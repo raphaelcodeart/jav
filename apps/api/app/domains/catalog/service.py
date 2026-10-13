@@ -1,0 +1,406 @@
+import uuid
+
+from sqlalchemy import delete, func, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.db import utcnow
+from app.domains.audit import service as audit_service
+from app.domains.catalog import pricing
+from app.domains.catalog.models import Product, ProductVersion
+from app.domains.catalog.schemas import (
+    ProductCreate,
+    ProductUpdate,
+    ProductVersionCreate,
+    ProductVersionUpdate,
+)
+from app.domains.contracts.models import Contract
+
+
+class ProductCodeTakenError(Exception):
+    """Another product of the organization already has this code."""
+
+
+class ProductDeletionError(Exception):
+    """Raised when a product can't be deleted -- see delete_product()."""
+
+
+def _clamp_credit_discount(category: str, requested: int) -> int:
+    """An INTERNAL product (Jav's own supply) is never discountable in wallet
+    credits, no matter what the caller asks for -- this is the single place
+    that invariant is enforced, so it can never drift out of sync between
+    create/add-version/update-version call sites."""
+    return requested if category != "INTERNAL" else 0
+
+
+def _clamp_cashback_enabled(category: str, requested: bool) -> bool:
+    """Same invariant as _clamp_credit_discount, for the other economic
+    toggle: an INTERNAL product never offers "riscuoti subito cashback" no
+    matter what the caller asks for."""
+    return requested if category != "INTERNAL" else False
+
+
+def _clamp_contract_cashback(category: str, requested: int) -> int:
+    """The mirror image of the two invariants above: automatic contract
+    cashback is a Jav-service concept, so it only exists on an
+    INTERNAL product. A DROPSHIPPING/PARTNER product earns cashback through
+    the order flow's opt-in 5% surcharge instead (cashback_enabled), and the
+    two must never both be live on the same product."""
+    if category != "INTERNAL":
+        return 0
+    return max(0, min(100, requested))
+
+
+def _clamp_first_referrer_bonus(category: str, enabled: bool, amount_cents: int) -> tuple[bool, int]:
+    """The first-referrer bonus is a commission movement, and commissions
+    only ever come from contracts -- so, like contract cashback, it exists
+    only on an INTERNAL product. An enabled-but-zero bonus is normalized to
+    disabled so "enabled" always means "will actually pay something"."""
+    if category != "INTERNAL":
+        return False, 0
+    amount = max(0, amount_cents)
+    # An amount configured with the toggle off is remembered, not discarded --
+    # an admin who fills the figure in first and flips the switch second
+    # shouldn't lose what they typed. "Enabled" still means "will actually
+    # pay something", so a zero amount can never leave it on.
+    return (enabled and amount > 0), amount
+
+
+async def list_products(db: AsyncSession, *, organization_id: uuid.UUID) -> list[Product]:
+    stmt = (
+        select(Product)
+        .where(Product.organization_id == organization_id)
+        .order_by(Product.created_at.desc())
+    )
+    return list((await db.execute(stmt)).scalars().all())
+
+
+async def list_products_with_current_version(
+    db: AsyncSession, *, organization_id: uuid.UUID
+) -> list[tuple[Product, ProductVersion | None]]:
+    """Each product paired with its most recent version (by valid_from) -- the
+    catalog grid (admin) and the marketplace (customer) both render name/photo/
+    price from this without a per-product detail round-trip."""
+    products = await list_products(db, organization_id=organization_id)
+    if not products:
+        return []
+
+    product_ids = [p.id for p in products]
+    versions_stmt = (
+        select(ProductVersion)
+        .where(ProductVersion.product_id.in_(product_ids))
+        .order_by(ProductVersion.product_id, ProductVersion.valid_from.desc())
+    )
+    versions = (await db.execute(versions_stmt)).scalars().all()
+
+    latest_by_product: dict[uuid.UUID, ProductVersion] = {}
+    for version in versions:
+        if version.product_id not in latest_by_product:
+            latest_by_product[version.product_id] = version
+
+    return [(product, latest_by_product.get(product.id)) for product in products]
+
+
+async def get_product_with_versions(
+    db: AsyncSession, *, organization_id: uuid.UUID, product_id: uuid.UUID
+) -> tuple[Product, list[ProductVersion]] | None:
+    product = await db.get(Product, product_id)
+    if product is None or product.organization_id != organization_id:
+        return None
+    stmt = (
+        select(ProductVersion)
+        .where(ProductVersion.product_id == product_id)
+        .order_by(ProductVersion.valid_from.desc())
+    )
+    versions = (await db.execute(stmt)).scalars().all()
+    return product, list(versions)
+
+
+def _monthly_price(product_type: str | None, value: int | None) -> int | None:
+    """Session 84: only a contract is paid in rate, so only a contract keeps a
+    monthly price; 0 means "none" as much as null does."""
+    if (product_type or "").upper() not in pricing.RECURRING_PRODUCT_TYPES or not value:
+        return None
+    return int(value)
+
+
+async def create_product(
+    db: AsyncSession, *, organization_id: uuid.UUID, payload: ProductCreate, actor_user_id: uuid.UUID
+) -> Product:
+    """Creates a Product together with its first ProductVersion, in one
+    transaction -- a product with no versions can never be attached to a
+    contract, so the two are never created separately."""
+    product = Product(
+        organization_id=organization_id,
+        code=payload.code,
+        product_type=payload.product_type,
+        energy_type=payload.energy_type,
+        customer_type=payload.customer_type,
+        category=payload.category,
+        status="ACTIVE",
+    )
+    db.add(product)
+    await db.flush()
+
+    _first_referrer_enabled, _first_referrer_cents = _clamp_first_referrer_bonus(
+        payload.category, payload.first_referrer_bonus_enabled, payload.first_referrer_bonus_cents
+    )
+    version = ProductVersion(
+        product_id=product.id,
+        version_label=payload.version_label,
+        name=payload.name,
+        description=payload.description,
+        image_url=payload.image_url,
+        base_price_cents=payload.base_price_cents,
+        monthly_price_cents=_monthly_price(payload.product_type, payload.monthly_price_cents),
+        initial_fee_cents=payload.initial_fee_cents,
+        recurring_fee_cents=payload.recurring_fee_cents,
+        billing_period=payload.billing_period,
+        tax_configuration={"vat_percentage": payload.vat_percentage} if payload.vat_percentage is not None else {},
+        contract_duration_months=payload.contract_duration_months,
+        commission_tokens=payload.commission_tokens,
+        credit_discount_percentage=_clamp_credit_discount(payload.category, payload.credit_discount_percentage),
+        cashback_enabled=_clamp_cashback_enabled(payload.category, payload.cashback_enabled),
+        contract_cashback_percentage=_clamp_contract_cashback(payload.category, payload.contract_cashback_percentage),
+        first_referrer_bonus_enabled=_first_referrer_enabled,
+        first_referrer_bonus_cents=_first_referrer_cents,
+        valid_from=utcnow(),
+        status="ACTIVE",
+    )
+    db.add(version)
+
+    await audit_service.record(
+        db, organization_id=organization_id, actor_user_id=actor_user_id,
+        action="product.created", entity_type="product", entity_id=str(product.id),
+        new_value={"code": payload.code, "name": payload.name},
+    )
+    await db.commit()
+    await db.refresh(product)
+    return product
+
+
+async def add_product_version(
+    db: AsyncSession,
+    *,
+    organization_id: uuid.UUID,
+    product_id: uuid.UUID,
+    payload: ProductVersionCreate,
+    actor_user_id: uuid.UUID,
+) -> ProductVersion | None:
+    """A new version never mutates or removes the previous one -- existing
+    contracts keep pointing at the product_version_id they were created with
+    (see docs/business-rules.md), so old versions stay exactly as they were."""
+    product = await db.get(Product, product_id)
+    if product is None or product.organization_id != organization_id:
+        return None
+
+    _version_first_referrer_enabled, _version_first_referrer_cents = _clamp_first_referrer_bonus(
+        product.category, payload.first_referrer_bonus_enabled, payload.first_referrer_bonus_cents
+    )
+    version = ProductVersion(
+        product_id=product_id,
+        version_label=payload.version_label,
+        name=payload.name,
+        description=payload.description,
+        image_url=payload.image_url,
+        base_price_cents=payload.base_price_cents,
+        monthly_price_cents=_monthly_price(product.product_type, payload.monthly_price_cents),
+        initial_fee_cents=payload.initial_fee_cents,
+        recurring_fee_cents=payload.recurring_fee_cents,
+        billing_period=payload.billing_period,
+        tax_configuration={"vat_percentage": payload.vat_percentage} if payload.vat_percentage is not None else {},
+        contract_duration_months=payload.contract_duration_months,
+        commission_tokens=payload.commission_tokens,
+        credit_discount_percentage=_clamp_credit_discount(product.category, payload.credit_discount_percentage),
+        cashback_enabled=_clamp_cashback_enabled(product.category, payload.cashback_enabled),
+        contract_cashback_percentage=_clamp_contract_cashback(product.category, payload.contract_cashback_percentage),
+        first_referrer_bonus_enabled=_version_first_referrer_enabled,
+        first_referrer_bonus_cents=_version_first_referrer_cents,
+        valid_from=utcnow(),
+        status="ACTIVE",
+    )
+    db.add(version)
+
+    await audit_service.record(
+        db, organization_id=organization_id, actor_user_id=actor_user_id,
+        action="product.version_added", entity_type="product", entity_id=str(product_id),
+        new_value={"version_label": payload.version_label},
+    )
+    await db.commit()
+    await db.refresh(version)
+    return version
+
+
+async def update_product_version(
+    db: AsyncSession,
+    *,
+    organization_id: uuid.UUID,
+    version_id: uuid.UUID,
+    payload: ProductVersionUpdate,
+    actor_user_id: uuid.UUID,
+) -> ProductVersion | None:
+    """Updates pricing/status on an EXISTING, not-yet-superseded version. This is
+    for fixing a mistake before anyone has contracted on it -- if a version is
+    already in use by live contracts, prefer add_product_version() instead so
+    those contracts' pricing never silently changes underneath them."""
+    version = await db.get(ProductVersion, version_id)
+    if version is None:
+        return None
+    product = await db.get(Product, version.product_id)
+    if product is None or product.organization_id != organization_id:
+        return None
+
+    previous = {
+        "status": version.status, "base_price_cents": version.base_price_cents,
+        "monthly_price_cents": version.monthly_price_cents,
+    }
+    if payload.name is not None:
+        version.name = payload.name
+    if payload.description is not None:
+        version.description = payload.description
+    if payload.image_url is not None:
+        version.image_url = payload.image_url
+    if payload.base_price_cents is not None:
+        version.base_price_cents = payload.base_price_cents
+    if "monthly_price_cents" in payload.model_fields_set:
+        version.monthly_price_cents = _monthly_price(product.product_type, payload.monthly_price_cents)
+    if payload.initial_fee_cents is not None:
+        version.initial_fee_cents = payload.initial_fee_cents
+    if payload.recurring_fee_cents is not None:
+        version.recurring_fee_cents = payload.recurring_fee_cents
+    if payload.vat_percentage is not None:
+        version.tax_configuration = {**(version.tax_configuration or {}), "vat_percentage": payload.vat_percentage}
+    if payload.contract_duration_months is not None:
+        version.contract_duration_months = payload.contract_duration_months
+    if payload.commission_tokens is not None:
+        version.commission_tokens = payload.commission_tokens
+    if payload.credit_discount_percentage is not None:
+        version.credit_discount_percentage = _clamp_credit_discount(product.category, payload.credit_discount_percentage)
+    if payload.cashback_enabled is not None:
+        version.cashback_enabled = _clamp_cashback_enabled(product.category, payload.cashback_enabled)
+    if payload.contract_cashback_percentage is not None:
+        version.contract_cashback_percentage = _clamp_contract_cashback(
+            product.category, payload.contract_cashback_percentage
+        )
+    if payload.first_referrer_bonus_enabled is not None or payload.first_referrer_bonus_cents is not None:
+        enabled, cents = _clamp_first_referrer_bonus(
+            product.category,
+            version.first_referrer_bonus_enabled
+            if payload.first_referrer_bonus_enabled is None
+            else payload.first_referrer_bonus_enabled,
+            version.first_referrer_bonus_cents
+            if payload.first_referrer_bonus_cents is None
+            else payload.first_referrer_bonus_cents,
+        )
+        version.first_referrer_bonus_enabled = enabled
+        version.first_referrer_bonus_cents = cents
+    if payload.status is not None:
+        version.status = payload.status
+
+    await audit_service.record(
+        db, organization_id=organization_id, actor_user_id=actor_user_id,
+        action="product.version_updated", entity_type="product_version", entity_id=str(version_id),
+        previous_value=previous,
+        new_value={
+            "status": version.status, "base_price_cents": version.base_price_cents,
+            "monthly_price_cents": version.monthly_price_cents,
+        },
+    )
+    await db.commit()
+    await db.refresh(version)
+    return version
+
+
+async def delete_product(
+    db: AsyncSession, *, organization_id: uuid.UUID, product_id: uuid.UUID, actor_user_id: uuid.UUID
+) -> bool | None:
+    """Hard-deletes a product and every one of its versions. Returns None if the
+    product doesn't exist in this org (-> router 404), raises
+    ProductDeletionError if any version has ever been sold (-> router 400) --
+    a contract's product_version_id must keep pointing at real pricing/token
+    data forever, so a product with sales history can only be status=RETIRED
+    via update_product(), never deleted."""
+    product = await db.get(Product, product_id)
+    if product is None or product.organization_id != organization_id:
+        return None
+
+    version_ids_stmt = select(ProductVersion.id).where(ProductVersion.product_id == product_id)
+    version_ids = list((await db.execute(version_ids_stmt)).scalars().all())
+
+    if version_ids:
+        contract_count = (
+            await db.execute(select(func.count()).select_from(Contract).where(Contract.product_version_id.in_(version_ids)))
+        ).scalar_one()
+        if contract_count > 0:
+            raise ProductDeletionError(
+                "Impossibile eliminare: questo prodotto ha contratti associati. Puoi solo disattivarlo."
+            )
+
+    await audit_service.record(
+        db, organization_id=organization_id, actor_user_id=actor_user_id,
+        action="product.deleted", entity_type="product", entity_id=str(product_id),
+        previous_value={"code": product.code, "status": product.status},
+    )
+    await db.execute(delete(ProductVersion).where(ProductVersion.product_id == product_id))
+    await db.delete(product)
+    await db.commit()
+    return True
+
+
+async def update_product(
+    db: AsyncSession,
+    *,
+    organization_id: uuid.UUID,
+    product_id: uuid.UUID,
+    payload: ProductUpdate,
+    actor_user_id: uuid.UUID,
+) -> Product | None:
+    """Product-level status (e.g. discontinuing it entirely, ACTIVE -> RETIRED).
+    Never touches pricing -- that's per-version, see update_product_version()."""
+    product = await db.get(Product, product_id)
+    if product is None or product.organization_id != organization_id:
+        return None
+
+    previous = {"code": product.code, "status": product.status, "customer_type": product.customer_type}
+    if payload.code is not None and payload.code != product.code:
+        taken = await db.scalar(
+            select(Product.id).where(
+                Product.organization_id == organization_id,
+                func.lower(Product.code) == payload.code.lower(),
+                Product.id != product.id,
+            )
+        )
+        if taken is not None:
+            raise ProductCodeTakenError(f"Il codice «{payload.code}» è già usato da un altro prodotto.")
+        product.code = payload.code
+    if payload.status is not None:
+        product.status = payload.status
+    # Session 88: lo schema lo accettava ma qui non si salvava, e «solo
+    # privati» / «solo aziende» dal pannello Prodotti andava perso in
+    # silenzio: un privato vedeva anche i pacchetti P.iva.
+    if payload.customer_type is not None:
+        product.customer_type = payload.customer_type
+    if payload.product_type is not None:
+        product.product_type = payload.product_type
+    if payload.energy_type is not None:
+        product.energy_type = payload.energy_type
+    if payload.category is not None:
+        product.category = payload.category
+        if payload.category == "INTERNAL":
+            # Switching back to INTERNAL must not leave a stale nonzero
+            # discount or an enabled cashback flag sitting on any version --
+            # see _clamp_credit_discount / _clamp_cashback_enabled.
+            await db.execute(
+                update(ProductVersion)
+                .where(ProductVersion.product_id == product_id)
+                .values(credit_discount_percentage=0, cashback_enabled=False)
+            )
+
+    await audit_service.record(
+        db, organization_id=organization_id, actor_user_id=actor_user_id,
+        action="product.updated", entity_type="product", entity_id=str(product_id),
+        previous_value=previous,
+        new_value={"code": product.code, "status": product.status, "customer_type": product.customer_type},
+    )
+    await db.commit()
+    await db.refresh(product)
+    return product

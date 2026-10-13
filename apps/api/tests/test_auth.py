@@ -1,0 +1,145 @@
+import uuid
+
+import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.security import hash_password
+from app.domains.auth import service as auth_service
+from app.domains.users.models import User
+
+
+async def _make_user(db: AsyncSession, organization_id: uuid.UUID, email: str, password: str) -> User:
+    user = User(organization_id=organization_id, email=email, password_hash=hash_password(password))
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
+@pytest.mark.asyncio
+async def test_successful_login_issues_tokens(db, organization_id):
+    await _make_user(db, organization_id, "alice@example.com", "correct-horse-battery-staple")
+
+    access_token, refresh_token = await auth_service.authenticate(
+        db, organization_id=organization_id, email="alice@example.com",
+        password="correct-horse-battery-staple", ip_address="127.0.0.1", user_agent="pytest",
+    )
+    assert access_token
+    assert refresh_token
+
+
+@pytest.mark.asyncio
+async def test_login_is_case_insensitive_against_a_legacy_mixed_case_stored_email(db, organization_id):
+    """New registrations always store email lowercase (RegisterRequest's
+    normalize_email validator), but authenticate()'s lookup must still work
+    for accounts created before that normalization existed -- real accounts
+    on this server have emails stored fully uppercase. Login here on purpose
+    with yet another casing than what's stored, to prove the match doesn't
+    depend on the two happening to agree."""
+    await _make_user(db, organization_id, "ALICE@EXAMPLE.COM", "correct-horse-battery-staple")
+
+    access_token, refresh_token = await auth_service.authenticate(
+        db, organization_id=organization_id, email="Alice@example.com",
+        password="correct-horse-battery-staple", ip_address="127.0.0.1", user_agent="pytest",
+    )
+    assert access_token
+    assert refresh_token
+
+
+@pytest.mark.asyncio
+async def test_wrong_password_and_unknown_email_give_identical_error_message(db, organization_id):
+    await _make_user(db, organization_id, "bob@example.com", "correct-horse-battery-staple")
+
+    with pytest.raises(auth_service.AuthenticationError) as wrong_password_exc:
+        await auth_service.authenticate(
+            db, organization_id=organization_id, email="bob@example.com",
+            password="wrong-password", ip_address="127.0.0.1", user_agent="pytest",
+        )
+
+    with pytest.raises(auth_service.AuthenticationError) as unknown_email_exc:
+        await auth_service.authenticate(
+            db, organization_id=organization_id, email="nobody@example.com",
+            password="whatever", ip_address="127.0.0.1", user_agent="pytest",
+        )
+
+    # Account enumeration mitigation: both failure modes surface the same message.
+    assert str(wrong_password_exc.value) == str(unknown_email_exc.value) == auth_service.GENERIC_AUTH_ERROR
+
+
+@pytest.mark.asyncio
+async def test_account_locks_after_max_failed_attempts(db, organization_id):
+    await _make_user(db, organization_id, "carol@example.com", "correct-horse-battery-staple")
+
+    for _ in range(auth_service.MAX_FAILED_ATTEMPTS):
+        with pytest.raises(auth_service.AuthenticationError):
+            await auth_service.authenticate(
+                db, organization_id=organization_id, email="carol@example.com",
+                password="wrong", ip_address="127.0.0.1", user_agent="pytest",
+            )
+
+    with pytest.raises(auth_service.AccountLockedError):
+        await auth_service.authenticate(
+            db, organization_id=organization_id, email="carol@example.com",
+            password="correct-horse-battery-staple", ip_address="127.0.0.1", user_agent="pytest",
+        )
+
+
+@pytest.mark.asyncio
+async def test_refresh_token_rotation_revokes_old_session(db, organization_id):
+    await _make_user(db, organization_id, "dave@example.com", "correct-horse-battery-staple")
+    _, refresh_token = await auth_service.authenticate(
+        db, organization_id=organization_id, email="dave@example.com",
+        password="correct-horse-battery-staple", ip_address="127.0.0.1", user_agent="pytest",
+    )
+
+    new_access, new_refresh = await auth_service.rotate_refresh_token(
+        db, organization_id=organization_id, refresh_token=refresh_token
+    )
+    assert new_access and new_refresh
+    assert new_refresh != refresh_token
+
+    # Session 85: past the grace window the old (now-revoked) refresh token
+    # must no longer work -- the stolen-token defence of the rotation.
+    await _age_rotation(db, refresh_token, seconds=auth_service.ROTATION_GRACE_SECONDS + 5)
+    with pytest.raises(auth_service.AuthenticationError):
+        await auth_service.rotate_refresh_token(
+            db, organization_id=organization_id, refresh_token=refresh_token
+        )
+
+
+async def _age_rotation(db, refresh_token: str, *, seconds: int) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import select
+
+    from app.core.security import hash_refresh_token
+    from app.domains.auth.models import Session
+
+    session = (await db.execute(
+        select(Session).where(Session.refresh_token_hash == hash_refresh_token(refresh_token))
+    )).scalar_one()
+    session.revoked_at = datetime.now(UTC) - timedelta(seconds=seconds)
+    await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_two_refreshes_at_once_both_succeed_but_never_after_a_logout(db, organization_id):
+    """A page fires several calls together; with the access token just
+    expired each refreshes with the same token. The second must not see
+    "Sessione scaduta" (Session 85). A logged-out session is never revived."""
+    await _make_user(db, organization_id, "erin@example.com", "correct-horse-battery-staple")
+    _, refresh_token = await auth_service.authenticate(
+        db, organization_id=organization_id, email="erin@example.com",
+        password="correct-horse-battery-staple", ip_address="127.0.0.1", user_agent="pytest",
+    )
+    _, first = await auth_service.rotate_refresh_token(db, organization_id=organization_id, refresh_token=refresh_token)
+    _, second = await auth_service.rotate_refresh_token(db, organization_id=organization_id, refresh_token=refresh_token)
+    assert first != second
+
+    # Logging out of the session that replaced it closes the window too.
+    await auth_service.revoke_session(db, refresh_token=first)
+    with pytest.raises(auth_service.AuthenticationError):
+        await auth_service.rotate_refresh_token(db, organization_id=organization_id, refresh_token=refresh_token)
+    # And a logged-out token itself never comes back.
+    with pytest.raises(auth_service.AuthenticationError):
+        await auth_service.rotate_refresh_token(db, organization_id=organization_id, refresh_token=first)

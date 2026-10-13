@@ -1,0 +1,298 @@
+import uuid
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.db import get_db
+from app.core.deps import CurrentUser, require_permission
+from app.core.rate_limit import rate_limit
+from app.core.storage import UploadValidationError
+from app.domains.contracts.models import Contract, ContractAttribution, ContractRequest
+from app.domains.customers.models import Company, Customer, CustomerProfile
+from app.domains.customers.service import display_name_for
+from app.domains.documents import service as documents_service
+from app.domains.documents.models import Document
+from app.domains.documents.schemas import (
+    ContractDocumentsRead,
+    DocumentRead,
+    DocumentReviewRequest,
+    DocumentUrlRead,
+    RequiredDocumentStatus,
+)
+from app.domains.support.service import actor_role_for
+from app.domains.users.models import User
+
+router = APIRouter(tags=["documents"])
+
+PRESIGNED_URL_TTL_SECONDS = 300
+
+
+async def _resolve_own_customer_id(db: AsyncSession, *, organization_id: uuid.UUID, user_id: uuid.UUID) -> uuid.UUID | None:
+    stmt = select(Customer.id).where(Customer.organization_id == organization_id, Customer.user_id == user_id)
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
+async def _get_org_scoped_contract(db: AsyncSession, *, organization_id: uuid.UUID, contract_id: uuid.UUID) -> Contract:
+    contract = await db.get(Contract, contract_id)
+    if contract is None or contract.organization_id != organization_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Contract not found")
+    return contract
+
+
+async def _resolve_own_agent_id(db: AsyncSession, *, organization_id: uuid.UUID, user_id: uuid.UUID) -> uuid.UUID | None:
+    from app.domains.network.models import AgentProfile
+
+    stmt = select(AgentProfile.id).where(AgentProfile.organization_id == organization_id, AgentProfile.user_id == user_id)
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
+async def _assert_contract_document_access(
+    db: AsyncSession, *, current_user: CurrentUser, contract: Contract, actor_role: str
+) -> str:
+    """Who may touch a contract's documents, and as what -- the role the
+    upload is recorded under.
+
+    - the customer the contract belongs to (as CUSTOMER);
+    - a promoter who produced the contract, or who filled in its pratica for
+      the customer (as PROMOTER) -- "Miei Clienti", Sessions 36 and 52;
+    - staff, anyone holding neither of those roles (as ADMIN).
+
+    Both relationships are checked whatever the token's first role is: a
+    promoter who joined through "Lavora con noi" keeps the CUSTOMER role, and
+    reading only that one refused them their own customers' documents."""
+    if "CUSTOMER" not in current_user.roles and "PROMOTER" not in current_user.roles:
+        return actor_role
+    own_customer_id = await _resolve_own_customer_id(
+        db, organization_id=current_user.organization_id, user_id=current_user.user_id
+    )
+    if own_customer_id is not None and contract.customer_id == own_customer_id:
+        return "CUSTOMER"
+    own_agent_id = await _resolve_own_agent_id(
+        db, organization_id=current_user.organization_id, user_id=current_user.user_id
+    )
+    if own_agent_id is not None:
+        attribution = (
+            await db.get(ContractAttribution, contract.contract_attribution_id)
+            if contract.contract_attribution_id is not None else None
+        )
+        request = await db.get(ContractRequest, contract.contract_request_id)
+        if (attribution is not None and attribution.producer_agent_id == own_agent_id) or (
+            request is not None and request.activated_by_promoter_id == own_agent_id
+        ):
+            return "PROMOTER"
+    raise HTTPException(status.HTTP_403_FORBIDDEN, "Not authorized for this contract's documents")
+
+
+async def _document_read(db: AsyncSession, document: Document) -> dict:
+    name = None
+    user = await db.get(User, document.uploaded_by_user_id)
+    if document.uploaded_by_role == "CUSTOMER":
+        customer = (
+            await db.execute(select(Customer).where(Customer.user_id == document.uploaded_by_user_id))
+        ).scalar_one_or_none()
+        if customer is not None:
+            profile = await db.get(CustomerProfile, customer.id)
+            company = await db.get(Company, customer.id)
+            name = display_name_for(customer.kind, profile, company)
+    if name is None and user is not None:
+        name = user.email
+
+    reviewed_by_name = None
+    if document.reviewed_by_user_id is not None:
+        reviewer = await db.get(User, document.reviewed_by_user_id)
+        reviewed_by_name = reviewer.email if reviewer else None
+
+    return {
+        "id": document.id,
+        "contract_id": document.contract_id,
+        "contract_request_id": document.contract_request_id,
+        "document_type": document.document_type,
+        "description": document.description,
+        "original_filename": document.original_filename,
+        "content_type": document.content_type,
+        "size_bytes": document.size_bytes,
+        "uploaded_by_user_id": document.uploaded_by_user_id,
+        "uploaded_by_role": document.uploaded_by_role,
+        "uploaded_by_name": name,
+        "status": document.status,
+        "reviewed_by_user_id": document.reviewed_by_user_id,
+        "reviewed_by_name": reviewed_by_name,
+        "reviewed_at": document.reviewed_at,
+        "review_note": document.review_note,
+        "created_at": document.created_at,
+    }
+
+
+async def slot_status_read(db: AsyncSession, row: dict) -> RequiredDocumentStatus:
+    pages = [DocumentRead(**(await _document_read(db, doc))) for doc in row["pages"]]
+    return RequiredDocumentStatus(
+        document_type=row["document_type"], required=row["required"],
+        document=pages[-1] if pages else None, pages=pages,
+    )
+
+
+@router.post(
+    "/contracts/{contract_id}/documents",
+    response_model=DocumentRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit("document-upload", max_requests=150, window_seconds=300))],
+)
+async def upload_contract_document(
+    contract_id: uuid.UUID,
+    document_type: str = Form(...),
+    #: Required when document_type is OTHER ("cosa stai allegando?"),
+    #: ignored otherwise -- the service is what enforces both halves.
+    description: str | None = Form(None),
+    file: UploadFile = File(...),
+    current_user: CurrentUser = Depends(require_permission("documents.upload")),
+    db: AsyncSession = Depends(get_db),
+) -> DocumentRead:
+    contract = await _get_org_scoped_contract(db, organization_id=current_user.organization_id, contract_id=contract_id)
+    actor_role = await _assert_contract_document_access(
+        db, current_user=current_user, contract=contract, actor_role=actor_role_for(current_user.roles)
+    )
+
+    file_bytes = await file.read()
+    try:
+        document = await documents_service.upload_document(
+            db,
+            organization_id=current_user.organization_id,
+            contract_id=contract_id,
+            document_type=document_type,
+            description=description,
+            file_bytes=file_bytes,
+            content_type=file.content_type or "",
+            original_filename=file.filename or "documento",
+            actor_user_id=current_user.user_id,
+            actor_role=actor_role,
+        )
+    except (documents_service.DocumentValidationError, UploadValidationError) as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    return DocumentRead(**(await _document_read(db, document)))
+
+
+@router.get("/contracts/{contract_id}/documents", response_model=ContractDocumentsRead)
+async def get_contract_documents(
+    contract_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_permission("documents.download")),
+    db: AsyncSession = Depends(get_db),
+) -> ContractDocumentsRead:
+    contract = await _get_org_scoped_contract(db, organization_id=current_user.organization_id, contract_id=contract_id)
+    actor_role = actor_role_for(current_user.roles)
+    await _assert_contract_document_access(db, current_user=current_user, contract=contract, actor_role=actor_role)
+
+    from app.domains.contracts.requests import contract_kind
+
+    # Session 85: the kind of the contract's pratica (privato / azienda).
+    customer_kind = await contract_kind(db, contract)
+
+    rows = await documents_service.get_contract_documents_status(
+        db, organization_id=current_user.organization_id, contract=contract, customer_kind=customer_kind
+    )
+    required = [await slot_status_read(db, row) for row in rows]
+
+    extra_docs = await documents_service.get_extra_documents_for_contract(
+        db, organization_id=current_user.organization_id, contract=contract, customer_kind=customer_kind
+    )
+    extra = [DocumentRead(**(await _document_read(db, doc))) for doc in extra_docs]
+    return ContractDocumentsRead(contract_id=contract_id, required=required, extra=extra)
+
+
+@router.get("/documents/{document_id}/url", response_model=DocumentUrlRead)
+async def get_document_url(
+    document_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_permission("documents.download")),
+    db: AsyncSession = Depends(get_db),
+) -> DocumentUrlRead:
+    document = await documents_service.get_document(db, organization_id=current_user.organization_id, document_id=document_id)
+    if document is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
+
+    if document.contract_id is None:
+        # A document of a pratica: whoever may open the pratica may open it.
+        from app.domains.contracts.requests_router import _load as load_request
+
+        await load_request(db, current_user, document.contract_request_id)
+    else:
+        contract = await _get_org_scoped_contract(
+            db, organization_id=current_user.organization_id, contract_id=document.contract_id
+        )
+        actor_role = actor_role_for(current_user.roles)
+        await _assert_contract_document_access(db, current_user=current_user, contract=contract, actor_role=actor_role)
+
+    url = await documents_service.get_presigned_url_for_document(document)
+    return DocumentUrlRead(url=url, expires_in_seconds=PRESIGNED_URL_TTL_SECONDS)
+
+
+@router.patch("/documents/{document_id}/review", response_model=DocumentRead)
+async def review_document(
+    document_id: uuid.UUID,
+    payload: DocumentReviewRequest,
+    current_user: CurrentUser = Depends(require_permission("documents.review")),
+    db: AsyncSession = Depends(get_db),
+) -> DocumentRead:
+    document = await documents_service.review_document(
+        db,
+        organization_id=current_user.organization_id,
+        document_id=document_id,
+        new_status=payload.status,
+        review_note=payload.review_note,
+        actor_user_id=current_user.user_id,
+    )
+    if document is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
+    return DocumentRead(**(await _document_read(db, document)))
+
+
+@router.delete("/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_document(
+    document_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_permission("documents.download")),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Takes one page out of a document (Session 82): the blurry photo, the
+    wrong page. Whoever may upload there may remove a page that is not yet
+    approved. Once the pratica is sent, only staff may remove the LAST page
+    of a slot -- a customer or promoter replaces a page by adding the good
+    one first, so a contract under review never loses its document."""
+    document = await documents_service.get_document(db, organization_id=current_user.organization_id, document_id=document_id)
+    if document is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
+
+    if document.contract_id is None:
+        from app.domains.contracts.requests_router import _load as load_request
+
+        request, access = await load_request(db, current_user, document.contract_request_id)
+        if not (access.can_edit or access.is_staff):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Non puoi modificare i documenti di questa pratica.")
+        is_staff, still_draft = access.is_staff, request.status == "DRAFT"
+        owner = Document.contract_request_id == document.contract_request_id
+    else:
+        contract = await _get_org_scoped_contract(
+            db, organization_id=current_user.organization_id, contract_id=document.contract_id
+        )
+        role = await _assert_contract_document_access(
+            db, current_user=current_user, contract=contract, actor_role=actor_role_for(current_user.roles)
+        )
+        is_staff, still_draft = role == "ADMIN", contract.status == "DRAFT"
+        owner = Document.contract_id == document.contract_id
+
+    if not is_staff and not still_draft and document.document_type != "OTHER":
+        from sqlalchemy import func
+
+        pages = (
+            await db.execute(
+                select(func.count()).select_from(Document).where(owner, Document.document_type == document.document_type)
+            )
+        ).scalar_one()
+        if pages <= 1:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "È l'unica pagina di questo documento: carica prima quella giusta, poi togli questa.",
+            )
+    try:
+        await documents_service.delete_document(db, document=document, actor_user_id=current_user.user_id)
+    except documents_service.DocumentDeletionError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc

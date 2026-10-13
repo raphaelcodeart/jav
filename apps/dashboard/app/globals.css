@@ -1,0 +1,200 @@
+@import "tailwindcss";
+
+/* Manual theme toggle (not OS-preference-based): `light:` variant classes apply
+   only when <html data-theme="light">, set by ThemeProvider (lib/theme.tsx). */
+@custom-variant light (&:where([data-theme="light"], [data-theme="light"] *));
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+:root {
+  --background: #090d16;
+  --foreground: #f8fafc;
+  --card-bg: rgba(17, 24, 39, 0.7);
+  --card-border: rgba(255, 255, 255, 0.08);
+  --input-bg: rgba(17, 24, 39, 0.6);
+  --input-border: rgba(255, 255, 255, 0.1);
+  --input-fg: #ffffff;
+  --scrollbar-track: rgba(9, 13, 22, 0.5);
+  --scrollbar-thumb: rgba(255, 255, 255, 0.1);
+  --grad-1: rgba(139, 92, 246, 0.07);
+  --grad-2: rgba(6, 182, 212, 0.07);
+  --primary: #8b5cf6;
+  --primary-hover: #7c3aed;
+  --primary-glow: rgba(139, 92, 246, 0.15);
+  --accent-cyan: #06b6d4;
+  --accent-cyan-glow: rgba(6, 182, 212, 0.15);
+  --accent-amber: #f59e0b;
+  --accent-emerald: #10b981;
+  --accent-rose: #f43f5e;
+}
+
+:root[data-theme="light"] {
+  --background: #f4f5f9;
+  --foreground: #0f172a;
+  --card-bg: rgba(255, 255, 255, 0.75);
+  --card-border: rgba(15, 23, 42, 0.08);
+  --input-bg: rgba(255, 255, 255, 0.9);
+  --input-border: rgba(15, 23, 42, 0.12);
+  --input-fg: #0f172a;
+  --scrollbar-track: rgba(226, 232, 240, 0.5);
+  --scrollbar-thumb: rgba(15, 23, 42, 0.12);
+  --grad-1: rgba(139, 92, 246, 0.08);
+  --grad-2: rgba(6, 182, 212, 0.08);
+  --primary-glow: rgba(139, 92, 246, 0.12);
+  --accent-cyan-glow: rgba(6, 182, 212, 0.12);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  background-image:
+    radial-gradient(at 0% 0%, var(--grad-1) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, var(--grad-2) 0px, transparent 50%);
+  background-attachment: fixed;
+  overflow-x: hidden;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Glassmorphism utility classes -- theme-aware via CSS variables, so every
+   component already using these classes re-themes automatically. */
+.glass-card {
+  background: var(--card-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--card-border);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+:root[data-theme="light"] .glass-card {
+  box-shadow: 0 8px 32px 0 rgba(15, 23, 42, 0.06);
+}
+
+.glass-card:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 8px 32px 0 var(--primary-glow);
+}
+
+:root[data-theme="light"] .glass-card:hover {
+  border-color: rgba(15, 23, 42, 0.15);
+}
+
+.glass-card-cyan:hover {
+  box-shadow: 0 8px 32px 0 var(--accent-cyan-glow);
+}
+
+.glass-input {
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  color: var(--input-fg);
+  transition: all 0.2s ease-in-out;
+}
+
+.glass-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-glow);
+}
+
+.glass-input option {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleUp {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Deliberately NOT `forwards` on any of these three: `forwards` freezes the
+   keyframe's "to" state on the element FOREVER (not just visually -- the
+   computed `transform` stays e.g. `translateY(0)`/`scale(1)`, a non-`none`
+   value). Per the CSS spec, any non-`none` transform on an element makes it
+   a new containing block for `position: fixed` descendants. `.animate-slide-up`
+   is applied to <main> in app-shell.tsx, the ancestor of every single modal
+   in this app -- with `forwards`, EVERY modal's `fixed inset-0` overlay
+   silently stopped being viewport-fixed and instead sized itself to <main>'s
+   own (often much taller, scrolled) box, so the modal could render far
+   outside the visible viewport while its backdrop still visually darkened
+   the screen ("clicked edit, screen went dark, nothing opened" -- confirmed
+   live with a headless browser: the overlay's bounding rect was offset by
+   the sidebar/header size and 5000+px tall instead of matching the
+   viewport). Without `forwards`, the element reverts to its own cascaded
+   styles once the animation ends -- identical visually here (no transform,
+   opacity 1 is the natural rest state for all three), but no longer a
+   containing block. */
+.animate-fade-in {
+  animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.animate-slide-up {
+  animation: slideUp 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.animate-scale-up {
+  animation: scaleUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.animate-shimmer {
+  background-size: 200% 100%;
+  animation: shimmer 2.5s ease-in-out infinite;
+}
+
+/* Scrollbar styles */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+
+/* Custom visual styles */
+.text-neon-purple {
+  text-shadow: 0 0 8px rgba(139, 92, 246, 0.5);
+}
+
+.text-neon-cyan {
+  text-shadow: 0 0 8px rgba(6, 182, 212, 0.5);
+}

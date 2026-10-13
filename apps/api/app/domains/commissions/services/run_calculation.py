@@ -1,0 +1,414 @@
+import hashlib
+import json
+import uuid
+from datetime import UTC, datetime
+
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.domains.audit import service as audit_service
+from app.domains.catalog.models import ProductVersion
+from app.domains.commissions.calculators.entrepreneurial_difference import (
+    ChainMember,
+    calculate_chain,
+)
+from app.domains.commissions.models import (
+    CommissionCalculation,
+    CommissionCalculationStep,
+    CommissionMovement,
+    Rank,
+)
+from app.domains.contracts.models import Contract
+from app.domains.network.models import AgentProfile, NetworkSnapshotNode
+from app.domains.notifications import service as notifications_service
+
+RULE_VERSION = "2026.1-placeholder"  # see docs/open-questions.md #1
+
+# A one-off bonus for the promoter who ORIGINALLY brought the customer in,
+# paid alongside (never instead of) the ordinary recursive commission. It is
+# configured per product version (ProductVersion.first_referrer_bonus_enabled
+# / first_referrer_bonus_cents), never keyed off a price or a product id in
+# code -- "il contratto BAR paga 25 euro in piu a chi ha portato il
+# cliente" has to
+# be a value an admin can set, and a different value tomorrow, without a
+# deploy.
+FIRST_REFERRER_BONUS_MOVEMENT_TYPE = "FIRST_REFERRER_BONUS"
+
+
+def instalment_share(total_cents: int, *, number: int, instalments: int) -> int:
+    """This instalment's slice of a commission: an equal share, with the
+    remainder of the division on the LAST instalment, so the slices always
+    add up to exactly the whole commission -- never a cent more or less, and
+    never paid ahead of the money that justifies it."""
+    if instalments <= 1:
+        return total_cents
+    base = total_cents // instalments
+    if number == instalments:
+        return total_cents - base * (instalments - 1)
+    return base
+
+
+def _idempotency_key(contract_id: uuid.UUID, trigger_event_id: uuid.UUID, agent_id: str, movement_type: str) -> str:
+    raw = f"{contract_id}:{trigger_event_id}:{agent_id}:{movement_type}"
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def _first_referrer_bonus_idempotency_key(contract_id: uuid.UUID, agent_id: uuid.UUID) -> str:
+    """Deliberately does NOT include the trigger event, unlike every other
+    movement key above. The recursive commission is earned again on each
+    renewal, so its key has to vary per trigger; this bonus is "once per
+    contract, ever", so leaving the trigger out makes the UNIQUE constraint
+    on commission_movements.idempotency_key itself the guarantee -- a renewal,
+    a replayed outbox event or a manual re-run simply cannot produce a second
+    one, whatever the application-level check below does."""
+    raw = f"first-referrer-bonus:{contract_id}:{agent_id}"
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+async def _build_chain(
+    db: AsyncSession, *, network_snapshot_id: uuid.UUID, product_version_id: uuid.UUID
+) -> list[ChainMember]:
+    """Personal token per chain member comes from the CONTRACT'S PRODUCT first
+    (ProductVersion.commission_tokens, keyed by rank code -- e.g. "Energia
+    Circolare" and "Standard" pay a different gettone for the same rank) and
+    only falls back to the org-wide Rank.personal_token_cents for a rank the
+    product hasn't configured a token for."""
+    product_version = await db.get(ProductVersion, product_version_id)
+    product_tokens: dict = (product_version.commission_tokens or {}) if product_version else {}
+
+    stmt = (
+        select(
+            NetworkSnapshotNode.ancestor_agent_id,
+            NetworkSnapshotNode.depth,
+            Rank.code,
+            Rank.personal_token_cents,
+        )
+        .join(Rank, Rank.id == NetworkSnapshotNode.rank_id_at_snapshot, isouter=True)
+        .where(NetworkSnapshotNode.snapshot_id == network_snapshot_id)
+        .order_by(NetworkSnapshotNode.depth.asc())
+    )
+    rows = (await db.execute(stmt)).all()
+    return [
+        ChainMember(
+            agent_id=str(agent_id),
+            rank_code=rank_code or "UNRANKED",
+            personal_token_cents=product_tokens.get(rank_code, personal_token_cents or 0),
+            depth=depth,
+        )
+        for agent_id, depth, rank_code, personal_token_cents in rows
+    ]
+
+
+async def _get_existing(
+    db: AsyncSession, *, contract_id: uuid.UUID, trigger_event_id: uuid.UUID
+) -> CommissionCalculation | None:
+    return (
+        await db.execute(
+            select(CommissionCalculation).where(
+                CommissionCalculation.contract_id == contract_id,
+                CommissionCalculation.trigger_event_id == trigger_event_id,
+            )
+        )
+    ).scalar_one_or_none()
+
+
+async def run_calculation_for_contract(
+    db: AsyncSession,
+    *,
+    organization_id: uuid.UUID,
+    contract_id: uuid.UUID,
+    trigger_event_id: uuid.UUID,
+    instalment_number: int = 1,
+    instalments_total: int = 1,
+) -> CommissionCalculation | None:
+    """Idempotent: re-invoking with the same (contract_id, trigger_event_id) is a
+    no-op if a calculation already exists for that pair. Single transaction: either
+    everything (calculation + steps + movements) is persisted, or nothing is.
+
+    The (contract_id, trigger_event_id) check below is the fast path, but it is
+    only an application-level SELECT-then-INSERT -- see
+    uq_commission_calculations_contract_trigger on the model for the DB-level
+    backstop this function falls back to if two dispatches race (docs/
+    paid-contract-commission-audit.md, Problem #3).
+
+    `instalment_number` / `instalments_total` (Session 50): a contract paid
+    in N instalments pays each beneficiary 1/N of their commission per paid
+    instalment (instalment_share), one calculation per instalment, all
+    against the same network snapshot frozen at activation. The defaults
+    (1 of 1) are the whole commission at once, exactly as before."""
+    existing = await _get_existing(db, contract_id=contract_id, trigger_event_id=trigger_event_id)
+    if existing is not None:
+        return existing
+
+    contract = await db.get(Contract, contract_id)
+    if contract is None or contract.network_snapshot_id is None:
+        raise ValueError("Contract has no network snapshot; cannot calculate commissions")
+
+    chain = await _build_chain(
+        db, network_snapshot_id=contract.network_snapshot_id, product_version_id=contract.product_version_id
+    )
+    if not chain:
+        # Producer (or its whole ancestor chain) resolved to nothing -- most
+        # likely an agent that no longer exists or was removed from the
+        # network between contract creation and activation. Recording this as
+        # a FAILED calculation (instead of silently returning None) is what
+        # makes this visible to accounting/ops instead of the contract just
+        # quietly paying nobody forever. See docs/paid-contract-commission-audit.md,
+        # Problem #1.
+        calculation = CommissionCalculation(
+            organization_id=organization_id,
+            contract_id=contract_id,
+            network_snapshot_id=contract.network_snapshot_id,
+            trigger_event_id=trigger_event_id,
+            input_snapshot={"contract_id": str(contract_id), "network_snapshot_id": str(contract.network_snapshot_id), "chain": []},
+            output_snapshot={"steps": [], "error": "empty_ancestor_chain"},
+            checksum=hashlib.sha256(b"empty_ancestor_chain").hexdigest(),
+            status="FAILED",
+        )
+        db.add(calculation)
+        await audit_service.record(
+            db, organization_id=organization_id, actor_user_id=None,
+            action="commission.calculation_failed", entity_type="contract", entity_id=str(contract_id),
+            new_value={"reason": "empty_ancestor_chain", "network_snapshot_id": str(contract.network_snapshot_id)},
+            reason="Network snapshot has no ancestor nodes -- producer agent could not be resolved",
+        )
+        try:
+            await db.commit()
+        except IntegrityError:
+            await db.rollback()
+            existing = await _get_existing(db, contract_id=contract_id, trigger_event_id=trigger_event_id)
+            if existing is not None:
+                return existing
+            raise
+        await db.refresh(calculation)
+        return calculation
+
+    steps = calculate_chain(chain)
+    split = instalments_total > 1
+
+    def _amount(step) -> int:
+        return instalment_share(step.gross_amount_cents, number=instalment_number, instalments=instalments_total)
+
+    def _explanation(step) -> str:
+        if not split:
+            return step.explanation
+        return (
+            f"{step.explanation} -- quota rata {instalment_number} di {instalments_total} "
+            f"(totale {step.gross_amount_cents / 100:.2f} EUR)"
+        )
+
+    input_snapshot = {
+        "contract_id": str(contract_id),
+        "network_snapshot_id": str(contract.network_snapshot_id),
+        "instalment_number": instalment_number,
+        "instalments_total": instalments_total,
+        "chain": [
+            {"agent_id": m.agent_id, "rank_code": m.rank_code, "depth": m.depth}
+            for m in chain
+        ],
+    }
+    output_snapshot = {
+        "steps": [
+            {
+                "beneficiary_agent_id": s.beneficiary_agent_id,
+                "movement_type": s.movement_type,
+                "gross_amount_cents": _amount(s),
+                "explanation": _explanation(s),
+            }
+            for s in steps
+        ]
+    }
+    checksum = hashlib.sha256(
+        json.dumps({"input": input_snapshot, "output": output_snapshot}, sort_keys=True).encode()
+    ).hexdigest()
+
+    calculation = CommissionCalculation(
+        organization_id=organization_id,
+        contract_id=contract_id,
+        network_snapshot_id=contract.network_snapshot_id,
+        trigger_event_id=trigger_event_id,
+        input_snapshot=input_snapshot,
+        output_snapshot=output_snapshot,
+        checksum=checksum,
+        status="COMPLETED",
+    )
+    db.add(calculation)
+    try:
+        # The INSERT (and therefore the earliest point a concurrent dispatch of
+        # the same trigger event can be caught by
+        # uq_commission_calculations_contract_trigger) happens here, at flush --
+        # not at the later db.commit(). calculation.id is needed immediately
+        # below for the steps/movements, so this flush cannot be deferred.
+        await db.flush()
+    except IntegrityError:
+        await db.rollback()
+        existing = await _get_existing(db, contract_id=contract_id, trigger_event_id=trigger_event_id)
+        if existing is not None:
+            return existing
+        raise
+
+    today = datetime.now(UTC).date()
+    beneficiary_ids = {uuid.UUID(s.beneficiary_agent_id) for s in steps}
+    user_id_by_agent = dict(
+        (
+            await db.execute(
+                select(AgentProfile.id, AgentProfile.user_id).where(AgentProfile.id.in_(beneficiary_ids))
+            )
+        ).all()
+    )
+    for order, step in enumerate(steps):
+        db.add(
+            CommissionCalculationStep(
+                calculation_id=calculation.id,
+                step_order=order,
+                beneficiary_agent_id=uuid.UUID(step.beneficiary_agent_id),
+                rank_at_calculation=step.rank_code,
+                base_amount_cents=step.base_amount_cents,
+                already_distributed_cents=step.already_distributed_cents,
+                entrepreneurial_difference_cents=step.entrepreneurial_difference_cents,
+                personal_bonus_cents=0,
+                gross_amount_cents=_amount(step),
+                movement_type=step.movement_type,
+                explanation=_explanation(step),
+            )
+        )
+        if _amount(step) > 0:
+            db.add(
+                CommissionMovement(
+                    organization_id=organization_id,
+                    agent_id=uuid.UUID(step.beneficiary_agent_id),
+                    contract_id=contract_id,
+                    origin_event_id=trigger_event_id,
+                    calculation_id=calculation.id,
+                    movement_type=step.movement_type,
+                    amount_cents=_amount(step),
+                    currency="EUR",
+                    status="ACCRUED",
+                    effective_date=today,
+                    rule_version_id=RULE_VERSION,
+                    network_snapshot_id=contract.network_snapshot_id,
+                    idempotency_key=_idempotency_key(
+                        contract_id, trigger_event_id, step.beneficiary_agent_id, step.movement_type
+                    ),
+                )
+            )
+            beneficiary_user_id = user_id_by_agent.get(uuid.UUID(step.beneficiary_agent_id))
+            if beneficiary_user_id is not None:
+                await notifications_service.notify_user(
+                    db, organization_id=organization_id, user_id=beneficiary_user_id,
+                    type_="COMMISSION_EARNED", entity_type="contract", entity_id=contract_id,
+                    title=f"Nuova provvigione: {_amount(step) / 100:.2f} EUR",
+                    body=_explanation(step),
+                )
+
+    # The first-referrer bonus is a one-off, not a commission on the money
+    # collected: it goes out whole with the first instalment and never again.
+    if instalment_number == 1:
+        await _maybe_add_first_referrer_bonus(
+            db,
+            organization_id=organization_id,
+            contract=contract,
+            calculation_id=calculation.id,
+            trigger_event_id=trigger_event_id,
+            effective_date=today,
+        )
+
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Lost a race against a concurrent dispatch of the same trigger event
+        # (see uq_commission_calculations_contract_trigger). The other side
+        # already committed the real calculation + movements -- return that one
+        # instead of raising, so the caller sees a normal idempotent result
+        # rather than an error for what is, from the caller's perspective, a
+        # successfully-processed event.
+        await db.rollback()
+        existing = await _get_existing(db, contract_id=contract_id, trigger_event_id=trigger_event_id)
+        if existing is not None:
+            return existing
+        raise
+    await db.refresh(calculation)
+    return calculation
+
+
+async def _maybe_add_first_referrer_bonus(
+    db: AsyncSession,
+    *,
+    organization_id: uuid.UUID,
+    contract: Contract,
+    calculation_id: uuid.UUID,
+    trigger_event_id: uuid.UUID,
+    effective_date,
+) -> None:
+    """Adds the first-referrer bonus movement, if this product pays one.
+
+    Three things this is careful about, because all three were stated as
+    requirements and each is easy to get subtly wrong:
+
+    1. It goes to the ORIGINAL referrer (`contract.first_referrer_agent_id`,
+       frozen at contract creation), not to the whole upline and not to
+       whoever filled the contract in. Those are genuinely different people
+       whenever one promoter assists another promoter's customer, and the
+       ordinary recursive commission already pays the producer.
+    2. Once per contract, ever -- not once per activation. The idempotency
+       key omits the trigger event precisely so a renewal cannot pay it
+       again; the SELECT below is the readable check, the UNIQUE constraint
+       is the one that actually cannot be raced.
+    3. It is additive. Nothing here touches the PERSONAL_TOKEN /
+       ENTREPRENEURIAL_DIFFERENCE movements written above -- the existing
+       commission keeps being paid exactly as it is today, and this lands as
+       its own separately auditable row.
+    """
+    referrer_agent_id = contract.first_referrer_agent_id
+    if referrer_agent_id is None:
+        return
+
+    version = await db.get(ProductVersion, contract.product_version_id)
+    if version is None or not version.first_referrer_bonus_enabled:
+        return
+    amount_cents = int(version.first_referrer_bonus_cents or 0)
+    if amount_cents <= 0:
+        return
+
+    referrer = await db.get(AgentProfile, referrer_agent_id)
+    if referrer is None or referrer.organization_id != organization_id or referrer.status != "ACTIVE":
+        # A deactivated or blacklisted promoter earns nothing new, same rule
+        # contract creation already applies to a producer agent.
+        return
+
+    already = (
+        await db.execute(
+            select(CommissionMovement.id).where(
+                CommissionMovement.contract_id == contract.id,
+                CommissionMovement.movement_type == FIRST_REFERRER_BONUS_MOVEMENT_TYPE,
+            )
+        )
+    ).first()
+    if already is not None:
+        return
+
+    db.add(
+        CommissionMovement(
+            organization_id=organization_id,
+            agent_id=referrer_agent_id,
+            contract_id=contract.id,
+            origin_event_id=trigger_event_id,
+            calculation_id=calculation_id,
+            movement_type=FIRST_REFERRER_BONUS_MOVEMENT_TYPE,
+            amount_cents=amount_cents,
+            currency="EUR",
+            status="ACCRUED",
+            effective_date=effective_date,
+            rule_version_id=RULE_VERSION,
+            network_snapshot_id=contract.network_snapshot_id,
+            idempotency_key=_first_referrer_bonus_idempotency_key(contract.id, referrer_agent_id),
+        )
+    )
+    if referrer.user_id is not None:
+        await notifications_service.notify_user(
+            db, organization_id=organization_id, user_id=referrer.user_id,
+            type_="COMMISSION_EARNED", entity_type="contract", entity_id=contract.id,
+            title=f"Bonus primo invito: {amount_cents / 100:.2f} EUR",
+            body="Bonus riconosciuto al promoter che ha portato questo cliente in Jav.",
+        )

@@ -1,0 +1,153 @@
+# Jav Platform
+
+Gestionale completo per Jav: sito/marketplace, rete commerciale
+multilivello, contratti e forniture, motore provvigionale deterministico,
+dashboard cliente/promoter/amministratore.
+
+See `docs/` for the full documentation set — start with `docs/architecture.md` and
+`docs/implementation-progress.md` (what's actually built vs. planned).
+
+**Working on this with an AI agent?** Read `CLAUDE.md` first. It is loaded
+automatically by Claude Code and holds the things the code does not say out
+loud: that this deployment is live, that the containers run baked images, the
+exact test invocation that does not wipe the real database, and what has to be
+updated alongside a change.
+
+**Migrating or rebuilding on a new server?** Go straight to
+`docs/server-migration-guide.md` — it has the exact steps, the full database
+schema (`docs/database-schema.sql`, a real `pg_dump` of the live database), and
+every real bug already found and fixed while standing this up.
+
+**Standing this codebase up for a *different company*?** Same guide, §12: an
+ordered runbook from a bare server to a working installation, each step with
+its own verification, plus §11 for everything that is hardcoded Jav
+and has to be replaced first. The one command that makes it possible is
+`python -m app.seed.bootstrap`, which creates a real, empty organization —
+permissions, roles, ranks, commission plan, one administrator — instead of the
+demo's twenty fictional promoters.
+
+**Using the app day to day?** See `docs/user-guide.md` (in Italian).
+
+**Login requires HTTPS.** The session cookie is `Secure`; real browsers silently
+drop it over plain HTTP (a real login attempt just reloads to `/login` with no
+visible error). HTTPS is terminated by Caddy on the host
+(`infrastructure/caddy/jav.caddy`, `docs/server-migration-guide.md` §4.6).
+
+## Stack
+
+- **Backend**: FastAPI, SQLAlchemy 2 (async), Alembic, PostgreSQL 16, Celery + Redis
+- **Frontend**: Next.js 16 (App Router), React 19, TypeScript strict, TanStack Query/Table, Tailwind CSS 4
+- **Monorepo**: pnpm workspace (`apps/api`, `apps/dashboard`, `apps/worker`)
+
+## Quickstart (Docker Compose)
+
+```bash
+cp .env.example .env
+# edit .env: set POSTGRES_PASSWORD, JWT_SECRET_KEY, MINIO_ROOT_USER/PASSWORD, S3_ACCESS_KEY/SECRET_KEY
+
+docker compose -f docker-compose.dev.yml up --build
+```
+
+This starts Postgres, Redis, MinIO, the API (migrations run automatically on
+startup), the Celery worker + beat, the dashboard, and nginx in front of
+everything.
+
+- App: http://localhost/ (via nginx) or http://localhost:3000 (dashboard directly)
+- API docs (OpenAPI): http://localhost:8000/docs (or http://localhost/backend/docs
+  through nginx — see `infrastructure/nginx/nginx.conf`'s comment on why this isn't
+  `/api/docs`: the dashboard's own BFF routes already own `/api/*`)
+- MinIO console: http://localhost:9001
+
+Load demo data (20 promoters across 2 parallel branches / 6 levels deep, sample
+customers, contracts in every state, generated commissions):
+
+```bash
+docker compose -f docker-compose.dev.yml exec api python -m app.seed
+```
+
+The seed script prints the demo organization ID and login credentials
+(password `DemoPass123!` for all seeded users) — you need the organization ID to
+log in via the dashboard's login form.
+
+For a **real** installation, do not run that. Run the bootstrap instead — it
+creates only what the application cannot start without (the global permission
+catalogue, the organization's system roles, the rank ladder, an active
+commission plan) plus a single administrator, and it is idempotent:
+
+```bash
+docker compose -f docker-compose.dev.yml exec api \
+  python -m app.seed.bootstrap \
+    --organization-name "Nome Azienda" \
+    --legal-name "Nome Azienda S.r.l." \
+    --admin-email "titolare@azienda.it"
+```
+
+The generated password is printed once and is not recoverable.
+
+## Verifying the system
+
+```bash
+scripts/health-check.sh dev
+```
+
+or manually:
+
+```bash
+curl http://localhost:8000/health
+curl http://localhost:8000/readiness
+```
+
+Run the backend test suite (needs a Postgres reachable at `TEST_DATABASE_URL`):
+
+```bash
+cd apps/api
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+TEST_DATABASE_URL=postgresql+psycopg://jav:<password>@localhost:5432/jav_test python -m pytest
+```
+
+`conftest.py` drops and recreates every table at the start of the run, so the
+database name in that URL must be `jav_test` — never `jav`.
+On the live server the container hostnames do not resolve from the host and
+another Postgres occupies `localhost:5432`; `CLAUDE.md` §2 has the invocation
+that works there.
+
+Run the frontend checks:
+
+```bash
+cd apps/dashboard
+pnpm install
+pnpm typecheck
+pnpm lint
+pnpm build
+```
+
+## Repository layout
+
+```
+/apps
+  /api         FastAPI backend -- domains/, alembic/, tests/, seed/
+  /dashboard   Next.js 16 App Router BFF + UI
+  /worker      Shares apps/api's image (see apps/worker/README.md) -- no separate package
+/infrastructure
+  /nginx       Reverse proxy config
+/scripts       deploy / backup (nightly, + weekly restore test) / restore / health-check / migrate / rollback
+               dump-schema (regenerates docs/database-schema.sql)
+/docs          Architecture, data model, business rules, ADRs, security model, ...
+CLAUDE.md      Operating instructions for AI agents working on this repo
+```
+
+## What's implemented vs. planned
+
+Far beyond the original Phases A–E vertical slice by now: commercial network,
+contracts, commissions, support tickets, an internal wallet ("JavCash") with
+per-product and partner-invoice-redemption cashback, a Shop with self-checkout
+orders (card via Stripe or bank transfer), notifications (in-app + branded
+email), and a customer accounting view are all real and live, not stubs — see
+`docs/implementation-progress.md` for the exact, continuously-updated,
+session-by-session checklist of what's actually built. Still not built: CI/CD,
+MFA enforcement, antivirus scanning of uploads, OCR, and the AI/pgvector layer
+(`docs/ai-architecture.md` is a design doc only) — see
+`docs/server-migration-guide.md §9` for the current, accurate list. See
+`docs/open-questions.md` for every business-rule
+placeholder awaiting the real Jav commission/career-plan document.

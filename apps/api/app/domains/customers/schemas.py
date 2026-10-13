@@ -1,0 +1,151 @@
+import uuid
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
+
+from app.core.normalization import normalize_email, normalize_person_name
+
+
+class CustomerRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    organization_id: uuid.UUID
+    user_id: uuid.UUID | None
+    kind: str
+    fiscal_code: str | None
+    vat_number: str | None
+    email: str
+    phone: str | None
+    pec: str | None
+    photo_url: str | None
+    display_name: str
+    #: None for a company/condominium with no person's profile.
+    first_name: str | None = None
+    last_name: str | None = None
+    created_at: datetime
+    # Account-gate visibility for the admin (docs/business-rules.md#account-gates)
+    # -- None (not False) when the customer has no login of its own.
+    email_verified: bool | None = None
+    privacy_accepted: bool | None = None
+    # None when there's no login (user_id is None); "ACTIVE"/"FROZEN"
+    # otherwise -- see users/service.py::freeze_user (Session 28).
+    user_status: str | None = None
+    #: Session 88: codice fiscale e residenza compilati (il terzo controllo).
+    profile_complete: bool | None = None
+
+
+class CustomerCreate(BaseModel):
+    kind: str  # PRIVATE / SOLE_PROPRIETOR / COMPANY / CONDOMINIUM
+    email: EmailStr
+    phone: str | None = None
+    pec: str | None = None
+    fiscal_code: str | None = None
+    vat_number: str | None = None
+    # Required for PRIVATE / SOLE_PROPRIETOR:
+    first_name: str | None = None
+    last_name: str | None = None
+    # Required for COMPANY / CONDOMINIUM:
+    company_name: str | None = None
+    legal_form: str | None = None
+    sdi_code: str | None = None
+
+    @field_validator("kind")
+    @classmethod
+    def validate_kind(cls, v: str) -> str:
+        allowed = {"PRIVATE", "SOLE_PROPRIETOR", "COMPANY", "CONDOMINIUM"}
+        if v not in allowed:
+            raise ValueError(f"kind must be one of {sorted(allowed)}")
+        return v
+
+    @field_validator("first_name", "last_name", mode="before")
+    @classmethod
+    def normalize_name_fields(cls, v: object) -> object:
+        return normalize_person_name(v) if isinstance(v, str) else v
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email_field(cls, v: object) -> object:
+        return normalize_email(v) if isinstance(v, str) else v
+
+
+class CustomerUpdate(BaseModel):
+    email: EmailStr | None = None
+    phone: str | None = None
+    pec: str | None = None
+    fiscal_code: str | None = None
+    vat_number: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    company_name: str | None = None
+
+    @field_validator("first_name", "last_name", mode="before")
+    @classmethod
+    def normalize_name_fields(cls, v: object) -> object:
+        return normalize_person_name(v) if isinstance(v, str) else v
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email_field(cls, v: object) -> object:
+        return normalize_email(v) if isinstance(v, str) else v
+
+
+class AddressRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    kind: str
+    street: str
+    city: str
+    province: str
+    postal_code: str
+    country: str
+
+
+class SupplyPointRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    label: str | None
+    energy_type: str | None
+    pod_code: str | None
+    pdr_code: str | None
+    meter_number: str | None
+    supply_address_id: uuid.UUID
+
+
+class SupplyPointCreate(BaseModel):
+    label: str | None = None  # auto-computed from energy_type + address if omitted
+    energy_type: str  # ELECTRICITY / GAS
+    pod_code: str | None = None
+    pdr_code: str | None = None
+    meter_number: str | None = None
+    street: str
+    city: str
+    province: str
+    postal_code: str
+    country: str = "IT"
+
+
+class SupplyPointUpdate(BaseModel):
+    label: str | None = None
+
+
+class CustomerDetailRead(CustomerRead):
+    addresses: list[AddressRead] = []
+    supply_points: list[SupplyPointRead] = []
+    current_promoter_agent_id: uuid.UUID | None = None
+    current_promoter_name: str | None = None
+
+
+class StaffCustomerCreate(CustomerCreate):
+    """The administration's "Nuovo cliente" (Session 67): anagrafica and
+    login together, under the promoter chosen here (none = direct customer
+    of the company)."""
+
+    promoter_agent_id: uuid.UUID | None = None
+
+
+class ReassignPromoterRequest(BaseModel):
+    new_agent_id: uuid.UUID
+    reason: str

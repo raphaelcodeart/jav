@@ -1,0 +1,182 @@
+"""Covers the invite-only public registration flow: a referral code from a
+promoter's shared link is required, no exceptions ("nessuno può stare senza
+promoter che lo invita" -- closed circuit)."""
+
+import uuid
+from datetime import UTC, datetime
+
+import pytest
+from sqlalchemy import select
+
+from app.domains.auth import service as auth_service
+from app.domains.auth.schemas import RegisterRequest
+from app.domains.customers.models import Customer, CustomerProfile
+from app.domains.network import service as network_service
+from app.domains.rbac.models import Role
+from app.domains.referral import service as referral_service
+from app.domains.referral.models import CustomerAttribution, PromoterCode
+from app.domains.users.models import User
+
+NOW = datetime(2026, 1, 1, tzinfo=UTC)
+
+
+async def _make_customer_role(db, organization_id):
+    role = Role(organization_id=organization_id, code="CUSTOMER", name="Customer")
+    db.add(role)
+    await db.commit()
+    return role
+
+
+async def _make_promoter_with_code(db, organization_id):
+    agent = await network_service.create_agent(
+        db, organization_id=organization_id, first_name="Referring", last_name="Promoter",
+        promoter_code=f"REF-{uuid.uuid4().hex[:8]}", parent_agent_id=None,
+    )
+    promoter_code = await referral_service.get_or_create_promoter_code(
+        db, organization_id=organization_id, agent_id=agent.id
+    )
+    return agent, promoter_code
+
+
+@pytest.mark.asyncio
+async def test_registration_with_valid_referral_code_creates_attributed_customer(db, organization_id):
+    await _make_customer_role(db, organization_id)
+    agent, promoter_code = await _make_promoter_with_code(db, organization_id)
+
+    # Mixed case and padding on purpose -- RegisterRequest's normalize_email/
+    # normalize_person_name validators must clean this up before it ever
+    # reaches the DB (see app/core/normalization.py), regardless of how the
+    # customer actually typed it.
+    payload = RegisterRequest(
+        organization_id=str(organization_id),
+        referral_code=promoter_code.code,
+        email="  New.Customer@Example.COM ",
+        password="correct-horse-battery-staple",
+        kind="PRIVATE",
+        first_name="  nuovo  ",
+        last_name="cliente",
+    )
+    user = await auth_service.register_with_referral(db, organization_id=organization_id, payload=payload)
+
+    assert user.email == "new.customer@example.com"
+
+    customer = (await db.execute(select(Customer).where(Customer.user_id == user.id))).scalar_one()
+    assert customer.email == "new.customer@example.com"
+
+    profile = (await db.execute(select(CustomerProfile).where(CustomerProfile.customer_id == customer.id))).scalar_one()
+    assert profile.first_name == "NUOVO"
+    assert profile.last_name == "CLIENTE"
+
+    attribution = (
+        await db.execute(select(CustomerAttribution).where(CustomerAttribution.customer_id == customer.id))
+    ).scalar_one()
+    assert attribution.promoter_code_id == promoter_code.id
+
+
+@pytest.mark.asyncio
+async def test_registration_rejects_invalid_referral_code(db, organization_id):
+    await _make_customer_role(db, organization_id)
+
+    payload = RegisterRequest(
+        organization_id=str(organization_id),
+        referral_code="DOES-NOT-EXIST",
+        email="orphan@example.com",
+        password="correct-horse-battery-staple",
+        kind="PRIVATE",
+        first_name="Orfano",
+        last_name="Cliente",
+    )
+    with pytest.raises(auth_service.RegistrationError):
+        await auth_service.register_with_referral(db, organization_id=organization_id, payload=payload)
+
+    # No half-created account left behind.
+    leftover = (await db.execute(select(User).where(User.email == "orphan@example.com"))).scalar_one_or_none()
+    assert leftover is None
+
+
+@pytest.mark.asyncio
+async def test_registration_rejects_duplicate_email(db, organization_id):
+    await _make_customer_role(db, organization_id)
+    _, promoter_code = await _make_promoter_with_code(db, organization_id)
+
+    payload = RegisterRequest(
+        organization_id=str(organization_id),
+        referral_code=promoter_code.code,
+        email="duplicate@example.com",
+        password="correct-horse-battery-staple",
+        kind="PRIVATE",
+        first_name="Primo",
+        last_name="Cliente",
+    )
+    await auth_service.register_with_referral(db, organization_id=organization_id, payload=payload)
+
+    with pytest.raises(auth_service.RegistrationError):
+        await auth_service.register_with_referral(db, organization_id=organization_id, payload=payload)
+
+
+@pytest.mark.asyncio
+async def test_registration_rejects_duplicate_email_regardless_of_case(db, organization_id):
+    """The duplicate check (and the email column itself) must not let the
+    same real inbox register twice just because the second attempt was typed
+    in different case -- RegisterRequest normalizes to lowercase before this
+    check ever runs, but the check itself is also case-insensitive
+    (func.lower on both sides, see auth/service.py::register_with_referral)
+    as a second line of defense for any pre-existing row stored with mixed
+    case from before that normalization existed."""
+    await _make_customer_role(db, organization_id)
+    _, promoter_code = await _make_promoter_with_code(db, organization_id)
+
+    first = RegisterRequest(
+        organization_id=str(organization_id), referral_code=promoter_code.code,
+        email="CaseSensitive@Example.com", password="correct-horse-battery-staple",
+        kind="PRIVATE", first_name="Primo", last_name="Cliente",
+    )
+    await auth_service.register_with_referral(db, organization_id=organization_id, payload=first)
+
+    second = RegisterRequest(
+        organization_id=str(organization_id), referral_code=promoter_code.code,
+        email="casesensitive@example.com", password="correct-horse-battery-staple",
+        kind="PRIVATE", first_name="Secondo", last_name="Cliente",
+    )
+    with pytest.raises(auth_service.RegistrationError):
+        await auth_service.register_with_referral(db, organization_id=organization_id, payload=second)
+
+
+@pytest.mark.asyncio
+async def test_registration_rejects_expired_referral_code(db, organization_id):
+    await _make_customer_role(db, organization_id)
+    agent = await network_service.create_agent(
+        db, organization_id=organization_id, first_name="Expired", last_name="Promoter",
+        promoter_code=f"EXP-{uuid.uuid4().hex[:8]}", parent_agent_id=None,
+    )
+    expired_code = PromoterCode(
+        organization_id=organization_id, agent_id=agent.id, code=f"EXPCODE-{uuid.uuid4().hex[:6]}",
+        personal_link="/r/expired", status="ACTIVE",
+        valid_from=NOW, valid_to=datetime(2026, 1, 2, tzinfo=UTC),
+    )
+    db.add(expired_code)
+    await db.commit()
+
+    payload = RegisterRequest(
+        organization_id=str(organization_id),
+        referral_code=expired_code.code,
+        email="toolate@example.com",
+        password="correct-horse-battery-staple",
+        kind="PRIVATE",
+        first_name="Troppo",
+        last_name="Tardi",
+    )
+    with pytest.raises(auth_service.RegistrationError):
+        await auth_service.register_with_referral(db, organization_id=organization_id, payload=payload)
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_promoter_code_is_idempotent(db, organization_id):
+    agent = await network_service.create_agent(
+        db, organization_id=organization_id, first_name="Idempotent", last_name="Promoter",
+        promoter_code=f"IDM-{uuid.uuid4().hex[:8]}", parent_agent_id=None,
+    )
+    first = await referral_service.get_or_create_promoter_code(db, organization_id=organization_id, agent_id=agent.id)
+    second = await referral_service.get_or_create_promoter_code(db, organization_id=organization_id, agent_id=agent.id)
+    assert first.id == second.id
+    assert first.code == agent.promoter_code

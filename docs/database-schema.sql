@@ -1,0 +1,9064 @@
+--
+-- PostgreSQL database dump
+--
+
+\restrict sylH4SHUNV0ujaQb0OWzd7YTGOYGFYaAl9VxkXHLxIPsItQpoz9a4DMEj7tgBdP
+
+-- Dumped from database version 16.14
+-- Dumped by pg_dump version 16.14
+
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
+
+SET default_tablespace = '';
+
+SET default_table_access_method = heap;
+
+--
+-- Name: addresses; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.addresses (
+    organization_id uuid NOT NULL,
+    customer_id uuid NOT NULL,
+    kind character varying(32) NOT NULL,
+    street character varying(255) NOT NULL,
+    city character varying(128) NOT NULL,
+    province character varying(8) NOT NULL,
+    postal_code character varying(16) NOT NULL,
+    country character varying(2) NOT NULL,
+    id uuid NOT NULL
+);
+
+
+--
+-- Name: agent_profiles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.agent_profiles (
+    organization_id uuid NOT NULL,
+    user_id uuid,
+    display_name character varying(255) NOT NULL,
+    promoter_code character varying(32) NOT NULL,
+    status character varying(32) NOT NULL,
+    photo_url character varying(1000),
+    joined_at timestamp with time zone NOT NULL,
+    current_rank_id uuid,
+    approved_by_user_id uuid,
+    approved_at timestamp with time zone,
+    rejection_reason character varying(500),
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    is_blacklisted boolean DEFAULT false NOT NULL,
+    first_name character varying(120),
+    last_name character varying(120),
+    collaboration_contract_version character varying(32),
+    collaboration_accepted_at timestamp with time zone,
+    collaboration_otp_verified_at timestamp with time zone,
+    collaboration_accepted_documents jsonb DEFAULT '{}'::jsonb NOT NULL
+);
+
+
+--
+-- Name: agent_rank_history; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.agent_rank_history (
+    organization_id uuid NOT NULL,
+    agent_id uuid NOT NULL,
+    rank_id uuid NOT NULL,
+    effective_from timestamp with time zone NOT NULL,
+    effective_to timestamp with time zone,
+    calculation_source character varying(32) NOT NULL,
+    rule_version_id character varying(32) NOT NULL,
+    approved_by uuid,
+    reason character varying(500),
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: alembic_version; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.alembic_version (
+    version_num character varying(32) NOT NULL
+);
+
+
+--
+-- Name: aliexpress_order_items; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.aliexpress_order_items (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    order_id uuid NOT NULL,
+    aliexpress_product_id uuid NOT NULL,
+    aliexpress_variant_id uuid NOT NULL,
+    quantity integer NOT NULL,
+    unit_price_cents bigint NOT NULL,
+    unit_cost_amount numeric(12,2),
+    product_name character varying(255) NOT NULL,
+    variant_label character varying(255),
+    credit_discount_percentage integer DEFAULT 0 NOT NULL,
+    aliexpress_order_id character varying(128),
+    tracking_number character varying(128),
+    tracking_url character varying(1000),
+    tracking_company character varying(128),
+    supplier_shipping_cents bigint,
+    CONSTRAINT ck_aliexpress_order_items_quantity_positive CHECK ((quantity > 0))
+);
+
+
+--
+-- Name: shop_order_number_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.shop_order_number_seq
+    START WITH 1000
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: aliexpress_orders; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.aliexpress_orders (
+    id uuid NOT NULL,
+    organization_id uuid NOT NULL,
+    customer_user_id uuid NOT NULL,
+    aliexpress_product_id uuid NOT NULL,
+    aliexpress_variant_id uuid NOT NULL,
+    created_by_user_id uuid NOT NULL,
+    quantity integer DEFAULT 1 NOT NULL,
+    unit_price_cents bigint NOT NULL,
+    shipping_cents bigint DEFAULT '0'::bigint NOT NULL,
+    amount_cents bigint NOT NULL,
+    credit_applied_cents bigint DEFAULT '0'::bigint NOT NULL,
+    bank_transfer_discount_cents bigint DEFAULT '0'::bigint NOT NULL,
+    credit_debit_transaction_id uuid,
+    status character varying(16) DEFAULT 'AWAITING_PAYMENT'::character varying NOT NULL,
+    payment_method character varying(16) DEFAULT 'BANK_TRANSFER'::character varying NOT NULL,
+    stripe_checkout_session_id character varying(255),
+    note character varying(1000),
+    payment_proof_storage_key character varying(500),
+    payment_proof_original_filename character varying(255),
+    payment_proof_uploaded_at timestamp with time zone,
+    paid_by_user_id uuid,
+    paid_at timestamp with time zone,
+    cancelled_by_user_id uuid,
+    cancelled_at timestamp with time zone,
+    cancellation_reason character varying(500),
+    recipient_name character varying(128) NOT NULL,
+    recipient_phone character varying(32),
+    address_line1 character varying(255) NOT NULL,
+    address_line2 character varying(255),
+    city character varying(128) NOT NULL,
+    province character varying(64) NOT NULL,
+    postal_code character varying(16) NOT NULL,
+    country_code character varying(2) DEFAULT 'IT'::character varying NOT NULL,
+    shipping_days character varying(32),
+    unit_cost_amount numeric(12,2),
+    currency_rate numeric(10,6) DEFAULT '1'::numeric NOT NULL,
+    fulfillment_status character varying(16) DEFAULT 'NOT_SENT'::character varying NOT NULL,
+    out_order_id character varying(64),
+    aliexpress_order_id character varying(128),
+    aliexpress_order_status character varying(64),
+    forwarded_at timestamp with time zone,
+    forwarded_by_user_id uuid,
+    forward_error character varying(500),
+    tracking_number character varying(128),
+    tracking_url character varying(1000),
+    tracking_company character varying(128),
+    shipped_at timestamp with time zone,
+    delivered_at timestamp with time zone,
+    last_sync_at timestamp with time zone,
+    attempt_count integer DEFAULT 0 NOT NULL,
+    last_attempt_at timestamp with time zone,
+    next_retry_at timestamp with time zone,
+    last_error_kind character varying(24),
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    vat_percentage integer DEFAULT 0 NOT NULL,
+    vat_amount_cents bigint DEFAULT '0'::bigint NOT NULL,
+    supplier_shipping_cents bigint,
+    minimum_shipping_cents bigint,
+    number bigint DEFAULT nextval('public.shop_order_number_seq'::regclass) NOT NULL,
+    vat_mode character varying(16) DEFAULT 'ADDED'::character varying NOT NULL,
+    CONSTRAINT ck_aliexpress_orders_ck_aliexpress_orders_vat_mode CHECK (((vat_mode)::text = ANY ((ARRAY['INCLUDED'::character varying, 'ADDED'::character varying])::text[]))),
+    CONSTRAINT ck_aliexpress_orders_credit_applied_non_negative CHECK ((credit_applied_cents >= 0)),
+    CONSTRAINT ck_aliexpress_orders_credit_applied_not_over_amount CHECK ((credit_applied_cents <= amount_cents)),
+    CONSTRAINT ck_aliexpress_orders_quantity_positive CHECK ((quantity > 0))
+);
+
+
+--
+-- Name: aliexpress_products; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.aliexpress_products (
+    id uuid NOT NULL,
+    organization_id uuid NOT NULL,
+    aliexpress_product_id character varying(128) NOT NULL,
+    product_url character varying(1000),
+    name character varying(255) NOT NULL,
+    source_title character varying(500),
+    vendor character varying(255),
+    description character varying(8000) DEFAULT ''::character varying NOT NULL,
+    image_url character varying(1000),
+    images jsonb DEFAULT '[]'::jsonb NOT NULL,
+    status character varying(16) DEFAULT 'ACTIVE'::character varying NOT NULL,
+    credit_discount_percentage integer DEFAULT 30 NOT NULL,
+    markup_percentage integer,
+    last_synced_at timestamp with time zone,
+    sync_error character varying(500),
+    created_by_user_id uuid NOT NULL,
+    updated_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT ck_aliexpress_products_credit_discount_percentage_below_100 CHECK (((credit_discount_percentage >= 0) AND (credit_discount_percentage <= 99)))
+);
+
+
+--
+-- Name: aliexpress_settings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.aliexpress_settings (
+    id uuid NOT NULL,
+    organization_id uuid NOT NULL,
+    app_key character varying(64),
+    app_secret character varying(255),
+    access_token character varying(500),
+    refresh_token character varying(500),
+    token_expires_at timestamp with time zone,
+    account_label character varying(255),
+    last_connected_at timestamp with time zone,
+    enabled boolean DEFAULT false NOT NULL,
+    ship_to_country character varying(2) DEFAULT 'IT'::character varying NOT NULL,
+    target_currency character varying(3) DEFAULT 'EUR'::character varying NOT NULL,
+    target_language character varying(8) DEFAULT 'it'::character varying NOT NULL,
+    currency_rate numeric(10,6) DEFAULT '1'::numeric NOT NULL,
+    price_basis character varying(8) DEFAULT 'COST'::character varying NOT NULL,
+    markup_percentage integer DEFAULT 100 NOT NULL,
+    markup_fixed_cents integer DEFAULT 0 NOT NULL,
+    price_rounding character varying(8) DEFAULT '90'::character varying NOT NULL,
+    shipping_mode character varying(16) DEFAULT 'CUSTOMER_PAYS'::character varying NOT NULL,
+    shipping_minimum_cents integer DEFAULT 590 NOT NULL,
+    shipping_days character varying(32) DEFAULT '10-20'::character varying,
+    default_credit_percentage integer DEFAULT 30 NOT NULL,
+    auto_forward boolean DEFAULT true NOT NULL,
+    updated_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: aliexpress_variants; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.aliexpress_variants (
+    id uuid NOT NULL,
+    product_id uuid NOT NULL,
+    aliexpress_sku_id character varying(128) NOT NULL,
+    sku_attr character varying(500),
+    sku character varying(128),
+    label character varying(255) DEFAULT ''::character varying NOT NULL,
+    image_url character varying(1000),
+    cost_amount numeric(12,2),
+    source_price_amount numeric(12,2) NOT NULL,
+    price_cents bigint NOT NULL,
+    price_override_cents bigint,
+    inventory integer,
+    active boolean DEFAULT true NOT NULL,
+    available_in_store boolean DEFAULT true NOT NULL,
+    last_synced_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: attribution_corrections; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.attribution_corrections (
+    organization_id uuid NOT NULL,
+    customer_attribution_id uuid NOT NULL,
+    previous_promoter_code_id uuid NOT NULL,
+    new_promoter_code_id uuid NOT NULL,
+    requested_by uuid NOT NULL,
+    approved_by uuid,
+    reason character varying(500) NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: audit_log; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.audit_log (
+    organization_id uuid NOT NULL,
+    actor_user_id uuid,
+    action character varying(128) NOT NULL,
+    entity_type character varying(64) NOT NULL,
+    entity_id character varying(64) NOT NULL,
+    previous_value jsonb,
+    new_value jsonb,
+    reason character varying(500),
+    ip_address character varying(64),
+    user_agent character varying(255),
+    correlation_id character varying(64),
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: cart_items; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.cart_items (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    cart_id uuid NOT NULL,
+    quantity bigint NOT NULL,
+    aliexpress_variant_id uuid,
+    cj_variant_id uuid,
+    shopify_variant_id uuid,
+    product_version_id uuid,
+    jav_market_variant_id uuid,
+    kappa_market_variant_id uuid,
+    vaitto_market_variant_id uuid,
+    symphonya_market_variant_id uuid,
+    soleil_market_variant_id uuid,
+    CONSTRAINT ck_cart_items_exactly_one_reference CHECK ((num_nonnulls(aliexpress_variant_id, cj_variant_id, shopify_variant_id, jav_market_variant_id, kappa_market_variant_id, vaitto_market_variant_id, symphonya_market_variant_id, soleil_market_variant_id, product_version_id) = 1)),
+    CONSTRAINT ck_cart_items_quantity_max CHECK ((quantity <= 99)),
+    CONSTRAINT ck_cart_items_quantity_positive CHECK ((quantity > 0))
+);
+
+
+--
+-- Name: carts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.carts (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    organization_id uuid NOT NULL,
+    customer_user_id uuid NOT NULL,
+    shop character varying(16) NOT NULL,
+    CONSTRAINT ck_carts_shop CHECK (((shop)::text = ANY ((ARRAY['aliexpress'::character varying, 'cj'::character varying, 'shopify'::character varying, 'jav_market'::character varying, 'kappa_market'::character varying, 'vaitto_market'::character varying, 'symphonya_market'::character varying, 'soleil_market'::character varying, 'catalog'::character varying])::text[])))
+);
+
+
+--
+-- Name: cj_order_items; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.cj_order_items (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    order_id uuid NOT NULL,
+    product_id uuid NOT NULL,
+    variant_id uuid NOT NULL,
+    quantity integer NOT NULL,
+    unit_price_cents bigint NOT NULL,
+    product_name character varying(255) NOT NULL,
+    variant_label character varying(255),
+    credit_discount_percentage integer DEFAULT 0 NOT NULL,
+    supplier_order_id character varying(128),
+    tracking_number character varying(128),
+    tracking_url character varying(1000),
+    tracking_company character varying(128),
+    unit_cost_usd numeric(12,2),
+    origin_country character varying(8),
+    CONSTRAINT ck_cj_order_items_quantity_positive CHECK ((quantity > 0))
+);
+
+
+--
+-- Name: cj_orders; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.cj_orders (
+    id uuid NOT NULL,
+    organization_id uuid NOT NULL,
+    customer_user_id uuid NOT NULL,
+    cj_product_id uuid NOT NULL,
+    cj_variant_id uuid NOT NULL,
+    created_by_user_id uuid NOT NULL,
+    quantity integer DEFAULT 1 NOT NULL,
+    unit_price_cents bigint NOT NULL,
+    shipping_cents bigint DEFAULT '0'::bigint NOT NULL,
+    amount_cents bigint NOT NULL,
+    credit_applied_cents bigint DEFAULT '0'::bigint NOT NULL,
+    credit_debit_transaction_id uuid,
+    status character varying(16) DEFAULT 'AWAITING_PAYMENT'::character varying NOT NULL,
+    payment_method character varying(16) DEFAULT 'BANK_TRANSFER'::character varying NOT NULL,
+    stripe_checkout_session_id character varying(255),
+    note character varying(1000),
+    payment_proof_storage_key character varying(500),
+    payment_proof_original_filename character varying(255),
+    payment_proof_uploaded_at timestamp with time zone,
+    paid_by_user_id uuid,
+    paid_at timestamp with time zone,
+    cancelled_by_user_id uuid,
+    cancelled_at timestamp with time zone,
+    cancellation_reason character varying(500),
+    recipient_name character varying(128) NOT NULL,
+    recipient_phone character varying(32),
+    address_line1 character varying(255) NOT NULL,
+    address_line2 character varying(255),
+    city character varying(128) NOT NULL,
+    province character varying(64) NOT NULL,
+    postal_code character varying(16) NOT NULL,
+    country_code character varying(2) DEFAULT 'IT'::character varying NOT NULL,
+    logistic_name character varying(64) NOT NULL,
+    origin_country character varying(2) DEFAULT 'CN'::character varying NOT NULL,
+    shipping_days character varying(32),
+    unit_cost_usd numeric(10,2) NOT NULL,
+    shipping_cost_usd numeric(10,2) DEFAULT '0'::numeric NOT NULL,
+    usd_eur_rate numeric(10,6) NOT NULL,
+    fulfillment_status character varying(16) DEFAULT 'NOT_SENT'::character varying NOT NULL,
+    sandbox boolean DEFAULT false NOT NULL,
+    cj_order_id character varying(64),
+    cj_order_status character varying(32),
+    cj_amount_usd numeric(12,2),
+    forwarded_at timestamp with time zone,
+    forwarded_by_user_id uuid,
+    forward_error character varying(500),
+    tracking_number character varying(128),
+    tracking_provider character varying(64),
+    shipped_at timestamp with time zone,
+    delivered_at timestamp with time zone,
+    last_cj_sync_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    cj_order_code character varying(64),
+    cj_shipment_order_id character varying(64),
+    cj_pay_url character varying(1000),
+    cj_payment_status character varying(24) DEFAULT 'NOT_REQUIRED'::character varying NOT NULL,
+    cj_product_amount_usd numeric(10,2),
+    cj_postage_amount_usd numeric(10,2),
+    cj_ioss_amount_usd numeric(10,2),
+    cj_paid_at timestamp with time zone,
+    attempt_count integer DEFAULT 0 NOT NULL,
+    last_attempt_at timestamp with time zone,
+    next_retry_at timestamp with time zone,
+    last_error_kind character varying(24),
+    bank_transfer_discount_cents bigint DEFAULT '0'::bigint NOT NULL,
+    vat_percentage integer DEFAULT 0 NOT NULL,
+    vat_amount_cents bigint DEFAULT '0'::bigint NOT NULL,
+    number bigint DEFAULT nextval('public.shop_order_number_seq'::regclass) NOT NULL,
+    vat_mode character varying(16) DEFAULT 'ADDED'::character varying NOT NULL,
+    CONSTRAINT ck_cj_orders_ck_cj_orders_credit_applied_non_negative CHECK ((credit_applied_cents >= 0)),
+    CONSTRAINT ck_cj_orders_ck_cj_orders_credit_applied_not_over_amount CHECK ((credit_applied_cents <= amount_cents)),
+    CONSTRAINT ck_cj_orders_ck_cj_orders_quantity_positive CHECK ((quantity > 0)),
+    CONSTRAINT ck_cj_orders_ck_cj_orders_vat_mode CHECK (((vat_mode)::text = ANY ((ARRAY['INCLUDED'::character varying, 'ADDED'::character varying])::text[])))
+);
+
+
+--
+-- Name: cj_products; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.cj_products (
+    id uuid NOT NULL,
+    organization_id uuid NOT NULL,
+    cj_pid character varying(64) NOT NULL,
+    cj_sku character varying(64),
+    name character varying(255) NOT NULL,
+    name_en character varying(500),
+    description character varying(8000) DEFAULT ''::character varying NOT NULL,
+    image_url character varying(1000),
+    images jsonb DEFAULT '[]'::jsonb NOT NULL,
+    category_name character varying(255),
+    origin_country character varying(2) DEFAULT 'CN'::character varying NOT NULL,
+    shipping_estimate_usd numeric(10,2),
+    shipping_days character varying(32),
+    status character varying(16) DEFAULT 'ACTIVE'::character varying NOT NULL,
+    credit_discount_percentage integer DEFAULT 100 NOT NULL,
+    markup_percentage integer,
+    last_synced_at timestamp with time zone,
+    sync_error character varying(500),
+    created_by_user_id uuid NOT NULL,
+    updated_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT ck_cj_products_credit_below_100 CHECK (((credit_discount_percentage >= 0) AND (credit_discount_percentage <= 99)))
+);
+
+
+--
+-- Name: cj_settings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.cj_settings (
+    id uuid NOT NULL,
+    organization_id uuid NOT NULL,
+    api_key character varying(255),
+    access_token text,
+    access_token_expires_at timestamp with time zone,
+    refresh_token text,
+    refresh_token_expires_at timestamp with time zone,
+    open_id character varying(64),
+    enabled boolean DEFAULT false NOT NULL,
+    sandbox boolean DEFAULT true NOT NULL,
+    usd_eur_rate numeric(10,6) DEFAULT 0.92 NOT NULL,
+    markup_percentage integer DEFAULT 40 NOT NULL,
+    markup_fixed_cents integer DEFAULT 0 NOT NULL,
+    price_rounding character varying(8) DEFAULT '90'::character varying NOT NULL,
+    shipping_mode character varying(16) DEFAULT 'CUSTOMER_PAYS'::character varying NOT NULL,
+    default_credit_percentage integer DEFAULT 30 NOT NULL,
+    destination_country character varying(2) DEFAULT 'IT'::character varying NOT NULL,
+    auto_forward boolean DEFAULT false NOT NULL,
+    last_balance_usd numeric(12,2),
+    last_balance_at timestamp with time zone,
+    updated_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT ck_cj_settings_default_credit_below_100 CHECK (((default_credit_percentage >= 0) AND (default_credit_percentage <= 99)))
+);
+
+
+--
+-- Name: cj_variants; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.cj_variants (
+    id uuid NOT NULL,
+    product_id uuid NOT NULL,
+    cj_vid character varying(64) NOT NULL,
+    cj_sku character varying(128),
+    label character varying(255) DEFAULT ''::character varying NOT NULL,
+    image_url character varying(1000),
+    cost_usd numeric(10,2) NOT NULL,
+    weight_g integer DEFAULT 0 NOT NULL,
+    price_cents bigint NOT NULL,
+    price_override_cents bigint,
+    inventory integer DEFAULT 0 NOT NULL,
+    active boolean DEFAULT true NOT NULL,
+    available_on_cj boolean DEFAULT true NOT NULL,
+    last_synced_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: commission_adjustments; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.commission_adjustments (
+    organization_id uuid NOT NULL,
+    original_movement_id uuid NOT NULL,
+    new_movement_id uuid NOT NULL,
+    reason character varying(500) NOT NULL,
+    requested_by uuid NOT NULL,
+    approved_by uuid,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: commission_calculation_steps; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.commission_calculation_steps (
+    calculation_id uuid NOT NULL,
+    step_order integer NOT NULL,
+    beneficiary_agent_id uuid NOT NULL,
+    rank_at_calculation character varying(16),
+    base_amount_cents bigint NOT NULL,
+    already_distributed_cents bigint NOT NULL,
+    entrepreneurial_difference_cents bigint NOT NULL,
+    personal_bonus_cents bigint NOT NULL,
+    gross_amount_cents bigint NOT NULL,
+    movement_type character varying(32) NOT NULL,
+    explanation character varying(1000) NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: commission_calculations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.commission_calculations (
+    organization_id uuid NOT NULL,
+    contract_id uuid NOT NULL,
+    network_snapshot_id uuid NOT NULL,
+    commission_plan_version_id uuid,
+    trigger_event_id uuid NOT NULL,
+    input_snapshot jsonb NOT NULL,
+    output_snapshot jsonb NOT NULL,
+    checksum character varying(64) NOT NULL,
+    status character varying(32) NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: commission_movements; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.commission_movements (
+    organization_id uuid NOT NULL,
+    agent_id uuid NOT NULL,
+    contract_id uuid NOT NULL,
+    origin_event_id uuid NOT NULL,
+    calculation_id uuid NOT NULL,
+    movement_type character varying(32) NOT NULL,
+    amount_cents bigint NOT NULL,
+    currency character varying(3) NOT NULL,
+    status character varying(32) NOT NULL,
+    effective_date date NOT NULL,
+    scheduled_date date,
+    paid_date date,
+    rule_version_id character varying(32) NOT NULL,
+    network_snapshot_id uuid NOT NULL,
+    idempotency_key character varying(128) NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: commission_offsets; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.commission_offsets (
+    organization_id uuid NOT NULL,
+    debit_movement_id uuid NOT NULL,
+    credit_movement_id uuid NOT NULL,
+    reason character varying(500) NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: commission_plan_versions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.commission_plan_versions (
+    organization_id uuid NOT NULL,
+    version_label character varying(32) NOT NULL,
+    valid_from timestamp with time zone NOT NULL,
+    valid_to timestamp with time zone,
+    status character varying(32) NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: commission_reversals; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.commission_reversals (
+    organization_id uuid NOT NULL,
+    original_movement_id uuid NOT NULL,
+    new_movement_id uuid NOT NULL,
+    reason character varying(500) NOT NULL,
+    requested_by uuid NOT NULL,
+    approved_by uuid,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: commission_rule_versions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.commission_rule_versions (
+    commission_plan_version_id uuid NOT NULL,
+    rule_type character varying(64) NOT NULL,
+    parameters jsonb NOT NULL,
+    valid_from timestamp with time zone NOT NULL,
+    valid_to timestamp with time zone,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: companies; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.companies (
+    customer_id uuid NOT NULL,
+    company_name character varying(255) NOT NULL,
+    legal_form character varying(64),
+    sdi_code character varying(16)
+);
+
+
+--
+-- Name: contract_attributions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.contract_attributions (
+    organization_id uuid NOT NULL,
+    producer_agent_id uuid NOT NULL,
+    attributed_promoter_id uuid NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: contract_commission_plans; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.contract_commission_plans (
+    id uuid NOT NULL,
+    organization_id uuid NOT NULL,
+    contract_id uuid NOT NULL,
+    accepted_by_user_id uuid NOT NULL,
+    accepted_at timestamp with time zone NOT NULL,
+    payment_plan character varying(16),
+    total_commission_cents bigint NOT NULL,
+    preview jsonb NOT NULL,
+    checksum character varying(64) NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: contract_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.contract_events (
+    contract_id uuid NOT NULL,
+    event_type character varying(64) NOT NULL,
+    payload jsonb NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: contract_instalments; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.contract_instalments (
+    id uuid NOT NULL,
+    organization_id uuid NOT NULL,
+    contract_id uuid NOT NULL,
+    number integer NOT NULL,
+    instalments_total integer NOT NULL,
+    due_date date NOT NULL,
+    amount_cents bigint NOT NULL,
+    status character varying(16) NOT NULL,
+    paid_at timestamp with time zone,
+    payment_source character varying(16),
+    confirmed_by_user_id uuid,
+    stripe_invoice_id character varying(255),
+    commission_event_id uuid,
+    commission_released_at timestamp with time zone,
+    commission_calculation_id uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: contract_request_checkouts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.contract_request_checkouts (
+    id uuid NOT NULL,
+    organization_id uuid NOT NULL,
+    contract_request_id uuid NOT NULL,
+    stripe_checkout_session_id character varying(255) NOT NULL,
+    payment_plan character varying(16) NOT NULL,
+    lines jsonb NOT NULL,
+    total_cents bigint NOT NULL,
+    instalment_cents bigint NOT NULL,
+    created_by_user_id uuid,
+    completed_at timestamp with time zone,
+    stripe_subscription_id character varying(255),
+    stripe_customer_id character varying(255),
+    outcome character varying(255),
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: contract_requests; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.contract_requests (
+    id uuid NOT NULL,
+    organization_id uuid NOT NULL,
+    customer_id uuid NOT NULL,
+    status character varying(16) NOT NULL,
+    holder_first_name character varying(128),
+    holder_last_name character varying(128),
+    email character varying(320),
+    pec character varying(320),
+    iban character varying(34),
+    created_by_user_id uuid,
+    created_by_role character varying(32),
+    activated_by_promoter_id uuid,
+    submitted_at timestamp with time zone,
+    cancelled_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone,
+    street character varying(255),
+    city character varying(128),
+    province character varying(8),
+    postal_code character varying(16),
+    bank_transfer_requested_at timestamp with time zone,
+    bank_transfer_total_cents bigint,
+    bank_transfer_confirmed_at timestamp with time zone,
+    bank_transfer_confirmed_by_user_id uuid,
+    payment_proof_storage_key character varying(500),
+    payment_proof_original_filename character varying(255),
+    payment_proof_uploaded_at timestamp with time zone,
+    notes text,
+    notes_updated_by_user_id uuid,
+    notes_updated_at timestamp with time zone,
+    holder_kind character varying(32),
+    company_name character varying(255),
+    legal_rep_fiscal_code character varying(16),
+    holder_fiscal_code character varying(16),
+    holder_birth_date date,
+    holder_birth_place character varying(160),
+    holder_birth_place_code character varying(4)
+);
+
+
+--
+-- Name: contract_status_history; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.contract_status_history (
+    contract_id uuid NOT NULL,
+    from_status character varying(32),
+    to_status character varying(32) NOT NULL,
+    actor_user_id uuid NOT NULL,
+    reason character varying(500),
+    notes character varying(2000),
+    correlation_id character varying(64) NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: contracts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.contracts (
+    organization_id uuid NOT NULL,
+    customer_id uuid NOT NULL,
+    supply_point_id uuid NOT NULL,
+    product_version_id uuid,
+    contract_attribution_id uuid,
+    network_snapshot_id uuid,
+    status character varying(32) NOT NULL,
+    notes character varying(2000),
+    iban character varying(34),
+    activated_at timestamp with time zone,
+    expires_at timestamp with time zone,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    email character varying(320),
+    updated_at timestamp with time zone,
+    created_by_user_id uuid,
+    created_by_role character varying(32),
+    activated_by_promoter_id uuid,
+    first_referrer_agent_id uuid,
+    customer_kind character varying(32),
+    net_amount_cents bigint,
+    vat_rate numeric(5,2),
+    vat_amount_cents bigint,
+    gross_amount_cents bigint,
+    payment_plan character varying(16),
+    payment_method character varying(16),
+    stripe_checkout_session_id character varying(255),
+    stripe_customer_id character varying(255),
+    stripe_subscription_id character varying(255),
+    paid_at timestamp with time zone,
+    cashback_credited_at timestamp with time zone,
+    terms_accepted_at timestamp with time zone,
+    terms_accepted_by_user_id uuid,
+    terms_version character varying(32),
+    terms_accepted_ip character varying(45),
+    terms_accepted_user_agent character varying(500),
+    holder_first_name character varying(128),
+    holder_last_name character varying(128),
+    pec character varying(320),
+    contract_request_id uuid NOT NULL,
+    stripe_subscription_item_id character varying(255),
+    billing_stopped_at timestamp with time zone,
+    payment_discount_cents integer DEFAULT 0 NOT NULL,
+    instalments_net_amount_cents bigint,
+    instalments_vat_amount_cents bigint,
+    instalments_gross_amount_cents bigint,
+    CONSTRAINT ck_contracts_product_required CHECK (((product_version_id IS NOT NULL) OR ((status)::text = ANY ((ARRAY['DRAFT'::character varying, 'CANCELLED'::character varying])::text[]))))
+);
+
+
+--
+-- Name: customer_attributions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.customer_attributions (
+    organization_id uuid NOT NULL,
+    customer_id uuid NOT NULL,
+    promoter_code_id uuid NOT NULL,
+    referral_session_id uuid,
+    attributed_at timestamp with time zone NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: customer_profiles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.customer_profiles (
+    customer_id uuid NOT NULL,
+    first_name character varying(128) NOT NULL,
+    last_name character varying(128) NOT NULL
+);
+
+
+--
+-- Name: customers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.customers (
+    organization_id uuid NOT NULL,
+    user_id uuid,
+    kind character varying(32) NOT NULL,
+    fiscal_code character varying(32),
+    vat_number character varying(32),
+    email character varying(255) NOT NULL,
+    phone character varying(32),
+    pec character varying(255),
+    photo_url character varying(1000),
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: documentation_posts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.documentation_posts (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    organization_id uuid NOT NULL,
+    title character varying(200) NOT NULL,
+    body text,
+    audience character varying(16) DEFAULT 'BOTH'::character varying NOT NULL,
+    status character varying(16) DEFAULT 'PUBLISHED'::character varying NOT NULL,
+    image_url character varying(500),
+    pdf_url character varying(500),
+    pdf_filename character varying(255),
+    video_url character varying(500),
+    created_by_user_id uuid NOT NULL
+);
+
+
+--
+-- Name: documents; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.documents (
+    organization_id uuid NOT NULL,
+    contract_id uuid,
+    document_type character varying(32) NOT NULL,
+    original_filename character varying(255) NOT NULL,
+    storage_key character varying(500) NOT NULL,
+    content_type character varying(100) NOT NULL,
+    size_bytes bigint NOT NULL,
+    uploaded_by_user_id uuid NOT NULL,
+    uploaded_by_role character varying(32) NOT NULL,
+    status character varying(32) NOT NULL,
+    reviewed_by_user_id uuid,
+    reviewed_at timestamp with time zone,
+    review_note character varying(1000),
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    description character varying(120),
+    contract_request_id uuid,
+    CONSTRAINT ck_documents_one_owner CHECK ((num_nonnulls(contract_id, contract_request_id) = 1))
+);
+
+
+--
+-- Name: domain_outbox; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.domain_outbox (
+    organization_id uuid NOT NULL,
+    event_type character varying(64) NOT NULL,
+    payload jsonb NOT NULL,
+    processed_at timestamp with time zone,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: email_verification_tokens; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.email_verification_tokens (
+    user_id uuid NOT NULL,
+    token_hash character varying(64) NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    used_at timestamp with time zone,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: friend_referral_codes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.friend_referral_codes (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    organization_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    code character varying(32) NOT NULL,
+    status character varying(16) DEFAULT 'ACTIVE'::character varying NOT NULL
+);
+
+
+--
+-- Name: friend_referral_reward_claims; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.friend_referral_reward_claims (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    organization_id uuid NOT NULL,
+    referrer_user_id uuid NOT NULL,
+    milestone integer NOT NULL,
+    status character varying(16) DEFAULT 'REQUESTED'::character varying NOT NULL,
+    handled_by_user_id uuid,
+    handled_at timestamp with time zone,
+    note character varying(500)
+);
+
+
+--
+-- Name: friend_referrals; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.friend_referrals (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    organization_id uuid NOT NULL,
+    referrer_user_id uuid NOT NULL,
+    referred_customer_id uuid NOT NULL,
+    code_used character varying(32) NOT NULL,
+    source character varying(16) NOT NULL
+);
+
+
+--
+-- Name: import_providers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.import_providers (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    organization_id uuid NOT NULL,
+    provider_type character varying(32) NOT NULL,
+    name character varying(128) NOT NULL,
+    base_url character varying(500),
+    api_key character varying(500),
+    enabled boolean DEFAULT true NOT NULL,
+    created_by_user_id uuid NOT NULL,
+    app_key character varying(64),
+    app_secret character varying(255),
+    access_token character varying(500),
+    refresh_token character varying(500),
+    token_expires_at timestamp with time zone,
+    account_label character varying(255),
+    last_connected_at timestamp with time zone
+);
+
+
+--
+-- Name: imported_product_orders; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.imported_product_orders (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    organization_id uuid NOT NULL,
+    customer_user_id uuid NOT NULL,
+    imported_product_id uuid NOT NULL,
+    created_by_user_id uuid NOT NULL,
+    amount_cents bigint NOT NULL,
+    credit_applied_cents bigint DEFAULT '0'::bigint NOT NULL,
+    credit_debit_transaction_id uuid,
+    status character varying(16) DEFAULT 'AWAITING_PAYMENT'::character varying NOT NULL,
+    payment_method character varying(16) DEFAULT 'BANK_TRANSFER'::character varying NOT NULL,
+    stripe_checkout_session_id character varying(255),
+    note character varying(1000),
+    payment_proof_storage_key character varying(500),
+    payment_proof_original_filename character varying(255),
+    payment_proof_uploaded_at timestamp with time zone,
+    paid_by_user_id uuid,
+    paid_at timestamp with time zone,
+    cancelled_by_user_id uuid,
+    cancelled_at timestamp with time zone,
+    cancellation_reason character varying(500),
+    bank_transfer_discount_cents bigint DEFAULT '0'::bigint NOT NULL,
+    vat_percentage integer DEFAULT 0 NOT NULL,
+    vat_amount_cents bigint DEFAULT '0'::bigint NOT NULL,
+    number bigint DEFAULT nextval('public.shop_order_number_seq'::regclass) NOT NULL,
+    vat_mode character varying(16) DEFAULT 'ADDED'::character varying NOT NULL,
+    CONSTRAINT ck_imported_product_orders_ck_imported_orders_credit_ap_3f85 CHECK ((credit_applied_cents <= amount_cents)),
+    CONSTRAINT ck_imported_product_orders_ck_imported_orders_credit_ap_4bb7 CHECK ((credit_applied_cents >= 0)),
+    CONSTRAINT ck_imported_product_orders_ck_imported_product_orders_vat_mode CHECK (((vat_mode)::text = ANY ((ARRAY['INCLUDED'::character varying, 'ADDED'::character varying])::text[])))
+);
+
+
+--
+-- Name: imported_products; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.imported_products (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    organization_id uuid NOT NULL,
+    provider_id uuid NOT NULL,
+    external_id character varying(255),
+    external_url character varying(1000),
+    name character varying(255) NOT NULL,
+    description character varying(2000) DEFAULT ''::character varying NOT NULL,
+    image_url character varying(1000),
+    price_cents bigint NOT NULL,
+    credit_discount_percentage integer DEFAULT 0 NOT NULL,
+    status character varying(16) DEFAULT 'ACTIVE'::character varying NOT NULL,
+    created_by_user_id uuid NOT NULL,
+    CONSTRAINT ck_imported_products_credit_below_100 CHECK (((credit_discount_percentage >= 0) AND (credit_discount_percentage <= 99)))
+);
+
+
+--
+-- Name: invoice_redemptions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.invoice_redemptions (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    organization_id uuid NOT NULL,
+    customer_user_id uuid NOT NULL,
+    partner_id uuid NOT NULL,
+    storage_key character varying(500) NOT NULL,
+    original_filename character varying(255) NOT NULL,
+    content_type character varying(100) NOT NULL,
+    size_bytes bigint NOT NULL,
+    declared_amount_cents bigint NOT NULL,
+    confirmed_amount_cents bigint,
+    payment_reference_code character varying(32),
+    status character varying(16) DEFAULT 'SUBMITTED'::character varying NOT NULL,
+    rejection_reason character varying(500),
+    verified_by_user_id uuid,
+    verified_at timestamp with time zone,
+    credited_by_user_id uuid,
+    credited_at timestamp with time zone,
+    payment_method character varying(16),
+    stripe_checkout_session_id character varying(255),
+    payment_proof_storage_key character varying(500),
+    payment_proof_original_filename character varying(255),
+    payment_proof_uploaded_at timestamp without time zone,
+    review_status character varying(16),
+    reviewed_by_user_id uuid,
+    reviewed_at timestamp with time zone,
+    review_note character varying(500),
+    CONSTRAINT ck_invoice_redemptions_ck_invoice_redemptions_confirmed_a796 CHECK (((confirmed_amount_cents IS NULL) OR (confirmed_amount_cents > 0))),
+    CONSTRAINT ck_invoice_redemptions_review_status CHECK (((review_status IS NULL) OR ((review_status)::text = ANY ((ARRAY['PENDING'::character varying, 'APPROVED'::character varying, 'REJECTED'::character varying])::text[]))))
+);
+
+
+--
+-- Name: kappa_market_order_items; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.kappa_market_order_items (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    order_id uuid NOT NULL,
+    product_id uuid NOT NULL,
+    variant_id uuid NOT NULL,
+    quantity integer NOT NULL,
+    unit_price_cents bigint NOT NULL,
+    unit_cost_cents bigint,
+    product_name character varying(255) NOT NULL,
+    variant_label character varying(255),
+    producer_name character varying(160),
+    credit_discount_percentage integer DEFAULT 0 NOT NULL,
+    CONSTRAINT ck_kappa_market_order_items_quantity_positive CHECK ((quantity > 0))
+);
+
+
+--
+-- Name: kappa_market_orders; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.kappa_market_orders (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    organization_id uuid NOT NULL,
+    customer_user_id uuid NOT NULL,
+    created_by_user_id uuid NOT NULL,
+    number bigint DEFAULT nextval('public.shop_order_number_seq'::regclass) NOT NULL,
+    items_cents bigint DEFAULT '0'::bigint NOT NULL,
+    shipping_cents bigint DEFAULT '0'::bigint NOT NULL,
+    amount_cents bigint NOT NULL,
+    credit_applied_cents bigint DEFAULT '0'::bigint NOT NULL,
+    bank_transfer_discount_cents bigint DEFAULT '0'::bigint NOT NULL,
+    vat_percentage integer DEFAULT 0 NOT NULL,
+    vat_amount_cents bigint DEFAULT '0'::bigint NOT NULL,
+    vat_mode character varying(16) DEFAULT 'ADDED'::character varying NOT NULL,
+    credit_debit_transaction_id uuid,
+    status character varying(16) DEFAULT 'AWAITING_PAYMENT'::character varying NOT NULL,
+    payment_method character varying(16) DEFAULT 'BANK_TRANSFER'::character varying NOT NULL,
+    stripe_checkout_session_id character varying(255),
+    note character varying(1000),
+    payment_proof_storage_key character varying(500),
+    payment_proof_original_filename character varying(255),
+    payment_proof_uploaded_at timestamp with time zone,
+    paid_by_user_id uuid,
+    paid_at timestamp with time zone,
+    cancelled_by_user_id uuid,
+    cancelled_at timestamp with time zone,
+    cancellation_reason character varying(500),
+    recipient_name character varying(128) NOT NULL,
+    recipient_phone character varying(32),
+    address_line1 character varying(255) NOT NULL,
+    address_line2 character varying(255),
+    city character varying(128) NOT NULL,
+    province character varying(64) NOT NULL,
+    postal_code character varying(16) NOT NULL,
+    country_code character varying(2) DEFAULT 'IT'::character varying NOT NULL,
+    shipping_days character varying(32),
+    fulfillment_status character varying(16) DEFAULT 'NOT_SENT'::character varying NOT NULL,
+    forwarded_at timestamp with time zone,
+    forwarded_by_user_id uuid,
+    forward_error character varying(500),
+    tracking_number character varying(128),
+    tracking_url character varying(1000),
+    tracking_company character varying(128),
+    shipped_at timestamp with time zone,
+    delivered_at timestamp with time zone,
+    CONSTRAINT ck_kappa_market_orders_credit_applied_non_negative CHECK ((credit_applied_cents >= 0)),
+    CONSTRAINT ck_kappa_market_orders_credit_applied_not_over_amount CHECK ((credit_applied_cents <= amount_cents)),
+    CONSTRAINT ck_kappa_market_orders_vat_mode CHECK (((vat_mode)::text = ANY ((ARRAY['INCLUDED'::character varying, 'ADDED'::character varying])::text[])))
+);
+
+
+--
+-- Name: kappa_market_producers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.kappa_market_producers (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    organization_id uuid NOT NULL,
+    name character varying(160) NOT NULL,
+    description character varying(4000) DEFAULT ''::character varying NOT NULL,
+    website_url character varying(1000),
+    logo_url character varying(1000),
+    vat_number character varying(32),
+    email character varying(255),
+    phone character varying(32),
+    address character varying(500),
+    active boolean DEFAULT true NOT NULL,
+    created_by_user_id uuid NOT NULL,
+    updated_at timestamp with time zone
+);
+
+
+--
+-- Name: kappa_market_products; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.kappa_market_products (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    organization_id uuid NOT NULL,
+    producer_id uuid,
+    name character varying(255) NOT NULL,
+    description character varying(8000) DEFAULT ''::character varying NOT NULL,
+    image_url character varying(1000),
+    images jsonb DEFAULT '[]'::jsonb NOT NULL,
+    status character varying(16) DEFAULT 'ACTIVE'::character varying NOT NULL,
+    credit_discount_percentage integer DEFAULT 30 NOT NULL,
+    unit_cost_cents bigint,
+    created_by_user_id uuid NOT NULL,
+    updated_at timestamp with time zone,
+    CONSTRAINT ck_kappa_market_products_credit_percentage_range CHECK (((credit_discount_percentage >= 0) AND (credit_discount_percentage <= 99)))
+);
+
+
+--
+-- Name: kappa_market_settings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.kappa_market_settings (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    organization_id uuid NOT NULL,
+    enabled boolean DEFAULT false NOT NULL,
+    shipping_mode character varying(16) DEFAULT 'CUSTOMER_PAYS'::character varying NOT NULL,
+    shipping_flat_cents integer DEFAULT 0 NOT NULL,
+    shipping_days character varying(32),
+    ship_to_country character varying(2) DEFAULT 'IT'::character varying NOT NULL,
+    auto_forward boolean DEFAULT false NOT NULL
+);
+
+
+--
+-- Name: kappa_market_variants; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.kappa_market_variants (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    product_id uuid NOT NULL,
+    label character varying(255) DEFAULT 'Unica'::character varying NOT NULL,
+    sku character varying(128),
+    image_url character varying(1000),
+    price_cents bigint NOT NULL,
+    inventory integer,
+    active boolean DEFAULT true NOT NULL,
+    CONSTRAINT ck_kappa_market_variants_price_positive CHECK ((price_cents > 0))
+);
+
+
+--
+-- Name: jav_market_order_items; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.jav_market_order_items (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    order_id uuid NOT NULL,
+    product_id uuid NOT NULL,
+    variant_id uuid NOT NULL,
+    quantity integer NOT NULL,
+    unit_price_cents bigint NOT NULL,
+    unit_cost_cents bigint,
+    product_name character varying(255) NOT NULL,
+    variant_label character varying(255),
+    producer_name character varying(160),
+    credit_discount_percentage integer DEFAULT 0 NOT NULL,
+    CONSTRAINT ck_jav_market_order_items_quantity_positive CHECK ((quantity > 0))
+);
+
+
+--
+-- Name: jav_market_orders; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.jav_market_orders (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    organization_id uuid NOT NULL,
+    customer_user_id uuid NOT NULL,
+    created_by_user_id uuid NOT NULL,
+    number bigint DEFAULT nextval('public.shop_order_number_seq'::regclass) NOT NULL,
+    items_cents bigint DEFAULT '0'::bigint NOT NULL,
+    shipping_cents bigint DEFAULT '0'::bigint NOT NULL,
+    amount_cents bigint NOT NULL,
+    credit_applied_cents bigint DEFAULT '0'::bigint NOT NULL,
+    bank_transfer_discount_cents bigint DEFAULT '0'::bigint NOT NULL,
+    vat_percentage integer DEFAULT 0 NOT NULL,
+    vat_amount_cents bigint DEFAULT '0'::bigint NOT NULL,
+    vat_mode character varying(16) DEFAULT 'ADDED'::character varying NOT NULL,
+    credit_debit_transaction_id uuid,
+    status character varying(16) DEFAULT 'AWAITING_PAYMENT'::character varying NOT NULL,
+    payment_method character varying(16) DEFAULT 'BANK_TRANSFER'::character varying NOT NULL,
+    stripe_checkout_session_id character varying(255),
+    note character varying(1000),
+    payment_proof_storage_key character varying(500),
+    payment_proof_original_filename character varying(255),
+    payment_proof_uploaded_at timestamp with time zone,
+    paid_by_user_id uuid,
+    paid_at timestamp with time zone,
+    cancelled_by_user_id uuid,
+    cancelled_at timestamp with time zone,
+    cancellation_reason character varying(500),
+    recipient_name character varying(128) NOT NULL,
+    recipient_phone character varying(32),
+    address_line1 character varying(255) NOT NULL,
+    address_line2 character varying(255),
+    city character varying(128) NOT NULL,
+    province character varying(64) NOT NULL,
+    postal_code character varying(16) NOT NULL,
+    country_code character varying(2) DEFAULT 'IT'::character varying NOT NULL,
+    shipping_days character varying(32),
+    fulfillment_status character varying(16) DEFAULT 'NOT_SENT'::character varying NOT NULL,
+    tracking_number character varying(128),
+    tracking_url character varying(1000),
+    tracking_company character varying(128),
+    shipped_at timestamp with time zone,
+    delivered_at timestamp with time zone,
+    forwarded_at timestamp with time zone,
+    forwarded_by_user_id uuid,
+    forward_error character varying(500),
+    CONSTRAINT ck_jav_market_orders_credit_applied_non_negative CHECK ((credit_applied_cents >= 0)),
+    CONSTRAINT ck_jav_market_orders_credit_applied_not_over_amount CHECK ((credit_applied_cents <= amount_cents)),
+    CONSTRAINT ck_jav_market_orders_vat_mode CHECK (((vat_mode)::text = ANY ((ARRAY['INCLUDED'::character varying, 'ADDED'::character varying])::text[])))
+);
+
+
+--
+-- Name: jav_market_producers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.jav_market_producers (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    organization_id uuid NOT NULL,
+    name character varying(160) NOT NULL,
+    description character varying(4000) DEFAULT ''::character varying NOT NULL,
+    website_url character varying(1000),
+    logo_url character varying(1000),
+    vat_number character varying(32),
+    email character varying(255),
+    phone character varying(32),
+    address character varying(500),
+    active boolean DEFAULT true NOT NULL,
+    created_by_user_id uuid NOT NULL,
+    updated_at timestamp with time zone
+);
+
+
+--
+-- Name: jav_market_products; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.jav_market_products (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    organization_id uuid NOT NULL,
+    producer_id uuid,
+    name character varying(255) NOT NULL,
+    description character varying(8000) DEFAULT ''::character varying NOT NULL,
+    image_url character varying(1000),
+    images jsonb DEFAULT '[]'::jsonb NOT NULL,
+    status character varying(16) DEFAULT 'ACTIVE'::character varying NOT NULL,
+    credit_discount_percentage integer DEFAULT 30 NOT NULL,
+    unit_cost_cents bigint,
+    created_by_user_id uuid NOT NULL,
+    updated_at timestamp with time zone,
+    CONSTRAINT ck_jav_market_products_credit_percentage_range CHECK (((credit_discount_percentage >= 0) AND (credit_discount_percentage <= 99)))
+);
+
+
+--
+-- Name: jav_market_settings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.jav_market_settings (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    organization_id uuid NOT NULL,
+    enabled boolean DEFAULT false NOT NULL,
+    shipping_mode character varying(16) DEFAULT 'CUSTOMER_PAYS'::character varying NOT NULL,
+    shipping_flat_cents integer DEFAULT 0 NOT NULL,
+    shipping_days character varying(32),
+    ship_to_country character varying(2) DEFAULT 'IT'::character varying NOT NULL,
+    auto_forward boolean DEFAULT false NOT NULL,
+    min_order_cents integer DEFAULT 0 NOT NULL,
+    free_shipping_threshold_cents integer
+);
+
+
+--
+-- Name: jav_market_variants; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.jav_market_variants (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    product_id uuid NOT NULL,
+    label character varying(255) DEFAULT 'Unica'::character varying NOT NULL,
+    sku character varying(128),
+    image_url character varying(1000),
+    price_cents bigint NOT NULL,
+    inventory integer,
+    active boolean DEFAULT true NOT NULL,
+    CONSTRAINT ck_jav_market_variants_price_positive CHECK ((price_cents > 0))
+);
+
+
+--
+-- Name: network_assignment_history; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.network_assignment_history (
+    organization_id uuid NOT NULL,
+    agent_id uuid NOT NULL,
+    old_parent_agent_id uuid,
+    new_parent_agent_id uuid,
+    requested_by uuid NOT NULL,
+    approved_by uuid,
+    reason character varying(500) NOT NULL,
+    effective_at timestamp with time zone NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: network_closure; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.network_closure (
+    organization_id uuid NOT NULL,
+    ancestor_agent_id uuid NOT NULL,
+    descendant_agent_id uuid NOT NULL,
+    effective_from timestamp with time zone NOT NULL,
+    depth integer NOT NULL,
+    effective_to timestamp with time zone
+);
+
+
+--
+-- Name: network_edges; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.network_edges (
+    organization_id uuid NOT NULL,
+    parent_agent_id uuid NOT NULL,
+    child_agent_id uuid NOT NULL,
+    effective_from timestamp with time zone NOT NULL,
+    effective_to timestamp with time zone,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: network_nodes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.network_nodes (
+    organization_id uuid NOT NULL,
+    agent_id uuid NOT NULL,
+    direct_parent_agent_id uuid,
+    status character varying(32) NOT NULL,
+    effective_from timestamp with time zone NOT NULL,
+    effective_to timestamp with time zone,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: network_snapshot_nodes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.network_snapshot_nodes (
+    snapshot_id uuid NOT NULL,
+    ancestor_agent_id uuid NOT NULL,
+    depth integer NOT NULL,
+    rank_id_at_snapshot uuid
+);
+
+
+--
+-- Name: network_snapshots; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.network_snapshots (
+    organization_id uuid NOT NULL,
+    reason character varying(64) NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: notifications; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.notifications (
+    organization_id uuid NOT NULL,
+    recipient_user_id uuid NOT NULL,
+    type character varying(64) NOT NULL,
+    entity_type character varying(64) NOT NULL,
+    entity_id character varying(64) NOT NULL,
+    title character varying(255) NOT NULL,
+    body character varying(1000),
+    is_read boolean NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: orders; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.orders (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    organization_id uuid NOT NULL,
+    customer_user_id uuid NOT NULL,
+    product_version_id uuid NOT NULL,
+    created_by_user_id uuid NOT NULL,
+    amount_cents bigint NOT NULL,
+    credit_applied_cents bigint DEFAULT '0'::bigint NOT NULL,
+    credit_debit_transaction_id uuid,
+    status character varying(16) DEFAULT 'AWAITING_PAYMENT'::character varying NOT NULL,
+    note character varying(1000),
+    paid_by_user_id uuid,
+    paid_at timestamp with time zone,
+    cancelled_by_user_id uuid,
+    cancelled_at timestamp with time zone,
+    cancellation_reason character varying(500),
+    payment_method character varying(16) DEFAULT 'BANK_TRANSFER'::character varying NOT NULL,
+    stripe_checkout_session_id character varying(255),
+    payment_proof_storage_key character varying(500),
+    payment_proof_original_filename character varying(255),
+    payment_proof_uploaded_at timestamp without time zone,
+    cashback_requested boolean DEFAULT false NOT NULL,
+    cashback_surcharge_cents bigint DEFAULT '0'::bigint NOT NULL,
+    cashback_credited_at timestamp without time zone,
+    CONSTRAINT ck_orders_ck_orders_credit_applied_non_negative CHECK ((credit_applied_cents >= 0)),
+    CONSTRAINT ck_orders_ck_orders_credit_applied_not_over_amount CHECK ((credit_applied_cents <= amount_cents))
+);
+
+
+--
+-- Name: organizations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.organizations (
+    name character varying(255) NOT NULL,
+    legal_name character varying(255),
+    vat_number character varying(32),
+    status character varying(32) NOT NULL,
+    settings jsonb NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: otp_codes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.otp_codes (
+    user_id uuid NOT NULL,
+    purpose character varying(32) NOT NULL,
+    code_hash character varying(64) NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    used_at timestamp with time zone,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: partners; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.partners (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    organization_id uuid NOT NULL,
+    name character varying(255) NOT NULL,
+    logo_url character varying(1000),
+    is_active boolean DEFAULT true NOT NULL
+);
+
+
+--
+-- Name: password_reset_tokens; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.password_reset_tokens (
+    user_id uuid NOT NULL,
+    token_hash character varying(64) NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    used_at timestamp with time zone,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: permissions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.permissions (
+    code character varying(64) NOT NULL,
+    description character varying(255) NOT NULL,
+    id uuid NOT NULL
+);
+
+
+--
+-- Name: product_request_messages; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.product_request_messages (
+    id uuid NOT NULL,
+    request_id uuid NOT NULL,
+    author_user_id uuid NOT NULL,
+    author_role character varying(32) NOT NULL,
+    body text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: product_requests; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.product_requests (
+    id uuid NOT NULL,
+    organization_id uuid NOT NULL,
+    opened_by_user_id uuid NOT NULL,
+    opened_by_role character varying(32) NOT NULL,
+    product_name character varying(255) NOT NULL,
+    reference_url character varying(1000),
+    status character varying(16) DEFAULT 'OPEN'::character varying NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: product_versions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.product_versions (
+    product_id uuid NOT NULL,
+    version_label character varying(32) NOT NULL,
+    name character varying(255) NOT NULL,
+    description character varying(2000) NOT NULL,
+    image_url character varying(1000),
+    base_price_cents bigint NOT NULL,
+    initial_fee_cents bigint NOT NULL,
+    recurring_fee_cents bigint NOT NULL,
+    billing_period character varying(16) NOT NULL,
+    contract_duration_months integer,
+    tax_configuration jsonb NOT NULL,
+    commission_plan_version_id uuid,
+    required_documents jsonb NOT NULL,
+    terms_version character varying(32) NOT NULL,
+    valid_from timestamp with time zone NOT NULL,
+    valid_to timestamp with time zone,
+    status character varying(32) NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    commission_tokens jsonb DEFAULT '{}'::jsonb NOT NULL,
+    credit_discount_percentage integer DEFAULT 0 NOT NULL,
+    cashback_enabled boolean DEFAULT false NOT NULL,
+    contract_cashback_percentage integer DEFAULT 0 NOT NULL,
+    first_referrer_bonus_enabled boolean DEFAULT false NOT NULL,
+    first_referrer_bonus_cents bigint DEFAULT '0'::bigint NOT NULL,
+    monthly_price_cents bigint
+);
+
+
+--
+-- Name: products; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.products (
+    organization_id uuid NOT NULL,
+    code character varying(64) NOT NULL,
+    product_type character varying(32) NOT NULL,
+    energy_type character varying(16),
+    customer_type character varying(32) NOT NULL,
+    status character varying(32) NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    category character varying(16) DEFAULT 'INTERNAL'::character varying NOT NULL
+);
+
+
+--
+-- Name: promoter_codes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.promoter_codes (
+    organization_id uuid NOT NULL,
+    agent_id uuid NOT NULL,
+    code character varying(32) NOT NULL,
+    personal_link character varying(500) NOT NULL,
+    qr_code_url character varying(500),
+    status character varying(32) NOT NULL,
+    valid_from timestamp with time zone NOT NULL,
+    valid_to timestamp with time zone,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: ranks; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.ranks (
+    organization_id uuid NOT NULL,
+    code character varying(16) NOT NULL,
+    name character varying(128) NOT NULL,
+    level integer NOT NULL,
+    personal_token_cents bigint NOT NULL,
+    energy_share_percentage numeric(5,2) NOT NULL,
+    personal_volume_threshold_cents bigint NOT NULL,
+    group_volume_threshold_cents bigint NOT NULL,
+    evaluation_window_months integer NOT NULL,
+    single_branch_cap_percentage numeric(5,2) NOT NULL,
+    valid_from timestamp with time zone NOT NULL,
+    valid_to timestamp with time zone,
+    rule_version character varying(32) NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: referral_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.referral_events (
+    organization_id uuid NOT NULL,
+    promoter_code_id uuid NOT NULL,
+    ip_address character varying(64),
+    user_agent character varying(255),
+    occurred_at timestamp with time zone NOT NULL,
+    id uuid NOT NULL
+);
+
+
+--
+-- Name: referral_sessions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.referral_sessions (
+    organization_id uuid NOT NULL,
+    promoter_code_id uuid NOT NULL,
+    cookie_token_hash character varying(64) NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: role_permissions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.role_permissions (
+    role_id uuid NOT NULL,
+    permission_id uuid NOT NULL
+);
+
+
+--
+-- Name: roles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.roles (
+    organization_id uuid,
+    code character varying(64) NOT NULL,
+    name character varying(128) NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: sessions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.sessions (
+    user_id uuid NOT NULL,
+    refresh_token_hash character varying(64) NOT NULL,
+    user_agent character varying(255),
+    ip_address character varying(64),
+    expires_at timestamp with time zone NOT NULL,
+    revoked_at timestamp with time zone,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    replaced_by_session_id uuid
+);
+
+
+--
+-- Name: shop_categories; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.shop_categories (
+    id uuid NOT NULL,
+    organization_id uuid NOT NULL,
+    shop character varying(16) NOT NULL,
+    name character varying(120) NOT NULL,
+    "position" integer DEFAULT 0 NOT NULL,
+    active boolean DEFAULT true NOT NULL,
+    updated_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: shop_category_products; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.shop_category_products (
+    id uuid NOT NULL,
+    organization_id uuid NOT NULL,
+    category_id uuid NOT NULL,
+    shop character varying(16) NOT NULL,
+    product_id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: shopify_order_items; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.shopify_order_items (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    order_id uuid NOT NULL,
+    product_id uuid NOT NULL,
+    variant_id uuid NOT NULL,
+    quantity integer NOT NULL,
+    unit_price_cents bigint NOT NULL,
+    product_name character varying(255) NOT NULL,
+    variant_label character varying(255),
+    credit_discount_percentage integer DEFAULT 0 NOT NULL,
+    supplier_order_id character varying(128),
+    tracking_number character varying(128),
+    tracking_url character varying(1000),
+    tracking_company character varying(128),
+    unit_cost_amount numeric(12,2),
+    CONSTRAINT ck_shopify_order_items_quantity_positive CHECK ((quantity > 0))
+);
+
+
+--
+-- Name: shopify_orders; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.shopify_orders (
+    id uuid NOT NULL,
+    organization_id uuid NOT NULL,
+    customer_user_id uuid NOT NULL,
+    shopify_product_id uuid NOT NULL,
+    shopify_variant_id uuid NOT NULL,
+    created_by_user_id uuid NOT NULL,
+    quantity integer DEFAULT 1 NOT NULL,
+    unit_price_cents bigint NOT NULL,
+    shipping_cents bigint DEFAULT '0'::bigint NOT NULL,
+    amount_cents bigint NOT NULL,
+    credit_applied_cents bigint DEFAULT '0'::bigint NOT NULL,
+    bank_transfer_discount_cents bigint DEFAULT '0'::bigint NOT NULL,
+    credit_debit_transaction_id uuid,
+    status character varying(16) DEFAULT 'AWAITING_PAYMENT'::character varying NOT NULL,
+    payment_method character varying(16) DEFAULT 'BANK_TRANSFER'::character varying NOT NULL,
+    stripe_checkout_session_id character varying(255),
+    note character varying(1000),
+    payment_proof_storage_key character varying(500),
+    payment_proof_original_filename character varying(255),
+    payment_proof_uploaded_at timestamp with time zone,
+    paid_by_user_id uuid,
+    paid_at timestamp with time zone,
+    cancelled_by_user_id uuid,
+    cancelled_at timestamp with time zone,
+    cancellation_reason character varying(500),
+    recipient_name character varying(128) NOT NULL,
+    recipient_phone character varying(32),
+    address_line1 character varying(255) NOT NULL,
+    address_line2 character varying(255),
+    city character varying(128) NOT NULL,
+    province character varying(64) NOT NULL,
+    postal_code character varying(16) NOT NULL,
+    country_code character varying(2) DEFAULT 'IT'::character varying NOT NULL,
+    shipping_days character varying(32),
+    unit_cost_amount numeric(12,2),
+    currency_rate numeric(10,6) DEFAULT '1'::numeric NOT NULL,
+    fulfillment_status character varying(16) DEFAULT 'NOT_SENT'::character varying NOT NULL,
+    shopify_draft_order_id character varying(128),
+    shopify_order_id character varying(128),
+    shopify_order_name character varying(64),
+    shopify_fulfillment_status character varying(32),
+    forwarded_at timestamp with time zone,
+    forwarded_by_user_id uuid,
+    forward_error character varying(500),
+    tracking_number character varying(128),
+    tracking_url character varying(1000),
+    tracking_company character varying(128),
+    shipped_at timestamp with time zone,
+    delivered_at timestamp with time zone,
+    last_sync_at timestamp with time zone,
+    attempt_count integer DEFAULT 0 NOT NULL,
+    last_attempt_at timestamp with time zone,
+    next_retry_at timestamp with time zone,
+    last_error_kind character varying(24),
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    vat_percentage integer DEFAULT 0 NOT NULL,
+    vat_amount_cents bigint DEFAULT '0'::bigint NOT NULL,
+    number bigint DEFAULT nextval('public.shop_order_number_seq'::regclass) NOT NULL,
+    vat_mode character varying(16) DEFAULT 'ADDED'::character varying NOT NULL,
+    CONSTRAINT ck_shopify_orders_ck_shopify_orders_credit_applied_non_negative CHECK ((credit_applied_cents >= 0)),
+    CONSTRAINT ck_shopify_orders_ck_shopify_orders_credit_applied_not__3b88 CHECK ((credit_applied_cents <= amount_cents)),
+    CONSTRAINT ck_shopify_orders_ck_shopify_orders_quantity_positive CHECK ((quantity > 0)),
+    CONSTRAINT ck_shopify_orders_ck_shopify_orders_vat_mode CHECK (((vat_mode)::text = ANY ((ARRAY['INCLUDED'::character varying, 'ADDED'::character varying])::text[])))
+);
+
+
+--
+-- Name: shopify_products; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.shopify_products (
+    id uuid NOT NULL,
+    organization_id uuid NOT NULL,
+    shopify_product_id character varying(128) NOT NULL,
+    handle character varying(255),
+    name character varying(255) NOT NULL,
+    source_title character varying(500),
+    vendor character varying(255),
+    description character varying(8000) DEFAULT ''::character varying NOT NULL,
+    image_url character varying(1000),
+    images jsonb DEFAULT '[]'::jsonb NOT NULL,
+    status character varying(16) DEFAULT 'ACTIVE'::character varying NOT NULL,
+    credit_discount_percentage integer DEFAULT 30 NOT NULL,
+    markup_percentage integer,
+    last_synced_at timestamp with time zone,
+    sync_error character varying(500),
+    created_by_user_id uuid NOT NULL,
+    updated_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT ck_shopify_products_ck_shopify_products_credit_discount_456a CHECK (((credit_discount_percentage >= 0) AND (credit_discount_percentage <= 99)))
+);
+
+
+--
+-- Name: shopify_settings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.shopify_settings (
+    id uuid NOT NULL,
+    organization_id uuid NOT NULL,
+    shop_domain character varying(255),
+    access_token character varying(255),
+    client_id character varying(255),
+    client_secret character varying(255),
+    token_expires_at timestamp with time zone,
+    api_version character varying(16) DEFAULT '2025-07'::character varying NOT NULL,
+    enabled boolean DEFAULT false NOT NULL,
+    shop_name character varying(255),
+    shop_currency character varying(3),
+    currency_rate numeric(10,6) DEFAULT '1'::numeric NOT NULL,
+    price_basis character varying(8) DEFAULT 'COST'::character varying NOT NULL,
+    markup_percentage integer DEFAULT 100 NOT NULL,
+    markup_fixed_cents integer DEFAULT 0 NOT NULL,
+    price_rounding character varying(8) DEFAULT '90'::character varying NOT NULL,
+    shipping_mode character varying(16) DEFAULT 'CUSTOMER_PAYS'::character varying NOT NULL,
+    shipping_flat_cents integer DEFAULT 590 NOT NULL,
+    shipping_days character varying(32) DEFAULT '7-15'::character varying,
+    default_credit_percentage integer DEFAULT 30 NOT NULL,
+    auto_forward boolean DEFAULT true NOT NULL,
+    last_connected_at timestamp with time zone,
+    updated_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: shopify_variants; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.shopify_variants (
+    id uuid NOT NULL,
+    product_id uuid NOT NULL,
+    shopify_variant_id character varying(128) NOT NULL,
+    sku character varying(128),
+    label character varying(255) DEFAULT ''::character varying NOT NULL,
+    image_url character varying(1000),
+    cost_amount numeric(12,2),
+    source_price_amount numeric(12,2) NOT NULL,
+    price_cents bigint NOT NULL,
+    price_override_cents bigint,
+    inventory integer,
+    active boolean DEFAULT true NOT NULL,
+    available_in_store boolean DEFAULT true NOT NULL,
+    last_synced_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: soleil_market_order_items; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.soleil_market_order_items (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    order_id uuid NOT NULL,
+    product_id uuid NOT NULL,
+    variant_id uuid NOT NULL,
+    quantity integer NOT NULL,
+    unit_price_cents bigint NOT NULL,
+    unit_cost_cents bigint,
+    product_name character varying(255) NOT NULL,
+    variant_label character varying(255),
+    producer_name character varying(160),
+    supplier_sku character varying(128),
+    barcode character varying(32),
+    supplier_url character varying(1000),
+    credit_discount_percentage integer DEFAULT 0 NOT NULL,
+    CONSTRAINT ck_soleil_market_order_items_quantity_positive CHECK ((quantity > 0))
+);
+
+
+--
+-- Name: soleil_market_orders; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.soleil_market_orders (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    organization_id uuid NOT NULL,
+    customer_user_id uuid NOT NULL,
+    created_by_user_id uuid NOT NULL,
+    number bigint DEFAULT nextval('public.shop_order_number_seq'::regclass) NOT NULL,
+    items_cents bigint DEFAULT '0'::bigint NOT NULL,
+    shipping_cents bigint DEFAULT '0'::bigint NOT NULL,
+    amount_cents bigint NOT NULL,
+    credit_applied_cents bigint DEFAULT '0'::bigint NOT NULL,
+    bank_transfer_discount_cents bigint DEFAULT '0'::bigint NOT NULL,
+    vat_percentage integer DEFAULT 0 NOT NULL,
+    vat_amount_cents bigint DEFAULT '0'::bigint NOT NULL,
+    vat_mode character varying(16) DEFAULT 'ADDED'::character varying NOT NULL,
+    credit_debit_transaction_id uuid,
+    status character varying(16) DEFAULT 'AWAITING_PAYMENT'::character varying NOT NULL,
+    payment_method character varying(16) DEFAULT 'BANK_TRANSFER'::character varying NOT NULL,
+    stripe_checkout_session_id character varying(255),
+    note character varying(1000),
+    payment_proof_storage_key character varying(500),
+    payment_proof_original_filename character varying(255),
+    payment_proof_uploaded_at timestamp with time zone,
+    paid_by_user_id uuid,
+    paid_at timestamp with time zone,
+    cancelled_by_user_id uuid,
+    cancelled_at timestamp with time zone,
+    cancellation_reason character varying(500),
+    recipient_name character varying(128) NOT NULL,
+    recipient_phone character varying(32),
+    address_line1 character varying(255) NOT NULL,
+    address_line2 character varying(255),
+    city character varying(128) NOT NULL,
+    province character varying(64) NOT NULL,
+    postal_code character varying(16) NOT NULL,
+    country_code character varying(2) DEFAULT 'IT'::character varying NOT NULL,
+    shipping_days character varying(32),
+    fulfillment_status character varying(16) DEFAULT 'NOT_SENT'::character varying NOT NULL,
+    forwarded_at timestamp with time zone,
+    forwarded_by_user_id uuid,
+    forward_error character varying(500),
+    tracking_number character varying(128),
+    tracking_url character varying(1000),
+    tracking_company character varying(128),
+    shipped_at timestamp with time zone,
+    delivered_at timestamp with time zone,
+    soleil_order_number character varying(64),
+    soleil_status_code character varying(64),
+    soleil_status_label character varying(128),
+    soleil_wallet_charged_cents bigint,
+    soleil_synced_at timestamp with time zone,
+    CONSTRAINT ck_soleil_market_orders_credit_applied_non_negative CHECK ((credit_applied_cents >= 0)),
+    CONSTRAINT ck_soleil_market_orders_credit_applied_not_over_amount CHECK ((credit_applied_cents <= amount_cents)),
+    CONSTRAINT ck_soleil_market_orders_vat_mode CHECK (((vat_mode)::text = ANY ((ARRAY['INCLUDED'::character varying, 'ADDED'::character varying])::text[])))
+);
+
+
+--
+-- Name: soleil_market_producers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.soleil_market_producers (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    organization_id uuid NOT NULL,
+    name character varying(160) NOT NULL,
+    description character varying(4000) DEFAULT ''::character varying NOT NULL,
+    website_url character varying(1000),
+    logo_url character varying(1000),
+    vat_number character varying(32),
+    email character varying(255),
+    phone character varying(32),
+    address character varying(500),
+    active boolean DEFAULT true NOT NULL,
+    created_by_user_id uuid NOT NULL,
+    updated_at timestamp with time zone
+);
+
+
+--
+-- Name: soleil_market_products; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.soleil_market_products (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    organization_id uuid NOT NULL,
+    producer_id uuid,
+    name character varying(255) NOT NULL,
+    description character varying(8000) DEFAULT ''::character varying NOT NULL,
+    image_url character varying(1000),
+    images jsonb DEFAULT '[]'::jsonb NOT NULL,
+    status character varying(16) DEFAULT 'ACTIVE'::character varying NOT NULL,
+    credit_discount_percentage integer DEFAULT 30 NOT NULL,
+    unit_cost_cents bigint,
+    created_by_user_id uuid NOT NULL,
+    updated_at timestamp with time zone,
+    soleil_product_id character varying(64),
+    category_name character varying(64),
+    subcategory character varying(64),
+    gender character varying(16),
+    source_url character varying(1000),
+    markup_percentage integer,
+    missing_from_feed boolean DEFAULT false NOT NULL,
+    last_synced_at timestamp with time zone,
+    credit_locked boolean DEFAULT false NOT NULL,
+    CONSTRAINT ck_soleil_market_products_credit_percentage_range CHECK (((credit_discount_percentage >= 0) AND (credit_discount_percentage <= 99)))
+);
+
+
+--
+-- Name: soleil_market_settings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.soleil_market_settings (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    organization_id uuid NOT NULL,
+    enabled boolean DEFAULT false NOT NULL,
+    shipping_mode character varying(16) DEFAULT 'CUSTOMER_PAYS'::character varying NOT NULL,
+    shipping_flat_cents integer DEFAULT 0 NOT NULL,
+    shipping_days character varying(32),
+    ship_to_country character varying(2) DEFAULT 'IT'::character varying NOT NULL,
+    auto_forward boolean DEFAULT false NOT NULL,
+    markup_percentage integer DEFAULT 0 NOT NULL,
+    last_import_at timestamp with time zone,
+    last_import_summary character varying(500),
+    last_import_error character varying(500),
+    credit_percentage integer DEFAULT 30 NOT NULL,
+    credit_mode character varying(16) DEFAULT 'MARGIN'::character varying NOT NULL,
+    credit_margin_share integer DEFAULT 50 NOT NULL,
+    prices_include_vat boolean DEFAULT true NOT NULL,
+    shipping_cost_cents integer DEFAULT 500 NOT NULL,
+    api_key character varying(255),
+    webhook_secret character varying(255),
+    auto_import boolean DEFAULT true NOT NULL,
+    eshop_name character varying(160),
+    wallet_balance_cents bigint,
+    last_api_check_at timestamp with time zone,
+    last_api_error character varying(500),
+    last_webhook_at timestamp with time zone,
+    last_order_sync_at timestamp with time zone,
+    CONSTRAINT ck_soleil_market_settings_credit_margin_share_range CHECK (((credit_margin_share >= 0) AND (credit_margin_share <= 100))),
+    CONSTRAINT ck_soleil_market_settings_credit_mode CHECK (((credit_mode)::text = ANY ((ARRAY['FIXED'::character varying, 'MARGIN'::character varying])::text[]))),
+    CONSTRAINT ck_soleil_market_settings_credit_percentage_range CHECK (((credit_percentage >= 0) AND (credit_percentage <= 99)))
+);
+
+
+--
+-- Name: soleil_market_variants; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.soleil_market_variants (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    product_id uuid NOT NULL,
+    label character varying(255) DEFAULT 'Unica'::character varying NOT NULL,
+    sku character varying(128),
+    image_url character varying(1000),
+    price_cents bigint NOT NULL,
+    inventory integer,
+    active boolean DEFAULT true NOT NULL,
+    soleil_variant_id character varying(64),
+    barcode character varying(32),
+    cost_cents bigint,
+    compare_at_cents bigint,
+    available_in_store boolean DEFAULT true NOT NULL,
+    price_locked boolean DEFAULT false NOT NULL,
+    suggested_price_cents bigint,
+    below_cost boolean DEFAULT false NOT NULL,
+    CONSTRAINT ck_soleil_market_variants_price_positive CHECK ((price_cents > 0))
+);
+
+
+--
+-- Name: soleil_market_webhook_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.soleil_market_webhook_events (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    organization_id uuid NOT NULL,
+    delivery_id character varying(128) NOT NULL,
+    event character varying(64) NOT NULL,
+    soleil_order_number character varying(64),
+    external_ref character varying(64)
+);
+
+
+--
+-- Name: spend_pins; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.spend_pins (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    user_id uuid NOT NULL,
+    enabled boolean DEFAULT false NOT NULL,
+    pin_hash character varying(255),
+    failed_attempts integer DEFAULT 0 NOT NULL,
+    locked_until timestamp with time zone,
+    updated_at timestamp with time zone
+);
+
+
+--
+-- Name: stripe_webhook_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.stripe_webhook_events (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    organization_id uuid NOT NULL,
+    stripe_event_id character varying(255) NOT NULL,
+    event_type character varying(64) NOT NULL,
+    processed_at timestamp with time zone,
+    outcome character varying(255)
+);
+
+
+--
+-- Name: supply_points; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.supply_points (
+    organization_id uuid NOT NULL,
+    customer_id uuid NOT NULL,
+    label character varying(255),
+    energy_type character varying(16),
+    pod_code character varying(32),
+    pdr_code character varying(32),
+    meter_number character varying(64),
+    supply_address_id uuid NOT NULL,
+    estimated_consumption bigint,
+    actual_consumption bigint,
+    provider_reference character varying(128),
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: symphonya_market_order_items; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.symphonya_market_order_items (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    order_id uuid NOT NULL,
+    product_id uuid NOT NULL,
+    variant_id uuid NOT NULL,
+    quantity integer NOT NULL,
+    unit_price_cents bigint NOT NULL,
+    unit_cost_cents bigint,
+    product_name character varying(255) NOT NULL,
+    variant_label character varying(255),
+    producer_name character varying(160),
+    supplier_sku character varying(128),
+    barcode character varying(32),
+    supplier_url character varying(1000),
+    credit_discount_percentage integer DEFAULT 0 NOT NULL,
+    CONSTRAINT ck_symphonya_market_order_items_quantity_positive CHECK ((quantity > 0))
+);
+
+
+--
+-- Name: symphonya_market_orders; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.symphonya_market_orders (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    organization_id uuid NOT NULL,
+    customer_user_id uuid NOT NULL,
+    created_by_user_id uuid NOT NULL,
+    number bigint DEFAULT nextval('public.shop_order_number_seq'::regclass) NOT NULL,
+    items_cents bigint DEFAULT '0'::bigint NOT NULL,
+    shipping_cents bigint DEFAULT '0'::bigint NOT NULL,
+    amount_cents bigint NOT NULL,
+    credit_applied_cents bigint DEFAULT '0'::bigint NOT NULL,
+    bank_transfer_discount_cents bigint DEFAULT '0'::bigint NOT NULL,
+    vat_percentage integer DEFAULT 0 NOT NULL,
+    vat_amount_cents bigint DEFAULT '0'::bigint NOT NULL,
+    vat_mode character varying(16) DEFAULT 'ADDED'::character varying NOT NULL,
+    credit_debit_transaction_id uuid,
+    status character varying(16) DEFAULT 'AWAITING_PAYMENT'::character varying NOT NULL,
+    payment_method character varying(16) DEFAULT 'BANK_TRANSFER'::character varying NOT NULL,
+    stripe_checkout_session_id character varying(255),
+    note character varying(1000),
+    payment_proof_storage_key character varying(500),
+    payment_proof_original_filename character varying(255),
+    payment_proof_uploaded_at timestamp with time zone,
+    paid_by_user_id uuid,
+    paid_at timestamp with time zone,
+    cancelled_by_user_id uuid,
+    cancelled_at timestamp with time zone,
+    cancellation_reason character varying(500),
+    recipient_name character varying(128) NOT NULL,
+    recipient_phone character varying(32),
+    address_line1 character varying(255) NOT NULL,
+    address_line2 character varying(255),
+    city character varying(128) NOT NULL,
+    province character varying(64) NOT NULL,
+    postal_code character varying(16) NOT NULL,
+    country_code character varying(2) DEFAULT 'IT'::character varying NOT NULL,
+    shipping_days character varying(32),
+    fulfillment_status character varying(16) DEFAULT 'NOT_SENT'::character varying NOT NULL,
+    forwarded_at timestamp with time zone,
+    forwarded_by_user_id uuid,
+    forward_error character varying(500),
+    tracking_number character varying(128),
+    tracking_url character varying(1000),
+    tracking_company character varying(128),
+    shipped_at timestamp with time zone,
+    delivered_at timestamp with time zone,
+    CONSTRAINT ck_symphonya_market_orders_credit_applied_non_negative CHECK ((credit_applied_cents >= 0)),
+    CONSTRAINT ck_symphonya_market_orders_credit_applied_not_over_amount CHECK ((credit_applied_cents <= amount_cents)),
+    CONSTRAINT ck_symphonya_market_orders_vat_mode CHECK (((vat_mode)::text = ANY ((ARRAY['INCLUDED'::character varying, 'ADDED'::character varying])::text[])))
+);
+
+
+--
+-- Name: symphonya_market_producers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.symphonya_market_producers (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    organization_id uuid NOT NULL,
+    name character varying(160) NOT NULL,
+    description character varying(4000) DEFAULT ''::character varying NOT NULL,
+    website_url character varying(1000),
+    logo_url character varying(1000),
+    vat_number character varying(32),
+    email character varying(255),
+    phone character varying(32),
+    address character varying(500),
+    active boolean DEFAULT true NOT NULL,
+    created_by_user_id uuid NOT NULL,
+    updated_at timestamp with time zone
+);
+
+
+--
+-- Name: symphonya_market_products; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.symphonya_market_products (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    organization_id uuid NOT NULL,
+    producer_id uuid,
+    name character varying(255) NOT NULL,
+    description character varying(8000) DEFAULT ''::character varying NOT NULL,
+    image_url character varying(1000),
+    images jsonb DEFAULT '[]'::jsonb NOT NULL,
+    status character varying(16) DEFAULT 'ACTIVE'::character varying NOT NULL,
+    credit_discount_percentage integer DEFAULT 30 NOT NULL,
+    unit_cost_cents bigint,
+    created_by_user_id uuid NOT NULL,
+    updated_at timestamp with time zone,
+    symphonya_product_id character varying(64),
+    category_name character varying(64),
+    subcategory character varying(64),
+    gender character varying(16),
+    source_url character varying(1000),
+    markup_percentage integer,
+    missing_from_feed boolean DEFAULT false NOT NULL,
+    last_synced_at timestamp with time zone,
+    credit_locked boolean DEFAULT false NOT NULL,
+    CONSTRAINT ck_symphonya_market_products_credit_percentage_range CHECK (((credit_discount_percentage >= 0) AND (credit_discount_percentage <= 99)))
+);
+
+
+--
+-- Name: symphonya_market_settings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.symphonya_market_settings (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    organization_id uuid NOT NULL,
+    enabled boolean DEFAULT false NOT NULL,
+    shipping_mode character varying(16) DEFAULT 'CUSTOMER_PAYS'::character varying NOT NULL,
+    shipping_flat_cents integer DEFAULT 0 NOT NULL,
+    shipping_days character varying(32),
+    ship_to_country character varying(2) DEFAULT 'IT'::character varying NOT NULL,
+    auto_forward boolean DEFAULT false NOT NULL,
+    api_key character varying(1000),
+    auto_import boolean DEFAULT true NOT NULL,
+    markup_percentage integer DEFAULT 0 NOT NULL,
+    last_import_at timestamp with time zone,
+    last_import_summary character varying(500),
+    last_import_error character varying(500),
+    credit_percentage integer DEFAULT 30 NOT NULL,
+    credit_mode character varying(16) DEFAULT 'MARGIN'::character varying NOT NULL,
+    credit_margin_share integer DEFAULT 50 NOT NULL,
+    prices_include_vat boolean DEFAULT true NOT NULL,
+    shipping_cost_cents integer DEFAULT 500 NOT NULL,
+    CONSTRAINT ck_symphonya_market_settings_credit_margin_share_range CHECK (((credit_margin_share >= 0) AND (credit_margin_share <= 100))),
+    CONSTRAINT ck_symphonya_market_settings_credit_mode CHECK (((credit_mode)::text = ANY ((ARRAY['FIXED'::character varying, 'MARGIN'::character varying])::text[]))),
+    CONSTRAINT ck_symphonya_market_settings_credit_percentage_range CHECK (((credit_percentage >= 0) AND (credit_percentage <= 99)))
+);
+
+
+--
+-- Name: symphonya_market_variants; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.symphonya_market_variants (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    product_id uuid NOT NULL,
+    label character varying(255) DEFAULT 'Unica'::character varying NOT NULL,
+    sku character varying(128),
+    image_url character varying(1000),
+    price_cents bigint NOT NULL,
+    inventory integer,
+    active boolean DEFAULT true NOT NULL,
+    symphonya_variant_id character varying(64),
+    barcode character varying(32),
+    cost_cents bigint,
+    compare_at_cents bigint,
+    available_in_store boolean DEFAULT true NOT NULL,
+    price_locked boolean DEFAULT false NOT NULL,
+    suggested_price_cents bigint,
+    below_cost boolean DEFAULT false NOT NULL,
+    CONSTRAINT ck_symphonya_market_variants_price_positive CHECK ((price_cents > 0))
+);
+
+
+--
+-- Name: ticket_messages; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.ticket_messages (
+    ticket_id uuid NOT NULL,
+    author_user_id uuid NOT NULL,
+    author_role character varying(32) NOT NULL,
+    body text NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: tickets; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.tickets (
+    organization_id uuid NOT NULL,
+    opened_by_user_id uuid NOT NULL,
+    opened_by_role character varying(32) NOT NULL,
+    subject character varying(255) NOT NULL,
+    category character varying(32) NOT NULL,
+    status character varying(16) NOT NULL,
+    contract_id uuid,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: user_roles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.user_roles (
+    user_id uuid NOT NULL,
+    organization_id uuid NOT NULL,
+    role_id uuid NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: users; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.users (
+    organization_id uuid NOT NULL,
+    email character varying(255) NOT NULL,
+    password_hash character varying(255) NOT NULL,
+    status character varying(32) NOT NULL,
+    email_verified_at timestamp with time zone,
+    failed_login_attempts integer NOT NULL,
+    locked_until timestamp with time zone,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    privacy_accepted_at timestamp with time zone,
+    fiscal_code character varying(16),
+    residence_street character varying(255),
+    residence_city character varying(100),
+    residence_province character varying(2),
+    residence_postal_code character varying(10),
+    residence_country character varying(2) DEFAULT 'IT'::character varying NOT NULL
+);
+
+
+--
+-- Name: vaitto_market_order_items; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.vaitto_market_order_items (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    order_id uuid NOT NULL,
+    product_id uuid NOT NULL,
+    variant_id uuid NOT NULL,
+    quantity integer NOT NULL,
+    unit_price_cents bigint NOT NULL,
+    unit_cost_cents bigint,
+    product_name character varying(255) NOT NULL,
+    variant_label character varying(255),
+    producer_name character varying(160),
+    supplier_sku character varying(128),
+    barcode character varying(32),
+    supplier_url character varying(1000),
+    credit_discount_percentage integer DEFAULT 0 NOT NULL,
+    CONSTRAINT ck_vaitto_market_order_items_quantity_positive CHECK ((quantity > 0))
+);
+
+
+--
+-- Name: vaitto_market_orders; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.vaitto_market_orders (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    organization_id uuid NOT NULL,
+    customer_user_id uuid NOT NULL,
+    created_by_user_id uuid NOT NULL,
+    number bigint DEFAULT nextval('public.shop_order_number_seq'::regclass) NOT NULL,
+    items_cents bigint DEFAULT '0'::bigint NOT NULL,
+    shipping_cents bigint DEFAULT '0'::bigint NOT NULL,
+    amount_cents bigint NOT NULL,
+    credit_applied_cents bigint DEFAULT '0'::bigint NOT NULL,
+    bank_transfer_discount_cents bigint DEFAULT '0'::bigint NOT NULL,
+    vat_percentage integer DEFAULT 0 NOT NULL,
+    vat_amount_cents bigint DEFAULT '0'::bigint NOT NULL,
+    vat_mode character varying(16) DEFAULT 'ADDED'::character varying NOT NULL,
+    credit_debit_transaction_id uuid,
+    status character varying(16) DEFAULT 'AWAITING_PAYMENT'::character varying NOT NULL,
+    payment_method character varying(16) DEFAULT 'BANK_TRANSFER'::character varying NOT NULL,
+    stripe_checkout_session_id character varying(255),
+    note character varying(1000),
+    payment_proof_storage_key character varying(500),
+    payment_proof_original_filename character varying(255),
+    payment_proof_uploaded_at timestamp with time zone,
+    paid_by_user_id uuid,
+    paid_at timestamp with time zone,
+    cancelled_by_user_id uuid,
+    cancelled_at timestamp with time zone,
+    cancellation_reason character varying(500),
+    recipient_name character varying(128) NOT NULL,
+    recipient_phone character varying(32),
+    address_line1 character varying(255) NOT NULL,
+    address_line2 character varying(255),
+    city character varying(128) NOT NULL,
+    province character varying(64) NOT NULL,
+    postal_code character varying(16) NOT NULL,
+    country_code character varying(2) DEFAULT 'IT'::character varying NOT NULL,
+    shipping_days character varying(32),
+    fulfillment_status character varying(16) DEFAULT 'NOT_SENT'::character varying NOT NULL,
+    forwarded_at timestamp with time zone,
+    forwarded_by_user_id uuid,
+    forward_error character varying(500),
+    tracking_number character varying(128),
+    tracking_url character varying(1000),
+    tracking_company character varying(128),
+    shipped_at timestamp with time zone,
+    delivered_at timestamp with time zone,
+    CONSTRAINT ck_vaitto_market_orders_credit_applied_non_negative CHECK ((credit_applied_cents >= 0)),
+    CONSTRAINT ck_vaitto_market_orders_credit_applied_not_over_amount CHECK ((credit_applied_cents <= amount_cents)),
+    CONSTRAINT ck_vaitto_market_orders_vat_mode CHECK (((vat_mode)::text = ANY ((ARRAY['INCLUDED'::character varying, 'ADDED'::character varying])::text[])))
+);
+
+
+--
+-- Name: vaitto_market_producers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.vaitto_market_producers (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    organization_id uuid NOT NULL,
+    name character varying(160) NOT NULL,
+    description character varying(4000) DEFAULT ''::character varying NOT NULL,
+    website_url character varying(1000),
+    logo_url character varying(1000),
+    vat_number character varying(32),
+    email character varying(255),
+    phone character varying(32),
+    address character varying(500),
+    active boolean DEFAULT true NOT NULL,
+    created_by_user_id uuid NOT NULL,
+    updated_at timestamp with time zone
+);
+
+
+--
+-- Name: vaitto_market_products; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.vaitto_market_products (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    organization_id uuid NOT NULL,
+    producer_id uuid,
+    name character varying(255) NOT NULL,
+    description character varying(8000) DEFAULT ''::character varying NOT NULL,
+    image_url character varying(1000),
+    images jsonb DEFAULT '[]'::jsonb NOT NULL,
+    status character varying(16) DEFAULT 'ACTIVE'::character varying NOT NULL,
+    credit_discount_percentage integer DEFAULT 30 NOT NULL,
+    unit_cost_cents bigint,
+    created_by_user_id uuid NOT NULL,
+    updated_at timestamp with time zone,
+    vaitto_product_id character varying(64),
+    category_name character varying(64),
+    subcategory character varying(64),
+    gender character varying(16),
+    source_url character varying(1000),
+    markup_percentage integer,
+    missing_from_feed boolean DEFAULT false NOT NULL,
+    last_synced_at timestamp with time zone,
+    credit_locked boolean DEFAULT false NOT NULL,
+    CONSTRAINT ck_vaitto_market_products_credit_percentage_range CHECK (((credit_discount_percentage >= 0) AND (credit_discount_percentage <= 99)))
+);
+
+
+--
+-- Name: vaitto_market_settings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.vaitto_market_settings (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    organization_id uuid NOT NULL,
+    enabled boolean DEFAULT false NOT NULL,
+    shipping_mode character varying(16) DEFAULT 'CUSTOMER_PAYS'::character varying NOT NULL,
+    shipping_flat_cents integer DEFAULT 0 NOT NULL,
+    shipping_days character varying(32),
+    ship_to_country character varying(2) DEFAULT 'IT'::character varying NOT NULL,
+    auto_forward boolean DEFAULT false NOT NULL,
+    feed_url character varying(1000),
+    auto_import boolean DEFAULT true NOT NULL,
+    markup_percentage integer DEFAULT 0 NOT NULL,
+    last_import_at timestamp with time zone,
+    last_import_summary character varying(500),
+    last_import_error character varying(500),
+    credit_percentage integer DEFAULT 30 NOT NULL,
+    credit_mode character varying(16) DEFAULT 'FIXED'::character varying NOT NULL,
+    credit_margin_share integer DEFAULT 50 NOT NULL,
+    prices_include_vat boolean DEFAULT true NOT NULL,
+    shipping_cost_cents integer DEFAULT 500 NOT NULL,
+    CONSTRAINT ck_vaitto_market_settings_credit_margin_share_range CHECK (((credit_margin_share >= 0) AND (credit_margin_share <= 100))),
+    CONSTRAINT ck_vaitto_market_settings_credit_mode CHECK (((credit_mode)::text = ANY ((ARRAY['FIXED'::character varying, 'MARGIN'::character varying])::text[]))),
+    CONSTRAINT ck_vaitto_market_settings_credit_percentage_range CHECK (((credit_percentage >= 0) AND (credit_percentage <= 99)))
+);
+
+
+--
+-- Name: vaitto_market_variants; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.vaitto_market_variants (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    product_id uuid NOT NULL,
+    label character varying(255) DEFAULT 'Unica'::character varying NOT NULL,
+    sku character varying(128),
+    image_url character varying(1000),
+    price_cents bigint NOT NULL,
+    inventory integer,
+    active boolean DEFAULT true NOT NULL,
+    vaitto_variant_id character varying(64),
+    barcode character varying(32),
+    cost_cents bigint,
+    compare_at_cents bigint,
+    available_in_store boolean DEFAULT true NOT NULL,
+    price_locked boolean DEFAULT false NOT NULL,
+    suggested_price_cents bigint,
+    below_cost boolean DEFAULT false NOT NULL,
+    CONSTRAINT ck_vaitto_market_variants_price_positive CHECK ((price_cents > 0))
+);
+
+
+--
+-- Name: wallet_transactions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.wallet_transactions (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    organization_id uuid NOT NULL,
+    from_wallet_id uuid,
+    to_wallet_id uuid,
+    amount_cents bigint NOT NULL,
+    currency character varying(3) DEFAULT 'EUR'::character varying NOT NULL,
+    type character varying(16) NOT NULL,
+    reference_contract_id uuid,
+    reverses_transaction_id uuid,
+    note character varying(500),
+    actor_user_id uuid,
+    idempotency_key character varying(128) NOT NULL,
+    source character varying(32),
+    reference_invoice_redemption_id uuid,
+    reference_order_id uuid,
+    reference_imported_order_id uuid,
+    reference_cj_order_id uuid,
+    reference_shopify_order_id uuid,
+    reference_aliexpress_order_id uuid,
+    reference_jav_market_order_id uuid,
+    reference_kappa_market_order_id uuid,
+    reference_vaitto_market_order_id uuid,
+    reference_symphonya_market_order_id uuid,
+    reference_soleil_market_order_id uuid,
+    CONSTRAINT ck_wallet_transactions_ck_wallet_transactions_has_a_side CHECK (((from_wallet_id IS NOT NULL) OR (to_wallet_id IS NOT NULL)))
+);
+
+
+--
+-- Name: wallets; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.wallets (
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    organization_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    address character varying(42) NOT NULL,
+    balance_cents bigint DEFAULT '0'::bigint NOT NULL,
+    currency character varying(3) DEFAULT 'EUR'::character varying NOT NULL,
+    can_transfer boolean DEFAULT false NOT NULL,
+    CONSTRAINT ck_wallets_ck_wallets_balance_non_negative CHECK ((balance_cents >= 0))
+);
+
+
+--
+-- Name: alembic_version alembic_version_pkc; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.alembic_version
+    ADD CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num);
+
+
+--
+-- Name: addresses pk_addresses; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.addresses
+    ADD CONSTRAINT pk_addresses PRIMARY KEY (id);
+
+
+--
+-- Name: agent_profiles pk_agent_profiles; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.agent_profiles
+    ADD CONSTRAINT pk_agent_profiles PRIMARY KEY (id);
+
+
+--
+-- Name: agent_rank_history pk_agent_rank_history; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.agent_rank_history
+    ADD CONSTRAINT pk_agent_rank_history PRIMARY KEY (id);
+
+
+--
+-- Name: aliexpress_order_items pk_aliexpress_order_items; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.aliexpress_order_items
+    ADD CONSTRAINT pk_aliexpress_order_items PRIMARY KEY (id);
+
+
+--
+-- Name: aliexpress_orders pk_aliexpress_orders; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.aliexpress_orders
+    ADD CONSTRAINT pk_aliexpress_orders PRIMARY KEY (id);
+
+
+--
+-- Name: aliexpress_products pk_aliexpress_products; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.aliexpress_products
+    ADD CONSTRAINT pk_aliexpress_products PRIMARY KEY (id);
+
+
+--
+-- Name: aliexpress_settings pk_aliexpress_settings; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.aliexpress_settings
+    ADD CONSTRAINT pk_aliexpress_settings PRIMARY KEY (id);
+
+
+--
+-- Name: aliexpress_variants pk_aliexpress_variants; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.aliexpress_variants
+    ADD CONSTRAINT pk_aliexpress_variants PRIMARY KEY (id);
+
+
+--
+-- Name: attribution_corrections pk_attribution_corrections; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.attribution_corrections
+    ADD CONSTRAINT pk_attribution_corrections PRIMARY KEY (id);
+
+
+--
+-- Name: audit_log pk_audit_log; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.audit_log
+    ADD CONSTRAINT pk_audit_log PRIMARY KEY (id);
+
+
+--
+-- Name: cart_items pk_cart_items; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cart_items
+    ADD CONSTRAINT pk_cart_items PRIMARY KEY (id);
+
+
+--
+-- Name: carts pk_carts; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.carts
+    ADD CONSTRAINT pk_carts PRIMARY KEY (id);
+
+
+--
+-- Name: cj_order_items pk_cj_order_items; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cj_order_items
+    ADD CONSTRAINT pk_cj_order_items PRIMARY KEY (id);
+
+
+--
+-- Name: cj_orders pk_cj_orders; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cj_orders
+    ADD CONSTRAINT pk_cj_orders PRIMARY KEY (id);
+
+
+--
+-- Name: cj_products pk_cj_products; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cj_products
+    ADD CONSTRAINT pk_cj_products PRIMARY KEY (id);
+
+
+--
+-- Name: cj_settings pk_cj_settings; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cj_settings
+    ADD CONSTRAINT pk_cj_settings PRIMARY KEY (id);
+
+
+--
+-- Name: cj_variants pk_cj_variants; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cj_variants
+    ADD CONSTRAINT pk_cj_variants PRIMARY KEY (id);
+
+
+--
+-- Name: commission_adjustments pk_commission_adjustments; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.commission_adjustments
+    ADD CONSTRAINT pk_commission_adjustments PRIMARY KEY (id);
+
+
+--
+-- Name: commission_calculation_steps pk_commission_calculation_steps; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.commission_calculation_steps
+    ADD CONSTRAINT pk_commission_calculation_steps PRIMARY KEY (id);
+
+
+--
+-- Name: commission_calculations pk_commission_calculations; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.commission_calculations
+    ADD CONSTRAINT pk_commission_calculations PRIMARY KEY (id);
+
+
+--
+-- Name: commission_movements pk_commission_movements; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.commission_movements
+    ADD CONSTRAINT pk_commission_movements PRIMARY KEY (id);
+
+
+--
+-- Name: commission_offsets pk_commission_offsets; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.commission_offsets
+    ADD CONSTRAINT pk_commission_offsets PRIMARY KEY (id);
+
+
+--
+-- Name: commission_plan_versions pk_commission_plan_versions; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.commission_plan_versions
+    ADD CONSTRAINT pk_commission_plan_versions PRIMARY KEY (id);
+
+
+--
+-- Name: commission_reversals pk_commission_reversals; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.commission_reversals
+    ADD CONSTRAINT pk_commission_reversals PRIMARY KEY (id);
+
+
+--
+-- Name: commission_rule_versions pk_commission_rule_versions; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.commission_rule_versions
+    ADD CONSTRAINT pk_commission_rule_versions PRIMARY KEY (id);
+
+
+--
+-- Name: companies pk_companies; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.companies
+    ADD CONSTRAINT pk_companies PRIMARY KEY (customer_id);
+
+
+--
+-- Name: contract_attributions pk_contract_attributions; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_attributions
+    ADD CONSTRAINT pk_contract_attributions PRIMARY KEY (id);
+
+
+--
+-- Name: contract_commission_plans pk_contract_commission_plans; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_commission_plans
+    ADD CONSTRAINT pk_contract_commission_plans PRIMARY KEY (id);
+
+
+--
+-- Name: contract_events pk_contract_events; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_events
+    ADD CONSTRAINT pk_contract_events PRIMARY KEY (id);
+
+
+--
+-- Name: contract_instalments pk_contract_instalments; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_instalments
+    ADD CONSTRAINT pk_contract_instalments PRIMARY KEY (id);
+
+
+--
+-- Name: contract_request_checkouts pk_contract_request_checkouts; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_request_checkouts
+    ADD CONSTRAINT pk_contract_request_checkouts PRIMARY KEY (id);
+
+
+--
+-- Name: contract_requests pk_contract_requests; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_requests
+    ADD CONSTRAINT pk_contract_requests PRIMARY KEY (id);
+
+
+--
+-- Name: contract_status_history pk_contract_status_history; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_status_history
+    ADD CONSTRAINT pk_contract_status_history PRIMARY KEY (id);
+
+
+--
+-- Name: contracts pk_contracts; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contracts
+    ADD CONSTRAINT pk_contracts PRIMARY KEY (id);
+
+
+--
+-- Name: customer_attributions pk_customer_attributions; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customer_attributions
+    ADD CONSTRAINT pk_customer_attributions PRIMARY KEY (id);
+
+
+--
+-- Name: customer_profiles pk_customer_profiles; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customer_profiles
+    ADD CONSTRAINT pk_customer_profiles PRIMARY KEY (customer_id);
+
+
+--
+-- Name: customers pk_customers; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customers
+    ADD CONSTRAINT pk_customers PRIMARY KEY (id);
+
+
+--
+-- Name: documentation_posts pk_documentation_posts; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.documentation_posts
+    ADD CONSTRAINT pk_documentation_posts PRIMARY KEY (id);
+
+
+--
+-- Name: documents pk_documents; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.documents
+    ADD CONSTRAINT pk_documents PRIMARY KEY (id);
+
+
+--
+-- Name: domain_outbox pk_domain_outbox; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.domain_outbox
+    ADD CONSTRAINT pk_domain_outbox PRIMARY KEY (id);
+
+
+--
+-- Name: email_verification_tokens pk_email_verification_tokens; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.email_verification_tokens
+    ADD CONSTRAINT pk_email_verification_tokens PRIMARY KEY (id);
+
+
+--
+-- Name: friend_referral_codes pk_friend_referral_codes; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.friend_referral_codes
+    ADD CONSTRAINT pk_friend_referral_codes PRIMARY KEY (id);
+
+
+--
+-- Name: friend_referral_reward_claims pk_friend_referral_reward_claims; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.friend_referral_reward_claims
+    ADD CONSTRAINT pk_friend_referral_reward_claims PRIMARY KEY (id);
+
+
+--
+-- Name: friend_referrals pk_friend_referrals; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.friend_referrals
+    ADD CONSTRAINT pk_friend_referrals PRIMARY KEY (id);
+
+
+--
+-- Name: import_providers pk_import_providers; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.import_providers
+    ADD CONSTRAINT pk_import_providers PRIMARY KEY (id);
+
+
+--
+-- Name: imported_product_orders pk_imported_product_orders; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.imported_product_orders
+    ADD CONSTRAINT pk_imported_product_orders PRIMARY KEY (id);
+
+
+--
+-- Name: imported_products pk_imported_products; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.imported_products
+    ADD CONSTRAINT pk_imported_products PRIMARY KEY (id);
+
+
+--
+-- Name: invoice_redemptions pk_invoice_redemptions; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invoice_redemptions
+    ADD CONSTRAINT pk_invoice_redemptions PRIMARY KEY (id);
+
+
+--
+-- Name: kappa_market_order_items pk_kappa_market_order_items; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.kappa_market_order_items
+    ADD CONSTRAINT pk_kappa_market_order_items PRIMARY KEY (id);
+
+
+--
+-- Name: kappa_market_orders pk_kappa_market_orders; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.kappa_market_orders
+    ADD CONSTRAINT pk_kappa_market_orders PRIMARY KEY (id);
+
+
+--
+-- Name: kappa_market_producers pk_kappa_market_producers; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.kappa_market_producers
+    ADD CONSTRAINT pk_kappa_market_producers PRIMARY KEY (id);
+
+
+--
+-- Name: kappa_market_products pk_kappa_market_products; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.kappa_market_products
+    ADD CONSTRAINT pk_kappa_market_products PRIMARY KEY (id);
+
+
+--
+-- Name: kappa_market_settings pk_kappa_market_settings; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.kappa_market_settings
+    ADD CONSTRAINT pk_kappa_market_settings PRIMARY KEY (id);
+
+
+--
+-- Name: kappa_market_variants pk_kappa_market_variants; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.kappa_market_variants
+    ADD CONSTRAINT pk_kappa_market_variants PRIMARY KEY (id);
+
+
+--
+-- Name: jav_market_order_items pk_jav_market_order_items; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.jav_market_order_items
+    ADD CONSTRAINT pk_jav_market_order_items PRIMARY KEY (id);
+
+
+--
+-- Name: jav_market_orders pk_jav_market_orders; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.jav_market_orders
+    ADD CONSTRAINT pk_jav_market_orders PRIMARY KEY (id);
+
+
+--
+-- Name: jav_market_producers pk_jav_market_producers; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.jav_market_producers
+    ADD CONSTRAINT pk_jav_market_producers PRIMARY KEY (id);
+
+
+--
+-- Name: jav_market_products pk_jav_market_products; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.jav_market_products
+    ADD CONSTRAINT pk_jav_market_products PRIMARY KEY (id);
+
+
+--
+-- Name: jav_market_settings pk_jav_market_settings; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.jav_market_settings
+    ADD CONSTRAINT pk_jav_market_settings PRIMARY KEY (id);
+
+
+--
+-- Name: jav_market_variants pk_jav_market_variants; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.jav_market_variants
+    ADD CONSTRAINT pk_jav_market_variants PRIMARY KEY (id);
+
+
+--
+-- Name: network_assignment_history pk_network_assignment_history; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.network_assignment_history
+    ADD CONSTRAINT pk_network_assignment_history PRIMARY KEY (id);
+
+
+--
+-- Name: network_closure pk_network_closure; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.network_closure
+    ADD CONSTRAINT pk_network_closure PRIMARY KEY (organization_id, ancestor_agent_id, descendant_agent_id, effective_from);
+
+
+--
+-- Name: network_edges pk_network_edges; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.network_edges
+    ADD CONSTRAINT pk_network_edges PRIMARY KEY (id);
+
+
+--
+-- Name: network_nodes pk_network_nodes; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.network_nodes
+    ADD CONSTRAINT pk_network_nodes PRIMARY KEY (id);
+
+
+--
+-- Name: network_snapshot_nodes pk_network_snapshot_nodes; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.network_snapshot_nodes
+    ADD CONSTRAINT pk_network_snapshot_nodes PRIMARY KEY (snapshot_id, ancestor_agent_id);
+
+
+--
+-- Name: network_snapshots pk_network_snapshots; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.network_snapshots
+    ADD CONSTRAINT pk_network_snapshots PRIMARY KEY (id);
+
+
+--
+-- Name: notifications pk_notifications; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.notifications
+    ADD CONSTRAINT pk_notifications PRIMARY KEY (id);
+
+
+--
+-- Name: orders pk_orders; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.orders
+    ADD CONSTRAINT pk_orders PRIMARY KEY (id);
+
+
+--
+-- Name: organizations pk_organizations; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.organizations
+    ADD CONSTRAINT pk_organizations PRIMARY KEY (id);
+
+
+--
+-- Name: otp_codes pk_otp_codes; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.otp_codes
+    ADD CONSTRAINT pk_otp_codes PRIMARY KEY (id);
+
+
+--
+-- Name: partners pk_partners; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.partners
+    ADD CONSTRAINT pk_partners PRIMARY KEY (id);
+
+
+--
+-- Name: password_reset_tokens pk_password_reset_tokens; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.password_reset_tokens
+    ADD CONSTRAINT pk_password_reset_tokens PRIMARY KEY (id);
+
+
+--
+-- Name: permissions pk_permissions; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.permissions
+    ADD CONSTRAINT pk_permissions PRIMARY KEY (id);
+
+
+--
+-- Name: product_request_messages pk_product_request_messages; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_request_messages
+    ADD CONSTRAINT pk_product_request_messages PRIMARY KEY (id);
+
+
+--
+-- Name: product_requests pk_product_requests; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_requests
+    ADD CONSTRAINT pk_product_requests PRIMARY KEY (id);
+
+
+--
+-- Name: product_versions pk_product_versions; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_versions
+    ADD CONSTRAINT pk_product_versions PRIMARY KEY (id);
+
+
+--
+-- Name: products pk_products; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.products
+    ADD CONSTRAINT pk_products PRIMARY KEY (id);
+
+
+--
+-- Name: promoter_codes pk_promoter_codes; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.promoter_codes
+    ADD CONSTRAINT pk_promoter_codes PRIMARY KEY (id);
+
+
+--
+-- Name: ranks pk_ranks; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ranks
+    ADD CONSTRAINT pk_ranks PRIMARY KEY (id);
+
+
+--
+-- Name: referral_events pk_referral_events; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.referral_events
+    ADD CONSTRAINT pk_referral_events PRIMARY KEY (id);
+
+
+--
+-- Name: referral_sessions pk_referral_sessions; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.referral_sessions
+    ADD CONSTRAINT pk_referral_sessions PRIMARY KEY (id);
+
+
+--
+-- Name: role_permissions pk_role_permissions; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.role_permissions
+    ADD CONSTRAINT pk_role_permissions PRIMARY KEY (role_id, permission_id);
+
+
+--
+-- Name: roles pk_roles; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.roles
+    ADD CONSTRAINT pk_roles PRIMARY KEY (id);
+
+
+--
+-- Name: sessions pk_sessions; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sessions
+    ADD CONSTRAINT pk_sessions PRIMARY KEY (id);
+
+
+--
+-- Name: shop_categories pk_shop_categories; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shop_categories
+    ADD CONSTRAINT pk_shop_categories PRIMARY KEY (id);
+
+
+--
+-- Name: shop_category_products pk_shop_category_products; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shop_category_products
+    ADD CONSTRAINT pk_shop_category_products PRIMARY KEY (id);
+
+
+--
+-- Name: shopify_order_items pk_shopify_order_items; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shopify_order_items
+    ADD CONSTRAINT pk_shopify_order_items PRIMARY KEY (id);
+
+
+--
+-- Name: shopify_orders pk_shopify_orders; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shopify_orders
+    ADD CONSTRAINT pk_shopify_orders PRIMARY KEY (id);
+
+
+--
+-- Name: shopify_products pk_shopify_products; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shopify_products
+    ADD CONSTRAINT pk_shopify_products PRIMARY KEY (id);
+
+
+--
+-- Name: shopify_settings pk_shopify_settings; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shopify_settings
+    ADD CONSTRAINT pk_shopify_settings PRIMARY KEY (id);
+
+
+--
+-- Name: shopify_variants pk_shopify_variants; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shopify_variants
+    ADD CONSTRAINT pk_shopify_variants PRIMARY KEY (id);
+
+
+--
+-- Name: soleil_market_order_items pk_soleil_market_order_items; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.soleil_market_order_items
+    ADD CONSTRAINT pk_soleil_market_order_items PRIMARY KEY (id);
+
+
+--
+-- Name: soleil_market_orders pk_soleil_market_orders; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.soleil_market_orders
+    ADD CONSTRAINT pk_soleil_market_orders PRIMARY KEY (id);
+
+
+--
+-- Name: soleil_market_producers pk_soleil_market_producers; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.soleil_market_producers
+    ADD CONSTRAINT pk_soleil_market_producers PRIMARY KEY (id);
+
+
+--
+-- Name: soleil_market_products pk_soleil_market_products; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.soleil_market_products
+    ADD CONSTRAINT pk_soleil_market_products PRIMARY KEY (id);
+
+
+--
+-- Name: soleil_market_settings pk_soleil_market_settings; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.soleil_market_settings
+    ADD CONSTRAINT pk_soleil_market_settings PRIMARY KEY (id);
+
+
+--
+-- Name: soleil_market_variants pk_soleil_market_variants; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.soleil_market_variants
+    ADD CONSTRAINT pk_soleil_market_variants PRIMARY KEY (id);
+
+
+--
+-- Name: soleil_market_webhook_events pk_soleil_market_webhook_events; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.soleil_market_webhook_events
+    ADD CONSTRAINT pk_soleil_market_webhook_events PRIMARY KEY (id);
+
+
+--
+-- Name: spend_pins pk_spend_pins; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.spend_pins
+    ADD CONSTRAINT pk_spend_pins PRIMARY KEY (id);
+
+
+--
+-- Name: stripe_webhook_events pk_stripe_webhook_events; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stripe_webhook_events
+    ADD CONSTRAINT pk_stripe_webhook_events PRIMARY KEY (id);
+
+
+--
+-- Name: supply_points pk_supply_points; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.supply_points
+    ADD CONSTRAINT pk_supply_points PRIMARY KEY (id);
+
+
+--
+-- Name: symphonya_market_order_items pk_symphonya_market_order_items; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.symphonya_market_order_items
+    ADD CONSTRAINT pk_symphonya_market_order_items PRIMARY KEY (id);
+
+
+--
+-- Name: symphonya_market_orders pk_symphonya_market_orders; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.symphonya_market_orders
+    ADD CONSTRAINT pk_symphonya_market_orders PRIMARY KEY (id);
+
+
+--
+-- Name: symphonya_market_producers pk_symphonya_market_producers; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.symphonya_market_producers
+    ADD CONSTRAINT pk_symphonya_market_producers PRIMARY KEY (id);
+
+
+--
+-- Name: symphonya_market_products pk_symphonya_market_products; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.symphonya_market_products
+    ADD CONSTRAINT pk_symphonya_market_products PRIMARY KEY (id);
+
+
+--
+-- Name: symphonya_market_settings pk_symphonya_market_settings; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.symphonya_market_settings
+    ADD CONSTRAINT pk_symphonya_market_settings PRIMARY KEY (id);
+
+
+--
+-- Name: symphonya_market_variants pk_symphonya_market_variants; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.symphonya_market_variants
+    ADD CONSTRAINT pk_symphonya_market_variants PRIMARY KEY (id);
+
+
+--
+-- Name: ticket_messages pk_ticket_messages; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ticket_messages
+    ADD CONSTRAINT pk_ticket_messages PRIMARY KEY (id);
+
+
+--
+-- Name: tickets pk_tickets; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.tickets
+    ADD CONSTRAINT pk_tickets PRIMARY KEY (id);
+
+
+--
+-- Name: user_roles pk_user_roles; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_roles
+    ADD CONSTRAINT pk_user_roles PRIMARY KEY (id);
+
+
+--
+-- Name: users pk_users; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT pk_users PRIMARY KEY (id);
+
+
+--
+-- Name: vaitto_market_order_items pk_vaitto_market_order_items; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vaitto_market_order_items
+    ADD CONSTRAINT pk_vaitto_market_order_items PRIMARY KEY (id);
+
+
+--
+-- Name: vaitto_market_orders pk_vaitto_market_orders; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vaitto_market_orders
+    ADD CONSTRAINT pk_vaitto_market_orders PRIMARY KEY (id);
+
+
+--
+-- Name: vaitto_market_producers pk_vaitto_market_producers; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vaitto_market_producers
+    ADD CONSTRAINT pk_vaitto_market_producers PRIMARY KEY (id);
+
+
+--
+-- Name: vaitto_market_products pk_vaitto_market_products; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vaitto_market_products
+    ADD CONSTRAINT pk_vaitto_market_products PRIMARY KEY (id);
+
+
+--
+-- Name: vaitto_market_settings pk_vaitto_market_settings; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vaitto_market_settings
+    ADD CONSTRAINT pk_vaitto_market_settings PRIMARY KEY (id);
+
+
+--
+-- Name: vaitto_market_variants pk_vaitto_market_variants; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vaitto_market_variants
+    ADD CONSTRAINT pk_vaitto_market_variants PRIMARY KEY (id);
+
+
+--
+-- Name: wallet_transactions pk_wallet_transactions; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.wallet_transactions
+    ADD CONSTRAINT pk_wallet_transactions PRIMARY KEY (id);
+
+
+--
+-- Name: wallets pk_wallets; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.wallets
+    ADD CONSTRAINT pk_wallets PRIMARY KEY (id);
+
+
+--
+-- Name: agent_profiles uq_agent_promoter_code; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.agent_profiles
+    ADD CONSTRAINT uq_agent_promoter_code UNIQUE (organization_id, promoter_code);
+
+
+--
+-- Name: aliexpress_order_items uq_aliexpress_order_items_variant; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.aliexpress_order_items
+    ADD CONSTRAINT uq_aliexpress_order_items_variant UNIQUE (order_id, aliexpress_variant_id);
+
+
+--
+-- Name: aliexpress_orders uq_aliexpress_orders_number; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.aliexpress_orders
+    ADD CONSTRAINT uq_aliexpress_orders_number UNIQUE (number);
+
+
+--
+-- Name: aliexpress_orders uq_aliexpress_orders_stripe_checkout_session_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.aliexpress_orders
+    ADD CONSTRAINT uq_aliexpress_orders_stripe_checkout_session_id UNIQUE (stripe_checkout_session_id);
+
+
+--
+-- Name: aliexpress_products uq_aliexpress_products_organization_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.aliexpress_products
+    ADD CONSTRAINT uq_aliexpress_products_organization_id UNIQUE (organization_id, aliexpress_product_id);
+
+
+--
+-- Name: aliexpress_settings uq_aliexpress_settings_organization_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.aliexpress_settings
+    ADD CONSTRAINT uq_aliexpress_settings_organization_id UNIQUE (organization_id);
+
+
+--
+-- Name: aliexpress_variants uq_aliexpress_variants_product_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.aliexpress_variants
+    ADD CONSTRAINT uq_aliexpress_variants_product_id UNIQUE (product_id, aliexpress_sku_id);
+
+
+--
+-- Name: cart_items uq_cart_items_aliexpress_variant; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cart_items
+    ADD CONSTRAINT uq_cart_items_aliexpress_variant UNIQUE (cart_id, aliexpress_variant_id);
+
+
+--
+-- Name: cart_items uq_cart_items_cj_variant; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cart_items
+    ADD CONSTRAINT uq_cart_items_cj_variant UNIQUE (cart_id, cj_variant_id);
+
+
+--
+-- Name: cart_items uq_cart_items_kappa_market_variant; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cart_items
+    ADD CONSTRAINT uq_cart_items_kappa_market_variant UNIQUE (cart_id, kappa_market_variant_id);
+
+
+--
+-- Name: cart_items uq_cart_items_jav_market_variant; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cart_items
+    ADD CONSTRAINT uq_cart_items_jav_market_variant UNIQUE (cart_id, jav_market_variant_id);
+
+
+--
+-- Name: cart_items uq_cart_items_product_version; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cart_items
+    ADD CONSTRAINT uq_cart_items_product_version UNIQUE (cart_id, product_version_id);
+
+
+--
+-- Name: cart_items uq_cart_items_shopify_variant; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cart_items
+    ADD CONSTRAINT uq_cart_items_shopify_variant UNIQUE (cart_id, shopify_variant_id);
+
+
+--
+-- Name: cart_items uq_cart_items_soleil_market_variant; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cart_items
+    ADD CONSTRAINT uq_cart_items_soleil_market_variant UNIQUE (cart_id, soleil_market_variant_id);
+
+
+--
+-- Name: cart_items uq_cart_items_symphonya_market_variant; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cart_items
+    ADD CONSTRAINT uq_cart_items_symphonya_market_variant UNIQUE (cart_id, symphonya_market_variant_id);
+
+
+--
+-- Name: cart_items uq_cart_items_vaitto_market_variant; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cart_items
+    ADD CONSTRAINT uq_cart_items_vaitto_market_variant UNIQUE (cart_id, vaitto_market_variant_id);
+
+
+--
+-- Name: carts uq_carts_customer_shop; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.carts
+    ADD CONSTRAINT uq_carts_customer_shop UNIQUE (customer_user_id, shop);
+
+
+--
+-- Name: cj_order_items uq_cj_order_items_variant; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cj_order_items
+    ADD CONSTRAINT uq_cj_order_items_variant UNIQUE (order_id, variant_id);
+
+
+--
+-- Name: cj_orders uq_cj_orders_number; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cj_orders
+    ADD CONSTRAINT uq_cj_orders_number UNIQUE (number);
+
+
+--
+-- Name: cj_orders uq_cj_orders_stripe_checkout_session_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cj_orders
+    ADD CONSTRAINT uq_cj_orders_stripe_checkout_session_id UNIQUE (stripe_checkout_session_id);
+
+
+--
+-- Name: cj_products uq_cj_products_organization_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cj_products
+    ADD CONSTRAINT uq_cj_products_organization_id UNIQUE (organization_id, cj_pid);
+
+
+--
+-- Name: cj_settings uq_cj_settings_organization_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cj_settings
+    ADD CONSTRAINT uq_cj_settings_organization_id UNIQUE (organization_id);
+
+
+--
+-- Name: cj_variants uq_cj_variants_product_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cj_variants
+    ADD CONSTRAINT uq_cj_variants_product_id UNIQUE (product_id, cj_vid);
+
+
+--
+-- Name: commission_calculations uq_commission_calculations_contract_trigger; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.commission_calculations
+    ADD CONSTRAINT uq_commission_calculations_contract_trigger UNIQUE (contract_id, trigger_event_id);
+
+
+--
+-- Name: commission_movements uq_commission_movements_idempotency_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.commission_movements
+    ADD CONSTRAINT uq_commission_movements_idempotency_key UNIQUE (idempotency_key);
+
+
+--
+-- Name: contract_commission_plans uq_contract_commission_plans_contract_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_commission_plans
+    ADD CONSTRAINT uq_contract_commission_plans_contract_id UNIQUE (contract_id);
+
+
+--
+-- Name: contract_instalments uq_contract_instalments_contract_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_instalments
+    ADD CONSTRAINT uq_contract_instalments_contract_id UNIQUE (contract_id, stripe_invoice_id);
+
+
+--
+-- Name: contract_instalments uq_contract_instalments_contract_number; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_instalments
+    ADD CONSTRAINT uq_contract_instalments_contract_number UNIQUE (contract_id, number);
+
+
+--
+-- Name: contract_request_checkouts uq_contract_request_checkouts_stripe_checkout_session_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_request_checkouts
+    ADD CONSTRAINT uq_contract_request_checkouts_stripe_checkout_session_id UNIQUE (stripe_checkout_session_id);
+
+
+--
+-- Name: contracts uq_contracts_stripe_checkout_session_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contracts
+    ADD CONSTRAINT uq_contracts_stripe_checkout_session_id UNIQUE (stripe_checkout_session_id);
+
+
+--
+-- Name: contracts uq_contracts_stripe_subscription_item_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contracts
+    ADD CONSTRAINT uq_contracts_stripe_subscription_item_id UNIQUE (stripe_subscription_item_id);
+
+
+--
+-- Name: customers uq_customers_user_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customers
+    ADD CONSTRAINT uq_customers_user_id UNIQUE (user_id);
+
+
+--
+-- Name: documents uq_documents_storage_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.documents
+    ADD CONSTRAINT uq_documents_storage_key UNIQUE (storage_key);
+
+
+--
+-- Name: friend_referral_reward_claims uq_friend_referral_claim_user_milestone; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.friend_referral_reward_claims
+    ADD CONSTRAINT uq_friend_referral_claim_user_milestone UNIQUE (referrer_user_id, milestone);
+
+
+--
+-- Name: friend_referral_codes uq_friend_referral_codes_code; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.friend_referral_codes
+    ADD CONSTRAINT uq_friend_referral_codes_code UNIQUE (code);
+
+
+--
+-- Name: friend_referral_codes uq_friend_referral_codes_user_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.friend_referral_codes
+    ADD CONSTRAINT uq_friend_referral_codes_user_id UNIQUE (user_id);
+
+
+--
+-- Name: friend_referrals uq_friend_referrals_referred_customer_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.friend_referrals
+    ADD CONSTRAINT uq_friend_referrals_referred_customer_id UNIQUE (referred_customer_id);
+
+
+--
+-- Name: imported_product_orders uq_imported_product_orders_number; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.imported_product_orders
+    ADD CONSTRAINT uq_imported_product_orders_number UNIQUE (number);
+
+
+--
+-- Name: imported_product_orders uq_imported_product_orders_stripe_session; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.imported_product_orders
+    ADD CONSTRAINT uq_imported_product_orders_stripe_session UNIQUE (stripe_checkout_session_id);
+
+
+--
+-- Name: invoice_redemptions uq_invoice_redemptions_payment_reference_code; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invoice_redemptions
+    ADD CONSTRAINT uq_invoice_redemptions_payment_reference_code UNIQUE (payment_reference_code);
+
+
+--
+-- Name: invoice_redemptions uq_invoice_redemptions_storage_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invoice_redemptions
+    ADD CONSTRAINT uq_invoice_redemptions_storage_key UNIQUE (storage_key);
+
+
+--
+-- Name: invoice_redemptions uq_invoice_redemptions_stripe_checkout_session_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invoice_redemptions
+    ADD CONSTRAINT uq_invoice_redemptions_stripe_checkout_session_id UNIQUE (stripe_checkout_session_id);
+
+
+--
+-- Name: kappa_market_order_items uq_kappa_market_order_items_variant; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.kappa_market_order_items
+    ADD CONSTRAINT uq_kappa_market_order_items_variant UNIQUE (order_id, variant_id);
+
+
+--
+-- Name: kappa_market_orders uq_kappa_market_orders_number; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.kappa_market_orders
+    ADD CONSTRAINT uq_kappa_market_orders_number UNIQUE (number);
+
+
+--
+-- Name: kappa_market_orders uq_kappa_market_orders_stripe_session; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.kappa_market_orders
+    ADD CONSTRAINT uq_kappa_market_orders_stripe_session UNIQUE (stripe_checkout_session_id);
+
+
+--
+-- Name: kappa_market_producers uq_kappa_market_producers_name; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.kappa_market_producers
+    ADD CONSTRAINT uq_kappa_market_producers_name UNIQUE (organization_id, name);
+
+
+--
+-- Name: kappa_market_settings uq_kappa_market_settings_organization_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.kappa_market_settings
+    ADD CONSTRAINT uq_kappa_market_settings_organization_id UNIQUE (organization_id);
+
+
+--
+-- Name: kappa_market_variants uq_kappa_market_variants_sku; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.kappa_market_variants
+    ADD CONSTRAINT uq_kappa_market_variants_sku UNIQUE (product_id, sku);
+
+
+--
+-- Name: jav_market_order_items uq_jav_market_order_items_variant; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.jav_market_order_items
+    ADD CONSTRAINT uq_jav_market_order_items_variant UNIQUE (order_id, variant_id);
+
+
+--
+-- Name: jav_market_orders uq_jav_market_orders_number; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.jav_market_orders
+    ADD CONSTRAINT uq_jav_market_orders_number UNIQUE (number);
+
+
+--
+-- Name: jav_market_orders uq_jav_market_orders_stripe_session; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.jav_market_orders
+    ADD CONSTRAINT uq_jav_market_orders_stripe_session UNIQUE (stripe_checkout_session_id);
+
+
+--
+-- Name: jav_market_producers uq_jav_market_producers_name; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.jav_market_producers
+    ADD CONSTRAINT uq_jav_market_producers_name UNIQUE (organization_id, name);
+
+
+--
+-- Name: jav_market_settings uq_jav_market_settings_organization_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.jav_market_settings
+    ADD CONSTRAINT uq_jav_market_settings_organization_id UNIQUE (organization_id);
+
+
+--
+-- Name: jav_market_variants uq_jav_market_variants_sku; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.jav_market_variants
+    ADD CONSTRAINT uq_jav_market_variants_sku UNIQUE (product_id, sku);
+
+
+--
+-- Name: orders uq_orders_stripe_checkout_session_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.orders
+    ADD CONSTRAINT uq_orders_stripe_checkout_session_id UNIQUE (stripe_checkout_session_id);
+
+
+--
+-- Name: partners uq_partners_organization_name; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.partners
+    ADD CONSTRAINT uq_partners_organization_name UNIQUE (organization_id, name);
+
+
+--
+-- Name: permissions uq_permissions_code; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.permissions
+    ADD CONSTRAINT uq_permissions_code UNIQUE (code);
+
+
+--
+-- Name: ranks uq_ranks_org_code_version; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ranks
+    ADD CONSTRAINT uq_ranks_org_code_version UNIQUE (organization_id, code, rule_version);
+
+
+--
+-- Name: roles uq_roles_org_code; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.roles
+    ADD CONSTRAINT uq_roles_org_code UNIQUE (organization_id, code);
+
+
+--
+-- Name: shop_category_products uq_shop_category_products_category_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shop_category_products
+    ADD CONSTRAINT uq_shop_category_products_category_id UNIQUE (category_id, product_id);
+
+
+--
+-- Name: shopify_order_items uq_shopify_order_items_variant; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shopify_order_items
+    ADD CONSTRAINT uq_shopify_order_items_variant UNIQUE (order_id, variant_id);
+
+
+--
+-- Name: shopify_orders uq_shopify_orders_number; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shopify_orders
+    ADD CONSTRAINT uq_shopify_orders_number UNIQUE (number);
+
+
+--
+-- Name: shopify_orders uq_shopify_orders_stripe_checkout_session_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shopify_orders
+    ADD CONSTRAINT uq_shopify_orders_stripe_checkout_session_id UNIQUE (stripe_checkout_session_id);
+
+
+--
+-- Name: shopify_products uq_shopify_products_organization_id_shopify_product_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shopify_products
+    ADD CONSTRAINT uq_shopify_products_organization_id_shopify_product_id UNIQUE (organization_id, shopify_product_id);
+
+
+--
+-- Name: shopify_settings uq_shopify_settings_organization_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shopify_settings
+    ADD CONSTRAINT uq_shopify_settings_organization_id UNIQUE (organization_id);
+
+
+--
+-- Name: shopify_variants uq_shopify_variants_product_id_shopify_variant_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shopify_variants
+    ADD CONSTRAINT uq_shopify_variants_product_id_shopify_variant_id UNIQUE (product_id, shopify_variant_id);
+
+
+--
+-- Name: soleil_market_order_items uq_soleil_market_order_items_variant; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.soleil_market_order_items
+    ADD CONSTRAINT uq_soleil_market_order_items_variant UNIQUE (order_id, variant_id);
+
+
+--
+-- Name: soleil_market_orders uq_soleil_market_orders_number; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.soleil_market_orders
+    ADD CONSTRAINT uq_soleil_market_orders_number UNIQUE (number);
+
+
+--
+-- Name: soleil_market_orders uq_soleil_market_orders_stripe_session; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.soleil_market_orders
+    ADD CONSTRAINT uq_soleil_market_orders_stripe_session UNIQUE (stripe_checkout_session_id);
+
+
+--
+-- Name: soleil_market_producers uq_soleil_market_producers_name; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.soleil_market_producers
+    ADD CONSTRAINT uq_soleil_market_producers_name UNIQUE (organization_id, name);
+
+
+--
+-- Name: soleil_market_products uq_soleil_market_products_soleil_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.soleil_market_products
+    ADD CONSTRAINT uq_soleil_market_products_soleil_id UNIQUE (organization_id, soleil_product_id);
+
+
+--
+-- Name: soleil_market_settings uq_soleil_market_settings_organization_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.soleil_market_settings
+    ADD CONSTRAINT uq_soleil_market_settings_organization_id UNIQUE (organization_id);
+
+
+--
+-- Name: soleil_market_variants uq_soleil_market_variants_sku; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.soleil_market_variants
+    ADD CONSTRAINT uq_soleil_market_variants_sku UNIQUE (product_id, sku);
+
+
+--
+-- Name: soleil_market_variants uq_soleil_market_variants_soleil_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.soleil_market_variants
+    ADD CONSTRAINT uq_soleil_market_variants_soleil_id UNIQUE (product_id, soleil_variant_id);
+
+
+--
+-- Name: soleil_market_webhook_events uq_soleil_market_webhook_events_delivery; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.soleil_market_webhook_events
+    ADD CONSTRAINT uq_soleil_market_webhook_events_delivery UNIQUE (organization_id, delivery_id);
+
+
+--
+-- Name: spend_pins uq_spend_pins_user_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.spend_pins
+    ADD CONSTRAINT uq_spend_pins_user_id UNIQUE (user_id);
+
+
+--
+-- Name: stripe_webhook_events uq_stripe_webhook_events_event_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stripe_webhook_events
+    ADD CONSTRAINT uq_stripe_webhook_events_event_id UNIQUE (stripe_event_id);
+
+
+--
+-- Name: symphonya_market_order_items uq_symphonya_market_order_items_variant; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.symphonya_market_order_items
+    ADD CONSTRAINT uq_symphonya_market_order_items_variant UNIQUE (order_id, variant_id);
+
+
+--
+-- Name: symphonya_market_orders uq_symphonya_market_orders_number; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.symphonya_market_orders
+    ADD CONSTRAINT uq_symphonya_market_orders_number UNIQUE (number);
+
+
+--
+-- Name: symphonya_market_orders uq_symphonya_market_orders_stripe_session; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.symphonya_market_orders
+    ADD CONSTRAINT uq_symphonya_market_orders_stripe_session UNIQUE (stripe_checkout_session_id);
+
+
+--
+-- Name: symphonya_market_producers uq_symphonya_market_producers_name; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.symphonya_market_producers
+    ADD CONSTRAINT uq_symphonya_market_producers_name UNIQUE (organization_id, name);
+
+
+--
+-- Name: symphonya_market_products uq_symphonya_market_products_symphonya_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.symphonya_market_products
+    ADD CONSTRAINT uq_symphonya_market_products_symphonya_id UNIQUE (organization_id, symphonya_product_id);
+
+
+--
+-- Name: symphonya_market_settings uq_symphonya_market_settings_organization_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.symphonya_market_settings
+    ADD CONSTRAINT uq_symphonya_market_settings_organization_id UNIQUE (organization_id);
+
+
+--
+-- Name: symphonya_market_variants uq_symphonya_market_variants_sku; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.symphonya_market_variants
+    ADD CONSTRAINT uq_symphonya_market_variants_sku UNIQUE (product_id, sku);
+
+
+--
+-- Name: symphonya_market_variants uq_symphonya_market_variants_symphonya_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.symphonya_market_variants
+    ADD CONSTRAINT uq_symphonya_market_variants_symphonya_id UNIQUE (product_id, symphonya_variant_id);
+
+
+--
+-- Name: user_roles uq_user_roles; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_roles
+    ADD CONSTRAINT uq_user_roles UNIQUE (user_id, organization_id, role_id);
+
+
+--
+-- Name: users uq_users_org_email; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT uq_users_org_email UNIQUE (organization_id, email);
+
+
+--
+-- Name: vaitto_market_order_items uq_vaitto_market_order_items_variant; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vaitto_market_order_items
+    ADD CONSTRAINT uq_vaitto_market_order_items_variant UNIQUE (order_id, variant_id);
+
+
+--
+-- Name: vaitto_market_orders uq_vaitto_market_orders_number; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vaitto_market_orders
+    ADD CONSTRAINT uq_vaitto_market_orders_number UNIQUE (number);
+
+
+--
+-- Name: vaitto_market_orders uq_vaitto_market_orders_stripe_session; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vaitto_market_orders
+    ADD CONSTRAINT uq_vaitto_market_orders_stripe_session UNIQUE (stripe_checkout_session_id);
+
+
+--
+-- Name: vaitto_market_producers uq_vaitto_market_producers_name; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vaitto_market_producers
+    ADD CONSTRAINT uq_vaitto_market_producers_name UNIQUE (organization_id, name);
+
+
+--
+-- Name: vaitto_market_products uq_vaitto_market_products_vaitto_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vaitto_market_products
+    ADD CONSTRAINT uq_vaitto_market_products_vaitto_id UNIQUE (organization_id, vaitto_product_id);
+
+
+--
+-- Name: vaitto_market_settings uq_vaitto_market_settings_organization_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vaitto_market_settings
+    ADD CONSTRAINT uq_vaitto_market_settings_organization_id UNIQUE (organization_id);
+
+
+--
+-- Name: vaitto_market_variants uq_vaitto_market_variants_sku; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vaitto_market_variants
+    ADD CONSTRAINT uq_vaitto_market_variants_sku UNIQUE (product_id, sku);
+
+
+--
+-- Name: vaitto_market_variants uq_vaitto_market_variants_vaitto_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vaitto_market_variants
+    ADD CONSTRAINT uq_vaitto_market_variants_vaitto_id UNIQUE (product_id, vaitto_variant_id);
+
+
+--
+-- Name: wallet_transactions uq_wallet_transactions_idempotency_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.wallet_transactions
+    ADD CONSTRAINT uq_wallet_transactions_idempotency_key UNIQUE (idempotency_key);
+
+
+--
+-- Name: wallets uq_wallets_address; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.wallets
+    ADD CONSTRAINT uq_wallets_address UNIQUE (address);
+
+
+--
+-- Name: wallets uq_wallets_user_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.wallets
+    ADD CONSTRAINT uq_wallets_user_id UNIQUE (user_id);
+
+
+--
+-- Name: ix_addresses_customer_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_addresses_customer_id ON public.addresses USING btree (customer_id);
+
+
+--
+-- Name: ix_addresses_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_addresses_organization_id ON public.addresses USING btree (organization_id);
+
+
+--
+-- Name: ix_agent_profiles_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_agent_profiles_organization_id ON public.agent_profiles USING btree (organization_id);
+
+
+--
+-- Name: ix_agent_rank_history_agent_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_agent_rank_history_agent_id ON public.agent_rank_history USING btree (agent_id);
+
+
+--
+-- Name: ix_agent_rank_history_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_agent_rank_history_organization_id ON public.agent_rank_history USING btree (organization_id);
+
+
+--
+-- Name: ix_aliexpress_order_items_aliexpress_order_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_aliexpress_order_items_aliexpress_order_id ON public.aliexpress_order_items USING btree (aliexpress_order_id);
+
+
+--
+-- Name: ix_aliexpress_order_items_order_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_aliexpress_order_items_order_id ON public.aliexpress_order_items USING btree (order_id);
+
+
+--
+-- Name: ix_aliexpress_orders_aliexpress_order_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_aliexpress_orders_aliexpress_order_id ON public.aliexpress_orders USING btree (aliexpress_order_id);
+
+
+--
+-- Name: ix_aliexpress_orders_customer_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_aliexpress_orders_customer_user_id ON public.aliexpress_orders USING btree (customer_user_id);
+
+
+--
+-- Name: ix_aliexpress_orders_fulfillment_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_aliexpress_orders_fulfillment_status ON public.aliexpress_orders USING btree (fulfillment_status);
+
+
+--
+-- Name: ix_aliexpress_orders_next_retry_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_aliexpress_orders_next_retry_at ON public.aliexpress_orders USING btree (next_retry_at);
+
+
+--
+-- Name: ix_aliexpress_orders_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_aliexpress_orders_organization_id ON public.aliexpress_orders USING btree (organization_id);
+
+
+--
+-- Name: ix_aliexpress_orders_out_order_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_aliexpress_orders_out_order_id ON public.aliexpress_orders USING btree (out_order_id);
+
+
+--
+-- Name: ix_aliexpress_orders_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_aliexpress_orders_status ON public.aliexpress_orders USING btree (status);
+
+
+--
+-- Name: ix_aliexpress_products_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_aliexpress_products_organization_id ON public.aliexpress_products USING btree (organization_id);
+
+
+--
+-- Name: ix_aliexpress_products_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_aliexpress_products_status ON public.aliexpress_products USING btree (status);
+
+
+--
+-- Name: ix_aliexpress_variants_product_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_aliexpress_variants_product_id ON public.aliexpress_variants USING btree (product_id);
+
+
+--
+-- Name: ix_attribution_corrections_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_attribution_corrections_organization_id ON public.attribution_corrections USING btree (organization_id);
+
+
+--
+-- Name: ix_audit_log_action; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_audit_log_action ON public.audit_log USING btree (action);
+
+
+--
+-- Name: ix_audit_log_correlation_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_audit_log_correlation_id ON public.audit_log USING btree (correlation_id);
+
+
+--
+-- Name: ix_audit_log_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_audit_log_organization_id ON public.audit_log USING btree (organization_id);
+
+
+--
+-- Name: ix_cart_items_cart_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_cart_items_cart_id ON public.cart_items USING btree (cart_id);
+
+
+--
+-- Name: ix_carts_customer_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_carts_customer_user_id ON public.carts USING btree (customer_user_id);
+
+
+--
+-- Name: ix_carts_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_carts_organization_id ON public.carts USING btree (organization_id);
+
+
+--
+-- Name: ix_cj_order_items_order_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_cj_order_items_order_id ON public.cj_order_items USING btree (order_id);
+
+
+--
+-- Name: ix_cj_orders_cj_order_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_cj_orders_cj_order_id ON public.cj_orders USING btree (cj_order_id);
+
+
+--
+-- Name: ix_cj_orders_cj_payment_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_cj_orders_cj_payment_status ON public.cj_orders USING btree (cj_payment_status);
+
+
+--
+-- Name: ix_cj_orders_customer_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_cj_orders_customer_user_id ON public.cj_orders USING btree (customer_user_id);
+
+
+--
+-- Name: ix_cj_orders_fulfillment_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_cj_orders_fulfillment_status ON public.cj_orders USING btree (fulfillment_status);
+
+
+--
+-- Name: ix_cj_orders_next_retry_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_cj_orders_next_retry_at ON public.cj_orders USING btree (next_retry_at);
+
+
+--
+-- Name: ix_cj_orders_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_cj_orders_organization_id ON public.cj_orders USING btree (organization_id);
+
+
+--
+-- Name: ix_cj_orders_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_cj_orders_status ON public.cj_orders USING btree (status);
+
+
+--
+-- Name: ix_cj_products_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_cj_products_organization_id ON public.cj_products USING btree (organization_id);
+
+
+--
+-- Name: ix_cj_products_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_cj_products_status ON public.cj_products USING btree (status);
+
+
+--
+-- Name: ix_cj_variants_product_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_cj_variants_product_id ON public.cj_variants USING btree (product_id);
+
+
+--
+-- Name: ix_commission_adjustments_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_commission_adjustments_organization_id ON public.commission_adjustments USING btree (organization_id);
+
+
+--
+-- Name: ix_commission_calculation_steps_calculation_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_commission_calculation_steps_calculation_id ON public.commission_calculation_steps USING btree (calculation_id);
+
+
+--
+-- Name: ix_commission_calculations_contract_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_commission_calculations_contract_id ON public.commission_calculations USING btree (contract_id);
+
+
+--
+-- Name: ix_commission_calculations_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_commission_calculations_organization_id ON public.commission_calculations USING btree (organization_id);
+
+
+--
+-- Name: ix_commission_movements_agent_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_commission_movements_agent_id ON public.commission_movements USING btree (agent_id);
+
+
+--
+-- Name: ix_commission_movements_contract_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_commission_movements_contract_id ON public.commission_movements USING btree (contract_id);
+
+
+--
+-- Name: ix_commission_movements_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_commission_movements_organization_id ON public.commission_movements USING btree (organization_id);
+
+
+--
+-- Name: ix_commission_offsets_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_commission_offsets_organization_id ON public.commission_offsets USING btree (organization_id);
+
+
+--
+-- Name: ix_commission_plan_versions_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_commission_plan_versions_organization_id ON public.commission_plan_versions USING btree (organization_id);
+
+
+--
+-- Name: ix_commission_reversals_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_commission_reversals_organization_id ON public.commission_reversals USING btree (organization_id);
+
+
+--
+-- Name: ix_commission_rule_versions_commission_plan_version_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_commission_rule_versions_commission_plan_version_id ON public.commission_rule_versions USING btree (commission_plan_version_id);
+
+
+--
+-- Name: ix_contract_attributions_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_contract_attributions_organization_id ON public.contract_attributions USING btree (organization_id);
+
+
+--
+-- Name: ix_contract_commission_plans_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_contract_commission_plans_organization_id ON public.contract_commission_plans USING btree (organization_id);
+
+
+--
+-- Name: ix_contract_events_contract_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_contract_events_contract_id ON public.contract_events USING btree (contract_id);
+
+
+--
+-- Name: ix_contract_instalments_contract_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_contract_instalments_contract_id ON public.contract_instalments USING btree (contract_id);
+
+
+--
+-- Name: ix_contract_instalments_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_contract_instalments_organization_id ON public.contract_instalments USING btree (organization_id);
+
+
+--
+-- Name: ix_contract_request_checkouts_contract_request_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_contract_request_checkouts_contract_request_id ON public.contract_request_checkouts USING btree (contract_request_id);
+
+
+--
+-- Name: ix_contract_request_checkouts_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_contract_request_checkouts_organization_id ON public.contract_request_checkouts USING btree (organization_id);
+
+
+--
+-- Name: ix_contract_requests_customer_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_contract_requests_customer_id ON public.contract_requests USING btree (customer_id);
+
+
+--
+-- Name: ix_contract_requests_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_contract_requests_organization_id ON public.contract_requests USING btree (organization_id);
+
+
+--
+-- Name: ix_contract_requests_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_contract_requests_status ON public.contract_requests USING btree (status);
+
+
+--
+-- Name: ix_contract_status_history_contract_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_contract_status_history_contract_id ON public.contract_status_history USING btree (contract_id);
+
+
+--
+-- Name: ix_contracts_contract_request_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_contracts_contract_request_id ON public.contracts USING btree (contract_request_id);
+
+
+--
+-- Name: ix_contracts_customer_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_contracts_customer_id ON public.contracts USING btree (customer_id);
+
+
+--
+-- Name: ix_contracts_expires_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_contracts_expires_at ON public.contracts USING btree (expires_at);
+
+
+--
+-- Name: ix_contracts_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_contracts_organization_id ON public.contracts USING btree (organization_id);
+
+
+--
+-- Name: ix_contracts_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_contracts_status ON public.contracts USING btree (status);
+
+
+--
+-- Name: ix_customer_attributions_customer_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_customer_attributions_customer_id ON public.customer_attributions USING btree (customer_id);
+
+
+--
+-- Name: ix_customer_attributions_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_customer_attributions_organization_id ON public.customer_attributions USING btree (organization_id);
+
+
+--
+-- Name: ix_customers_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_customers_organization_id ON public.customers USING btree (organization_id);
+
+
+--
+-- Name: ix_documentation_posts_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_documentation_posts_organization_id ON public.documentation_posts USING btree (organization_id);
+
+
+--
+-- Name: ix_documentation_posts_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_documentation_posts_status ON public.documentation_posts USING btree (status);
+
+
+--
+-- Name: ix_documents_contract_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_documents_contract_id ON public.documents USING btree (contract_id);
+
+
+--
+-- Name: ix_documents_contract_request_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_documents_contract_request_id ON public.documents USING btree (contract_request_id);
+
+
+--
+-- Name: ix_documents_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_documents_organization_id ON public.documents USING btree (organization_id);
+
+
+--
+-- Name: ix_documents_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_documents_status ON public.documents USING btree (status);
+
+
+--
+-- Name: ix_domain_outbox_event_type; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_domain_outbox_event_type ON public.domain_outbox USING btree (event_type);
+
+
+--
+-- Name: ix_domain_outbox_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_domain_outbox_organization_id ON public.domain_outbox USING btree (organization_id);
+
+
+--
+-- Name: ix_domain_outbox_processed_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_domain_outbox_processed_at ON public.domain_outbox USING btree (processed_at);
+
+
+--
+-- Name: ix_email_verification_tokens_token_hash; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX ix_email_verification_tokens_token_hash ON public.email_verification_tokens USING btree (token_hash);
+
+
+--
+-- Name: ix_email_verification_tokens_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_email_verification_tokens_user_id ON public.email_verification_tokens USING btree (user_id);
+
+
+--
+-- Name: ix_friend_referral_codes_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_friend_referral_codes_organization_id ON public.friend_referral_codes USING btree (organization_id);
+
+
+--
+-- Name: ix_friend_referral_reward_claims_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_friend_referral_reward_claims_organization_id ON public.friend_referral_reward_claims USING btree (organization_id);
+
+
+--
+-- Name: ix_friend_referral_reward_claims_referrer_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_friend_referral_reward_claims_referrer_user_id ON public.friend_referral_reward_claims USING btree (referrer_user_id);
+
+
+--
+-- Name: ix_friend_referral_reward_claims_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_friend_referral_reward_claims_status ON public.friend_referral_reward_claims USING btree (status);
+
+
+--
+-- Name: ix_friend_referrals_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_friend_referrals_organization_id ON public.friend_referrals USING btree (organization_id);
+
+
+--
+-- Name: ix_friend_referrals_referrer_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_friend_referrals_referrer_user_id ON public.friend_referrals USING btree (referrer_user_id);
+
+
+--
+-- Name: ix_import_providers_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_import_providers_organization_id ON public.import_providers USING btree (organization_id);
+
+
+--
+-- Name: ix_imported_product_orders_customer_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_imported_product_orders_customer_user_id ON public.imported_product_orders USING btree (customer_user_id);
+
+
+--
+-- Name: ix_imported_product_orders_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_imported_product_orders_organization_id ON public.imported_product_orders USING btree (organization_id);
+
+
+--
+-- Name: ix_imported_product_orders_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_imported_product_orders_status ON public.imported_product_orders USING btree (status);
+
+
+--
+-- Name: ix_imported_products_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_imported_products_organization_id ON public.imported_products USING btree (organization_id);
+
+
+--
+-- Name: ix_imported_products_provider_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_imported_products_provider_id ON public.imported_products USING btree (provider_id);
+
+
+--
+-- Name: ix_invoice_redemptions_customer_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_invoice_redemptions_customer_user_id ON public.invoice_redemptions USING btree (customer_user_id);
+
+
+--
+-- Name: ix_invoice_redemptions_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_invoice_redemptions_organization_id ON public.invoice_redemptions USING btree (organization_id);
+
+
+--
+-- Name: ix_invoice_redemptions_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_invoice_redemptions_status ON public.invoice_redemptions USING btree (status);
+
+
+--
+-- Name: ix_kappa_market_order_items_order_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_kappa_market_order_items_order_id ON public.kappa_market_order_items USING btree (order_id);
+
+
+--
+-- Name: ix_kappa_market_orders_customer_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_kappa_market_orders_customer_user_id ON public.kappa_market_orders USING btree (customer_user_id);
+
+
+--
+-- Name: ix_kappa_market_orders_fulfillment_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_kappa_market_orders_fulfillment_status ON public.kappa_market_orders USING btree (fulfillment_status);
+
+
+--
+-- Name: ix_kappa_market_orders_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_kappa_market_orders_organization_id ON public.kappa_market_orders USING btree (organization_id);
+
+
+--
+-- Name: ix_kappa_market_orders_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_kappa_market_orders_status ON public.kappa_market_orders USING btree (status);
+
+
+--
+-- Name: ix_kappa_market_producers_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_kappa_market_producers_organization_id ON public.kappa_market_producers USING btree (organization_id);
+
+
+--
+-- Name: ix_kappa_market_products_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_kappa_market_products_organization_id ON public.kappa_market_products USING btree (organization_id);
+
+
+--
+-- Name: ix_kappa_market_products_producer_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_kappa_market_products_producer_id ON public.kappa_market_products USING btree (producer_id);
+
+
+--
+-- Name: ix_kappa_market_products_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_kappa_market_products_status ON public.kappa_market_products USING btree (status);
+
+
+--
+-- Name: ix_kappa_market_settings_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_kappa_market_settings_organization_id ON public.kappa_market_settings USING btree (organization_id);
+
+
+--
+-- Name: ix_kappa_market_variants_product_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_kappa_market_variants_product_id ON public.kappa_market_variants USING btree (product_id);
+
+
+--
+-- Name: ix_jav_market_order_items_order_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_jav_market_order_items_order_id ON public.jav_market_order_items USING btree (order_id);
+
+
+--
+-- Name: ix_jav_market_orders_customer_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_jav_market_orders_customer_user_id ON public.jav_market_orders USING btree (customer_user_id);
+
+
+--
+-- Name: ix_jav_market_orders_fulfillment_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_jav_market_orders_fulfillment_status ON public.jav_market_orders USING btree (fulfillment_status);
+
+
+--
+-- Name: ix_jav_market_orders_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_jav_market_orders_organization_id ON public.jav_market_orders USING btree (organization_id);
+
+
+--
+-- Name: ix_jav_market_orders_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_jav_market_orders_status ON public.jav_market_orders USING btree (status);
+
+
+--
+-- Name: ix_jav_market_producers_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_jav_market_producers_organization_id ON public.jav_market_producers USING btree (organization_id);
+
+
+--
+-- Name: ix_jav_market_products_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_jav_market_products_organization_id ON public.jav_market_products USING btree (organization_id);
+
+
+--
+-- Name: ix_jav_market_products_producer_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_jav_market_products_producer_id ON public.jav_market_products USING btree (producer_id);
+
+
+--
+-- Name: ix_jav_market_products_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_jav_market_products_status ON public.jav_market_products USING btree (status);
+
+
+--
+-- Name: ix_jav_market_settings_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_jav_market_settings_organization_id ON public.jav_market_settings USING btree (organization_id);
+
+
+--
+-- Name: ix_jav_market_variants_product_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_jav_market_variants_product_id ON public.jav_market_variants USING btree (product_id);
+
+
+--
+-- Name: ix_network_assignment_history_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_network_assignment_history_organization_id ON public.network_assignment_history USING btree (organization_id);
+
+
+--
+-- Name: ix_network_closure_org_ancestor; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_network_closure_org_ancestor ON public.network_closure USING btree (organization_id, ancestor_agent_id);
+
+
+--
+-- Name: ix_network_closure_org_ancestor_depth; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_network_closure_org_ancestor_depth ON public.network_closure USING btree (organization_id, ancestor_agent_id, depth);
+
+
+--
+-- Name: ix_network_closure_org_descendant; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_network_closure_org_descendant ON public.network_closure USING btree (organization_id, descendant_agent_id);
+
+
+--
+-- Name: ix_network_closure_org_descendant_depth; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_network_closure_org_descendant_depth ON public.network_closure USING btree (organization_id, descendant_agent_id, depth);
+
+
+--
+-- Name: ix_network_edges_child_agent_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_network_edges_child_agent_id ON public.network_edges USING btree (child_agent_id);
+
+
+--
+-- Name: ix_network_edges_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_network_edges_organization_id ON public.network_edges USING btree (organization_id);
+
+
+--
+-- Name: ix_network_edges_parent_agent_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_network_edges_parent_agent_id ON public.network_edges USING btree (parent_agent_id);
+
+
+--
+-- Name: ix_network_nodes_agent_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_network_nodes_agent_id ON public.network_nodes USING btree (agent_id);
+
+
+--
+-- Name: ix_network_nodes_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_network_nodes_organization_id ON public.network_nodes USING btree (organization_id);
+
+
+--
+-- Name: ix_network_snapshots_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_network_snapshots_organization_id ON public.network_snapshots USING btree (organization_id);
+
+
+--
+-- Name: ix_notifications_is_read; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_notifications_is_read ON public.notifications USING btree (is_read);
+
+
+--
+-- Name: ix_notifications_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_notifications_organization_id ON public.notifications USING btree (organization_id);
+
+
+--
+-- Name: ix_notifications_recipient_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_notifications_recipient_user_id ON public.notifications USING btree (recipient_user_id);
+
+
+--
+-- Name: ix_notifications_type; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_notifications_type ON public.notifications USING btree (type);
+
+
+--
+-- Name: ix_orders_customer_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_orders_customer_user_id ON public.orders USING btree (customer_user_id);
+
+
+--
+-- Name: ix_orders_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_orders_organization_id ON public.orders USING btree (organization_id);
+
+
+--
+-- Name: ix_orders_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_orders_status ON public.orders USING btree (status);
+
+
+--
+-- Name: ix_otp_codes_code_hash; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_otp_codes_code_hash ON public.otp_codes USING btree (code_hash);
+
+
+--
+-- Name: ix_otp_codes_purpose; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_otp_codes_purpose ON public.otp_codes USING btree (purpose);
+
+
+--
+-- Name: ix_otp_codes_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_otp_codes_user_id ON public.otp_codes USING btree (user_id);
+
+
+--
+-- Name: ix_partners_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_partners_organization_id ON public.partners USING btree (organization_id);
+
+
+--
+-- Name: ix_password_reset_tokens_token_hash; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX ix_password_reset_tokens_token_hash ON public.password_reset_tokens USING btree (token_hash);
+
+
+--
+-- Name: ix_password_reset_tokens_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_password_reset_tokens_user_id ON public.password_reset_tokens USING btree (user_id);
+
+
+--
+-- Name: ix_product_request_messages_request_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_product_request_messages_request_id ON public.product_request_messages USING btree (request_id);
+
+
+--
+-- Name: ix_product_requests_opened_by_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_product_requests_opened_by_user_id ON public.product_requests USING btree (opened_by_user_id);
+
+
+--
+-- Name: ix_product_requests_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_product_requests_organization_id ON public.product_requests USING btree (organization_id);
+
+
+--
+-- Name: ix_product_requests_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_product_requests_status ON public.product_requests USING btree (status);
+
+
+--
+-- Name: ix_product_versions_product_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_product_versions_product_id ON public.product_versions USING btree (product_id);
+
+
+--
+-- Name: ix_products_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_products_organization_id ON public.products USING btree (organization_id);
+
+
+--
+-- Name: ix_promoter_codes_agent_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_promoter_codes_agent_id ON public.promoter_codes USING btree (agent_id);
+
+
+--
+-- Name: ix_promoter_codes_code; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX ix_promoter_codes_code ON public.promoter_codes USING btree (code);
+
+
+--
+-- Name: ix_promoter_codes_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_promoter_codes_organization_id ON public.promoter_codes USING btree (organization_id);
+
+
+--
+-- Name: ix_ranks_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_ranks_organization_id ON public.ranks USING btree (organization_id);
+
+
+--
+-- Name: ix_referral_events_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_referral_events_organization_id ON public.referral_events USING btree (organization_id);
+
+
+--
+-- Name: ix_referral_events_promoter_code_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_referral_events_promoter_code_id ON public.referral_events USING btree (promoter_code_id);
+
+
+--
+-- Name: ix_referral_sessions_cookie_token_hash; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX ix_referral_sessions_cookie_token_hash ON public.referral_sessions USING btree (cookie_token_hash);
+
+
+--
+-- Name: ix_referral_sessions_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_referral_sessions_organization_id ON public.referral_sessions USING btree (organization_id);
+
+
+--
+-- Name: ix_referral_sessions_promoter_code_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_referral_sessions_promoter_code_id ON public.referral_sessions USING btree (promoter_code_id);
+
+
+--
+-- Name: ix_roles_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_roles_organization_id ON public.roles USING btree (organization_id);
+
+
+--
+-- Name: ix_sessions_refresh_token_hash; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX ix_sessions_refresh_token_hash ON public.sessions USING btree (refresh_token_hash);
+
+
+--
+-- Name: ix_sessions_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_sessions_user_id ON public.sessions USING btree (user_id);
+
+
+--
+-- Name: ix_shop_categories_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_shop_categories_organization_id ON public.shop_categories USING btree (organization_id);
+
+
+--
+-- Name: ix_shop_category_products_category_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_shop_category_products_category_id ON public.shop_category_products USING btree (category_id);
+
+
+--
+-- Name: ix_shop_category_products_organization_id_shop_product_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_shop_category_products_organization_id_shop_product_id ON public.shop_category_products USING btree (organization_id, shop, product_id);
+
+
+--
+-- Name: ix_shopify_order_items_order_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_shopify_order_items_order_id ON public.shopify_order_items USING btree (order_id);
+
+
+--
+-- Name: ix_shopify_orders_customer_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_shopify_orders_customer_user_id ON public.shopify_orders USING btree (customer_user_id);
+
+
+--
+-- Name: ix_shopify_orders_fulfillment_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_shopify_orders_fulfillment_status ON public.shopify_orders USING btree (fulfillment_status);
+
+
+--
+-- Name: ix_shopify_orders_next_retry_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_shopify_orders_next_retry_at ON public.shopify_orders USING btree (next_retry_at);
+
+
+--
+-- Name: ix_shopify_orders_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_shopify_orders_organization_id ON public.shopify_orders USING btree (organization_id);
+
+
+--
+-- Name: ix_shopify_orders_shopify_order_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_shopify_orders_shopify_order_id ON public.shopify_orders USING btree (shopify_order_id);
+
+
+--
+-- Name: ix_shopify_orders_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_shopify_orders_status ON public.shopify_orders USING btree (status);
+
+
+--
+-- Name: ix_shopify_products_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_shopify_products_organization_id ON public.shopify_products USING btree (organization_id);
+
+
+--
+-- Name: ix_shopify_products_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_shopify_products_status ON public.shopify_products USING btree (status);
+
+
+--
+-- Name: ix_shopify_variants_product_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_shopify_variants_product_id ON public.shopify_variants USING btree (product_id);
+
+
+--
+-- Name: ix_soleil_market_order_items_order_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_soleil_market_order_items_order_id ON public.soleil_market_order_items USING btree (order_id);
+
+
+--
+-- Name: ix_soleil_market_orders_customer_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_soleil_market_orders_customer_user_id ON public.soleil_market_orders USING btree (customer_user_id);
+
+
+--
+-- Name: ix_soleil_market_orders_fulfillment_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_soleil_market_orders_fulfillment_status ON public.soleil_market_orders USING btree (fulfillment_status);
+
+
+--
+-- Name: ix_soleil_market_orders_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_soleil_market_orders_organization_id ON public.soleil_market_orders USING btree (organization_id);
+
+
+--
+-- Name: ix_soleil_market_orders_soleil_order_number; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_soleil_market_orders_soleil_order_number ON public.soleil_market_orders USING btree (soleil_order_number);
+
+
+--
+-- Name: ix_soleil_market_orders_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_soleil_market_orders_status ON public.soleil_market_orders USING btree (status);
+
+
+--
+-- Name: ix_soleil_market_producers_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_soleil_market_producers_organization_id ON public.soleil_market_producers USING btree (organization_id);
+
+
+--
+-- Name: ix_soleil_market_products_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_soleil_market_products_organization_id ON public.soleil_market_products USING btree (organization_id);
+
+
+--
+-- Name: ix_soleil_market_products_producer_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_soleil_market_products_producer_id ON public.soleil_market_products USING btree (producer_id);
+
+
+--
+-- Name: ix_soleil_market_products_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_soleil_market_products_status ON public.soleil_market_products USING btree (status);
+
+
+--
+-- Name: ix_soleil_market_settings_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_soleil_market_settings_organization_id ON public.soleil_market_settings USING btree (organization_id);
+
+
+--
+-- Name: ix_soleil_market_variants_product_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_soleil_market_variants_product_id ON public.soleil_market_variants USING btree (product_id);
+
+
+--
+-- Name: ix_soleil_market_webhook_events_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_soleil_market_webhook_events_organization_id ON public.soleil_market_webhook_events USING btree (organization_id);
+
+
+--
+-- Name: ix_spend_pins_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_spend_pins_user_id ON public.spend_pins USING btree (user_id);
+
+
+--
+-- Name: ix_stripe_webhook_events_event_type; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_stripe_webhook_events_event_type ON public.stripe_webhook_events USING btree (event_type);
+
+
+--
+-- Name: ix_stripe_webhook_events_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_stripe_webhook_events_organization_id ON public.stripe_webhook_events USING btree (organization_id);
+
+
+--
+-- Name: ix_supply_points_customer_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_supply_points_customer_id ON public.supply_points USING btree (customer_id);
+
+
+--
+-- Name: ix_supply_points_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_supply_points_organization_id ON public.supply_points USING btree (organization_id);
+
+
+--
+-- Name: ix_symphonya_market_order_items_order_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_symphonya_market_order_items_order_id ON public.symphonya_market_order_items USING btree (order_id);
+
+
+--
+-- Name: ix_symphonya_market_orders_customer_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_symphonya_market_orders_customer_user_id ON public.symphonya_market_orders USING btree (customer_user_id);
+
+
+--
+-- Name: ix_symphonya_market_orders_fulfillment_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_symphonya_market_orders_fulfillment_status ON public.symphonya_market_orders USING btree (fulfillment_status);
+
+
+--
+-- Name: ix_symphonya_market_orders_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_symphonya_market_orders_organization_id ON public.symphonya_market_orders USING btree (organization_id);
+
+
+--
+-- Name: ix_symphonya_market_orders_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_symphonya_market_orders_status ON public.symphonya_market_orders USING btree (status);
+
+
+--
+-- Name: ix_symphonya_market_producers_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_symphonya_market_producers_organization_id ON public.symphonya_market_producers USING btree (organization_id);
+
+
+--
+-- Name: ix_symphonya_market_products_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_symphonya_market_products_organization_id ON public.symphonya_market_products USING btree (organization_id);
+
+
+--
+-- Name: ix_symphonya_market_products_producer_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_symphonya_market_products_producer_id ON public.symphonya_market_products USING btree (producer_id);
+
+
+--
+-- Name: ix_symphonya_market_products_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_symphonya_market_products_status ON public.symphonya_market_products USING btree (status);
+
+
+--
+-- Name: ix_symphonya_market_settings_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_symphonya_market_settings_organization_id ON public.symphonya_market_settings USING btree (organization_id);
+
+
+--
+-- Name: ix_symphonya_market_variants_product_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_symphonya_market_variants_product_id ON public.symphonya_market_variants USING btree (product_id);
+
+
+--
+-- Name: ix_ticket_messages_ticket_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_ticket_messages_ticket_id ON public.ticket_messages USING btree (ticket_id);
+
+
+--
+-- Name: ix_tickets_opened_by_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_tickets_opened_by_user_id ON public.tickets USING btree (opened_by_user_id);
+
+
+--
+-- Name: ix_tickets_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_tickets_organization_id ON public.tickets USING btree (organization_id);
+
+
+--
+-- Name: ix_tickets_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_tickets_status ON public.tickets USING btree (status);
+
+
+--
+-- Name: ix_user_roles_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_user_roles_organization_id ON public.user_roles USING btree (organization_id);
+
+
+--
+-- Name: ix_user_roles_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_user_roles_user_id ON public.user_roles USING btree (user_id);
+
+
+--
+-- Name: ix_users_email; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_users_email ON public.users USING btree (email);
+
+
+--
+-- Name: ix_users_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_users_organization_id ON public.users USING btree (organization_id);
+
+
+--
+-- Name: ix_vaitto_market_order_items_order_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_vaitto_market_order_items_order_id ON public.vaitto_market_order_items USING btree (order_id);
+
+
+--
+-- Name: ix_vaitto_market_orders_customer_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_vaitto_market_orders_customer_user_id ON public.vaitto_market_orders USING btree (customer_user_id);
+
+
+--
+-- Name: ix_vaitto_market_orders_fulfillment_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_vaitto_market_orders_fulfillment_status ON public.vaitto_market_orders USING btree (fulfillment_status);
+
+
+--
+-- Name: ix_vaitto_market_orders_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_vaitto_market_orders_organization_id ON public.vaitto_market_orders USING btree (organization_id);
+
+
+--
+-- Name: ix_vaitto_market_orders_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_vaitto_market_orders_status ON public.vaitto_market_orders USING btree (status);
+
+
+--
+-- Name: ix_vaitto_market_producers_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_vaitto_market_producers_organization_id ON public.vaitto_market_producers USING btree (organization_id);
+
+
+--
+-- Name: ix_vaitto_market_products_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_vaitto_market_products_organization_id ON public.vaitto_market_products USING btree (organization_id);
+
+
+--
+-- Name: ix_vaitto_market_products_producer_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_vaitto_market_products_producer_id ON public.vaitto_market_products USING btree (producer_id);
+
+
+--
+-- Name: ix_vaitto_market_products_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_vaitto_market_products_status ON public.vaitto_market_products USING btree (status);
+
+
+--
+-- Name: ix_vaitto_market_settings_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_vaitto_market_settings_organization_id ON public.vaitto_market_settings USING btree (organization_id);
+
+
+--
+-- Name: ix_vaitto_market_variants_product_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_vaitto_market_variants_product_id ON public.vaitto_market_variants USING btree (product_id);
+
+
+--
+-- Name: ix_wallet_transactions_from_wallet_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_wallet_transactions_from_wallet_id ON public.wallet_transactions USING btree (from_wallet_id);
+
+
+--
+-- Name: ix_wallet_transactions_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_wallet_transactions_organization_id ON public.wallet_transactions USING btree (organization_id);
+
+
+--
+-- Name: ix_wallet_transactions_reference_kappa_market_order_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_wallet_transactions_reference_kappa_market_order_id ON public.wallet_transactions USING btree (reference_kappa_market_order_id);
+
+
+--
+-- Name: ix_wallet_transactions_reference_jav_market_order_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_wallet_transactions_reference_jav_market_order_id ON public.wallet_transactions USING btree (reference_jav_market_order_id);
+
+
+--
+-- Name: ix_wallet_transactions_reference_soleil_market_order_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_wallet_transactions_reference_soleil_market_order_id ON public.wallet_transactions USING btree (reference_soleil_market_order_id);
+
+
+--
+-- Name: ix_wallet_transactions_reference_symphonya_market_order_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_wallet_transactions_reference_symphonya_market_order_id ON public.wallet_transactions USING btree (reference_symphonya_market_order_id);
+
+
+--
+-- Name: ix_wallet_transactions_reference_vaitto_market_order_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_wallet_transactions_reference_vaitto_market_order_id ON public.wallet_transactions USING btree (reference_vaitto_market_order_id);
+
+
+--
+-- Name: ix_wallet_transactions_to_wallet_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_wallet_transactions_to_wallet_id ON public.wallet_transactions USING btree (to_wallet_id);
+
+
+--
+-- Name: ix_wallet_transactions_type; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_wallet_transactions_type ON public.wallet_transactions USING btree (type);
+
+
+--
+-- Name: ix_wallets_address; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_wallets_address ON public.wallets USING btree (address);
+
+
+--
+-- Name: ix_wallets_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_wallets_organization_id ON public.wallets USING btree (organization_id);
+
+
+--
+-- Name: ix_wallets_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_wallets_user_id ON public.wallets USING btree (user_id);
+
+
+--
+-- Name: uq_network_nodes_active_agent; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uq_network_nodes_active_agent ON public.network_nodes USING btree (organization_id, agent_id) WHERE (effective_to IS NULL);
+
+
+--
+-- Name: uq_shop_categories_organization_id_shop_name; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uq_shop_categories_organization_id_shop_name ON public.shop_categories USING btree (organization_id, shop, lower((name)::text));
+
+
+--
+-- Name: addresses fk_addresses_customer_id_customers; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.addresses
+    ADD CONSTRAINT fk_addresses_customer_id_customers FOREIGN KEY (customer_id) REFERENCES public.customers(id);
+
+
+--
+-- Name: addresses fk_addresses_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.addresses
+    ADD CONSTRAINT fk_addresses_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: agent_profiles fk_agent_profiles_approved_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.agent_profiles
+    ADD CONSTRAINT fk_agent_profiles_approved_by_user_id_users FOREIGN KEY (approved_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: agent_profiles fk_agent_profiles_current_rank_id_ranks; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.agent_profiles
+    ADD CONSTRAINT fk_agent_profiles_current_rank_id_ranks FOREIGN KEY (current_rank_id) REFERENCES public.ranks(id);
+
+
+--
+-- Name: agent_profiles fk_agent_profiles_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.agent_profiles
+    ADD CONSTRAINT fk_agent_profiles_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: agent_profiles fk_agent_profiles_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.agent_profiles
+    ADD CONSTRAINT fk_agent_profiles_user_id_users FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: agent_rank_history fk_agent_rank_history_agent_id_agent_profiles; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.agent_rank_history
+    ADD CONSTRAINT fk_agent_rank_history_agent_id_agent_profiles FOREIGN KEY (agent_id) REFERENCES public.agent_profiles(id);
+
+
+--
+-- Name: agent_rank_history fk_agent_rank_history_approved_by_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.agent_rank_history
+    ADD CONSTRAINT fk_agent_rank_history_approved_by_users FOREIGN KEY (approved_by) REFERENCES public.users(id);
+
+
+--
+-- Name: agent_rank_history fk_agent_rank_history_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.agent_rank_history
+    ADD CONSTRAINT fk_agent_rank_history_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: agent_rank_history fk_agent_rank_history_rank_id_ranks; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.agent_rank_history
+    ADD CONSTRAINT fk_agent_rank_history_rank_id_ranks FOREIGN KEY (rank_id) REFERENCES public.ranks(id);
+
+
+--
+-- Name: aliexpress_order_items fk_aliexpress_order_items_aliexpress_product_id_aliexpr_b16a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.aliexpress_order_items
+    ADD CONSTRAINT fk_aliexpress_order_items_aliexpress_product_id_aliexpr_b16a FOREIGN KEY (aliexpress_product_id) REFERENCES public.aliexpress_products(id);
+
+
+--
+-- Name: aliexpress_order_items fk_aliexpress_order_items_aliexpress_variant_id_aliexpr_2749; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.aliexpress_order_items
+    ADD CONSTRAINT fk_aliexpress_order_items_aliexpress_variant_id_aliexpr_2749 FOREIGN KEY (aliexpress_variant_id) REFERENCES public.aliexpress_variants(id);
+
+
+--
+-- Name: aliexpress_order_items fk_aliexpress_order_items_order_id_aliexpress_orders; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.aliexpress_order_items
+    ADD CONSTRAINT fk_aliexpress_order_items_order_id_aliexpress_orders FOREIGN KEY (order_id) REFERENCES public.aliexpress_orders(id) ON DELETE CASCADE;
+
+
+--
+-- Name: aliexpress_orders fk_aliexpress_orders_aliexpress_product_id_aliexpress_products; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.aliexpress_orders
+    ADD CONSTRAINT fk_aliexpress_orders_aliexpress_product_id_aliexpress_products FOREIGN KEY (aliexpress_product_id) REFERENCES public.aliexpress_products(id);
+
+
+--
+-- Name: aliexpress_orders fk_aliexpress_orders_aliexpress_variant_id_aliexpress_variants; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.aliexpress_orders
+    ADD CONSTRAINT fk_aliexpress_orders_aliexpress_variant_id_aliexpress_variants FOREIGN KEY (aliexpress_variant_id) REFERENCES public.aliexpress_variants(id);
+
+
+--
+-- Name: aliexpress_orders fk_aliexpress_orders_cancelled_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.aliexpress_orders
+    ADD CONSTRAINT fk_aliexpress_orders_cancelled_by_user_id_users FOREIGN KEY (cancelled_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: aliexpress_orders fk_aliexpress_orders_created_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.aliexpress_orders
+    ADD CONSTRAINT fk_aliexpress_orders_created_by_user_id_users FOREIGN KEY (created_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: aliexpress_orders fk_aliexpress_orders_credit_debit_transaction_id_wallet_bf86; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.aliexpress_orders
+    ADD CONSTRAINT fk_aliexpress_orders_credit_debit_transaction_id_wallet_bf86 FOREIGN KEY (credit_debit_transaction_id) REFERENCES public.wallet_transactions(id);
+
+
+--
+-- Name: aliexpress_orders fk_aliexpress_orders_customer_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.aliexpress_orders
+    ADD CONSTRAINT fk_aliexpress_orders_customer_user_id_users FOREIGN KEY (customer_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: aliexpress_orders fk_aliexpress_orders_forwarded_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.aliexpress_orders
+    ADD CONSTRAINT fk_aliexpress_orders_forwarded_by_user_id_users FOREIGN KEY (forwarded_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: aliexpress_orders fk_aliexpress_orders_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.aliexpress_orders
+    ADD CONSTRAINT fk_aliexpress_orders_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: aliexpress_orders fk_aliexpress_orders_paid_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.aliexpress_orders
+    ADD CONSTRAINT fk_aliexpress_orders_paid_by_user_id_users FOREIGN KEY (paid_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: aliexpress_products fk_aliexpress_products_created_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.aliexpress_products
+    ADD CONSTRAINT fk_aliexpress_products_created_by_user_id_users FOREIGN KEY (created_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: aliexpress_products fk_aliexpress_products_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.aliexpress_products
+    ADD CONSTRAINT fk_aliexpress_products_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: aliexpress_settings fk_aliexpress_settings_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.aliexpress_settings
+    ADD CONSTRAINT fk_aliexpress_settings_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: aliexpress_variants fk_aliexpress_variants_product_id_aliexpress_products; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.aliexpress_variants
+    ADD CONSTRAINT fk_aliexpress_variants_product_id_aliexpress_products FOREIGN KEY (product_id) REFERENCES public.aliexpress_products(id);
+
+
+--
+-- Name: attribution_corrections fk_attribution_corrections_approved_by_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.attribution_corrections
+    ADD CONSTRAINT fk_attribution_corrections_approved_by_users FOREIGN KEY (approved_by) REFERENCES public.users(id);
+
+
+--
+-- Name: attribution_corrections fk_attribution_corrections_customer_attribution_id_cust_9fdb; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.attribution_corrections
+    ADD CONSTRAINT fk_attribution_corrections_customer_attribution_id_cust_9fdb FOREIGN KEY (customer_attribution_id) REFERENCES public.customer_attributions(id);
+
+
+--
+-- Name: attribution_corrections fk_attribution_corrections_new_promoter_code_id_promoter_codes; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.attribution_corrections
+    ADD CONSTRAINT fk_attribution_corrections_new_promoter_code_id_promoter_codes FOREIGN KEY (new_promoter_code_id) REFERENCES public.promoter_codes(id);
+
+
+--
+-- Name: attribution_corrections fk_attribution_corrections_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.attribution_corrections
+    ADD CONSTRAINT fk_attribution_corrections_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: attribution_corrections fk_attribution_corrections_previous_promoter_code_id_pr_9ca1; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.attribution_corrections
+    ADD CONSTRAINT fk_attribution_corrections_previous_promoter_code_id_pr_9ca1 FOREIGN KEY (previous_promoter_code_id) REFERENCES public.promoter_codes(id);
+
+
+--
+-- Name: attribution_corrections fk_attribution_corrections_requested_by_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.attribution_corrections
+    ADD CONSTRAINT fk_attribution_corrections_requested_by_users FOREIGN KEY (requested_by) REFERENCES public.users(id);
+
+
+--
+-- Name: audit_log fk_audit_log_actor_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.audit_log
+    ADD CONSTRAINT fk_audit_log_actor_user_id_users FOREIGN KEY (actor_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: audit_log fk_audit_log_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.audit_log
+    ADD CONSTRAINT fk_audit_log_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: cart_items fk_cart_items_aliexpress_variant_id_aliexpress_variants; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cart_items
+    ADD CONSTRAINT fk_cart_items_aliexpress_variant_id_aliexpress_variants FOREIGN KEY (aliexpress_variant_id) REFERENCES public.aliexpress_variants(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cart_items fk_cart_items_cart_id_carts; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cart_items
+    ADD CONSTRAINT fk_cart_items_cart_id_carts FOREIGN KEY (cart_id) REFERENCES public.carts(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cart_items fk_cart_items_cj_variant_id_cj_variants; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cart_items
+    ADD CONSTRAINT fk_cart_items_cj_variant_id_cj_variants FOREIGN KEY (cj_variant_id) REFERENCES public.cj_variants(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cart_items fk_cart_items_kappa_market_variant_id_kappa_market_variants; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cart_items
+    ADD CONSTRAINT fk_cart_items_kappa_market_variant_id_kappa_market_variants FOREIGN KEY (kappa_market_variant_id) REFERENCES public.kappa_market_variants(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cart_items fk_cart_items_jav_market_variant_id_jav_market_variants; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cart_items
+    ADD CONSTRAINT fk_cart_items_jav_market_variant_id_jav_market_variants FOREIGN KEY (jav_market_variant_id) REFERENCES public.jav_market_variants(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cart_items fk_cart_items_product_version_id_product_versions; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cart_items
+    ADD CONSTRAINT fk_cart_items_product_version_id_product_versions FOREIGN KEY (product_version_id) REFERENCES public.product_versions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cart_items fk_cart_items_shopify_variant_id_shopify_variants; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cart_items
+    ADD CONSTRAINT fk_cart_items_shopify_variant_id_shopify_variants FOREIGN KEY (shopify_variant_id) REFERENCES public.shopify_variants(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cart_items fk_cart_items_soleil_market_variant_id_soleil_market_variants; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cart_items
+    ADD CONSTRAINT fk_cart_items_soleil_market_variant_id_soleil_market_variants FOREIGN KEY (soleil_market_variant_id) REFERENCES public.soleil_market_variants(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cart_items fk_cart_items_symphonya_market_variant_id_symphonya_mar_f428; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cart_items
+    ADD CONSTRAINT fk_cart_items_symphonya_market_variant_id_symphonya_mar_f428 FOREIGN KEY (symphonya_market_variant_id) REFERENCES public.symphonya_market_variants(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cart_items fk_cart_items_vaitto_market_variant_id_vaitto_market_variants; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cart_items
+    ADD CONSTRAINT fk_cart_items_vaitto_market_variant_id_vaitto_market_variants FOREIGN KEY (vaitto_market_variant_id) REFERENCES public.vaitto_market_variants(id) ON DELETE CASCADE;
+
+
+--
+-- Name: carts fk_carts_customer_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.carts
+    ADD CONSTRAINT fk_carts_customer_user_id_users FOREIGN KEY (customer_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: carts fk_carts_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.carts
+    ADD CONSTRAINT fk_carts_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: cj_order_items fk_cj_order_items_order_id_cj_orders; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cj_order_items
+    ADD CONSTRAINT fk_cj_order_items_order_id_cj_orders FOREIGN KEY (order_id) REFERENCES public.cj_orders(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cj_order_items fk_cj_order_items_product_id_cj_products; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cj_order_items
+    ADD CONSTRAINT fk_cj_order_items_product_id_cj_products FOREIGN KEY (product_id) REFERENCES public.cj_products(id);
+
+
+--
+-- Name: cj_order_items fk_cj_order_items_variant_id_cj_variants; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cj_order_items
+    ADD CONSTRAINT fk_cj_order_items_variant_id_cj_variants FOREIGN KEY (variant_id) REFERENCES public.cj_variants(id);
+
+
+--
+-- Name: cj_orders fk_cj_orders_cancelled_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cj_orders
+    ADD CONSTRAINT fk_cj_orders_cancelled_by_user_id_users FOREIGN KEY (cancelled_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: cj_orders fk_cj_orders_cj_product_id_cj_products; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cj_orders
+    ADD CONSTRAINT fk_cj_orders_cj_product_id_cj_products FOREIGN KEY (cj_product_id) REFERENCES public.cj_products(id);
+
+
+--
+-- Name: cj_orders fk_cj_orders_cj_variant_id_cj_variants; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cj_orders
+    ADD CONSTRAINT fk_cj_orders_cj_variant_id_cj_variants FOREIGN KEY (cj_variant_id) REFERENCES public.cj_variants(id);
+
+
+--
+-- Name: cj_orders fk_cj_orders_created_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cj_orders
+    ADD CONSTRAINT fk_cj_orders_created_by_user_id_users FOREIGN KEY (created_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: cj_orders fk_cj_orders_credit_debit_transaction_id_wallet_transactions; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cj_orders
+    ADD CONSTRAINT fk_cj_orders_credit_debit_transaction_id_wallet_transactions FOREIGN KEY (credit_debit_transaction_id) REFERENCES public.wallet_transactions(id);
+
+
+--
+-- Name: cj_orders fk_cj_orders_customer_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cj_orders
+    ADD CONSTRAINT fk_cj_orders_customer_user_id_users FOREIGN KEY (customer_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: cj_orders fk_cj_orders_forwarded_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cj_orders
+    ADD CONSTRAINT fk_cj_orders_forwarded_by_user_id_users FOREIGN KEY (forwarded_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: cj_orders fk_cj_orders_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cj_orders
+    ADD CONSTRAINT fk_cj_orders_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: cj_orders fk_cj_orders_paid_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cj_orders
+    ADD CONSTRAINT fk_cj_orders_paid_by_user_id_users FOREIGN KEY (paid_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: cj_products fk_cj_products_created_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cj_products
+    ADD CONSTRAINT fk_cj_products_created_by_user_id_users FOREIGN KEY (created_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: cj_products fk_cj_products_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cj_products
+    ADD CONSTRAINT fk_cj_products_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: cj_settings fk_cj_settings_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cj_settings
+    ADD CONSTRAINT fk_cj_settings_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: cj_variants fk_cj_variants_product_id_cj_products; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cj_variants
+    ADD CONSTRAINT fk_cj_variants_product_id_cj_products FOREIGN KEY (product_id) REFERENCES public.cj_products(id);
+
+
+--
+-- Name: commission_adjustments fk_commission_adjustments_approved_by_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.commission_adjustments
+    ADD CONSTRAINT fk_commission_adjustments_approved_by_users FOREIGN KEY (approved_by) REFERENCES public.users(id);
+
+
+--
+-- Name: commission_adjustments fk_commission_adjustments_new_movement_id_commission_movements; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.commission_adjustments
+    ADD CONSTRAINT fk_commission_adjustments_new_movement_id_commission_movements FOREIGN KEY (new_movement_id) REFERENCES public.commission_movements(id);
+
+
+--
+-- Name: commission_adjustments fk_commission_adjustments_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.commission_adjustments
+    ADD CONSTRAINT fk_commission_adjustments_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: commission_adjustments fk_commission_adjustments_original_movement_id_commissi_4113; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.commission_adjustments
+    ADD CONSTRAINT fk_commission_adjustments_original_movement_id_commissi_4113 FOREIGN KEY (original_movement_id) REFERENCES public.commission_movements(id);
+
+
+--
+-- Name: commission_adjustments fk_commission_adjustments_requested_by_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.commission_adjustments
+    ADD CONSTRAINT fk_commission_adjustments_requested_by_users FOREIGN KEY (requested_by) REFERENCES public.users(id);
+
+
+--
+-- Name: commission_calculation_steps fk_commission_calculation_steps_beneficiary_agent_id_ag_5fea; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.commission_calculation_steps
+    ADD CONSTRAINT fk_commission_calculation_steps_beneficiary_agent_id_ag_5fea FOREIGN KEY (beneficiary_agent_id) REFERENCES public.agent_profiles(id);
+
+
+--
+-- Name: commission_calculation_steps fk_commission_calculation_steps_calculation_id_commissi_4b0f; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.commission_calculation_steps
+    ADD CONSTRAINT fk_commission_calculation_steps_calculation_id_commissi_4b0f FOREIGN KEY (calculation_id) REFERENCES public.commission_calculations(id);
+
+
+--
+-- Name: commission_calculations fk_commission_calculations_commission_plan_version_id_c_62c3; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.commission_calculations
+    ADD CONSTRAINT fk_commission_calculations_commission_plan_version_id_c_62c3 FOREIGN KEY (commission_plan_version_id) REFERENCES public.commission_plan_versions(id);
+
+
+--
+-- Name: commission_calculations fk_commission_calculations_contract_id_contracts; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.commission_calculations
+    ADD CONSTRAINT fk_commission_calculations_contract_id_contracts FOREIGN KEY (contract_id) REFERENCES public.contracts(id);
+
+
+--
+-- Name: commission_calculations fk_commission_calculations_network_snapshot_id_network__9654; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.commission_calculations
+    ADD CONSTRAINT fk_commission_calculations_network_snapshot_id_network__9654 FOREIGN KEY (network_snapshot_id) REFERENCES public.network_snapshots(id);
+
+
+--
+-- Name: commission_calculations fk_commission_calculations_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.commission_calculations
+    ADD CONSTRAINT fk_commission_calculations_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: commission_movements fk_commission_movements_agent_id_agent_profiles; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.commission_movements
+    ADD CONSTRAINT fk_commission_movements_agent_id_agent_profiles FOREIGN KEY (agent_id) REFERENCES public.agent_profiles(id);
+
+
+--
+-- Name: commission_movements fk_commission_movements_calculation_id_commission_calculations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.commission_movements
+    ADD CONSTRAINT fk_commission_movements_calculation_id_commission_calculations FOREIGN KEY (calculation_id) REFERENCES public.commission_calculations(id);
+
+
+--
+-- Name: commission_movements fk_commission_movements_contract_id_contracts; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.commission_movements
+    ADD CONSTRAINT fk_commission_movements_contract_id_contracts FOREIGN KEY (contract_id) REFERENCES public.contracts(id);
+
+
+--
+-- Name: commission_movements fk_commission_movements_network_snapshot_id_network_snapshots; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.commission_movements
+    ADD CONSTRAINT fk_commission_movements_network_snapshot_id_network_snapshots FOREIGN KEY (network_snapshot_id) REFERENCES public.network_snapshots(id);
+
+
+--
+-- Name: commission_movements fk_commission_movements_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.commission_movements
+    ADD CONSTRAINT fk_commission_movements_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: commission_offsets fk_commission_offsets_credit_movement_id_commission_movements; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.commission_offsets
+    ADD CONSTRAINT fk_commission_offsets_credit_movement_id_commission_movements FOREIGN KEY (credit_movement_id) REFERENCES public.commission_movements(id);
+
+
+--
+-- Name: commission_offsets fk_commission_offsets_debit_movement_id_commission_movements; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.commission_offsets
+    ADD CONSTRAINT fk_commission_offsets_debit_movement_id_commission_movements FOREIGN KEY (debit_movement_id) REFERENCES public.commission_movements(id);
+
+
+--
+-- Name: commission_offsets fk_commission_offsets_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.commission_offsets
+    ADD CONSTRAINT fk_commission_offsets_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: commission_plan_versions fk_commission_plan_versions_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.commission_plan_versions
+    ADD CONSTRAINT fk_commission_plan_versions_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: commission_reversals fk_commission_reversals_approved_by_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.commission_reversals
+    ADD CONSTRAINT fk_commission_reversals_approved_by_users FOREIGN KEY (approved_by) REFERENCES public.users(id);
+
+
+--
+-- Name: commission_reversals fk_commission_reversals_new_movement_id_commission_movements; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.commission_reversals
+    ADD CONSTRAINT fk_commission_reversals_new_movement_id_commission_movements FOREIGN KEY (new_movement_id) REFERENCES public.commission_movements(id);
+
+
+--
+-- Name: commission_reversals fk_commission_reversals_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.commission_reversals
+    ADD CONSTRAINT fk_commission_reversals_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: commission_reversals fk_commission_reversals_original_movement_id_commission_9fb0; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.commission_reversals
+    ADD CONSTRAINT fk_commission_reversals_original_movement_id_commission_9fb0 FOREIGN KEY (original_movement_id) REFERENCES public.commission_movements(id);
+
+
+--
+-- Name: commission_reversals fk_commission_reversals_requested_by_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.commission_reversals
+    ADD CONSTRAINT fk_commission_reversals_requested_by_users FOREIGN KEY (requested_by) REFERENCES public.users(id);
+
+
+--
+-- Name: commission_rule_versions fk_commission_rule_versions_commission_plan_version_id__cf5f; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.commission_rule_versions
+    ADD CONSTRAINT fk_commission_rule_versions_commission_plan_version_id__cf5f FOREIGN KEY (commission_plan_version_id) REFERENCES public.commission_plan_versions(id);
+
+
+--
+-- Name: companies fk_companies_customer_id_customers; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.companies
+    ADD CONSTRAINT fk_companies_customer_id_customers FOREIGN KEY (customer_id) REFERENCES public.customers(id);
+
+
+--
+-- Name: contract_attributions fk_contract_attributions_attributed_promoter_id_agent_profiles; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_attributions
+    ADD CONSTRAINT fk_contract_attributions_attributed_promoter_id_agent_profiles FOREIGN KEY (attributed_promoter_id) REFERENCES public.agent_profiles(id);
+
+
+--
+-- Name: contract_attributions fk_contract_attributions_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_attributions
+    ADD CONSTRAINT fk_contract_attributions_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: contract_attributions fk_contract_attributions_producer_agent_id_agent_profiles; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_attributions
+    ADD CONSTRAINT fk_contract_attributions_producer_agent_id_agent_profiles FOREIGN KEY (producer_agent_id) REFERENCES public.agent_profiles(id);
+
+
+--
+-- Name: contract_commission_plans fk_contract_commission_plans_accepted_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_commission_plans
+    ADD CONSTRAINT fk_contract_commission_plans_accepted_by_user_id_users FOREIGN KEY (accepted_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: contract_commission_plans fk_contract_commission_plans_contract_id_contracts; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_commission_plans
+    ADD CONSTRAINT fk_contract_commission_plans_contract_id_contracts FOREIGN KEY (contract_id) REFERENCES public.contracts(id);
+
+
+--
+-- Name: contract_commission_plans fk_contract_commission_plans_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_commission_plans
+    ADD CONSTRAINT fk_contract_commission_plans_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: contract_events fk_contract_events_contract_id_contracts; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_events
+    ADD CONSTRAINT fk_contract_events_contract_id_contracts FOREIGN KEY (contract_id) REFERENCES public.contracts(id);
+
+
+--
+-- Name: contract_instalments fk_contract_instalments_commission_calculation_id_commi_80b6; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_instalments
+    ADD CONSTRAINT fk_contract_instalments_commission_calculation_id_commi_80b6 FOREIGN KEY (commission_calculation_id) REFERENCES public.commission_calculations(id);
+
+
+--
+-- Name: contract_instalments fk_contract_instalments_confirmed_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_instalments
+    ADD CONSTRAINT fk_contract_instalments_confirmed_by_user_id_users FOREIGN KEY (confirmed_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: contract_instalments fk_contract_instalments_contract_id_contracts; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_instalments
+    ADD CONSTRAINT fk_contract_instalments_contract_id_contracts FOREIGN KEY (contract_id) REFERENCES public.contracts(id);
+
+
+--
+-- Name: contract_instalments fk_contract_instalments_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_instalments
+    ADD CONSTRAINT fk_contract_instalments_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: contract_request_checkouts fk_contract_request_checkouts_contract_request_id_contr_9532; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_request_checkouts
+    ADD CONSTRAINT fk_contract_request_checkouts_contract_request_id_contr_9532 FOREIGN KEY (contract_request_id) REFERENCES public.contract_requests(id);
+
+
+--
+-- Name: contract_request_checkouts fk_contract_request_checkouts_created_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_request_checkouts
+    ADD CONSTRAINT fk_contract_request_checkouts_created_by_user_id_users FOREIGN KEY (created_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: contract_request_checkouts fk_contract_request_checkouts_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_request_checkouts
+    ADD CONSTRAINT fk_contract_request_checkouts_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: contract_requests fk_contract_requests_activated_by_promoter_id_agent_profiles; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_requests
+    ADD CONSTRAINT fk_contract_requests_activated_by_promoter_id_agent_profiles FOREIGN KEY (activated_by_promoter_id) REFERENCES public.agent_profiles(id);
+
+
+--
+-- Name: contract_requests fk_contract_requests_bank_transfer_confirmed_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_requests
+    ADD CONSTRAINT fk_contract_requests_bank_transfer_confirmed_by_user_id_users FOREIGN KEY (bank_transfer_confirmed_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: contract_requests fk_contract_requests_created_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_requests
+    ADD CONSTRAINT fk_contract_requests_created_by_user_id_users FOREIGN KEY (created_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: contract_requests fk_contract_requests_customer_id_customers; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_requests
+    ADD CONSTRAINT fk_contract_requests_customer_id_customers FOREIGN KEY (customer_id) REFERENCES public.customers(id);
+
+
+--
+-- Name: contract_requests fk_contract_requests_notes_updated_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_requests
+    ADD CONSTRAINT fk_contract_requests_notes_updated_by_user_id_users FOREIGN KEY (notes_updated_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: contract_requests fk_contract_requests_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_requests
+    ADD CONSTRAINT fk_contract_requests_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: contract_status_history fk_contract_status_history_actor_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_status_history
+    ADD CONSTRAINT fk_contract_status_history_actor_user_id_users FOREIGN KEY (actor_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: contract_status_history fk_contract_status_history_contract_id_contracts; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_status_history
+    ADD CONSTRAINT fk_contract_status_history_contract_id_contracts FOREIGN KEY (contract_id) REFERENCES public.contracts(id);
+
+
+--
+-- Name: contracts fk_contracts_activated_by_promoter_id_agent_profiles; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contracts
+    ADD CONSTRAINT fk_contracts_activated_by_promoter_id_agent_profiles FOREIGN KEY (activated_by_promoter_id) REFERENCES public.agent_profiles(id);
+
+
+--
+-- Name: contracts fk_contracts_contract_attribution_id_contract_attributions; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contracts
+    ADD CONSTRAINT fk_contracts_contract_attribution_id_contract_attributions FOREIGN KEY (contract_attribution_id) REFERENCES public.contract_attributions(id);
+
+
+--
+-- Name: contracts fk_contracts_contract_request_id_contract_requests; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contracts
+    ADD CONSTRAINT fk_contracts_contract_request_id_contract_requests FOREIGN KEY (contract_request_id) REFERENCES public.contract_requests(id);
+
+
+--
+-- Name: contracts fk_contracts_created_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contracts
+    ADD CONSTRAINT fk_contracts_created_by_user_id_users FOREIGN KEY (created_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: contracts fk_contracts_customer_id_customers; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contracts
+    ADD CONSTRAINT fk_contracts_customer_id_customers FOREIGN KEY (customer_id) REFERENCES public.customers(id);
+
+
+--
+-- Name: contracts fk_contracts_first_referrer_agent_id_agent_profiles; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contracts
+    ADD CONSTRAINT fk_contracts_first_referrer_agent_id_agent_profiles FOREIGN KEY (first_referrer_agent_id) REFERENCES public.agent_profiles(id);
+
+
+--
+-- Name: contracts fk_contracts_network_snapshot_id_network_snapshots; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contracts
+    ADD CONSTRAINT fk_contracts_network_snapshot_id_network_snapshots FOREIGN KEY (network_snapshot_id) REFERENCES public.network_snapshots(id);
+
+
+--
+-- Name: contracts fk_contracts_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contracts
+    ADD CONSTRAINT fk_contracts_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: contracts fk_contracts_product_version_id_product_versions; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contracts
+    ADD CONSTRAINT fk_contracts_product_version_id_product_versions FOREIGN KEY (product_version_id) REFERENCES public.product_versions(id);
+
+
+--
+-- Name: contracts fk_contracts_supply_point_id_supply_points; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contracts
+    ADD CONSTRAINT fk_contracts_supply_point_id_supply_points FOREIGN KEY (supply_point_id) REFERENCES public.supply_points(id);
+
+
+--
+-- Name: contracts fk_contracts_terms_accepted_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contracts
+    ADD CONSTRAINT fk_contracts_terms_accepted_by_user_id_users FOREIGN KEY (terms_accepted_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: customer_attributions fk_customer_attributions_customer_id_customers; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customer_attributions
+    ADD CONSTRAINT fk_customer_attributions_customer_id_customers FOREIGN KEY (customer_id) REFERENCES public.customers(id);
+
+
+--
+-- Name: customer_attributions fk_customer_attributions_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customer_attributions
+    ADD CONSTRAINT fk_customer_attributions_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: customer_attributions fk_customer_attributions_promoter_code_id_promoter_codes; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customer_attributions
+    ADD CONSTRAINT fk_customer_attributions_promoter_code_id_promoter_codes FOREIGN KEY (promoter_code_id) REFERENCES public.promoter_codes(id);
+
+
+--
+-- Name: customer_attributions fk_customer_attributions_referral_session_id_referral_sessions; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customer_attributions
+    ADD CONSTRAINT fk_customer_attributions_referral_session_id_referral_sessions FOREIGN KEY (referral_session_id) REFERENCES public.referral_sessions(id);
+
+
+--
+-- Name: customer_profiles fk_customer_profiles_customer_id_customers; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customer_profiles
+    ADD CONSTRAINT fk_customer_profiles_customer_id_customers FOREIGN KEY (customer_id) REFERENCES public.customers(id);
+
+
+--
+-- Name: customers fk_customers_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customers
+    ADD CONSTRAINT fk_customers_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: customers fk_customers_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customers
+    ADD CONSTRAINT fk_customers_user_id_users FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: documentation_posts fk_documentation_posts_created_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.documentation_posts
+    ADD CONSTRAINT fk_documentation_posts_created_by_user_id_users FOREIGN KEY (created_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: documentation_posts fk_documentation_posts_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.documentation_posts
+    ADD CONSTRAINT fk_documentation_posts_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: documents fk_documents_contract_id_contracts; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.documents
+    ADD CONSTRAINT fk_documents_contract_id_contracts FOREIGN KEY (contract_id) REFERENCES public.contracts(id);
+
+
+--
+-- Name: documents fk_documents_contract_request_id_contract_requests; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.documents
+    ADD CONSTRAINT fk_documents_contract_request_id_contract_requests FOREIGN KEY (contract_request_id) REFERENCES public.contract_requests(id);
+
+
+--
+-- Name: documents fk_documents_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.documents
+    ADD CONSTRAINT fk_documents_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: documents fk_documents_reviewed_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.documents
+    ADD CONSTRAINT fk_documents_reviewed_by_user_id_users FOREIGN KEY (reviewed_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: documents fk_documents_uploaded_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.documents
+    ADD CONSTRAINT fk_documents_uploaded_by_user_id_users FOREIGN KEY (uploaded_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: domain_outbox fk_domain_outbox_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.domain_outbox
+    ADD CONSTRAINT fk_domain_outbox_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: email_verification_tokens fk_email_verification_tokens_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.email_verification_tokens
+    ADD CONSTRAINT fk_email_verification_tokens_user_id_users FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: friend_referral_codes fk_friend_referral_codes_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.friend_referral_codes
+    ADD CONSTRAINT fk_friend_referral_codes_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: friend_referral_codes fk_friend_referral_codes_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.friend_referral_codes
+    ADD CONSTRAINT fk_friend_referral_codes_user_id_users FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: friend_referral_reward_claims fk_friend_referral_reward_claims_handled_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.friend_referral_reward_claims
+    ADD CONSTRAINT fk_friend_referral_reward_claims_handled_by_user_id_users FOREIGN KEY (handled_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: friend_referral_reward_claims fk_friend_referral_reward_claims_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.friend_referral_reward_claims
+    ADD CONSTRAINT fk_friend_referral_reward_claims_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: friend_referral_reward_claims fk_friend_referral_reward_claims_referrer_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.friend_referral_reward_claims
+    ADD CONSTRAINT fk_friend_referral_reward_claims_referrer_user_id_users FOREIGN KEY (referrer_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: friend_referrals fk_friend_referrals_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.friend_referrals
+    ADD CONSTRAINT fk_friend_referrals_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: friend_referrals fk_friend_referrals_referred_customer_id_customers; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.friend_referrals
+    ADD CONSTRAINT fk_friend_referrals_referred_customer_id_customers FOREIGN KEY (referred_customer_id) REFERENCES public.customers(id);
+
+
+--
+-- Name: friend_referrals fk_friend_referrals_referrer_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.friend_referrals
+    ADD CONSTRAINT fk_friend_referrals_referrer_user_id_users FOREIGN KEY (referrer_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: import_providers fk_import_providers_created_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.import_providers
+    ADD CONSTRAINT fk_import_providers_created_by_user_id_users FOREIGN KEY (created_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: import_providers fk_import_providers_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.import_providers
+    ADD CONSTRAINT fk_import_providers_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: imported_product_orders fk_imported_product_orders_cancelled_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.imported_product_orders
+    ADD CONSTRAINT fk_imported_product_orders_cancelled_by_user_id_users FOREIGN KEY (cancelled_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: imported_product_orders fk_imported_product_orders_created_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.imported_product_orders
+    ADD CONSTRAINT fk_imported_product_orders_created_by_user_id_users FOREIGN KEY (created_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: imported_product_orders fk_imported_product_orders_credit_debit_transaction_id__583a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.imported_product_orders
+    ADD CONSTRAINT fk_imported_product_orders_credit_debit_transaction_id__583a FOREIGN KEY (credit_debit_transaction_id) REFERENCES public.wallet_transactions(id);
+
+
+--
+-- Name: imported_product_orders fk_imported_product_orders_customer_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.imported_product_orders
+    ADD CONSTRAINT fk_imported_product_orders_customer_user_id_users FOREIGN KEY (customer_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: imported_product_orders fk_imported_product_orders_imported_product_id_imported_d6e8; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.imported_product_orders
+    ADD CONSTRAINT fk_imported_product_orders_imported_product_id_imported_d6e8 FOREIGN KEY (imported_product_id) REFERENCES public.imported_products(id);
+
+
+--
+-- Name: imported_product_orders fk_imported_product_orders_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.imported_product_orders
+    ADD CONSTRAINT fk_imported_product_orders_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: imported_product_orders fk_imported_product_orders_paid_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.imported_product_orders
+    ADD CONSTRAINT fk_imported_product_orders_paid_by_user_id_users FOREIGN KEY (paid_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: imported_products fk_imported_products_created_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.imported_products
+    ADD CONSTRAINT fk_imported_products_created_by_user_id_users FOREIGN KEY (created_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: imported_products fk_imported_products_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.imported_products
+    ADD CONSTRAINT fk_imported_products_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: imported_products fk_imported_products_provider_id_import_providers; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.imported_products
+    ADD CONSTRAINT fk_imported_products_provider_id_import_providers FOREIGN KEY (provider_id) REFERENCES public.import_providers(id);
+
+
+--
+-- Name: invoice_redemptions fk_invoice_redemptions_credited_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invoice_redemptions
+    ADD CONSTRAINT fk_invoice_redemptions_credited_by_user_id_users FOREIGN KEY (credited_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: invoice_redemptions fk_invoice_redemptions_customer_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invoice_redemptions
+    ADD CONSTRAINT fk_invoice_redemptions_customer_user_id_users FOREIGN KEY (customer_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: invoice_redemptions fk_invoice_redemptions_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invoice_redemptions
+    ADD CONSTRAINT fk_invoice_redemptions_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: invoice_redemptions fk_invoice_redemptions_partner_id_partners; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invoice_redemptions
+    ADD CONSTRAINT fk_invoice_redemptions_partner_id_partners FOREIGN KEY (partner_id) REFERENCES public.partners(id);
+
+
+--
+-- Name: invoice_redemptions fk_invoice_redemptions_reviewed_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invoice_redemptions
+    ADD CONSTRAINT fk_invoice_redemptions_reviewed_by_user_id_users FOREIGN KEY (reviewed_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: invoice_redemptions fk_invoice_redemptions_verified_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invoice_redemptions
+    ADD CONSTRAINT fk_invoice_redemptions_verified_by_user_id_users FOREIGN KEY (verified_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: kappa_market_order_items fk_kappa_market_order_items_order_id_kappa_market_orders; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.kappa_market_order_items
+    ADD CONSTRAINT fk_kappa_market_order_items_order_id_kappa_market_orders FOREIGN KEY (order_id) REFERENCES public.kappa_market_orders(id) ON DELETE CASCADE;
+
+
+--
+-- Name: kappa_market_order_items fk_kappa_market_order_items_product_id_kappa_market_products; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.kappa_market_order_items
+    ADD CONSTRAINT fk_kappa_market_order_items_product_id_kappa_market_products FOREIGN KEY (product_id) REFERENCES public.kappa_market_products(id);
+
+
+--
+-- Name: kappa_market_order_items fk_kappa_market_order_items_variant_id_kappa_market_variants; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.kappa_market_order_items
+    ADD CONSTRAINT fk_kappa_market_order_items_variant_id_kappa_market_variants FOREIGN KEY (variant_id) REFERENCES public.kappa_market_variants(id);
+
+
+--
+-- Name: kappa_market_orders fk_kappa_market_orders_cancelled_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.kappa_market_orders
+    ADD CONSTRAINT fk_kappa_market_orders_cancelled_by_user_id_users FOREIGN KEY (cancelled_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: kappa_market_orders fk_kappa_market_orders_created_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.kappa_market_orders
+    ADD CONSTRAINT fk_kappa_market_orders_created_by_user_id_users FOREIGN KEY (created_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: kappa_market_orders fk_kappa_market_orders_credit_debit_transaction_id_wall_982a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.kappa_market_orders
+    ADD CONSTRAINT fk_kappa_market_orders_credit_debit_transaction_id_wall_982a FOREIGN KEY (credit_debit_transaction_id) REFERENCES public.wallet_transactions(id);
+
+
+--
+-- Name: kappa_market_orders fk_kappa_market_orders_customer_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.kappa_market_orders
+    ADD CONSTRAINT fk_kappa_market_orders_customer_user_id_users FOREIGN KEY (customer_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: kappa_market_orders fk_kappa_market_orders_forwarded_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.kappa_market_orders
+    ADD CONSTRAINT fk_kappa_market_orders_forwarded_by_user_id_users FOREIGN KEY (forwarded_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: kappa_market_orders fk_kappa_market_orders_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.kappa_market_orders
+    ADD CONSTRAINT fk_kappa_market_orders_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: kappa_market_orders fk_kappa_market_orders_paid_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.kappa_market_orders
+    ADD CONSTRAINT fk_kappa_market_orders_paid_by_user_id_users FOREIGN KEY (paid_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: kappa_market_producers fk_kappa_market_producers_created_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.kappa_market_producers
+    ADD CONSTRAINT fk_kappa_market_producers_created_by_user_id_users FOREIGN KEY (created_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: kappa_market_producers fk_kappa_market_producers_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.kappa_market_producers
+    ADD CONSTRAINT fk_kappa_market_producers_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: kappa_market_products fk_kappa_market_products_created_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.kappa_market_products
+    ADD CONSTRAINT fk_kappa_market_products_created_by_user_id_users FOREIGN KEY (created_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: kappa_market_products fk_kappa_market_products_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.kappa_market_products
+    ADD CONSTRAINT fk_kappa_market_products_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: kappa_market_products fk_kappa_market_products_producer_id_kappa_market_producers; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.kappa_market_products
+    ADD CONSTRAINT fk_kappa_market_products_producer_id_kappa_market_producers FOREIGN KEY (producer_id) REFERENCES public.kappa_market_producers(id);
+
+
+--
+-- Name: kappa_market_settings fk_kappa_market_settings_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.kappa_market_settings
+    ADD CONSTRAINT fk_kappa_market_settings_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: kappa_market_variants fk_kappa_market_variants_product_id_kappa_market_products; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.kappa_market_variants
+    ADD CONSTRAINT fk_kappa_market_variants_product_id_kappa_market_products FOREIGN KEY (product_id) REFERENCES public.kappa_market_products(id) ON DELETE CASCADE;
+
+
+--
+-- Name: jav_market_order_items fk_jav_market_order_items_order_id_jav_market_orders; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.jav_market_order_items
+    ADD CONSTRAINT fk_jav_market_order_items_order_id_jav_market_orders FOREIGN KEY (order_id) REFERENCES public.jav_market_orders(id) ON DELETE CASCADE;
+
+
+--
+-- Name: jav_market_order_items fk_jav_market_order_items_product_id_jav_market_products; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.jav_market_order_items
+    ADD CONSTRAINT fk_jav_market_order_items_product_id_jav_market_products FOREIGN KEY (product_id) REFERENCES public.jav_market_products(id);
+
+
+--
+-- Name: jav_market_order_items fk_jav_market_order_items_variant_id_jav_market_variants; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.jav_market_order_items
+    ADD CONSTRAINT fk_jav_market_order_items_variant_id_jav_market_variants FOREIGN KEY (variant_id) REFERENCES public.jav_market_variants(id);
+
+
+--
+-- Name: jav_market_orders fk_jav_market_orders_cancelled_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.jav_market_orders
+    ADD CONSTRAINT fk_jav_market_orders_cancelled_by_user_id_users FOREIGN KEY (cancelled_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: jav_market_orders fk_jav_market_orders_created_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.jav_market_orders
+    ADD CONSTRAINT fk_jav_market_orders_created_by_user_id_users FOREIGN KEY (created_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: jav_market_orders fk_jav_market_orders_credit_debit_transaction_id_walle_8ba4; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.jav_market_orders
+    ADD CONSTRAINT fk_jav_market_orders_credit_debit_transaction_id_walle_8ba4 FOREIGN KEY (credit_debit_transaction_id) REFERENCES public.wallet_transactions(id);
+
+
+--
+-- Name: jav_market_orders fk_jav_market_orders_customer_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.jav_market_orders
+    ADD CONSTRAINT fk_jav_market_orders_customer_user_id_users FOREIGN KEY (customer_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: jav_market_orders fk_jav_market_orders_forwarded_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.jav_market_orders
+    ADD CONSTRAINT fk_jav_market_orders_forwarded_by_user_id_users FOREIGN KEY (forwarded_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: jav_market_orders fk_jav_market_orders_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.jav_market_orders
+    ADD CONSTRAINT fk_jav_market_orders_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: jav_market_orders fk_jav_market_orders_paid_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.jav_market_orders
+    ADD CONSTRAINT fk_jav_market_orders_paid_by_user_id_users FOREIGN KEY (paid_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: jav_market_producers fk_jav_market_producers_created_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.jav_market_producers
+    ADD CONSTRAINT fk_jav_market_producers_created_by_user_id_users FOREIGN KEY (created_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: jav_market_producers fk_jav_market_producers_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.jav_market_producers
+    ADD CONSTRAINT fk_jav_market_producers_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: jav_market_products fk_jav_market_products_created_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.jav_market_products
+    ADD CONSTRAINT fk_jav_market_products_created_by_user_id_users FOREIGN KEY (created_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: jav_market_products fk_jav_market_products_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.jav_market_products
+    ADD CONSTRAINT fk_jav_market_products_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: jav_market_products fk_jav_market_products_producer_id_jav_market_producers; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.jav_market_products
+    ADD CONSTRAINT fk_jav_market_products_producer_id_jav_market_producers FOREIGN KEY (producer_id) REFERENCES public.jav_market_producers(id);
+
+
+--
+-- Name: jav_market_settings fk_jav_market_settings_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.jav_market_settings
+    ADD CONSTRAINT fk_jav_market_settings_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: jav_market_variants fk_jav_market_variants_product_id_jav_market_products; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.jav_market_variants
+    ADD CONSTRAINT fk_jav_market_variants_product_id_jav_market_products FOREIGN KEY (product_id) REFERENCES public.jav_market_products(id) ON DELETE CASCADE;
+
+
+--
+-- Name: network_assignment_history fk_network_assignment_history_agent_id_agent_profiles; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.network_assignment_history
+    ADD CONSTRAINT fk_network_assignment_history_agent_id_agent_profiles FOREIGN KEY (agent_id) REFERENCES public.agent_profiles(id);
+
+
+--
+-- Name: network_assignment_history fk_network_assignment_history_approved_by_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.network_assignment_history
+    ADD CONSTRAINT fk_network_assignment_history_approved_by_users FOREIGN KEY (approved_by) REFERENCES public.users(id);
+
+
+--
+-- Name: network_assignment_history fk_network_assignment_history_new_parent_agent_id_agent_149a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.network_assignment_history
+    ADD CONSTRAINT fk_network_assignment_history_new_parent_agent_id_agent_149a FOREIGN KEY (new_parent_agent_id) REFERENCES public.agent_profiles(id);
+
+
+--
+-- Name: network_assignment_history fk_network_assignment_history_old_parent_agent_id_agent_6886; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.network_assignment_history
+    ADD CONSTRAINT fk_network_assignment_history_old_parent_agent_id_agent_6886 FOREIGN KEY (old_parent_agent_id) REFERENCES public.agent_profiles(id);
+
+
+--
+-- Name: network_assignment_history fk_network_assignment_history_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.network_assignment_history
+    ADD CONSTRAINT fk_network_assignment_history_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: network_assignment_history fk_network_assignment_history_requested_by_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.network_assignment_history
+    ADD CONSTRAINT fk_network_assignment_history_requested_by_users FOREIGN KEY (requested_by) REFERENCES public.users(id);
+
+
+--
+-- Name: network_closure fk_network_closure_ancestor_agent_id_agent_profiles; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.network_closure
+    ADD CONSTRAINT fk_network_closure_ancestor_agent_id_agent_profiles FOREIGN KEY (ancestor_agent_id) REFERENCES public.agent_profiles(id);
+
+
+--
+-- Name: network_closure fk_network_closure_descendant_agent_id_agent_profiles; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.network_closure
+    ADD CONSTRAINT fk_network_closure_descendant_agent_id_agent_profiles FOREIGN KEY (descendant_agent_id) REFERENCES public.agent_profiles(id);
+
+
+--
+-- Name: network_closure fk_network_closure_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.network_closure
+    ADD CONSTRAINT fk_network_closure_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: network_edges fk_network_edges_child_agent_id_agent_profiles; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.network_edges
+    ADD CONSTRAINT fk_network_edges_child_agent_id_agent_profiles FOREIGN KEY (child_agent_id) REFERENCES public.agent_profiles(id);
+
+
+--
+-- Name: network_edges fk_network_edges_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.network_edges
+    ADD CONSTRAINT fk_network_edges_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: network_edges fk_network_edges_parent_agent_id_agent_profiles; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.network_edges
+    ADD CONSTRAINT fk_network_edges_parent_agent_id_agent_profiles FOREIGN KEY (parent_agent_id) REFERENCES public.agent_profiles(id);
+
+
+--
+-- Name: network_nodes fk_network_nodes_agent_id_agent_profiles; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.network_nodes
+    ADD CONSTRAINT fk_network_nodes_agent_id_agent_profiles FOREIGN KEY (agent_id) REFERENCES public.agent_profiles(id);
+
+
+--
+-- Name: network_nodes fk_network_nodes_direct_parent_agent_id_agent_profiles; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.network_nodes
+    ADD CONSTRAINT fk_network_nodes_direct_parent_agent_id_agent_profiles FOREIGN KEY (direct_parent_agent_id) REFERENCES public.agent_profiles(id);
+
+
+--
+-- Name: network_nodes fk_network_nodes_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.network_nodes
+    ADD CONSTRAINT fk_network_nodes_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: network_snapshot_nodes fk_network_snapshot_nodes_ancestor_agent_id_agent_profiles; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.network_snapshot_nodes
+    ADD CONSTRAINT fk_network_snapshot_nodes_ancestor_agent_id_agent_profiles FOREIGN KEY (ancestor_agent_id) REFERENCES public.agent_profiles(id);
+
+
+--
+-- Name: network_snapshot_nodes fk_network_snapshot_nodes_rank_id_at_snapshot_ranks; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.network_snapshot_nodes
+    ADD CONSTRAINT fk_network_snapshot_nodes_rank_id_at_snapshot_ranks FOREIGN KEY (rank_id_at_snapshot) REFERENCES public.ranks(id);
+
+
+--
+-- Name: network_snapshot_nodes fk_network_snapshot_nodes_snapshot_id_network_snapshots; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.network_snapshot_nodes
+    ADD CONSTRAINT fk_network_snapshot_nodes_snapshot_id_network_snapshots FOREIGN KEY (snapshot_id) REFERENCES public.network_snapshots(id);
+
+
+--
+-- Name: network_snapshots fk_network_snapshots_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.network_snapshots
+    ADD CONSTRAINT fk_network_snapshots_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: notifications fk_notifications_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.notifications
+    ADD CONSTRAINT fk_notifications_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: notifications fk_notifications_recipient_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.notifications
+    ADD CONSTRAINT fk_notifications_recipient_user_id_users FOREIGN KEY (recipient_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: orders fk_orders_cancelled_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.orders
+    ADD CONSTRAINT fk_orders_cancelled_by_user_id_users FOREIGN KEY (cancelled_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: orders fk_orders_created_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.orders
+    ADD CONSTRAINT fk_orders_created_by_user_id_users FOREIGN KEY (created_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: orders fk_orders_credit_debit_transaction_id_wallet_transactions; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.orders
+    ADD CONSTRAINT fk_orders_credit_debit_transaction_id_wallet_transactions FOREIGN KEY (credit_debit_transaction_id) REFERENCES public.wallet_transactions(id);
+
+
+--
+-- Name: orders fk_orders_customer_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.orders
+    ADD CONSTRAINT fk_orders_customer_user_id_users FOREIGN KEY (customer_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: orders fk_orders_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.orders
+    ADD CONSTRAINT fk_orders_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: orders fk_orders_paid_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.orders
+    ADD CONSTRAINT fk_orders_paid_by_user_id_users FOREIGN KEY (paid_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: orders fk_orders_product_version_id_product_versions; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.orders
+    ADD CONSTRAINT fk_orders_product_version_id_product_versions FOREIGN KEY (product_version_id) REFERENCES public.product_versions(id);
+
+
+--
+-- Name: otp_codes fk_otp_codes_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.otp_codes
+    ADD CONSTRAINT fk_otp_codes_user_id_users FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: partners fk_partners_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.partners
+    ADD CONSTRAINT fk_partners_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: password_reset_tokens fk_password_reset_tokens_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.password_reset_tokens
+    ADD CONSTRAINT fk_password_reset_tokens_user_id_users FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: product_request_messages fk_product_request_messages_author_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_request_messages
+    ADD CONSTRAINT fk_product_request_messages_author_user_id_users FOREIGN KEY (author_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: product_request_messages fk_product_request_messages_request_id_product_requests; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_request_messages
+    ADD CONSTRAINT fk_product_request_messages_request_id_product_requests FOREIGN KEY (request_id) REFERENCES public.product_requests(id);
+
+
+--
+-- Name: product_requests fk_product_requests_opened_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_requests
+    ADD CONSTRAINT fk_product_requests_opened_by_user_id_users FOREIGN KEY (opened_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: product_requests fk_product_requests_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_requests
+    ADD CONSTRAINT fk_product_requests_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: product_versions fk_product_versions_commission_plan_version_id_commissi_c160; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_versions
+    ADD CONSTRAINT fk_product_versions_commission_plan_version_id_commissi_c160 FOREIGN KEY (commission_plan_version_id) REFERENCES public.commission_plan_versions(id);
+
+
+--
+-- Name: product_versions fk_product_versions_product_id_products; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_versions
+    ADD CONSTRAINT fk_product_versions_product_id_products FOREIGN KEY (product_id) REFERENCES public.products(id);
+
+
+--
+-- Name: products fk_products_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.products
+    ADD CONSTRAINT fk_products_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: promoter_codes fk_promoter_codes_agent_id_agent_profiles; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.promoter_codes
+    ADD CONSTRAINT fk_promoter_codes_agent_id_agent_profiles FOREIGN KEY (agent_id) REFERENCES public.agent_profiles(id);
+
+
+--
+-- Name: promoter_codes fk_promoter_codes_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.promoter_codes
+    ADD CONSTRAINT fk_promoter_codes_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: ranks fk_ranks_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ranks
+    ADD CONSTRAINT fk_ranks_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: referral_events fk_referral_events_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.referral_events
+    ADD CONSTRAINT fk_referral_events_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: referral_events fk_referral_events_promoter_code_id_promoter_codes; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.referral_events
+    ADD CONSTRAINT fk_referral_events_promoter_code_id_promoter_codes FOREIGN KEY (promoter_code_id) REFERENCES public.promoter_codes(id);
+
+
+--
+-- Name: referral_sessions fk_referral_sessions_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.referral_sessions
+    ADD CONSTRAINT fk_referral_sessions_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: referral_sessions fk_referral_sessions_promoter_code_id_promoter_codes; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.referral_sessions
+    ADD CONSTRAINT fk_referral_sessions_promoter_code_id_promoter_codes FOREIGN KEY (promoter_code_id) REFERENCES public.promoter_codes(id);
+
+
+--
+-- Name: role_permissions fk_role_permissions_permission_id_permissions; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.role_permissions
+    ADD CONSTRAINT fk_role_permissions_permission_id_permissions FOREIGN KEY (permission_id) REFERENCES public.permissions(id);
+
+
+--
+-- Name: role_permissions fk_role_permissions_role_id_roles; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.role_permissions
+    ADD CONSTRAINT fk_role_permissions_role_id_roles FOREIGN KEY (role_id) REFERENCES public.roles(id);
+
+
+--
+-- Name: roles fk_roles_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.roles
+    ADD CONSTRAINT fk_roles_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: sessions fk_sessions_replaced_by_session_id_sessions; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sessions
+    ADD CONSTRAINT fk_sessions_replaced_by_session_id_sessions FOREIGN KEY (replaced_by_session_id) REFERENCES public.sessions(id);
+
+
+--
+-- Name: sessions fk_sessions_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sessions
+    ADD CONSTRAINT fk_sessions_user_id_users FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: shop_categories fk_shop_categories_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shop_categories
+    ADD CONSTRAINT fk_shop_categories_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: shop_category_products fk_shop_category_products_category_id_shop_categories; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shop_category_products
+    ADD CONSTRAINT fk_shop_category_products_category_id_shop_categories FOREIGN KEY (category_id) REFERENCES public.shop_categories(id) ON DELETE CASCADE;
+
+
+--
+-- Name: shop_category_products fk_shop_category_products_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shop_category_products
+    ADD CONSTRAINT fk_shop_category_products_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: shopify_order_items fk_shopify_order_items_order_id_shopify_orders; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shopify_order_items
+    ADD CONSTRAINT fk_shopify_order_items_order_id_shopify_orders FOREIGN KEY (order_id) REFERENCES public.shopify_orders(id) ON DELETE CASCADE;
+
+
+--
+-- Name: shopify_order_items fk_shopify_order_items_product_id_shopify_products; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shopify_order_items
+    ADD CONSTRAINT fk_shopify_order_items_product_id_shopify_products FOREIGN KEY (product_id) REFERENCES public.shopify_products(id);
+
+
+--
+-- Name: shopify_order_items fk_shopify_order_items_variant_id_shopify_variants; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shopify_order_items
+    ADD CONSTRAINT fk_shopify_order_items_variant_id_shopify_variants FOREIGN KEY (variant_id) REFERENCES public.shopify_variants(id);
+
+
+--
+-- Name: shopify_orders fk_shopify_orders_cancelled_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shopify_orders
+    ADD CONSTRAINT fk_shopify_orders_cancelled_by_user_id_users FOREIGN KEY (cancelled_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: shopify_orders fk_shopify_orders_created_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shopify_orders
+    ADD CONSTRAINT fk_shopify_orders_created_by_user_id_users FOREIGN KEY (created_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: shopify_orders fk_shopify_orders_credit_debit_transaction_id_wallet_tr_0474; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shopify_orders
+    ADD CONSTRAINT fk_shopify_orders_credit_debit_transaction_id_wallet_tr_0474 FOREIGN KEY (credit_debit_transaction_id) REFERENCES public.wallet_transactions(id);
+
+
+--
+-- Name: shopify_orders fk_shopify_orders_customer_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shopify_orders
+    ADD CONSTRAINT fk_shopify_orders_customer_user_id_users FOREIGN KEY (customer_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: shopify_orders fk_shopify_orders_forwarded_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shopify_orders
+    ADD CONSTRAINT fk_shopify_orders_forwarded_by_user_id_users FOREIGN KEY (forwarded_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: shopify_orders fk_shopify_orders_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shopify_orders
+    ADD CONSTRAINT fk_shopify_orders_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: shopify_orders fk_shopify_orders_paid_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shopify_orders
+    ADD CONSTRAINT fk_shopify_orders_paid_by_user_id_users FOREIGN KEY (paid_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: shopify_orders fk_shopify_orders_shopify_product_id_shopify_products; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shopify_orders
+    ADD CONSTRAINT fk_shopify_orders_shopify_product_id_shopify_products FOREIGN KEY (shopify_product_id) REFERENCES public.shopify_products(id);
+
+
+--
+-- Name: shopify_orders fk_shopify_orders_shopify_variant_id_shopify_variants; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shopify_orders
+    ADD CONSTRAINT fk_shopify_orders_shopify_variant_id_shopify_variants FOREIGN KEY (shopify_variant_id) REFERENCES public.shopify_variants(id);
+
+
+--
+-- Name: shopify_products fk_shopify_products_created_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shopify_products
+    ADD CONSTRAINT fk_shopify_products_created_by_user_id_users FOREIGN KEY (created_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: shopify_products fk_shopify_products_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shopify_products
+    ADD CONSTRAINT fk_shopify_products_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: shopify_settings fk_shopify_settings_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shopify_settings
+    ADD CONSTRAINT fk_shopify_settings_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: shopify_variants fk_shopify_variants_product_id_shopify_products; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shopify_variants
+    ADD CONSTRAINT fk_shopify_variants_product_id_shopify_products FOREIGN KEY (product_id) REFERENCES public.shopify_products(id);
+
+
+--
+-- Name: soleil_market_order_items fk_soleil_market_order_items_order_id_soleil_market_orders; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.soleil_market_order_items
+    ADD CONSTRAINT fk_soleil_market_order_items_order_id_soleil_market_orders FOREIGN KEY (order_id) REFERENCES public.soleil_market_orders(id) ON DELETE CASCADE;
+
+
+--
+-- Name: soleil_market_order_items fk_soleil_market_order_items_product_id_soleil_market_products; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.soleil_market_order_items
+    ADD CONSTRAINT fk_soleil_market_order_items_product_id_soleil_market_products FOREIGN KEY (product_id) REFERENCES public.soleil_market_products(id);
+
+
+--
+-- Name: soleil_market_order_items fk_soleil_market_order_items_variant_id_soleil_market_variants; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.soleil_market_order_items
+    ADD CONSTRAINT fk_soleil_market_order_items_variant_id_soleil_market_variants FOREIGN KEY (variant_id) REFERENCES public.soleil_market_variants(id);
+
+
+--
+-- Name: soleil_market_orders fk_soleil_market_orders_cancelled_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.soleil_market_orders
+    ADD CONSTRAINT fk_soleil_market_orders_cancelled_by_user_id_users FOREIGN KEY (cancelled_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: soleil_market_orders fk_soleil_market_orders_created_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.soleil_market_orders
+    ADD CONSTRAINT fk_soleil_market_orders_created_by_user_id_users FOREIGN KEY (created_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: soleil_market_orders fk_soleil_market_orders_credit_debit_transaction_id_wal_2499; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.soleil_market_orders
+    ADD CONSTRAINT fk_soleil_market_orders_credit_debit_transaction_id_wal_2499 FOREIGN KEY (credit_debit_transaction_id) REFERENCES public.wallet_transactions(id);
+
+
+--
+-- Name: soleil_market_orders fk_soleil_market_orders_customer_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.soleil_market_orders
+    ADD CONSTRAINT fk_soleil_market_orders_customer_user_id_users FOREIGN KEY (customer_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: soleil_market_orders fk_soleil_market_orders_forwarded_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.soleil_market_orders
+    ADD CONSTRAINT fk_soleil_market_orders_forwarded_by_user_id_users FOREIGN KEY (forwarded_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: soleil_market_orders fk_soleil_market_orders_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.soleil_market_orders
+    ADD CONSTRAINT fk_soleil_market_orders_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: soleil_market_orders fk_soleil_market_orders_paid_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.soleil_market_orders
+    ADD CONSTRAINT fk_soleil_market_orders_paid_by_user_id_users FOREIGN KEY (paid_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: soleil_market_producers fk_soleil_market_producers_created_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.soleil_market_producers
+    ADD CONSTRAINT fk_soleil_market_producers_created_by_user_id_users FOREIGN KEY (created_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: soleil_market_producers fk_soleil_market_producers_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.soleil_market_producers
+    ADD CONSTRAINT fk_soleil_market_producers_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: soleil_market_products fk_soleil_market_products_created_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.soleil_market_products
+    ADD CONSTRAINT fk_soleil_market_products_created_by_user_id_users FOREIGN KEY (created_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: soleil_market_products fk_soleil_market_products_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.soleil_market_products
+    ADD CONSTRAINT fk_soleil_market_products_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: soleil_market_products fk_soleil_market_products_producer_id_soleil_market_producers; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.soleil_market_products
+    ADD CONSTRAINT fk_soleil_market_products_producer_id_soleil_market_producers FOREIGN KEY (producer_id) REFERENCES public.soleil_market_producers(id);
+
+
+--
+-- Name: soleil_market_settings fk_soleil_market_settings_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.soleil_market_settings
+    ADD CONSTRAINT fk_soleil_market_settings_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: soleil_market_variants fk_soleil_market_variants_product_id_soleil_market_products; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.soleil_market_variants
+    ADD CONSTRAINT fk_soleil_market_variants_product_id_soleil_market_products FOREIGN KEY (product_id) REFERENCES public.soleil_market_products(id) ON DELETE CASCADE;
+
+
+--
+-- Name: soleil_market_webhook_events fk_soleil_market_webhook_events_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.soleil_market_webhook_events
+    ADD CONSTRAINT fk_soleil_market_webhook_events_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: spend_pins fk_spend_pins_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.spend_pins
+    ADD CONSTRAINT fk_spend_pins_user_id_users FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: stripe_webhook_events fk_stripe_webhook_events_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stripe_webhook_events
+    ADD CONSTRAINT fk_stripe_webhook_events_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: supply_points fk_supply_points_customer_id_customers; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.supply_points
+    ADD CONSTRAINT fk_supply_points_customer_id_customers FOREIGN KEY (customer_id) REFERENCES public.customers(id);
+
+
+--
+-- Name: supply_points fk_supply_points_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.supply_points
+    ADD CONSTRAINT fk_supply_points_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: supply_points fk_supply_points_supply_address_id_addresses; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.supply_points
+    ADD CONSTRAINT fk_supply_points_supply_address_id_addresses FOREIGN KEY (supply_address_id) REFERENCES public.addresses(id);
+
+
+--
+-- Name: symphonya_market_order_items fk_symphonya_market_order_items_order_id_symphonya_mark_a23c; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.symphonya_market_order_items
+    ADD CONSTRAINT fk_symphonya_market_order_items_order_id_symphonya_mark_a23c FOREIGN KEY (order_id) REFERENCES public.symphonya_market_orders(id) ON DELETE CASCADE;
+
+
+--
+-- Name: symphonya_market_order_items fk_symphonya_market_order_items_product_id_symphonya_ma_5ada; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.symphonya_market_order_items
+    ADD CONSTRAINT fk_symphonya_market_order_items_product_id_symphonya_ma_5ada FOREIGN KEY (product_id) REFERENCES public.symphonya_market_products(id);
+
+
+--
+-- Name: symphonya_market_order_items fk_symphonya_market_order_items_variant_id_symphonya_ma_7cc6; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.symphonya_market_order_items
+    ADD CONSTRAINT fk_symphonya_market_order_items_variant_id_symphonya_ma_7cc6 FOREIGN KEY (variant_id) REFERENCES public.symphonya_market_variants(id);
+
+
+--
+-- Name: symphonya_market_orders fk_symphonya_market_orders_cancelled_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.symphonya_market_orders
+    ADD CONSTRAINT fk_symphonya_market_orders_cancelled_by_user_id_users FOREIGN KEY (cancelled_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: symphonya_market_orders fk_symphonya_market_orders_created_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.symphonya_market_orders
+    ADD CONSTRAINT fk_symphonya_market_orders_created_by_user_id_users FOREIGN KEY (created_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: symphonya_market_orders fk_symphonya_market_orders_credit_debit_transaction_id__d6ff; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.symphonya_market_orders
+    ADD CONSTRAINT fk_symphonya_market_orders_credit_debit_transaction_id__d6ff FOREIGN KEY (credit_debit_transaction_id) REFERENCES public.wallet_transactions(id);
+
+
+--
+-- Name: symphonya_market_orders fk_symphonya_market_orders_customer_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.symphonya_market_orders
+    ADD CONSTRAINT fk_symphonya_market_orders_customer_user_id_users FOREIGN KEY (customer_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: symphonya_market_orders fk_symphonya_market_orders_forwarded_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.symphonya_market_orders
+    ADD CONSTRAINT fk_symphonya_market_orders_forwarded_by_user_id_users FOREIGN KEY (forwarded_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: symphonya_market_orders fk_symphonya_market_orders_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.symphonya_market_orders
+    ADD CONSTRAINT fk_symphonya_market_orders_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: symphonya_market_orders fk_symphonya_market_orders_paid_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.symphonya_market_orders
+    ADD CONSTRAINT fk_symphonya_market_orders_paid_by_user_id_users FOREIGN KEY (paid_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: symphonya_market_producers fk_symphonya_market_producers_created_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.symphonya_market_producers
+    ADD CONSTRAINT fk_symphonya_market_producers_created_by_user_id_users FOREIGN KEY (created_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: symphonya_market_producers fk_symphonya_market_producers_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.symphonya_market_producers
+    ADD CONSTRAINT fk_symphonya_market_producers_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: symphonya_market_products fk_symphonya_market_products_created_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.symphonya_market_products
+    ADD CONSTRAINT fk_symphonya_market_products_created_by_user_id_users FOREIGN KEY (created_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: symphonya_market_products fk_symphonya_market_products_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.symphonya_market_products
+    ADD CONSTRAINT fk_symphonya_market_products_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: symphonya_market_products fk_symphonya_market_products_producer_id_symphonya_mark_5015; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.symphonya_market_products
+    ADD CONSTRAINT fk_symphonya_market_products_producer_id_symphonya_mark_5015 FOREIGN KEY (producer_id) REFERENCES public.symphonya_market_producers(id);
+
+
+--
+-- Name: symphonya_market_settings fk_symphonya_market_settings_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.symphonya_market_settings
+    ADD CONSTRAINT fk_symphonya_market_settings_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: symphonya_market_variants fk_symphonya_market_variants_product_id_symphonya_marke_5142; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.symphonya_market_variants
+    ADD CONSTRAINT fk_symphonya_market_variants_product_id_symphonya_marke_5142 FOREIGN KEY (product_id) REFERENCES public.symphonya_market_products(id) ON DELETE CASCADE;
+
+
+--
+-- Name: ticket_messages fk_ticket_messages_author_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ticket_messages
+    ADD CONSTRAINT fk_ticket_messages_author_user_id_users FOREIGN KEY (author_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: ticket_messages fk_ticket_messages_ticket_id_tickets; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ticket_messages
+    ADD CONSTRAINT fk_ticket_messages_ticket_id_tickets FOREIGN KEY (ticket_id) REFERENCES public.tickets(id);
+
+
+--
+-- Name: tickets fk_tickets_contract_id_contracts; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.tickets
+    ADD CONSTRAINT fk_tickets_contract_id_contracts FOREIGN KEY (contract_id) REFERENCES public.contracts(id);
+
+
+--
+-- Name: tickets fk_tickets_opened_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.tickets
+    ADD CONSTRAINT fk_tickets_opened_by_user_id_users FOREIGN KEY (opened_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: tickets fk_tickets_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.tickets
+    ADD CONSTRAINT fk_tickets_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: user_roles fk_user_roles_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_roles
+    ADD CONSTRAINT fk_user_roles_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: user_roles fk_user_roles_role_id_roles; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_roles
+    ADD CONSTRAINT fk_user_roles_role_id_roles FOREIGN KEY (role_id) REFERENCES public.roles(id);
+
+
+--
+-- Name: user_roles fk_user_roles_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_roles
+    ADD CONSTRAINT fk_user_roles_user_id_users FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: users fk_users_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT fk_users_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: vaitto_market_order_items fk_vaitto_market_order_items_order_id_vaitto_market_orders; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vaitto_market_order_items
+    ADD CONSTRAINT fk_vaitto_market_order_items_order_id_vaitto_market_orders FOREIGN KEY (order_id) REFERENCES public.vaitto_market_orders(id) ON DELETE CASCADE;
+
+
+--
+-- Name: vaitto_market_order_items fk_vaitto_market_order_items_product_id_vaitto_market_products; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vaitto_market_order_items
+    ADD CONSTRAINT fk_vaitto_market_order_items_product_id_vaitto_market_products FOREIGN KEY (product_id) REFERENCES public.vaitto_market_products(id);
+
+
+--
+-- Name: vaitto_market_order_items fk_vaitto_market_order_items_variant_id_vaitto_market_variants; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vaitto_market_order_items
+    ADD CONSTRAINT fk_vaitto_market_order_items_variant_id_vaitto_market_variants FOREIGN KEY (variant_id) REFERENCES public.vaitto_market_variants(id);
+
+
+--
+-- Name: vaitto_market_orders fk_vaitto_market_orders_cancelled_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vaitto_market_orders
+    ADD CONSTRAINT fk_vaitto_market_orders_cancelled_by_user_id_users FOREIGN KEY (cancelled_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: vaitto_market_orders fk_vaitto_market_orders_created_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vaitto_market_orders
+    ADD CONSTRAINT fk_vaitto_market_orders_created_by_user_id_users FOREIGN KEY (created_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: vaitto_market_orders fk_vaitto_market_orders_credit_debit_transaction_id_wal_8910; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vaitto_market_orders
+    ADD CONSTRAINT fk_vaitto_market_orders_credit_debit_transaction_id_wal_8910 FOREIGN KEY (credit_debit_transaction_id) REFERENCES public.wallet_transactions(id);
+
+
+--
+-- Name: vaitto_market_orders fk_vaitto_market_orders_customer_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vaitto_market_orders
+    ADD CONSTRAINT fk_vaitto_market_orders_customer_user_id_users FOREIGN KEY (customer_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: vaitto_market_orders fk_vaitto_market_orders_forwarded_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vaitto_market_orders
+    ADD CONSTRAINT fk_vaitto_market_orders_forwarded_by_user_id_users FOREIGN KEY (forwarded_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: vaitto_market_orders fk_vaitto_market_orders_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vaitto_market_orders
+    ADD CONSTRAINT fk_vaitto_market_orders_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: vaitto_market_orders fk_vaitto_market_orders_paid_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vaitto_market_orders
+    ADD CONSTRAINT fk_vaitto_market_orders_paid_by_user_id_users FOREIGN KEY (paid_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: vaitto_market_producers fk_vaitto_market_producers_created_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vaitto_market_producers
+    ADD CONSTRAINT fk_vaitto_market_producers_created_by_user_id_users FOREIGN KEY (created_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: vaitto_market_producers fk_vaitto_market_producers_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vaitto_market_producers
+    ADD CONSTRAINT fk_vaitto_market_producers_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: vaitto_market_products fk_vaitto_market_products_created_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vaitto_market_products
+    ADD CONSTRAINT fk_vaitto_market_products_created_by_user_id_users FOREIGN KEY (created_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: vaitto_market_products fk_vaitto_market_products_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vaitto_market_products
+    ADD CONSTRAINT fk_vaitto_market_products_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: vaitto_market_products fk_vaitto_market_products_producer_id_vaitto_market_producers; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vaitto_market_products
+    ADD CONSTRAINT fk_vaitto_market_products_producer_id_vaitto_market_producers FOREIGN KEY (producer_id) REFERENCES public.vaitto_market_producers(id);
+
+
+--
+-- Name: vaitto_market_settings fk_vaitto_market_settings_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vaitto_market_settings
+    ADD CONSTRAINT fk_vaitto_market_settings_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: vaitto_market_variants fk_vaitto_market_variants_product_id_vaitto_market_products; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vaitto_market_variants
+    ADD CONSTRAINT fk_vaitto_market_variants_product_id_vaitto_market_products FOREIGN KEY (product_id) REFERENCES public.vaitto_market_products(id) ON DELETE CASCADE;
+
+
+--
+-- Name: wallet_transactions fk_wallet_transactions_actor_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.wallet_transactions
+    ADD CONSTRAINT fk_wallet_transactions_actor_user_id_users FOREIGN KEY (actor_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: wallet_transactions fk_wallet_transactions_from_wallet_id_wallets; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.wallet_transactions
+    ADD CONSTRAINT fk_wallet_transactions_from_wallet_id_wallets FOREIGN KEY (from_wallet_id) REFERENCES public.wallets(id);
+
+
+--
+-- Name: wallet_transactions fk_wallet_transactions_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.wallet_transactions
+    ADD CONSTRAINT fk_wallet_transactions_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: wallet_transactions fk_wallet_transactions_reference_aliexpress_order_id_al_d92c; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.wallet_transactions
+    ADD CONSTRAINT fk_wallet_transactions_reference_aliexpress_order_id_al_d92c FOREIGN KEY (reference_aliexpress_order_id) REFERENCES public.aliexpress_orders(id);
+
+
+--
+-- Name: wallet_transactions fk_wallet_transactions_reference_cj_order_id_cj_orders; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.wallet_transactions
+    ADD CONSTRAINT fk_wallet_transactions_reference_cj_order_id_cj_orders FOREIGN KEY (reference_cj_order_id) REFERENCES public.cj_orders(id);
+
+
+--
+-- Name: wallet_transactions fk_wallet_transactions_reference_contract_id_contracts; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.wallet_transactions
+    ADD CONSTRAINT fk_wallet_transactions_reference_contract_id_contracts FOREIGN KEY (reference_contract_id) REFERENCES public.contracts(id);
+
+
+--
+-- Name: wallet_transactions fk_wallet_transactions_reference_imported_order_id_impo_d9ec; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.wallet_transactions
+    ADD CONSTRAINT fk_wallet_transactions_reference_imported_order_id_impo_d9ec FOREIGN KEY (reference_imported_order_id) REFERENCES public.imported_product_orders(id);
+
+
+--
+-- Name: wallet_transactions fk_wallet_transactions_reference_invoice_redemption_id__3fd7; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.wallet_transactions
+    ADD CONSTRAINT fk_wallet_transactions_reference_invoice_redemption_id__3fd7 FOREIGN KEY (reference_invoice_redemption_id) REFERENCES public.invoice_redemptions(id);
+
+
+--
+-- Name: wallet_transactions fk_wallet_transactions_reference_kappa_market_order_id__4de7; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.wallet_transactions
+    ADD CONSTRAINT fk_wallet_transactions_reference_kappa_market_order_id__4de7 FOREIGN KEY (reference_kappa_market_order_id) REFERENCES public.kappa_market_orders(id);
+
+
+--
+-- Name: wallet_transactions fk_wallet_transactions_reference_jav_market_order_id_l_0b9d; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.wallet_transactions
+    ADD CONSTRAINT fk_wallet_transactions_reference_jav_market_order_id_l_0b9d FOREIGN KEY (reference_jav_market_order_id) REFERENCES public.jav_market_orders(id);
+
+
+--
+-- Name: wallet_transactions fk_wallet_transactions_reference_order_id_orders; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.wallet_transactions
+    ADD CONSTRAINT fk_wallet_transactions_reference_order_id_orders FOREIGN KEY (reference_order_id) REFERENCES public.orders(id);
+
+
+--
+-- Name: wallet_transactions fk_wallet_transactions_reference_shopify_order_id_shopi_ef35; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.wallet_transactions
+    ADD CONSTRAINT fk_wallet_transactions_reference_shopify_order_id_shopi_ef35 FOREIGN KEY (reference_shopify_order_id) REFERENCES public.shopify_orders(id);
+
+
+--
+-- Name: wallet_transactions fk_wallet_transactions_reference_soleil_market_order_id_fea9; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.wallet_transactions
+    ADD CONSTRAINT fk_wallet_transactions_reference_soleil_market_order_id_fea9 FOREIGN KEY (reference_soleil_market_order_id) REFERENCES public.soleil_market_orders(id);
+
+
+--
+-- Name: wallet_transactions fk_wallet_transactions_reference_symphonya_market_order_44d8; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.wallet_transactions
+    ADD CONSTRAINT fk_wallet_transactions_reference_symphonya_market_order_44d8 FOREIGN KEY (reference_symphonya_market_order_id) REFERENCES public.symphonya_market_orders(id);
+
+
+--
+-- Name: wallet_transactions fk_wallet_transactions_reference_vaitto_market_order_id_9d73; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.wallet_transactions
+    ADD CONSTRAINT fk_wallet_transactions_reference_vaitto_market_order_id_9d73 FOREIGN KEY (reference_vaitto_market_order_id) REFERENCES public.vaitto_market_orders(id);
+
+
+--
+-- Name: wallet_transactions fk_wallet_transactions_reverses_transaction_id_wallet_t_a759; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.wallet_transactions
+    ADD CONSTRAINT fk_wallet_transactions_reverses_transaction_id_wallet_t_a759 FOREIGN KEY (reverses_transaction_id) REFERENCES public.wallet_transactions(id);
+
+
+--
+-- Name: wallet_transactions fk_wallet_transactions_to_wallet_id_wallets; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.wallet_transactions
+    ADD CONSTRAINT fk_wallet_transactions_to_wallet_id_wallets FOREIGN KEY (to_wallet_id) REFERENCES public.wallets(id);
+
+
+--
+-- Name: wallets fk_wallets_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.wallets
+    ADD CONSTRAINT fk_wallets_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: wallets fk_wallets_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.wallets
+    ADD CONSTRAINT fk_wallets_user_id_users FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- PostgreSQL database dump complete
+--
+
+\unrestrict sylH4SHUNV0ujaQb0OWzd7YTGOYGFYaAl9VxkXHLxIPsItQpoz9a4DMEj7tgBdP
+

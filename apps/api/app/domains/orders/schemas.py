@@ -1,0 +1,121 @@
+import uuid
+from datetime import datetime
+
+from pydantic import BaseModel, Field
+
+
+class OrderRead(BaseModel):
+    """Built from a service dict row (see service.py::to_read_dict), not
+    model_validate(orm_obj) -- product/customer names are resolved joins."""
+
+    id: uuid.UUID
+    customer_user_id: uuid.UUID
+    customer_display_name: str
+    product_version_id: uuid.UUID
+    product_name: str
+    product_image_url: str | None = None
+    created_by_user_id: uuid.UUID
+    amount_cents: int
+    credit_applied_cents: int
+    residual_amount_cents: int
+    cashback_requested: bool = False
+    cashback_surcharge_cents: int = 0
+    cashback_credited_at: datetime | None = None
+    status: str
+    payment_method: str
+    stripe_checkout_session_id: str | None = None
+    payment_proof_uploaded_at: datetime | None = None
+    note: str | None
+    paid_at: datetime | None
+    cancelled_at: datetime | None
+    cancellation_reason: str | None
+    created_at: datetime
+
+
+class OrderQuoteRead(BaseModel):
+    """What the checkout screen shows before an order is actually created --
+    lets the buyer (customer self-checkout or admin) see the credit cap, the
+    customer's balance, and which payment methods for the residual are even
+    switched on before committing to anything. A frontend must grey out or
+    hide "Paga con bonifico"/"Paga con carta" entirely when the matching flag
+    is false -- the backend enforces this too (create_order rejects an
+    unavailable method), this is what lets the UI never offer it in the
+    first place."""
+
+    product_version_id: uuid.UUID
+    product_name: str
+    amount_cents: int
+    credit_discount_percentage: int
+    max_creditable_cents: int
+    customer_wallet_balance_cents: int
+    bank_transfer_available: bool
+    card_available: bool
+    cashback_available: bool
+    cashback_percentage: int
+
+
+class OrderCreateRequest(BaseModel):
+    customer_user_id: uuid.UUID
+    product_version_id: uuid.UUID
+    # 0 if the credit discount alone covers the price -- never inferred, the
+    # caller always states explicitly how much credit to apply.
+    credit_applied_cents: int = Field(default=0, ge=0)
+    # Only meaningful when credit_applied_cents < amount_cents -- see
+    # ORDER_PAYMENT_METHODS. Ignored (order goes straight to PAID) when
+    # credit covers 100%.
+    payment_method: str = "BANK_TRANSFER"
+    # "Riscuoti subito cashback" -- only valid when the product allows it
+    # (OrderQuoteRead.cashback_available) and something is actually still
+    # owed in new money after any credit_applied_cents.
+    cashback_requested: bool = False
+    note: str | None = Field(default=None, max_length=1000)
+
+
+class OrderSelfCreateRequest(BaseModel):
+    """Same as OrderCreateRequest minus customer_user_id -- self-checkout
+    (POST /orders/mine) always forces the caller's own user_id server-side,
+    never accepts it from the body (same rule as wallet transfer's
+    from_wallet_id)."""
+
+    product_version_id: uuid.UUID
+    credit_applied_cents: int = Field(default=0, ge=0)
+    payment_method: str = "BANK_TRANSFER"
+    cashback_requested: bool = False
+    # Required (and verified server-side) whenever credit_applied_cents > 0
+    # -- see POST /orders/mine/request-credit-otp and
+    # orders/service.py::create_order's otp_code parameter. Irrelevant, and
+    # never checked, when no wallet JavCash is being spent.
+    otp_code: str | None = None
+    note: str | None = Field(default=None, max_length=1000)
+
+
+class OrderCreditOtpRequest(BaseModel):
+    """POST /orders/mine/request-credit-otp -- product_version_id and
+    credit_applied_cents are used ONLY to look up the product name/price
+    server-side (never trusted client display strings) so the emailed OTP
+    can say exactly what it's confirming: which product, the order's value,
+    and how much JavCash is about to be spent."""
+
+    product_version_id: uuid.UUID
+    credit_applied_cents: int = Field(gt=0)
+
+
+class OrderCancelRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class OrderPaymentMethodUpdate(BaseModel):
+    """Lets a customer switch an existing AWAITING_PAYMENT order between
+    BANK_TRANSFER and CARD -- e.g. "actually, let me just pay by card now
+    instead of waiting on a bank transfer" -- see
+    orders/service.py::change_payment_method."""
+
+    payment_method: str
+
+
+class PaymentProofUrlRead(BaseModel):
+    url: str
+
+
+class CheckoutSessionRead(BaseModel):
+    checkout_url: str

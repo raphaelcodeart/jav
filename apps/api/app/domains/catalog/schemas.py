@@ -1,0 +1,260 @@
+import uuid
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.domains.catalog import pricing
+
+PRODUCT_TYPES = {"ENERGY_CONTRACT", "DIGITAL", "PHYSICAL", "SUBSCRIPTION"}
+# INTERNAL is the safe default: never discountable in wallet credits, bank
+# transfer only. DROPSHIPPING/PARTNER may accept a configurable credit
+# discount -- see catalog/service.py for the enforcement that INTERNAL always
+# stays at 0%.
+PRODUCT_CATEGORIES = {"INTERNAL", "DROPSHIPPING", "PARTNER"}
+
+
+class ProductVersionRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    version_label: str
+    name: str
+    description: str
+    image_url: str | None
+    base_price_cents: int
+    #: Session 84: the monthly rata of a contract paid in rate, net of VAT.
+    monthly_price_cents: int | None = None
+    initial_fee_cents: int
+    recurring_fee_cents: int
+    billing_period: str
+    vat_percentage: float | None
+    contract_duration_months: int | None
+    # {rank_code: personal_token_cents} -- this product's per-rank gettone
+    # override. A rank code missing from this dict falls back to that rank's
+    # org-wide Rank.personal_token_cents at calculation time.
+    commission_tokens: dict[str, int]
+    credit_discount_percentage: int
+    cashback_enabled: bool
+    contract_cashback_percentage: int
+    first_referrer_bonus_enabled: bool
+    first_referrer_bonus_cents: int
+    #: NO_CASHBACK / STANDARD / AUTOMATIC_INTERNAL_SERVICE -- derived from the
+    #: two toggles above plus the parent product's category, never stored, so
+    #: it can never disagree with the fields that actually drive behaviour.
+    #: See catalog/pricing.py::cashback_mode_for.
+    cashback_mode: str = pricing.CASHBACK_MODE_NONE
+    #: How many canoni one contract is made of, and what the whole contract
+    #: costs before VAT (catalog/pricing.py::contract_net_amount_cents) --
+    #: so the activation wizard can say "12 mesi, 180 € + IVA" without doing
+    #: the arithmetic in the browser.
+    contract_billing_periods: int = 1
+    contract_net_amount_cents: int = 0
+    #: Session 84: the same contract paid in rate (3 or 12, same total), net
+    #: of VAT -- monthly price x months. None: the rate split the one-go price.
+    contract_instalments_net_amount_cents: int | None = None
+    valid_from: datetime
+    valid_to: datetime | None
+    status: str
+
+    @classmethod
+    def from_version(
+        cls, version, *, category: str | None = None, product_type: str | None = None
+    ) -> "ProductVersionRead":
+        """ProductVersion has no vat_percentage column -- it lives inside the
+        tax_configuration JSONB blob (already present on the model, previously
+        unused). from_attributes=True can't compute that, so every call site
+        builds through here instead of model_validate()."""
+        tax_configuration = version.tax_configuration or {}
+        return cls(
+            id=version.id,
+            version_label=version.version_label,
+            name=version.name,
+            description=version.description,
+            image_url=version.image_url,
+            base_price_cents=version.base_price_cents,
+            monthly_price_cents=version.monthly_price_cents,
+            initial_fee_cents=version.initial_fee_cents,
+            recurring_fee_cents=version.recurring_fee_cents,
+            billing_period=version.billing_period,
+            vat_percentage=tax_configuration.get("vat_percentage"),
+            contract_duration_months=version.contract_duration_months,
+            commission_tokens=version.commission_tokens or {},
+            credit_discount_percentage=version.credit_discount_percentage,
+            cashback_enabled=version.cashback_enabled,
+            contract_cashback_percentage=version.contract_cashback_percentage,
+            first_referrer_bonus_enabled=version.first_referrer_bonus_enabled,
+            first_referrer_bonus_cents=version.first_referrer_bonus_cents,
+            cashback_mode=pricing.cashback_mode_for(category=category, version=version),
+            contract_billing_periods=pricing.contract_billing_periods(version, product_type=product_type),
+            contract_net_amount_cents=pricing.contract_net_amount_cents(version, product_type=product_type),
+            contract_instalments_net_amount_cents=pricing.contract_instalments_net_amount_cents(
+                version, product_type=product_type
+            ),
+            valid_from=version.valid_from,
+            valid_to=version.valid_to,
+            status=version.status,
+        )
+
+
+class ProductRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    organization_id: uuid.UUID
+    code: str
+    product_type: str
+    energy_type: str | None
+    customer_type: str
+    status: str
+    category: str
+
+
+class ProductWithVersionsRead(ProductRead):
+    versions: list[ProductVersionRead] = []
+    #: See ProductCatalogRead.category_ids.
+    category_ids: list[uuid.UUID] = []
+
+
+class ProductCatalogRead(ProductRead):
+    """Product + its current (most recent) version, denormalized for list views --
+    the admin catalog grid and the customer-facing marketplace both need
+    name/description/photo/price without an N+1 detail fetch per product."""
+
+    current_version: ProductVersionRead | None = None
+    #: The Shop categories this product carries inside its own section
+    #: (shop_categories, Session 73) -- carried on the card so the grid can
+    #: filter without asking once per product. Empty for a product nobody
+    #: has categorised. Unrelated to `category` above, which says WHICH
+    #: section the product is in.
+    category_ids: list[uuid.UUID] = []
+
+
+class ProductCreate(BaseModel):
+    code: str
+    product_type: str = "ENERGY_CONTRACT"  # ENERGY_CONTRACT / DIGITAL / PHYSICAL / SUBSCRIPTION
+    energy_type: str | None = None  # ELECTRICITY / GAS / DUAL_FUEL -- only for ENERGY_CONTRACT
+    # PRIVATE / BUSINESS / BOTH -- who this product may be sold to. Legacy
+    # values (SOLE_PROPRIETOR, PMI, CONDOMINIUM, ENERGY_INTENSIVE) still parse
+    # and collapse onto BUSINESS; see catalog/pricing.py.
+    customer_type: str = pricing.BOTH_PRODUCT_CUSTOMER_TYPES
+    category: str = "INTERNAL"  # INTERNAL / DROPSHIPPING / PARTNER -- see PRODUCT_CATEGORIES
+    # Initial version, created together with the product -- a product with zero
+    # versions can't be sold, so the marketplace form always creates both at once.
+    version_label: str = "1.0"
+    name: str
+    description: str = ""
+    image_url: str | None = None
+    base_price_cents: int
+    #: Session 84: see ProductVersionRead.monthly_price_cents.
+    monthly_price_cents: int | None = Field(default=None, ge=0)
+    initial_fee_cents: int = 0
+    recurring_fee_cents: int = 0
+    billing_period: str = "MONTHLY"
+    vat_percentage: float | None = None
+    contract_duration_months: int | None = 12
+    commission_tokens: dict[str, int] = {}
+    # Only meaningful when category != INTERNAL -- catalog/service.py forces
+    # this to 0 for INTERNAL regardless of what's sent here.
+    credit_discount_percentage: int = Field(default=0, ge=0, le=100)
+    # Same INTERNAL-forced-False rule -- catalog/service.py enforces it.
+    cashback_enabled: bool = False
+    # The INTERNAL-only counterparts, forced to 0/False for every other
+    # category by catalog/service.py -- see the clamps there.
+    contract_cashback_percentage: int = Field(default=0, ge=0, le=100)
+    first_referrer_bonus_enabled: bool = False
+    first_referrer_bonus_cents: int = Field(default=0, ge=0)
+
+    @field_validator("customer_type")
+    @classmethod
+    def validate_customer_type(cls, v: str) -> str:
+        return pricing.normalize_product_customer_type(v)
+
+    @field_validator("product_type")
+    @classmethod
+    def validate_product_type(cls, v: str) -> str:
+        if v not in PRODUCT_TYPES:
+            raise ValueError(f"product_type must be one of {sorted(PRODUCT_TYPES)}")
+        return v
+
+    @field_validator("category")
+    @classmethod
+    def validate_category(cls, v: str) -> str:
+        if v not in PRODUCT_CATEGORIES:
+            raise ValueError(f"category must be one of {sorted(PRODUCT_CATEGORIES)}")
+        return v
+
+
+class ProductVersionCreate(BaseModel):
+    version_label: str
+    name: str
+    description: str = ""
+    image_url: str | None = None
+    base_price_cents: int
+    #: Session 84: see ProductVersionRead.monthly_price_cents.
+    monthly_price_cents: int | None = Field(default=None, ge=0)
+    initial_fee_cents: int = 0
+    recurring_fee_cents: int = 0
+    billing_period: str = "MONTHLY"
+    vat_percentage: float | None = None
+    contract_duration_months: int | None = 12
+    commission_tokens: dict[str, int] = {}
+    credit_discount_percentage: int = Field(default=0, ge=0, le=100)
+    cashback_enabled: bool = False
+    contract_cashback_percentage: int = Field(default=0, ge=0, le=100)
+    first_referrer_bonus_enabled: bool = False
+    first_referrer_bonus_cents: int = Field(default=0, ge=0)
+
+
+class ProductVersionUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    image_url: str | None = None
+    base_price_cents: int | None = None
+    #: An explicit null clears it (catalog/service.py reads model_fields_set).
+    monthly_price_cents: int | None = Field(default=None, ge=0)
+    initial_fee_cents: int | None = None
+    recurring_fee_cents: int | None = None
+    vat_percentage: float | None = None
+    contract_duration_months: int | None = None
+    commission_tokens: dict[str, int] | None = None
+    credit_discount_percentage: int | None = Field(default=None, ge=0, le=100)
+    cashback_enabled: bool | None = None
+    contract_cashback_percentage: int | None = Field(default=None, ge=0, le=100)
+    first_referrer_bonus_enabled: bool | None = None
+    first_referrer_bonus_cents: int | None = Field(default=None, ge=0)
+    status: str | None = None
+
+
+class ProductUpdate(BaseModel):
+    #: Session 89: the internal code («LUCE-COPY-COPY» after two duplicates)
+    #: can be renamed. Unique per organization, checked in catalog/service.py.
+    code: str | None = Field(default=None, max_length=64)
+    status: str | None = None
+    product_type: str | None = None
+    energy_type: str | None = None
+    category: str | None = None
+    # Previously missing entirely, which meant a product's audience could be
+    # set at creation and never corrected again.
+    customer_type: str | None = None
+
+    @field_validator("customer_type")
+    @classmethod
+    def validate_customer_type(cls, v: str | None) -> str | None:
+        return None if v is None else pricing.normalize_product_customer_type(v)
+
+    @field_validator("code")
+    @classmethod
+    def validate_code(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        cleaned = v.strip()
+        if not cleaned:
+            raise ValueError("il codice non può essere vuoto")
+        return cleaned
+
+    @field_validator("category")
+    @classmethod
+    def validate_category(cls, v: str | None) -> str | None:
+        if v is not None and v not in PRODUCT_CATEGORIES:
+            raise ValueError(f"category must be one of {sorted(PRODUCT_CATEGORIES)}")
+        return v

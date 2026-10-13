@@ -1,0 +1,156 @@
+name: jav-dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-jav}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-jav}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-jav}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # Intentionally not published to the host -- see docs/network-model.md.
+    # Use `docker compose -f docker-compose.dev.yml exec postgres psql -U jav -d jav`.
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    # minio/minio is no longer published on Docker Hub (pull access denied):
+    # same MinIO, Chainguard build. Entrypoint is already /usr/bin/minio and
+    # it ships sh + mc, which the healthcheck below needs.
+    image: cgr.dev/chainguard/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+      # Must match S3_REGION in .env (passed to boto3 as region_name) --
+      # MinIO defaults to us-east-1 otherwise, which fails SigV4 signature
+      # verification against a client signing requests for a different
+      # region (confirmed live: every request 403'd until these matched).
+      MINIO_REGION: ${S3_REGION:-eu-central-1}
+    volumes:
+      - minio_data:/data
+    ports:
+      # MinIO is the one dev-only exception: developers need the console to
+      # inspect uploaded documents locally. Never do this in production (S3-
+      # compatible storage there has no equivalent admin surface exposed).
+      - "127.0.0.1:9001:9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-jav}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-jav}
+      REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT_URL: http://minio:9000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  celery-worker:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-jav}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-jav}
+      REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT_URL: http://minio:9000
+    depends_on:
+      api:
+        condition: service_healthy
+    command: ["celery", "-A", "app.celery_app", "worker", "--loglevel=info"]
+    # Overrides the api image's baked-in HTTP healthcheck, which is meaningless
+    # here -- the worker doesn't serve HTTP. `celery inspect ping` is the real check.
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.celery_app inspect ping -d celery@$$HOSTNAME || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  celery-beat:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-jav}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-jav}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      api:
+        condition: service_healthy
+    # /app is owned by root (only the files COPY --chown'd into it belong to the
+    # app user) -- beat's schedule file must live somewhere the app user can write.
+    command: ["celery", "-A", "app.celery_app", "beat", "--loglevel=info", "--schedule=/tmp/celerybeat-schedule"]
+    # No HTTP server here either -- disable the inherited api-image healthcheck
+    # rather than report a false "unhealthy".
+    healthcheck:
+      disable: true
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: apps/dashboard/Dockerfile
+    restart: unless-stopped
+    environment:
+      API_INTERNAL_URL: http://api:8000
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      # Next's standalone server.js binds to this exact address; without it, it
+      # binds to the container's own interface IP instead of the wildcard, and
+      # the healthcheck's `localhost` probe (and anything else hitting localhost)
+      # fails with ECONNREFUSED despite the app working fine.
+      HOSTNAME: "0.0.0.0"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    volumes:
+      - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      # Localhost only: Caddy on the host owns 80/443, terminates HTTPS and
+      # proxies here. Docker bypasses ufw for published ports, so binding to
+      # 127.0.0.1 is what actually keeps this off the internet.
+      - "127.0.0.1:8081:80"
+    depends_on:
+      - api
+      - dashboard
+
+volumes:
+  postgres_data:
+  minio_data:

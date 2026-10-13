@@ -1,0 +1,51 @@
+# Node
+node_modules/
+.next/
+out/
+dist/
+.pnpm-store/
+*.tsbuildinfo
+next-env.d.ts
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+
+# Editors
+.vscode/
+.idea/
+
+# Claude Code local settings (per-user, not project config)
+.claude/settings.local.json
+
+# Docker volumes mounted locally (dev only, not used by default)
+infrastructure/postgres/data/
+infrastructure/minio/data/
+
+# Backups produced by scripts/backup.sh (real data -- pg_dump, MinIO exports).
+# Never commit these; the portable, data-free artifact is docs/database-schema.sql.
+backups/
+
+# Let's Encrypt certificates/private keys and certbot state -- generated
+# per-server by scripts/renew-cert.sh, NEVER commit private keys.
+certbot/
+
+# Test / coverage
+.coverage
+htmlcov/
+coverage.xml

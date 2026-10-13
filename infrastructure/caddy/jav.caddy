@@ -1,0 +1,13 @@
+# Caddy site for Jav -- installed as /etc/caddy/sites/jav.caddy and imported
+# by /etc/caddy/Caddyfile (which defines the `common` snippet: compression,
+# HSTS/nosniff/X-Frame-Options/Referrer-Policy, access log). Caddy obtains and
+# renews the Let's Encrypt certificate by itself.
+jav.ecodo.ai {
+	import common jav
+	request_body {
+		max_size 25MB
+	}
+	reverse_proxy 127.0.0.1:8081 {
+		header_up X-Real-IP {remote_host}
+	}
+}

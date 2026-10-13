@@ -1,0 +1,298 @@
+# Open Questions / Assumptions Requiring Confirmation
+
+Source document `docs/Allegato_A_Piano_Carriera_Regolamento_Provvigionale.pdf` was not
+present in the repository. Everything below is a placeholder that makes the system
+runnable and testable; none of it is confirmed Jav policy. Each item names the
+exact config location to update once real figures/rules are available — no formula is
+silently invented into unlabelled code.
+
+## 1. Rank table (career plan) figures
+
+**Placeholder**: `S1..S3`, `TL1..TL4`, `MD1..MD5` with linearly increasing
+`personal_token_cents` (4000 → 9500), see `business-rules.md §Ranks`.
+**Update (Session 15)**: `personal_volume_threshold_cents` /
+`group_volume_threshold_cents` are no longer 0 -- populated with placeholder
+ascending figures (migration `0010`) at the user's explicit request ("go get
+those criteria and set them yourself"), used by the new rank-promotion-progress
+feature (`business-rules.md §Rank promotion progress`). Still not confirmed
+Jav policy. `evaluation_window_months` remains unused/unknown -- the
+progress calculation is lifetime-cumulative, not evaluated over any window.
+**Where to fix**: `apps/api/alembic/versions/0010_rank_promotion_thresholds.py`
+and `apps/api/app/seed/ranks.py` (both need updating together to stay in
+sync), or a new `commission_rule_versions` row once the real plan document is
+available — no application code change needed, only data.
+**Also (Session 20)**: `network/service.py::AUTO_ACTIVATION_RANK_CODE = "S1"`
+hardcodes the floor rank self-service "lavora con noi" applicants start at,
+instead of deriving the lowest-`level` rank from the org's ladder. If code
+`S1` is ever renamed/removed, this silently resolves to no rank
+(`_get_current_rank_id()` returns `None`, no error) rather than failing loud.
+**Where to fix**: same file, alongside item #1's other placeholder figures.
+**Update (Session 20)**: a second, independent axis now exists —
+`commissions/services/rank_evaluation.py` actually **writes** the agent's
+rank (promotes or demotes) once a month, using a fixed single-calendar-month
+window, explicitly NOT `evaluation_window_months` (still unused by anything).
+This was an explicit user decision, not a resolution of this open question —
+see `business-rules.md §Automatic monthly rank evaluation`. If the real plan
+document specifies a genuine rolling window, both this and item #6 below need
+updating together, since they'd likely share the same window definition.
+
+## 2. Network move approval
+
+**Assumption**: a role with `network.manage` may self-approve a branch move
+(`approved_by` optional in that case); all other moves require a second approver.
+**Where to fix**: `apps/api/app/domains/network/service.py::move_agent()` — the
+self-approval check is a single `if` guarded by this assumption; flip it once the real
+approval policy is confirmed.
+
+## 3. Energia Circolare bonus formula
+
+**Assumption**: no distinct bonus formula exists yet; Energia Circolare contracts only
+have the extension point (`product_versions` can point at a distinct
+`commission_plan_version_id`), with a no-op hook in the calculator
+(`commission-engine-specification.md §Algorithm` step 18).
+**Where to fix**: implement the real formula in
+`apps/api/app/domains/commissions/calculators/energia_circolare.py` (file reserved but
+not yet created) once the rule is known.
+
+## 4. Reversal ("storno") refund formula
+
+**Assumption**: linear proration —
+`refund_cents = original_amount_cents * remaining_months / total_contract_months`.
+**Where to fix**: `apps/api/app/domains/commissions/calculators/reversal.py`.
+
+## 5. GDPR retention & legal basis
+
+**Assumption**: none finalized. Schema hooks exist (`documents.expires_at`, full audit
+of document access/download) but retention windows per document category and the
+lawful-basis registry require legal sign-off, not an engineering guess.
+**Where to fix**: this requires a decision from Jav's legal counsel, then a
+`retention_policies` table (not yet created) keyed by document category.
+
+## 6. 33% branch cap — exact denominator
+
+**Assumption**: the cap applies to production aggregated at first-level-branch
+granularity under the evaluated beneficiary, using the same evaluation window as the
+beneficiary's rank re-evaluation (`ranks.evaluation_window_months`).
+**Where to fix**: `apps/api/app/domains/commissions/policies/branch_cap.py` — the
+aggregation query is isolated there specifically so the denominator can change without
+touching the main calculator.
+**Note (Session 20)**: the rank re-evaluation that now actually exists
+(`rank_evaluation.py`, see item #1) does NOT use `evaluation_window_months`
+either — it's a fixed single calendar month. This assumption's cross-reference
+to "the same evaluation window" is therefore still unresolved/unverified, not
+contradicted; revisit both together once the real window is known.
+
+## 7. MFA and account lockout policy
+
+**Assumption**: MFA schema is present (session/device tables support it) but not
+enforced in v1; account lockout threshold is a placeholder (5 failed attempts / 15
+minute window) pending a real security policy decision.
+**Where to fix**: `apps/api/app/domains/auth/service.py` constants
+`MAX_FAILED_ATTEMPTS`, `LOCKOUT_WINDOW_MINUTES`.
+
+## 8. Che cosa è "il totale del contratto" (Session 38)
+
+**Assumption**: the taxable/chargeable amount of a Jav contract is
+`product_versions.base_price_cents` — the single figure the dashboard has
+always shown as the product's price, and the one the wizard already renders
+with "+ IVA" next to it. `initial_fee_cents` and `recurring_fee_cents` exist
+on the same row but **have never been charged by any code path in this
+project**, so folding them in would silently start billing amounts nobody has
+agreed to.
+
+This matters now for the first time, because contracts are about to become
+payable (three plans: unico / mensile 12 mesi / finanziaria Stripe). The
+business talks
+about a "contratto BAR / Energia Circolare da €249", while the products
+actually in the catalog are priced €15–€35 base with a small monthly
+recurring fee — so either that product does not exist yet, or "il totale" is
+computed differently from what the code assumes.
+
+**Where to fix**: `apps/api/app/domains/catalog/pricing.py::
+contract_net_amount_cents` — deliberately one function, so every price, VAT
+figure and payment plan in the app follows from changing it in one place.
+
+## 9. Percentuale di cashback sui contratti (Session 38)
+
+**Assumption**: `product_versions.contract_cashback_percentage` is **0 on
+every product**, i.e. paying a contract currently credits no JavCash at all.
+The mechanism is built and tested; the number is a deliberate no-op until the
+business sets it, because it mints credit and the safe default is "off".
+
+The stated rule was "intero importo + IVA accreditato nel wallet JavCash",
+which would be **100** (the credit is computed on the gross, VAT included).
+That is a 1:1 return of everything the customer paid, which is a large
+commitment — hence set by an admin per product, not assumed here.
+
+**Where to fix**: admin dashboard, `Prodotti → modifica → Cashback automatico
+sul contratto (%)`. No deploy needed.
+
+## 10. Bonus primo segnalatore: su quali prodotti (Session 38)
+
+**Assumption**: `first_referrer_bonus_enabled` is **false on every product**.
+The stated example — €25 extra to the first referrer on the "BAR / Energia
+Circolare €249" contract, on top of the existing €80 commission — cannot be
+configured yet because **that product does not exist in the catalog**.
+
+**Where to fix**: create the product, then admin dashboard, `Prodotti →
+modifica → Bonus primo segnalatore`. No deploy needed.
+
+## 11. Testo del contratto promoter "Lavora con noi" (Session 38)
+
+**Assumption**: none — deliberately. The flow already requires an OTP
+confirmation whose email text mentions "accettare il contratto di
+collaborazione", but no contract text or version is stored, and **no
+placeholder text was invented**, per explicit instruction ("NON inserire
+adesso testo inventato").
+
+The contract-side plumbing for storing proof of acceptance already exists and
+is the shape this will reuse: `contracts.terms_accepted_at /
+terms_accepted_by_user_id / terms_version / terms_accepted_ip /
+terms_accepted_user_agent` (migration 0035).
+
+**Where to fix**: pending the official PDF from the business.
+
+## 12. ~~"Finanziaria Stripe"~~ — RISOLTA (Session 44)
+
+The third payment plan is **3 rate**, and it needs no external financing
+provider at all: it is the same Stripe subscription as the 12-instalment
+plan, with N = 3. Jav splits its own invoice and is paid by the
+customer's own card each month, so there is nothing to finance, no BNPL
+capability to enable, and no account review to wait for.
+
+Built in Session 44 (`contracts/payment_plans.py`). Left here rather than
+deleted because "possiamo usare Klarna?" is the kind of question that comes
+back, and the answer — that the requirement never actually needed it — is
+worth keeping.
+
+## 13. Eventi del webhook Stripe per le rate — DA FARE SUL PANNELLO STRIPE (Session 51)
+
+L'endpoint webhook registrato su Stripe ha abilitato **solo**
+`checkout.session.completed`. Vanno aggiunti `invoice.paid` e
+`invoice.payment_failed`: senza, dalla 2ª rata in poi Stripe addebita la carta
+ma l'app non registra la rata (niente cashback, niente provvigioni per rata,
+nessun avviso di addebito fallito). Il codice è pronto; manca solo la
+configurazione, che non è stata cambiata da qui senza conferma. Vedi
+`server-migration-guide.md` §11.
+
+## 14. Il pacchetto "GAS Energia Circolare con cash back" è registrato come luce (Session 52)
+
+Codice prodotto `LUCE-STD-COPY`, `energy_type = ELECTRICITY`: sembra la copia
+di un pacchetto luce rinominata senza cambiare il tipo. Dalla Session 53 è il
+pacchetto scelto a decidere se un POD è luce o gas, quindi un POD con questo
+pacchetto risulta **luce**. Correzione da Prodotti → tipo energia Gas, se è
+davvero un pacchetto gas. I contratti già aperti restano invariati.
+
+## 15. Prezzi dello Shop: IVA inclusa o esclusa? (Session 51)
+
+Scheda e dettaglio prodotto dello Shop mostrano "+ IVA 22% (totale)", ma
+l'ordine addebita il prezzo di listino senza aggiungere IVA. Serve una
+decisione: il prezzo dello Shop è IVA inclusa (e va tolta la dicitura) o IVA
+esclusa (e va aggiunta al checkout)?
+
+## 16. Stesso POD in due contratti (Session 53)
+
+Il codice POD/PDR non si chiede più nella pratica (richiesta esplicita), quindi
+il sistema non può accorgersi se lo stesso punto reale viene attivato due
+volte: il controllo passa alla verifica della bolletta da parte
+dell'amministrazione. Se diventa un problema, si può chiedere il codice come
+campo **facoltativo** al momento della verifica documenti.
+
+---
+
+When `Allegato_A_Piano_Carriera_Regolamento_Provvigionale.pdf` (or an equivalent
+written policy) becomes available, re-open this file item by item, update the
+corresponding code/data location, delete the resolved item, and record the change as a
+new ADR if it affects architecture (e.g. a genuinely new bonus category that doesn't
+fit the current calculator extension points).
+
+## 17. Shop Jav Partner: prima di accenderlo (Session 60)
+
+Collegamento a CJ fatto e verificato; lo shop è **spento e in sandbox**.
+Decisioni e azioni che restano all'azienda:
+
+- **Saldo CJ**: non serve più precaricarlo (Session 63). Con saldo a zero
+  ogni ordine pagato dal cliente viene creato su CJ e resta "Pagamento CJ
+  richiesto" finché non lo paghi dalla pagina CJ dell'ordine. Da verificare al
+  primo ordine reale (non sandbox) che CJ restituisca davvero la pagina di
+  pagamento (`cjPayUrl`): in sandbox CJ paga da sé e non la restituisce. Se
+  mancasse, l'ordine si paga comunque dalla lista ordini del sito CJ.
+- **Margini**: CJ addebita spedizione con sdoganamento e IVA IOSS (~22% del
+  prodotto). Sull'unico prodotto importato: costo reale circa 29,62 $
+  (≈ 27,25 €) contro 25,90 € di prezzo + spedizione pagata dal cliente.
+  Controllare il margine stimato in "Ordini" e, se serve, alzare il ricarico.
+- **IVA e dogana**: la merce parte quasi sempre dalla Cina. Gli ordini sono
+  inviati con `iossType=3` (IVA all'importazione riscossa tramite l'IOSS di
+  CJ), così il cliente non paga dazi alla consegna. Da confermare con il
+  commercialista, insieme a come fatturare queste vendite (vedi anche #15).
+- **Cambio USD/EUR**: è un valore fisso impostato a mano (0,92). Va
+  aggiornato ogni tanto; al salvataggio tutti i prezzi si ricalcolano.
+- **Traduzioni**: nomi e descrizioni arrivano in inglese; si traducono
+  all'importazione (campi modificabili).
+- **Resi e rimborsi**: un ordine già pagato e poi annullato da CJ viene solo
+  segnalato allo staff; rimborso e restituzione JavCash oggi si gestiscono a
+  mano.
+- **Sandbox**: spegnerla solo quando si vuole spedire davvero. Con sandbox
+  accesa un cliente che paga davvero non riceverebbe nulla: per questo lo
+  shop resta spento finché la prova non è finita.
+
+## 18. Sconto del pagamento unico e cashback (Session 64)
+
+Con lo sconto (32%) il cashback JavCash di un contratto pagato tutto subito è
+calcolato su quanto il cliente paga, non sul prezzo pieno. Su un prodotto con
+cashback al 100%: pratica da 1.140 €, pagata 775,20 €, cashback 775,20 JavCash
+(prima 1.140). Se il cashback deve restare sul prezzo pieno è una modifica di
+una riga (`contracts/service.py::credit_contract_cashback`). Percentuale
+confermata dall'azienda: 32% (Session 65). Resta da confermare solo la regola
+del cashback.
+
+## IVA dei Marketplace: inclusa o aggiunta? (CHIUSA il 21/09/2026)
+
+**Risolta nella Session 78**: l'utente ha scelto l'opzione **(a)** — lo
+sconto bonifico non tocca l'IVA — e l'IVA aggiunta è in produzione.
+Quanto segue resta come memoria di come ci si è arrivati.
+
+Nella Session 74 si era deciso, insieme all'utente, che il prezzo mostrato
+è **IVA inclusa** (Codice del Consumo artt. 14-15: verso un consumatore il
+prezzo esposto dev'essere quello finale). Nella Session 75 l'utente ha
+chiesto di ribaltarla: 17,90 diventa l'imponibile, l'IVA si somma sopra.
+
+Deciso con l'utente:
+- **16,38 €** su un prodotto da 17,90 con il 25% di JavCash — il 25% pieno,
+  nessun arrotondamento intermedio (nella formula che l'utente ha scritto
+  13,425 diventava 13,25: è un refuso, non una regola);
+- si applica a **tutti e tre i Marketplace**; il catalogo interno resta com'è;
+- in vetrina si legge **17,90 + IVA**;
+- l'IVA si calcola sui **17,90 pieni**: i JavCash restano un modo di pagare
+  e non abbassano l'imponibile;
+- la **spedizione resta fuori IVA** (fiscalmente discutibile — art. 12 DPR
+  633/72 vuole che segua l'aliquota del bene — ma è la scelta dell'utente,
+  presa dopo averglielo fatto presente).
+
+**Ancora da decidere, e perché il lavoro non è partito**: lo sconto bonifico
+del 5% oggi abbassa l'imponibile IVA (`freeze_vat`). Con l'IVA aggiunta
+l'imponibile è congelato prima di sapere il metodo di pagamento, quindi o
+(a) lo sconto bonifico non tocca più l'IVA — coerente con la scelta fatta
+sui JavCash — oppure (b) continua ad abbassarla, e allora va applicato
+all'imponibile *prima* dell'IVA, cambiando l'ordine con i JavCash rispetto
+a oggi. Raccomandazione: **(b)**, perché è una vera riduzione di prezzo
+(art. 13 DPR 633/72) e mantiene la distinzione che il codice già documenta.
+
+**Dove si tocca**: `marketplaces/rules.py` (nuova `vat_added_cents()`,
+`vat_included_cents()` resta per rileggere gli ordini vecchi), i tre
+`service.py` dei Marketplace, una migrazione con una colonna `vat_mode`
+(`INCLUDED`/`ADDED`) sulle tabelle ordini — le stesse colonne avrebbero
+altrimenti significato opposto fra ordini vecchi e nuovi — e le diciture
+nel frontend.
+
+## JavCash: sconto sul totale con IVA? (Session 88, aperta)
+
+Oggi, in tutti i Marketplace, la percentuale JavCash di un prodotto si
+calcola sul prezzo **senza IVA**, e l'IVA sull'ordine è quella del prezzo
+pieno (i JavCash sono trattati come un modo di pagare). L'utente ha detto che
+i JavCash sono **uno sconto che si brucia**, che la percentuale va calcolata
+sul **totale con IVA** e che la fattura va fatta sul **totale scontato**
+(esempio: 171,90 € con IVA, 25% = 42,98 € di JavCash, fattura 128,92 € di
+cui IVA 23,25 €). Da confermare con l'utente (vale per tutti i Marketplace?)
+e con il commercialista prima di cambiare i calcoli: cambia l'IVA da versare.
+

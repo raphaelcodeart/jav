@@ -1,0 +1,274 @@
+"""Object storage, two buckets with deliberately different access models:
+
+- "jav-media" (s3_bucket_media): PUBLIC-read, profile/product photos. Served
+  to browsers via nginx proxying directly to MinIO
+  (infrastructure/nginx/nginx.conf `location /media/`) -- not sensitive, meant
+  to be trivially embeddable as `<img src>`.
+- "jav-documents" (s3_bucket_documents): PRIVATE, real customer documents
+  (identity, fiscal code, utility bills, chamber-of-commerce registration).
+  No bucket policy grants anonymous access -- the ONLY way to read an object
+  is a short-lived presigned URL minted server-side after an authorization
+  check (see documents/service.py), and even that presigned URL is proxied
+  through nginx's `location /jav-documents/` (Session 14), which forwards
+  to MinIO with a fixed internal Host header so the signature (computed
+  against the internal endpoint) still validates -- see
+  server-migration-guide.md §8 for why that Host rewrite is necessary. A
+  presigned URL expires in minutes and is never linked from anywhere a
+  search engine could crawl, so it is never indexable.
+
+Backed by the MinIO instance already running in this stack
+(docker-compose.dev.yml) but previously unused by any application code --
+boto3 was a declared dependency with nothing calling it until Session 13.
+"""
+
+import mimetypes
+import uuid
+
+import boto3
+from botocore.exceptions import ClientError
+
+from app.core.config import get_settings
+
+settings = get_settings()
+
+ALLOWED_IMAGE_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+MAX_UPLOAD_BYTES = 5 * 1024 * 1024  # 5 MB -- profile/product photos, not documents
+
+# Documentation/news feed attachments (see domains/documentation): admin-authored
+# marketing/training material meant to be freely downloadable by every promoter
+# or customer it's published to -- never sensitive like a KYC document -- so it
+# belongs in the public bucket too, just with PDFs allowed and a larger cap.
+ALLOWED_DOCUMENTATION_CONTENT_TYPES = ALLOWED_IMAGE_CONTENT_TYPES | {"application/pdf"}
+MAX_DOCUMENTATION_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB -- PDFs, not just photos
+
+# Magic-byte signatures for every content type this module ever accepts.
+# The `Content-Type` an upload arrives with is just a client-supplied HTTP
+# header -- trivially spoofable (rename anything.html to bolletta.pdf, send
+# it with Content-Type: application/pdf, and the whitelist check alone would
+# wave it through). Checking the first bytes against the real file format's
+# signature closes that gap: a mismatch is rejected before it ever reaches
+# MinIO, for every bucket (public media, documentation, and the private
+# documents bucket used by KYC documents, order payment proofs, and invoice
+# redemption uploads -- see security-model.md §Documents). Not a full
+# antivirus/content scan (that gap is separately documented and deliberate,
+# see ensure_documents_bucket's docstring) -- this only proves the bytes are
+# *structurally* what they claim to be.
+_MAGIC_BYTE_SIGNATURES: dict[str, tuple[bytes, ...]] = {
+    "application/pdf": (b"%PDF-",),
+    "image/jpeg": (b"\xff\xd8\xff",),
+    "image/png": (b"\x89PNG\r\n\x1a\n",),
+    "image/gif": (b"GIF87a", b"GIF89a"),
+    "image/webp": (b"RIFF",),  # bytes 8-12 must also be b"WEBP", checked below
+}
+
+
+def _verify_magic_bytes(*, file_bytes: bytes, content_type: str) -> None:
+    signatures = _MAGIC_BYTE_SIGNATURES.get(content_type)
+    if signatures is None:
+        return  # no known signature for this type -- nothing to check against
+    if not any(file_bytes.startswith(sig) for sig in signatures):
+        raise UploadValidationError(
+            f"Il contenuto del file non corrisponde al tipo dichiarato ({content_type})."
+        )
+    if content_type == "image/webp" and file_bytes[8:12] != b"WEBP":
+        raise UploadValidationError(
+            f"Il contenuto del file non corrisponde al tipo dichiarato ({content_type})."
+        )
+
+
+_client = None
+
+
+def _get_client():
+    global _client
+    if _client is None:
+        _client = boto3.client(
+            "s3",
+            endpoint_url=settings.s3_endpoint_url,
+            aws_access_key_id=settings.s3_access_key,
+            aws_secret_access_key=settings.s3_secret_key,
+            region_name=settings.s3_region,
+        )
+    return _client
+
+
+class UploadValidationError(Exception):
+    pass
+
+
+def ensure_media_bucket() -> None:
+    """Idempotent: creates the public-media bucket and its anonymous-read
+    policy if they don't already exist. Called once at API startup (see
+    main.py) -- MinIO doesn't auto-create buckets, and there's no separate
+    init container in this stack, so the app owns its own bucket setup the
+    same way it owns its own schema migrations."""
+    client = _get_client()
+    bucket = settings.s3_bucket_media
+    try:
+        client.head_bucket(Bucket=bucket)
+    except ClientError:
+        client.create_bucket(Bucket=bucket)
+
+    policy = f"""{{
+        "Version": "2012-10-17",
+        "Statement": [
+            {{
+                "Effect": "Allow",
+                "Principal": "*",
+                "Action": ["s3:GetObject"],
+                "Resource": ["arn:aws:s3:::{bucket}/*"]
+            }}
+        ]
+    }}"""
+    client.put_bucket_policy(Bucket=bucket, Policy=policy)
+
+
+def upload_media(*, file_bytes: bytes, content_type: str, key_prefix: str) -> str:
+    """Uploads to the public bucket under a fresh random key (old uploads for
+    the same entity are never overwritten in place -- the caller just points
+    its photo_url column at the new key, orphaning the old object; not worth
+    a cleanup job for a handful of KB images). Returns the PUBLIC url the
+    browser can load directly (through nginx's /media/ proxy, never MinIO's
+    internal docker-network address)."""
+    if content_type not in ALLOWED_IMAGE_CONTENT_TYPES:
+        raise UploadValidationError(f"Unsupported content type: {content_type}")
+    if len(file_bytes) > MAX_UPLOAD_BYTES:
+        raise UploadValidationError("File too large (max 5 MB)")
+    _verify_magic_bytes(file_bytes=file_bytes, content_type=content_type)
+
+    extension = mimetypes.guess_extension(content_type) or ".bin"
+    key = f"{key_prefix}/{uuid.uuid4().hex}{extension}"
+
+    client = _get_client()
+    client.put_object(
+        Bucket=settings.s3_bucket_media, Key=key, Body=file_bytes, ContentType=content_type,
+    )
+    return f"{settings.public_app_base_url}/media/{key}"
+
+
+def upload_documentation_attachment(
+    *, file_bytes: bytes, content_type: str, key_prefix: str, allowed_content_types: set[str] | None = None
+) -> str:
+    """Like upload_media() but for the documentation/news feed (see
+    ALLOWED_DOCUMENTATION_CONTENT_TYPES docstring above) -- same public bucket
+    and nginx /media/ proxy, just images-or-PDF and a larger size cap.
+
+    allowed_content_types narrows the check for a specific call site (e.g. the
+    image slot must reject a PDF and vice versa) -- defaults to the full
+    images-or-PDF set when omitted, but every current caller
+    (set_post_image/set_post_pdf) passes its own narrower set explicitly."""
+    allowed = allowed_content_types if allowed_content_types is not None else ALLOWED_DOCUMENTATION_CONTENT_TYPES
+    if content_type not in allowed:
+        raise UploadValidationError(f"Unsupported content type: {content_type}")
+    if len(file_bytes) > MAX_DOCUMENTATION_UPLOAD_BYTES:
+        raise UploadValidationError("File too large (max 20 MB)")
+    _verify_magic_bytes(file_bytes=file_bytes, content_type=content_type)
+
+    extension = mimetypes.guess_extension(content_type) or ".bin"
+    key = f"{key_prefix}/{uuid.uuid4().hex}{extension}"
+
+    client = _get_client()
+    client.put_object(
+        Bucket=settings.s3_bucket_media, Key=key, Body=file_bytes, ContentType=content_type,
+    )
+    return f"{settings.public_app_base_url}/media/{key}"
+
+
+def ensure_documents_bucket() -> None:
+    """Idempotent, mirrors ensure_media_bucket() but DELIBERATELY sets no
+    bucket policy at all -- MinIO buckets are private by default (no
+    anonymous access of any kind) until a policy explicitly grants it, so
+    "do nothing" IS the correct private configuration. Called once at API
+    startup alongside ensure_media_bucket()."""
+    client = _get_client()
+    bucket = settings.s3_bucket_documents
+    try:
+        client.head_bucket(Bucket=bucket)
+    except ClientError:
+        client.create_bucket(Bucket=bucket)
+
+
+def upload_document(*, file_bytes: bytes, content_type: str, key_prefix: str) -> str:
+    """Uploads to the PRIVATE documents bucket. Returns only the opaque
+    storage key -- never a URL -- callers persist the key and mint a
+    presigned URL on demand via generate_presigned_document_url(), never
+    construct a URL themselves."""
+    from app.domains.documents.models import ALLOWED_DOCUMENT_CONTENT_TYPES, MAX_DOCUMENT_BYTES
+
+    if content_type not in ALLOWED_DOCUMENT_CONTENT_TYPES:
+        raise UploadValidationError(f"Unsupported content type: {content_type}")
+    if len(file_bytes) > MAX_DOCUMENT_BYTES:
+        raise UploadValidationError("File too large (max 15 MB)")
+    _verify_magic_bytes(file_bytes=file_bytes, content_type=content_type)
+
+    extension = mimetypes.guess_extension(content_type) or ".bin"
+    key = f"{key_prefix}/{uuid.uuid4().hex}{extension}"
+
+    client = _get_client()
+    client.put_object(
+        Bucket=settings.s3_bucket_documents, Key=key, Body=file_bytes, ContentType=content_type,
+    )
+    return key
+
+
+def stash_private_file(*, file_bytes: bytes, content_type: str, key_prefix: str) -> str:
+    """Un file che serve solo al server per qualche minuto -- il CSV di un
+    import che un worker Celery deve leggere (Session 88). Stesso bucket
+    privato dei documenti, ma senza i loro controlli di formato: non è un
+    documento di un cliente e non finisce mai in un browser. Chi lo usa lo
+    cancella con delete_document_object() quando ha finito."""
+    key = f"{key_prefix}/{uuid.uuid4().hex}"
+    _get_client().put_object(
+        Bucket=settings.s3_bucket_documents, Key=key, Body=file_bytes, ContentType=content_type,
+    )
+    return key
+
+
+def delete_document_object(*, storage_key: str) -> None:
+    """Removes one object from the private bucket -- a page taken out of a
+    document before anyone approved it. Best-effort by design: the database
+    row is what makes a file part of a contract, so an object left behind by
+    a failed delete is an orphan, not a leak."""
+    try:
+        _get_client().delete_object(Bucket=settings.s3_bucket_documents, Key=storage_key)
+    except ClientError:
+        pass
+
+
+def download_document(*, storage_key: str) -> bytes:
+    """Legge un oggetto del bucket privato **lato server**, senza passare da
+    un URL presigned.
+
+    È l'eccezione alla regola di `generate_presigned_document_url()`, e vale
+    la pena dire perché: un URL presigned serve a far arrivare un file a un
+    browser senza dargli le chiavi del bucket. Qui il file non deve arrivare
+    a nessun browser -- deve finire dentro uno zip o dentro una richiesta a
+    Google Drive che parte da questo stesso processo. Fare un giro via HTTP
+    firmato per riportarsi in memoria un oggetto che il processo può già
+    leggere sarebbe solo più lento e più fragile.
+
+    Nessun controllo di autorizzazione qui dentro: lo fa il chiamante, come
+    per ogni altra funzione di questo modulo."""
+    client = _get_client()
+    response = client.get_object(Bucket=settings.s3_bucket_documents, Key=storage_key)
+    return response["Body"].read()
+
+
+def generate_presigned_document_url(*, storage_key: str, expires_in_seconds: int = 300) -> str:
+    """A time-limited, cryptographically signed URL good for exactly one
+    object, expiring in `expires_in_seconds` (default 5 minutes) -- the only
+    way anything ever reads from the private documents bucket. The client is
+    configured with the INTERNAL endpoint_url (http://minio:9000), so the
+    signature nginx must validate is computed against Host: minio:9000 --
+    nginx's `location /jav-documents/` forces that exact Host header
+    regardless of what the public domain's hostname is, which is why this
+    works at all through a reverse proxy. Only the scheme+host of the
+    returned URL are rewritten to the public domain; path and query
+    (including the signature) are left byte-for-byte untouched."""
+    client = _get_client()
+    internal_url = client.generate_presigned_url(
+        "get_object",
+        Params={"Bucket": settings.s3_bucket_documents, "Key": storage_key},
+        ExpiresIn=expires_in_seconds,
+    )
+    return internal_url.replace(settings.s3_endpoint_url, settings.public_app_base_url, 1)

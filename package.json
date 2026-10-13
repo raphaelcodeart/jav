@@ -1,0 +1,16 @@
+{
+  "name": "jav-platform",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "docker compose -f docker-compose.dev.yml up --build",
+    "dashboard:dev": "pnpm --filter dashboard dev",
+    "dashboard:lint": "pnpm --filter dashboard lint",
+    "dashboard:typecheck": "pnpm --filter dashboard typecheck",
+    "dashboard:build": "pnpm --filter dashboard build"
+  }
+}

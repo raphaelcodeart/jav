@@ -1,0 +1,615 @@
+"use client";
+
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import Image from "next/image";
+import Link from "next/link";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { AccountGate } from "@/components/account-gate";
+import { AreaSwitcher, useDualRoleAreas } from "@/components/area-switcher";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { ShopCartButton, ShopCartPanel } from "@/components/shop-cart";
+import { CartCheckoutModal, CartCheckoutShop } from "@/components/cart-checkout-modal";
+import type { NotificationRead } from "@/lib/types";
+
+export interface NavItem {
+  key: string;
+  label: string;
+  description?: string;
+  icon: ReactNode;
+  /** Notification `type` values that should light up this nav item's unread
+      dot -- e.g. Anagrafiche Promoter opts into PROMOTER_APPROVAL_REQUESTED.
+      A nav item with no notificationTypes never shows a dot. */
+  notificationTypes?: string[];
+}
+
+interface AppShellProps {
+  roleLabel: string;
+  email?: string;
+  navItems: NavItem[];
+  activeKey: string;
+  onNavigate: (key: string, filter?: string) => void;
+  children: ReactNode;
+  headerTitle?: string;
+  headerSubtitle?: ReactNode;
+  headerActions?: ReactNode;
+  /** Center headerActions as a group instead of pushing it to the right with
+      justify-between -- for pages with no headerSubtitle, justify-between
+      would leave it looking stuck to the right against empty space rather
+      than deliberately centered. Default false preserves the existing
+      title/subtitle-on-left, actions-on-right layout. */
+  centerHeaderActions?: boolean;
+  /** Session 76: il carrello nella barra in alto, visibile da ogni scheda.
+      Sta qui e non dentro lo Shop perché un carrello che si vede solo
+      mentre si compra è un carrello che il cliente perde appena apre "I
+      miei Ordini". Solo per l'area cliente: un amministratore non compra. */
+  showCart?: boolean;
+}
+
+// How many nav items fit comfortably in the mobile bottom tab bar before the
+// rest fold into the "Altro" drawer button -- matches the classic
+// native-app pattern (4-5 primary tabs max).
+const MOBILE_TAB_COUNT = 4;
+
+const NOTIFICATION_TYPE_LABELS: Record<string, string> = {
+  CONTRACT_CREATED: "Nuovo contratto",
+  TICKET_CREATED: "Nuovo ticket",
+  PRODUCT_REQUEST_CREATED: "Nuova richiesta prodotto",
+  PRODUCT_REQUEST_CUSTOMER_REPLY: "Risposta su una richiesta prodotto",
+  PRODUCT_REQUEST_REPLY: "Risposta alla tua richiesta",
+  PROMOTER_APPROVAL_REQUESTED: "Promoter da approvare",
+  PROMOTER_APPROVED: "Promoter approvato",
+  PROMOTER_REJECTED: "Promoter non approvato",
+  COMMISSION_EARNED: "Nuova provvigione",
+  CASHBACK_RECEIVED: "Cashback ricevuto",
+  WALLET_TRANSFER_RECEIVED: "JavCash ricevuti",
+  INVOICE_REDEMPTION_VERIFIED: "Fattura verificata",
+  INVOICE_REDEMPTION_REJECTED: "Fattura rifiutata",
+  ORDER_CREDIT_APPLIED: "JavCash usati per un ordine",
+  ORDER_PAID: "Ordine confermato",
+  ORDER_PAYMENT_PROOF_UPLOADED: "Prova di pagamento caricata",
+  INVOICE_REDEMPTION_PAYMENT_PROOF_UPLOADED: "Prova di pagamento riscatto caricata",
+  IMPORTED_ORDER_CREATED: "Nuovo ordine Acquisti Jav",
+  CJ_ORDER_CREATED: "Nuovo ordine Shop Jav Partner",
+  CJ_ORDER_PAID: "Ordine Shop Jav Partner pagato",
+  CJ_ORDER_FAILED: "Ordine Shop Jav Partner da controllare",
+  CJ_PAYMENT_REQUIRED: "Pagamento CJ richiesto",
+  SHOPIFY_ORDER_CREATED: "Nuovo ordine Shopify",
+  SHOPIFY_ORDER_PAID: "Ordine Shopify pagato",
+  SHOPIFY_ORDER_FAILED: "Ordine Shopify da controllare",
+  ALIEXPRESS_ORDER_CREATED: "Nuovo ordine AliExpress",
+  ALIEXPRESS_ORDER_PAID: "Ordine AliExpress pagato",
+  ALIEXPRESS_ORDER_FAILED: "Ordine AliExpress da controllare",
+  ORDER_SHIPPED: "Aggiornamento spedizione",
+};
+
+const NOTIFICATION_TYPE_ICONS: Record<string, ReactNode> = {
+  CONTRACT_CREATED: (
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+  ),
+  TICKET_CREATED: (
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+  ),
+  PRODUCT_REQUEST_CREATED: (
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0zM11 8v6m-3-3h6" />
+  ),
+  PRODUCT_REQUEST_CUSTOMER_REPLY: (
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0zM11 8v6m-3-3h6" />
+  ),
+  PRODUCT_REQUEST_REPLY: (
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0zM11 8v6m-3-3h6" />
+  ),
+  PROMOTER_APPROVAL_REQUESTED: (
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4zm6 0a4 4 0 10-4-4" />
+  ),
+  PROMOTER_APPROVED: (
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+  ),
+  PROMOTER_REJECTED: (
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+  ),
+  COMMISSION_EARNED: (
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V6m0 10v2" />
+  ),
+  CASHBACK_RECEIVED: (
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V6m0 10v2" />
+  ),
+  WALLET_TRANSFER_RECEIVED: (
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+  ),
+  INVOICE_REDEMPTION_VERIFIED: (
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+  ),
+  INVOICE_REDEMPTION_REJECTED: (
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+  ),
+  ORDER_CREDIT_APPLIED: (
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a2 2 0 00-2-2H7a2 2 0 00-2 2m16 0v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6m16 0V9a2 2 0 00-2-2H5a2 2 0 00-2 2v3m16 0h-4a1 1 0 00-1 1v0a1 1 0 001 1h4" />
+  ),
+  ORDER_PAID: (
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16.5 7.5h-9v9h9v-9zM3 6a3 3 0 013-3h12a3 3 0 013 3v12a3 3 0 01-3 3H6a3 3 0 01-3-3V6z" />
+  ),
+  IMPORTED_ORDER_CREATED: (
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16.5 7.5h-9v9h9v-9zM3 6a3 3 0 013-3h12a3 3 0 013 3v12a3 3 0 01-3 3H6a3 3 0 01-3-3V6z" />
+  ),  ORDER_SHIPPED: (
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0" />
+  ),
+};
+
+function timeAgo(iso: string): string {
+  const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (seconds < 60) return "adesso";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} min fa`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} ${hours === 1 ? "ora" : "ore"} fa`;
+  const days = Math.floor(hours / 24);
+  return `${days} ${days === 1 ? "giorno" : "giorni"} fa`;
+}
+
+async function fetchNotifications(): Promise<NotificationRead[]> {
+  const res = await fetch("/api/proxy/notifications/mine");
+  if (!res.ok) return [];
+  return res.json();
+}
+
+/** Bell icon + unread badge + dropdown -- polls every 25s so a new
+    notification shows up without a manual refresh, without needing
+    WebSockets for what is, for now, a low-volume internal tool. */
+function NotificationBell({ onOpenNotification }: { onOpenNotification: (n: NotificationRead) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const queryClient = useQueryClient();
+
+  const { data: notifications } = useQuery({
+    queryKey: ["notifications", "mine"],
+    queryFn: fetchNotifications,
+    refetchInterval: 25000,
+  });
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
+
+  const list = notifications ?? [];
+  const unreadCount = list.filter((n) => !n.is_read).length;
+
+  async function handleClick(notification: NotificationRead) {
+    setOpen(false);
+    if (!notification.is_read) {
+      await fetch(`/api/proxy/notifications/${notification.id}/read`, { method: "PATCH" });
+      queryClient.invalidateQueries({ queryKey: ["notifications", "mine"] });
+    }
+    onOpenNotification(notification);
+  }
+
+  async function handleMarkAllRead() {
+    await fetch("/api/proxy/notifications/mark-all-read", { method: "POST" });
+    queryClient.invalidateQueries({ queryKey: ["notifications", "mine"] });
+  }
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="relative flex h-9 w-9 items-center justify-center rounded-full bg-white/5 light:bg-slate-900/5 hover:bg-white/10 light:hover:bg-slate-900/10 text-slate-300 light:text-slate-600 transition cursor-pointer"
+        aria-label="Notifiche"
+      >
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+        </svg>
+        {unreadCount > 0 && (
+          <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white">
+            {unreadCount > 9 ? "9+" : unreadCount}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-11 z-50 w-80 max-h-[420px] overflow-y-auto rounded-xl border border-white/10 light:border-slate-200 bg-slate-900 light:bg-white shadow-xl animate-scale-up">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 light:border-slate-100 sticky top-0 bg-slate-900 light:bg-white">
+            <p className="text-sm font-semibold text-white light:text-slate-900">Notifiche</p>
+            {unreadCount > 0 && (
+              <button
+                onClick={handleMarkAllRead}
+                className="text-[11px] text-orange-400 hover:text-orange-300 transition cursor-pointer"
+              >
+                Segna tutte come lette
+              </button>
+            )}
+          </div>
+          {list.length === 0 ? (
+            <p className="text-xs text-slate-500 text-center py-8">Nessuna notifica.</p>
+          ) : (
+            <div className="divide-y divide-white/5 light:divide-slate-100">
+              {list.map((n) => (
+                <button
+                  key={n.id}
+                  onClick={() => handleClick(n)}
+                  className={`w-full flex items-start gap-3 px-4 py-3 text-left transition cursor-pointer hover:bg-white/5 light:hover:bg-slate-50 ${
+                    !n.is_read ? "bg-orange-500/5" : ""
+                  }`}
+                >
+                  <span className="p-1.5 rounded-lg bg-orange-500/10 text-orange-400 shrink-0 mt-0.5">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      {NOTIFICATION_TYPE_ICONS[n.type] ?? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01" />}
+                    </svg>
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-1.5">
+                      <span className="text-xs font-semibold text-white light:text-slate-900 truncate">{n.title}</span>
+                      {!n.is_read && <span className="w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0" />}
+                    </span>
+                    {n.body && <span className="block text-[11px] text-slate-400 light:text-slate-500 mt-0.5 line-clamp-2">{n.body}</span>}
+                    <span className="block text-[10px] text-slate-500 mt-1">
+                      {NOTIFICATION_TYPE_LABELS[n.type] ?? n.type} · {timeAgo(n.created_at)}
+                    </span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LogoMark({ compact = false }: { compact?: boolean }) {
+  return (
+    <div className="flex items-center rounded-xl bg-white p-1.5 shadow-sm shrink-0">
+      <Image
+        src="/logo.png"
+        alt="Jav"
+        width={compact ? 32 : 40}
+        height={compact ? 29 : 36}
+        priority
+        className="h-auto w-auto"
+      />
+    </div>
+  );
+}
+
+/** Top-right icon cluster: theme toggle + avatar menu (classic dashboard corner). */
+function UserMenu({ email, roleLabel, onOpenSettings }: { email?: string; roleLabel: string; onOpenSettings?: () => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
+
+  const initials = ((email || "?").split("@")[0] ?? "?")
+    .split(/[._-]/)
+    .map((p) => p[0] ?? "")
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
+  const { hasBothRoles, isCustomerArea } = useDualRoleAreas();
+
+  async function handleLogout() {
+    // A full page load, and whatever the call answered (Session 85): a soft
+    // router.push could hang on a page left open across a deploy, leaving
+    // "Esci" doing nothing.
+    await fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
+    window.location.assign("/login");
+  }
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-tr from-orange-600 to-amber-500 text-xs font-bold text-white shadow-md cursor-pointer"
+        aria-label="Menu utente"
+      >
+        {initials}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-11 z-50 w-56 rounded-xl border border-white/10 light:border-slate-200 bg-slate-900 light:bg-white shadow-xl animate-scale-up overflow-hidden">
+          <div className="px-4 py-3 border-b border-white/5 light:border-slate-100">
+            <p className="truncate text-sm font-semibold text-white light:text-slate-900">{email}</p>
+            <p className="truncate text-xs text-slate-400 light:text-slate-500">{roleLabel}</p>
+          </div>
+          {hasBothRoles && (
+            <Link
+              href={isCustomerArea ? "/promoter" : "/customer"}
+              onClick={() => setOpen(false)}
+              className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-200 light:text-slate-700 hover:bg-white/5 light:hover:bg-slate-50 transition cursor-pointer"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4M16 17H4m0 0l4 4m-4-4l4-4" />
+              </svg>
+              {isCustomerArea ? "Passa a modalità promoter" : "Passa a modalità cliente"}
+            </Link>
+          )}
+          {/* Session 87: le Impostazioni del cliente (il PIN dei JavCash) si
+              raggiungono anche da qui, dove le cerca chi è abituato alle app. */}
+          {onOpenSettings && (
+            <button
+              onClick={() => { setOpen(false); onOpenSettings(); }}
+              className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-200 light:text-slate-700 hover:bg-white/5 light:hover:bg-slate-50 transition cursor-pointer"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              Impostazioni
+            </button>
+          )}
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-rose-400 light:text-rose-600 hover:bg-white/5 light:hover:bg-slate-50 transition cursor-pointer"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            Esci
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function AppShell({
+  roleLabel,
+  email,
+  navItems,
+  activeKey,
+  onNavigate,
+  children,
+  headerTitle,
+  headerSubtitle,
+  headerActions,
+  showCart = false,
+  centerHeaderActions = false,
+}: AppShellProps) {
+  const [mobileOpen, setMobileOpen] = useState(false);
+  // Il carrello vive qui, non dentro lo Shop: si apre da qualunque scheda, e
+  // il checkout deve restare raggiungibile anche dopo averlo aperto da "I
+  // miei Ordini" o dalla Contabilità.
+  const [cartOpen, setCartOpen] = useState(false);
+  const [cartCheckoutShop, setCartCheckoutShop] = useState<CartCheckoutShop | null>(null);
+
+  const { data: notifications } = useQuery({
+    queryKey: ["notifications", "mine"],
+    queryFn: fetchNotifications,
+    refetchInterval: 25000,
+  });
+  const unreadTypes = new Set((notifications ?? []).filter((n) => !n.is_read).map((n) => n.type));
+
+  function handleOpenNotification(notification: NotificationRead) {
+    const targetKey = navItems.find((item) => item.notificationTypes?.includes(notification.type))?.key;
+    if (targetKey) onNavigate(targetKey);
+  }
+
+  const sidebarContent = (
+    <div className="flex h-full flex-col">
+      <div className="px-5 pt-6 pb-5">
+        <LogoMark />
+      </div>
+
+      <nav className="flex-1 overflow-y-auto px-3 space-y-1">
+        {navItems.map((item) => {
+          const active = item.key === activeKey;
+          const hasUnread = item.notificationTypes?.some((t) => unreadTypes.has(t)) ?? false;
+          return (
+            <button
+              key={item.key}
+              onClick={() => {
+                onNavigate(item.key);
+                setMobileOpen(false);
+              }}
+              className={`w-full flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-all cursor-pointer group ${
+                active
+                  ? "bg-gradient-to-r from-orange-600/15 to-amber-500/10 text-orange-300 light:text-orange-700 shadow-[inset_0_0_0_1px_rgba(139,92,246,0.25)]"
+                  : "text-slate-400 light:text-slate-500 hover:bg-white/5 light:hover:bg-slate-900/5 hover:text-white light:hover:text-slate-900"
+              }`}
+            >
+              <span
+                className={`relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors ${
+                  active
+                    ? "bg-orange-500/20 text-orange-400 light:bg-orange-100 light:text-orange-600"
+                    : "bg-white/5 light:bg-slate-900/5 text-current opacity-80 group-hover:opacity-100 group-hover:bg-white/10 light:group-hover:bg-slate-900/10"
+                }`}
+              >
+                {item.icon}
+                {hasUnread && (
+                  <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-rose-500 border-2 border-slate-950 light:border-white" />
+                )}
+              </span>
+              <span className="flex-1 text-left truncate">{item.label}</span>
+              {active && <span className="h-1.5 w-1.5 rounded-full bg-orange-500 shrink-0" />}
+            </button>
+          );
+        })}
+      </nav>
+
+      <div className="p-4 border-t border-white/5 light:border-slate-900/5 mt-2">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 light:text-slate-400">
+          {roleLabel}
+        </p>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen">
+      {/* Desktop sidebar */}
+      <aside className="hidden lg:block fixed inset-y-0 left-0 z-30 w-64 border-r border-white/5 light:border-slate-900/5 bg-slate-950/70 light:bg-white/70 backdrop-blur-xl">
+        {sidebarContent}
+      </aside>
+
+      {/* Mobile sidebar (drawer) */}
+      {mobileOpen && (
+        <div className="lg:hidden fixed inset-0 z-50 flex">
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-fade-in"
+            onClick={() => setMobileOpen(false)}
+          />
+          <aside className="relative z-10 w-72 h-full bg-slate-950 light:bg-white border-r border-white/5 light:border-slate-900/5 animate-scale-up">
+            {sidebarContent}
+          </aside>
+        </div>
+      )}
+
+      {/* Mobile bottom tab bar -- app-style primary navigation for phones,
+          big touch-target buttons mirroring how a native app puts its main
+          sections in a bottom bar with icons. */}
+      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 flex items-stretch border-t border-white/5 light:border-slate-900/5 bg-slate-950/95 light:bg-white/95 backdrop-blur-xl pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_16px_rgba(0,0,0,0.2)]">
+        {navItems.slice(0, MOBILE_TAB_COUNT).map((item) => {
+          const active = item.key === activeKey;
+          const hasUnread = item.notificationTypes?.some((t) => unreadTypes.has(t)) ?? false;
+          return (
+            <button
+              key={item.key}
+              onClick={() => onNavigate(item.key)}
+              className={`flex-1 flex flex-col items-center justify-center gap-1 py-2.5 cursor-pointer transition-colors ${
+                active ? "text-orange-400" : "text-slate-400 light:text-slate-500"
+              }`}
+            >
+              <span
+                className={`relative flex h-9 w-9 items-center justify-center rounded-xl transition-colors [&_svg]:h-6 [&_svg]:w-6 ${
+                  active ? "bg-orange-500/15" : ""
+                }`}
+              >
+                {item.icon}
+                {hasUnread && (
+                  <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-rose-500 border-2 border-slate-950 light:border-white" />
+                )}
+              </span>
+              <span className="text-[10px] font-semibold truncate max-w-[72px]">{item.label}</span>
+            </button>
+          );
+        })}
+        {navItems.length > MOBILE_TAB_COUNT && (
+          <button
+            onClick={() => setMobileOpen(true)}
+            className="flex-1 flex flex-col items-center justify-center gap-1 py-2.5 cursor-pointer text-slate-400 light:text-slate-500"
+          >
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl">
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </span>
+            <span className="text-[10px] font-semibold">Altro</span>
+          </button>
+        )}
+      </nav>
+
+      {/* Persistent top bar -- classic dashboard layout: page title left, icon
+          cluster (theme toggle + avatar/logout menu) in the top-right corner. */}
+      <header className="sticky top-0 z-40 flex items-center justify-between gap-4 border-b border-white/5 light:border-slate-900/5 bg-slate-950/80 light:bg-white/80 backdrop-blur-md px-4 sm:px-6 lg:px-8 lg:ml-64 h-16">
+        <div className="flex items-center gap-3 min-w-0">
+          <button
+            onClick={() => setMobileOpen(true)}
+            className="lg:hidden p-2 -ml-2 rounded-lg text-slate-300 light:text-slate-600 hover:bg-white/5 light:hover:bg-slate-900/5 cursor-pointer shrink-0"
+            aria-label="Apri il menu"
+          >
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          <div className="lg:hidden">
+            <LogoMark compact />
+          </div>
+          {headerTitle && (
+            <h1 className="hidden lg:block truncate text-base font-semibold text-white light:text-slate-900">
+              {headerTitle}
+            </h1>
+          )}
+        </div>
+
+        <div className="flex items-center gap-3 shrink-0">
+          {showCart && <ShopCartButton onOpen={() => setCartOpen(true)} />}
+          <AreaSwitcher />
+          <NotificationBell onOpenNotification={handleOpenNotification} />
+          <ThemeToggle />
+          <UserMenu
+            email={email}
+            roleLabel={roleLabel}
+            onOpenSettings={navItems.some((item) => item.key === "settings") ? () => onNavigate("settings") : undefined}
+          />
+        </div>
+      </header>
+
+      {/* Desktop quick-nav bar -- the same "big app-style buttons" idea as the
+          mobile bottom bar, but as a fixed guide pinned under the header on
+          every page in desktop mode, so the primary sections are always one
+          big click away without depending on the (smaller-text) sidebar. */}
+      <nav className="hidden lg:flex sticky top-16 z-30 items-stretch gap-2 overflow-x-auto border-b border-white/5 light:border-slate-900/5 bg-slate-950/80 light:bg-white/80 backdrop-blur-md px-6 py-3 lg:ml-64 [scrollbar-width:thin]">
+        {navItems.map((item) => {
+          const active = item.key === activeKey;
+          const hasUnread = item.notificationTypes?.some((t) => unreadTypes.has(t)) ?? false;
+          return (
+            <button
+              key={item.key}
+              onClick={() => onNavigate(item.key)}
+              className={`relative flex shrink-0 items-center gap-2.5 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all cursor-pointer [&_svg]:h-5 [&_svg]:w-5 ${
+                active
+                  ? "bg-gradient-to-r from-orange-600 to-amber-500 text-white shadow-lg shadow-orange-500/20"
+                  : "bg-white/5 light:bg-slate-900/5 text-slate-300 light:text-slate-600 hover:bg-white/10 light:hover:bg-slate-900/10 hover:text-white light:hover:text-slate-900"
+              }`}
+            >
+              {item.icon}
+              <span className="whitespace-nowrap">{item.label}</span>
+              {hasUnread && (
+                <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-rose-500 border-2 border-slate-950 light:border-white" />
+              )}
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* Main content */}
+      <div className="lg:pl-64">
+        <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 pb-24 lg:pb-8 animate-slide-up">
+          {(headerTitle || headerSubtitle || headerActions) && (
+            <div
+              className={`mb-8 flex flex-col gap-4 ${
+                centerHeaderActions ? "" : "md:flex-row md:items-center md:justify-between"
+              }`}
+            >
+              <div>
+                <h1 className="lg:hidden text-2xl font-bold tracking-tight text-white light:text-slate-900 sm:text-3xl">
+                  {headerTitle}
+                </h1>
+                {headerSubtitle && <div className="text-sm text-slate-400 light:text-slate-500 mt-1">{headerSubtitle}</div>}
+              </div>
+              {headerActions && <div className={centerHeaderActions ? "w-full" : "flex gap-3"}>{headerActions}</div>}
+            </div>
+          )}
+          <AccountGate>{children}</AccountGate>
+        </main>
+      </div>
+
+      {showCart && (
+        <ShopCartPanel
+          open={cartOpen}
+          onClose={() => setCartOpen(false)}
+          onCheckout={(shop) => {
+            // Il pannello si chiude: modificare il carrello mentre se ne sta
+            // pagando il contenuto e' il modo piu' rapido per pagare una cosa
+            // diversa da quella che si e' confermata.
+            setCartOpen(false);
+            // Solo i negozi che hanno una finestra di checkout: il carrello
+            // del catalogo interno arrivera' con la sua.
+            if (shop !== "catalog") setCartCheckoutShop(shop);
+          }}
+        />
+      )}
+      {cartCheckoutShop && (
+        <CartCheckoutModal shop={cartCheckoutShop} onClose={() => setCartCheckoutShop(null)} />
+      )}
+    </div>
+  );
+}
