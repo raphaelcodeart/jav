@@ -305,6 +305,37 @@ pubblicati dal club (`club_athlete_media`), link al profilo IJF validato.
 Media visibili solo con consenso, permesso foto e pubblicazione; il ritiro del
 consenso li rimette tutti non pubblicati.
 
+**Pagina del club in stile pagina Facebook e messaggi dal sito**
+(migrazione `0011`). Il titolare voleva che la pagina di ogni club fosse
+"del club": copertina, logo, i suoi colori, e in fondo un modo per
+scrivergli. `/clubes/[slug]` è ridisegnata: copertina velata nei colori del
+club, logo rotondo che sporge, numeri (atleti, gruppi, allenamenti,
+allenatori, medaglie), Inscrever / Enviar mensagem, social, schede fisse
+(Sobre, Grupos e preços, Horário, Treinadores, Fotos, Provas, Ranking),
+riquadro Informações, e il modulo in fondo. I colori sono tre colonne su
+`club_sites` (`brand_*`, CHECK sul formato); il tema con il contrasto
+controllato (WCAG AA) lo calcola l'API (`club/brand.py`) e la pagina lo
+mette in variabili CSS (`club-*` in `globals.css`): perché un colore scelto
+male non deve mai rendere illeggibile un bottone, e perché la regola stia
+in un posto solo (l'editor la rifà in `lib/brand.ts` solo per l'anteprima).
+I gruppi della pagina sono quelli di JAVBOT (`site.plan_slots`, ora usato
+anche dal bot), i prezzi solo con "Mostra i prezzi". I social si accettano
+solo verso il loro sito. Messaggi: tabella `contact_messages`
+(`club/contact.py`), `POST /public-site/clubs/{slug}/message` e
+`/public-site/contact`, campo trappola, limite per IP su Redis più un tetto
+nel database (5 l'ora per mittente, perché il limite di Redis lascia
+passare se Redis è giù), consenso obbligatorio, notifica `CONTACT_MESSAGE`
+alla segreteria o agli amministratori, email best effort con Reply-To verso
+chi scrive (senza SMTP non parte e la richiesta riesce). Caselle
+"Messaggi" per la segreteria e per la console (messaggi a JAV; quelli dei
+club solo con `clubs.manage`). Nuova pagina `/contactos` (nel menu "Chi
+siamo", nel piè di pagina e da schermo largo nella barra) con i contatti di
+JAV e il modulo; i link generici a JAV (progetto, sponsor) portano lì.
+Script: `scripts/load_club_branding.py` (logo dai file ripuliti in
+`scripts/club_branding/`, colori, Facebook e YouTube dei tre club) e in
+`load_official_prices.py` gli orari di Alvor. `docs/database-schema.sql`
+rigenerato da un database costruito dalle migrazioni.
+
 ## Sessione 8 — 2026-10-14 — JAVBOT: prezzi, gruppi e sconti dei club
 
 Il titolare ha chiesto al bot del sito "quanto costa la mensilità di Lagos"
@@ -339,7 +370,8 @@ taxa de faltas, scadenza il 15, sconti A25/B15/C5, famiglia 5 €, invito
 - SMTP non configurato: senza, le famiglie che si registrano dal link del
   club non ricevono l'email di conferma, gli inviti allo staff vanno
   consegnati a mano, e le lettere a fornitori e comuni non partono (restano
-  pronte, con il motivo).
+  pronte, con il motivo). Anche i messaggi dal sito arrivano solo nelle
+  caselle "Messaggi", senza l'email di avviso.
 - Il dominio judoartevida.com va puntato su questo server e aggiunto a
   Caddy; le foto dei club le caricano i club dall'editor (Instagram non si
   può leggere in automatico).

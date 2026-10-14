@@ -228,7 +228,50 @@ Puoi preparare la pagina prima: nessuno la vede finché manca il consenso.
 famiglia ritira il consenso, tornano tutti non pubblicati. Nei **Cursos
 JAV** la sezione non c'è: gli atleti dei corsi non compaiono mai sul sito.
 
+**I colori e il logo della pagina del club.** In **Sito del club**:
+
+1. **Foto**: carica la **copertina** (la foto grande in alto: meglio
+   orizzontale, una foto del tatami o della squadra) e il **logo** (meglio
+   quadrato, su fondo bianco). Sulla pagina il logo compare in un cerchio
+   che sporge dalla copertina, come su Facebook.
+2. **Colori del club**: scegli il **colore principale** (di solito il colore
+   più forte del logo), il **secondario** e l'**accento** dalla tavolozza,
+   oppure scrivili (per esempio `#C92429`). A destra vedi subito come sarà
+   la copertina. Non serve preoccuparsi della leggibilità: il testo dei
+   bottoni diventa bianco o nero da solo, e se un colore è troppo chiaro
+   per i titoli la pagina ne usa una versione più scura (te lo dice un
+   avviso giallo). **Usa i colori di JudoArteVida** toglie i colori del club.
+3. **Contatti e social**: Facebook, Instagram e YouTube accettano solo
+   indirizzi di quei siti. Apri la pagina del club su Facebook e copia
+   l'indirizzo dalla barra del browser (va bene anche senza `https://`).
+4. **Salva**. Se la pagina è pubblicata, i cambiamenti si vedono subito.
+
+**I messaggi dal sito.** In fondo alla pagina pubblica del club c'è il
+modulo «Envie uma mensagem ao clube». Quando qualcuno scrive, ricevi una
+notifica (la campanella) e il messaggio arriva in **Messaggi** ✉️ (nel
+menu, gruppo *Club*) e, se nella pagina c'è l'email di contatto, anche per
+email. In **Messaggi**:
+
+- **Rispondi via email** apre il tuo programma di posta già compilato:
+  la risposta va direttamente a chi ha scritto;
+- **Segna come letto** / **Segna da leggere**, e **Archivia** quando hai
+  finito (gli archiviati restano nella scheda *Archiviati*);
+- la riga grigia «arrivato solo qui» vuol dire che l'email di avviso non è
+  partita (per esempio perché l'invio delle email non è ancora attivo): il
+  messaggio è comunque qui.
+
+Vedi solo i messaggi scritti al tuo club. Chi scrive deve accettare di
+essere ricontattato: usa quei dati solo per rispondere.
+
 ### 3.1 Per il superadmin: i club
+
+**Messaggi a JudoArteVida.** Chi scrive dalla pagina **Contactos** del sito
+(`/contactos`) scrive a JudoArteVida: il messaggio arriva in console →
+**JudoArteVida** → **Messaggi** ✉️ (con la notifica) e per email a
+info@judoartevida.com. Lo vedono gli amministratori della piattaforma; il
+superadmin, dal menu in alto della casella, può guardare anche i messaggi
+di un club o tutti. Si risponde, si segna letto e si archivia come nella
+casella di un club.
 
 Nell'area amministrazione la sezione **Club** elenca tutti i club, con atleti
 attivi, staff e stato. Da qui:

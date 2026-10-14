@@ -561,7 +561,9 @@ notifications
   id, organization_id, recipient_user_id, created_at,
   type (CONTRACT_CREATED / TICKET_CREATED / PROMOTER_APPROVAL_REQUESTED /
     PROMOTER_APPROVED / PROMOTER_REJECTED / COMMISSION_EARNED /
-    RANK_CHANGED / RANK_EVALUATION_COMPLETED,
+    RANK_CHANGED / RANK_EVALUATION_COMPLETED / CONTACT_MESSAGE (un
+    messaggio dal sito: alla segreteria del club, o agli amministratori
+    della piattaforma se è scritto a JudoArteVida),
     fired by commissions/services/rank_evaluation.py: RANK_CHANGED to the
     individual agent being promoted/demoted, RANK_EVALUATION_COMPLETED as a
     roles-fanout summary to staff once a monthly run finishes),
@@ -1144,7 +1146,7 @@ Il Jav Ranking, il livello, i punti esperienza e le medaglie di un atleta
 **non hanno tabelle**: si calcolano da risultati, presenze e cinture a ogni
 lettura (`club/competitions.py`, `club/achievements.py`).
 
-## 22. Sito pubblico JudoArteVida (`club/site_models.py`, migrazioni 0006 e 0010)
+## 22. Sito pubblico JudoArteVida (`club/site_models.py`, `club/contact_models.py`, migrazioni 0006, 0010 e 0011)
 
 Ciò che il sito pubblico mostra sta in **tabelle sue**, separate dai dati del
 gestionale: una query del sito non può trascinarsi dietro per sbaglio una
@@ -1160,8 +1162,13 @@ club_sites                       la pagina pubblica di un club, una per club
   address, map_url, instagram_url, facebook_url, youtube_url, website_url,
   published (default false), show_prices (default false, migrazione 0008:
   il club sceglie se JAVBOT del sito può dire i prezzi dei suoi piani),
+  brand_primary, brand_secondary, brand_accent (VARCHAR 7, migrazione
+  0011: i colori della pagina, "#RRGGBB" maiuscolo o NULL = colori di
+  JudoArteVida; un CHECK per colonna `~ '^#[0-9A-F]{6}$'`),
   updated_at
   -- un club è sul portale solo se clubs.status = ACTIVE e published
+  -- facebook_url / instagram_url / youtube_url: solo https verso il loro
+     sito (site.check_social_url); hero_image_url è la copertina
 
 club_athlete_public_profiles     consenso della famiglia e scelta del club
   organization_id, club_id, athlete_id -> club_athletes UNIQUE,
@@ -1187,9 +1194,28 @@ club_athlete_media               foto e video della scheda del judoca (0010)
      show_photo è vero; ritirare il consenso li rimette tutti a false
 ```
 
-Orari, eventi, risultati, punti, medaglie, posto nel ranking, percorso delle
-cinture e prove in programma del sito **non hanno tabelle**: si leggono da
-corsi, gare, risultati e storico delle cinture del club a ogni richiesta.
+```
+contact_messages                 i messaggi scritti dal sito (0011): non
+                                 pubblici, li legge solo chi li riceve
+  organization_id, club_id -> clubs (NULL = scritto a JudoArteVida da
+  /contactos), name (120), email (255), phone (40, facoltativo),
+  message (TEXT, 10–4000 caratteri), locale (pt | it | en, default pt),
+  status (NEW | READ | ARCHIVED, CHECK, default NEW), consent_at (quando
+  ha spuntato il consenso a essere ricontattato: senza, il messaggio non
+  si salva), ip_hash (64: sha256 dell'IP con il segreto del server, mai
+  l'IP), user_agent (200), emailed_at (NULL = l'email di avviso non è
+  partita: SMTP non configurato, nessun indirizzo, server giù), created_at
+  -- INDEX (ip_hash, created_at): il tetto di 5 messaggi l'ora per mittente
+  -- la segreteria vede solo club_id = il suo club (club/scope.py); quelli
+     con club_id NULL solo lo staff della piattaforma (clubs.enter, account
+     senza club); i messaggi dei club nella console solo con clubs.manage
+```
+
+Orari, gruppi, eventi, risultati, punti, medaglie, posto nel ranking,
+percorso delle cinture, prove in programma e il tema dei colori del sito
+**non hanno tabelle**: si leggono da piani, corsi, gare, risultati e storico
+delle cinture del club a ogni richiesta (il tema lo calcola `club/brand.py`
+dai tre colori).
 
 ## 23. JAVBOT (`domains/javbot`, migrazione 0008)
 

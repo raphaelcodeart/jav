@@ -160,3 +160,26 @@ quando arriva il secondo club vero:
   esistente).
 - **Shop unico**: catalogo, prezzi e bonifici sono della piattaforma; il club
   non guadagna sugli ordini delle sue famiglie e non ha un suo catalogo.
+
+## 15. Pagina del club e messaggi dal sito (sessione 7)
+
+Scelte fatte senza il titolare, da confermare:
+
+- **Conservazione dei messaggi** (`contact_messages`, dati personali di chi
+  scrive): oggi restano finché qualcuno non li cancella dal database; non
+  c'è un bottone "elimina" né una scadenza. Proposta: cancellare da soli
+  gli archiviati dopo 24 mesi (un job notturno, come i promemoria).
+- **Lingua dell'email di avviso**: portoghese per tutti (i club sono
+  portoghesi); il messaggio dice in che lingua ha scritto la persona.
+- **Club senza email di contatto**: il messaggio resta solo nella casella
+  "Messaggi" della segreteria, non va a info@judoartevida.com (è scritto al
+  club). Va bene, o JAV vuole una copia?
+- **Colori dei club** caricati dallo script (`scripts/load_club_branding.py`)
+  presi dai loghi: Lagos blu #6366F1 e giallo pallido #F8FF94, Albufeira
+  rosso #C92429 e argento #C4C4C6, Alvor nero con l'accento rosso-arancio
+  di JudoArteVida (#E13F22). Da far vedere ai club; si cambiano dall'editor.
+- **Copertine**: Facebook non le lascia scaricare; restano le foto già
+  caricate. Meglio chiedere ai club le loro foto di copertina.
+- **Orario di Albufeira**: non lo conosciamo, quindi niente corsi; la
+  pagina dice "orari a breve".
+- **Instagram** dei tre club: non trovato; il campo resta vuoto.

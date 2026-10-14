@@ -297,7 +297,7 @@ quote del mese e l'inizio stagione (`/club/admin/jobs/...`).
 ## Sito pubblico
 
 Il portale **JudoArteVida** (`/`, `/clubes`, `/clubes/<slug>`, `/judocas/<id>`,
-`/eventos`, `/eventos/<id>`, `/ranking`) presenta la rete dei club come una
+`/eventos`, `/eventos/<id>`, `/ranking`, `/contactos`) presenta la rete dei club come una
 federazione: chi è, i club attivi in un carosello, gli eventi, il ranking, le
 ultime medaglie, e come iscriversi. Non serve il login; il login resta a un
 clic ("Entrar" in alto). Le API sono `GET /public-site/...`, senza
@@ -305,7 +305,7 @@ autenticazione (`club/site_router.py`, servizio `club/site.py`).
 
 **Si scrive poco, il resto arriva da solo.** La segreteria scrive solo la
 pagina del club (`club_sites`: frase, presentazione, città, copertina, logo,
-galleria, allenatori, contatti, social) dall'editor della pagina
+colori, galleria, allenatori, contatti, social) dall'editor della pagina
 (`/club/admin/site`, `club.manage`, solo il proprio club). Orario della
 settimana (dai corsi attivi e i loro slot), eventi, judoka, medaglie e
 ranking si calcolano dal gestionale a ogni lettura: una gara inserita compare
@@ -351,7 +351,101 @@ account da istruttore non è un consenso a comparire sul web.
 
 **Le foto** vanno nel bucket pubblico dei media (`upload_media`, come le foto
 degli atleti): JPG, PNG o WebP fino a 5 MB, galleria di al massimo 24 foto.
-Gli indirizzi (social, mappa, sito) devono essere `http(s)://`.
+Gli indirizzi (mappa, sito) devono essere `http(s)://`. **I social** solo
+verso il loro sito e in https (`site.check_social_url`): Facebook
+(`facebook.com`, `fb.com`), Instagram (`instagram.com`), YouTube
+(`youtube.com`, `youtu.be`), con un percorso (la home di Facebook non è il
+club). Chi incolla `facebook.com/club` senza `https://`, o con `http://`,
+non riceve un errore: si completa in https. Un'icona di Facebook che porta
+altrove sarebbe un inganno.
+
+### La pagina del club
+
+`/clubes/<slug>` è la pagina del club come una pagina Facebook, ma sua:
+
+- **i colori del club** (`club_sites.brand_primary`, `brand_secondary`,
+  `brand_accent`, "#RRGGBB" o vuoti; vuoti = i colori di JudoArteVida,
+  #E13F22 e #F3E017). Principale: copertina, bottoni, titoli. Secondario:
+  le luci sfumate della copertina e i fondi. Accento: ciò che spicca sulla
+  parte scura (il bottone "Inscrever" in fondo, le scritte piccole). Un
+  colore mancante prende il posto dell'altro prima di ricadere su JAV;
+- **il tema lo calcola l'API** (`club/brand.py`, campo `theme` della
+  pagina) e il browser lo usa così com'è, come variabili CSS sul
+  contenitore della pagina (token `club-*` in `globals.css`, che fuori
+  dalla pagina valgono i colori di JAV). Regole: il testo su un fondo è
+  bianco o quasi nero, quello che contrasta di più; per i titoli sul bianco
+  il principale si scurisce finché arriva a 4,5:1 (WCAG AA); l'accento
+  sulla parte scura si schiarisce fino a 4,5:1; la copertina parte dal
+  principale scurito quanto serve per il testo bianco (3:1) e finisce
+  scura. L'editor rifà lo stesso calcolo in `lib/brand.ts` per
+  l'anteprima dal vivo e avvisa con parole semplici quando il principale è
+  stato scurito o l'accento è troppo simile al principale. Un valore che
+  non è un colore si rifiuta (e un CHECK nel database lo ripete): nel CSS
+  della pagina non finisce altro che un colore;
+- **copertina** (la foto `hero_image_url`, velata nei colori del club; senza
+  foto il tatami) e **logo rotondo** che sporge dalla copertina; nome, città,
+  i numeri del club (atleti attivi, gruppi, allenamenti a settimana,
+  allenatori, medaglie: contati, mai scritti; quelli a zero non si dicono),
+  i bottoni **Inscrever** (`/c/<slug>`) e **Enviar mensagem** (scende al
+  modulo), le icone dei social;
+- **le schede** che restano in alto mentre si scorre: Sobre, Grupos e
+  preços, Horário, Treinadores, Fotos e vídeos, Provas, Ranking, Contactos;
+  accanto, il riquadro "Informações" (città, indirizzo, telefono, email,
+  mappa, social);
+- **Grupos e preços** sono i gruppi di JAVBOT: ogni piano attivo con la sua
+  fascia d'età e gli allenamenti dei corsi la cui età lo tocca
+  (`site.plan_slots`, la stessa funzione del bot); mensilità, iscrizione,
+  giorno di scadenza e descrizione del piano **solo con "Mostra i prezzi"**
+  (`show_prices`), altrimenti "chiedi i prezzi al club" che porta al
+  modulo. Nell'API i campi si chiamano `monthly_price_cents`: "fee" resta
+  la parola delle quote di una famiglia, che il sito non mostra mai;
+- **Ranking do clube**: i primi dieci del club nel ranking della stagione,
+  lo stesso calcolo di `/ranking` (stesse regole: solo judoca con consenso
+  e pubblicati, mai gli atleti dei corsi JAV), ognuno con il link alla sua
+  scheda; poi le ultime medaglie;
+- **in fondo, "Envie uma mensagem ao clube"**: il modulo che scrive al club
+  (vedi "Messaggi dal sito");
+- SEO: titolo, descrizione (la frase del club), indirizzo canonico,
+  anteprima di un link condiviso con copertina e logo. Le animazioni sono
+  quelle del sito (`Reveal`) e rispettano "riduci movimento".
+
+### Messaggi dal sito
+
+Chiunque può scrivere a un club dalla sua pagina, o a JudoArteVida da
+`/contactos` (`club/contact.py`, tabella `contact_messages`):
+
+- `POST /public-site/clubs/{slug}/message` (solo un club che il sito mostra:
+  a una pagina in bozza, sospesa o all'unità dei corsi JAV non si scrive,
+  404) e `POST /public-site/contact` (a JAV). Nome, email, telefono
+  facoltativo, messaggio (10–4000 caratteri), lingua, e **il consenso a
+  essere ricontattati** (GDPR): senza, il messaggio non si accetta. I dati
+  servono solo a rispondere;
+- **contro lo spam, senza captcha esterni**: un campo trappola nascosto
+  (`website`: chi lo riempie riceve "inviato" e non si salva niente: un
+  robot non deve capire che cosa lo ha fermato), il limite per IP del
+  router (`core/rate_limit.py`, 5 ogni 10 minuti) e, siccome quel limite
+  lascia passare se Redis non risponde, **un tetto nel database**: 5
+  messaggi l'ora per mittente. Dell'IP si salva solo l'impronta (sha256 con
+  il segreto del server), dello User-Agent i primi 200 caratteri;
+- il messaggio **si salva** e poi: **notifica** `CONTACT_MESSAGE` alla
+  segreteria del club (come i messaggi di JAVBOT), o agli amministratori
+  della piattaforma (SUPER_ADMIN, ORGANIZATION_ADMIN, ADMIN) se è scritto a
+  JAV; **email** all'email di contatto della pagina del club (poi a quella
+  delle impostazioni del club), o a `info@judoartevida.com`
+  (`JAV_CONTACT_EMAIL`), con "Rispondi" (Reply-To) verso chi ha scritto, in
+  portoghese. L'email è una cortesia: senza SMTP, senza indirizzo o con il
+  server di posta giù non parte (`emailed_at` resta vuoto) e la richiesta
+  riesce lo stesso (CLAUDE.md §5). Un club senza email riceve il messaggio
+  solo nella casella: non va a JAV, perché è scritto al club;
+- **le caselle "Messaggi"**: la segreteria (`club.manage`) vede solo quelli
+  del suo club (`/club/admin/messages`, il club lo decide `club/scope.py`);
+  la console di JudoArteVida (`/contact-messages`, `clubs.enter`, solo
+  account senza club) quelli scritti a JAV, e con `clubs.manage`
+  (superadmin) anche quelli di un club o tutti (`?club=<id>|all`).
+  Ognuno si segna letto, da leggere, archiviato (`NEW` / `READ` /
+  `ARCHIVED`, ogni cambio nell'audit) e si risponde con "Rispondi via
+  email" (si apre il programma di posta, già compilato). Nell'unità dei
+  corsi JAV la sezione non c'è.
 
 ### La scheda del judoca
 
@@ -480,7 +574,13 @@ scelta di un club.
 
 Per caricare la tabella prezzi ufficiale nei club della rete c'è
 `apps/api/scripts/load_official_prices.py` (prova di default, `--apply` per
-scrivere, idempotente; uso nel docstring).
+scrivere, idempotente; uso nel docstring), con gli orari di Lagos e di
+Alvor (Grupo 1 martedì e giovedì 18:30–19:30; Grupos 2 e 3 lunedì,
+mercoledì e venerdì 19:00–22:00, dagli 8 anni); Albufeira senza orario
+finché il club non lo dà. Logo, colori e social dei tre club li mette
+`apps/api/scripts/load_club_branding.py` (stesso stile; i loghi ripuliti
+sono in `scripts/club_branding/`, un logo già caricato non si sostituisce
+senza `--replace-logo`).
 
 ### Regole di sicurezza
 
