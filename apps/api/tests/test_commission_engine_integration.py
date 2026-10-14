@@ -14,7 +14,7 @@ from app.domains.commissions.services.run_calculation import run_calculation_for
 from app.domains.commissions.tasks.dispatch import process_pending_outbox_events
 from app.domains.contracts import service as contract_service
 from app.domains.contracts.models import Contract, ContractRequest
-from app.domains.customers.models import Address, Customer, SupplyPoint
+from app.domains.customers.models import Address, Customer
 from app.domains.network import service as network_service
 from app.domains.network.models import AgentProfile, NetworkSnapshot, NetworkSnapshotNode
 from app.domains.organizations.models import Organization
@@ -62,7 +62,7 @@ async def _setup_contract_ready_to_activate(db, organization_id, actor_user_id):
         parent_agent_id=sponsor.id, current_rank_id=s1.id,
     )
 
-    product = Product(organization_id=organization_id, code="TEST-PROD", energy_type="ELECTRICITY", customer_type="PRIVATE")
+    product = Product(organization_id=organization_id, code="TEST-PROD", customer_type="PRIVATE")
     db.add(product)
     await db.flush()
     product_version = ProductVersion(
@@ -81,16 +81,10 @@ async def _setup_contract_ready_to_activate(db, organization_id, actor_user_id):
     )
     db.add(address)
     await db.flush()
-    supply_point = SupplyPoint(
-        organization_id=organization_id, customer_id=customer.id, energy_type="ELECTRICITY",
-        supply_address_id=address.id,
-    )
-    db.add(supply_point)
     await db.commit()
 
     contract = await contract_service.create_contract(
-        db, organization_id=organization_id, customer_id=customer.id, supply_point_id=supply_point.id,
-        product_version_id=product_version.id, producer_agent_id=producer.id,
+        db, organization_id=organization_id, customer_id=customer.id, product_version_id=product_version.id, producer_agent_id=producer.id,
         actor_user_id=actor_user_id, correlation_id=str(uuid.uuid4()),
     )
     return contract, sponsor
@@ -177,13 +171,8 @@ async def test_empty_ancestor_chain_records_failed_calculation_not_silent_skip(d
     )
     db.add(address)
     await db.flush()
-    supply_point = SupplyPoint(
-        organization_id=organization_id, customer_id=customer.id, energy_type="ELECTRICITY",
-        supply_address_id=address.id,
-    )
-    db.add(supply_point)
 
-    product = Product(organization_id=organization_id, code="EMPTY-PROD", energy_type="ELECTRICITY", customer_type="PRIVATE")
+    product = Product(organization_id=organization_id, code="EMPTY-PROD", customer_type="PRIVATE")
     db.add(product)
     await db.flush()
     product_version = ProductVersion(
@@ -198,14 +187,13 @@ async def test_empty_ancestor_chain_records_failed_calculation_not_silent_skip(d
     db.add(snapshot)
     await db.flush()
 
-    # Every contract belongs to a pratica (Session 52).
+    # Every contract belongs to a pratica.
     request = ContractRequest(organization_id=organization_id, customer_id=customer.id, status="SUBMITTED")
     db.add(request)
     await db.flush()
 
     contract = Contract(
-        organization_id=organization_id, customer_id=customer.id, supply_point_id=supply_point.id,
-        contract_request_id=request.id,
+        organization_id=organization_id, customer_id=customer.id, contract_request_id=request.id,
         product_version_id=product_version.id, contract_attribution_id=None,
         network_snapshot_id=snapshot.id, status="ACTIVE",
     )

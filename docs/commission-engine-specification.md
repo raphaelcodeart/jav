@@ -11,7 +11,7 @@ commissions/
   services/          # orchestration: run_calculation() (also admin_ledger.py --
                      # traceability/payment tracking; rank_progress.py --
                      # cumulative "next rank" display; rank_evaluation.py --
-                     # monthly automatic promote/demote, added Session 20,
+                     # monthly automatic promote/demote,
                      # see business-rules.md §Automatic monthly rank evaluation)
   calculators/       # pure functions: personal token, entrepreneurial difference
   policies/          # branch_cap (33% rule), eligibility
@@ -48,8 +48,8 @@ For a given `contract_id`:
 2.  producer = network_snapshot chain depth 0 (the contract's producer_agent_id)
 3.  producer_rank = producer's rank_id_at_snapshot
 4.  base_amount_cents = product_version.commission_tokens[producer_rank.code]
-      if that key exists (added Session 20 -- a product can override the
-      org-wide gettone per rank, e.g. "Energia Circolare" pays a different
+      if that key exists (a product can override the
+      org-wide gettone per rank, e.g. a "Premium" product pays a different
       token than "Standard" for the same rank), else producer_rank.personal_token_cents
 5.  already_distributed_cents = base_amount_cents
 6.  emit step: producer receives base_amount_cents (movement_type = PERSONAL_TOKEN)
@@ -66,7 +66,7 @@ For a given `contract_id`:
 15.     else:
 16.         emit step: ascendant receives 0, explanation "already covered by lower rank"
 17. apply any personal_bonus rules (product/plan-specific, additive, own movement_type = PERSONAL_BONUS)
-18. apply Energia Circolare extension hook if product_version flags it (no-op today, see business-rules.md)
+18. apply product-specific extension hooks if product_version flags one (none exist today)
 19. write commission_calculations (input_snapshot, output_snapshot, checksum = sha256 of both)
 20. write commission_calculation_steps (one row per step above)
 21. write commission_movements (one row per non-zero step), each with a unique
@@ -131,7 +131,7 @@ Implemented now (`apps/api/app/domains/commissions/tests/`):
 - same trigger event replayed twice → second run produces no new movements (idempotency)
 - org isolation: calculation for org A never reads org B's ranks/snapshots
 
-**Correction (`docs/paid-contract-commission-audit.md`, Problem #5):** the 33% branch
+**Correction:** the 33% branch
 cap policy (`policies/branch_cap.py::apply_branch_cap`) is implemented and unit-tested
 **in isolation** (`test_branch_cap.py`), but is **not** wired into `calculate_chain()` /
 `run_calculation_for_contract()` — steps 9 and 12 of the algorithm above
@@ -143,6 +143,6 @@ business decision on the "qualifying group production" denominator first (see
 replace an honest gap with a silently wrong one.
 
 Deferred to Phase E hardening pass (tracked in `implementation-progress.md`):
-33% branch cap integration (see correction above), Energia Circolare bonus formulas,
+33% branch cap integration (see correction above), product-specific bonus formulas,
 renewal/reversal calculators, Hypothesis
 property-based invariants, multi-plan-version diffing in the simulator UI.

@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import BigInteger, ForeignKey, String
+from sqlalchemy import ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -56,33 +56,9 @@ class Address(UUIDPKMixin, Base):
         UUID(as_uuid=True), ForeignKey("organizations.id"), index=True
     )
     customer_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("customers.id"), index=True)
-    kind: Mapped[str] = mapped_column(String(32), default="SUPPLY")
+    kind: Mapped[str] = mapped_column(String(32), default="BILLING")
     street: Mapped[str] = mapped_column(String(255))
     city: Mapped[str] = mapped_column(String(128))
     province: Mapped[str] = mapped_column(String(8))
     postal_code: Mapped[str] = mapped_column(String(16))
     country: Mapped[str] = mapped_column(String(2), default="IT")
-
-
-class SupplyPoint(UUIDPKMixin, TimestampMixin, Base):
-    __tablename__ = "supply_points"
-
-    organization_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("organizations.id"), index=True
-    )
-    customer_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("customers.id"), index=True)
-    # Human-readable identifier (e.g. "Abitazione principale - Via Roma 12,
-    # Milano") -- POD/PDR codes are correct but meaningless to a person
-    # scanning a list. Auto-computed from energy_type + address at creation if
-    # not given explicitly (see service.py); always editable afterwards.
-    label: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    #: ELECTRICITY / GAS / DUAL_FUEL. Null only for a point of a pratica whose
-    #: package has not been chosen yet: the package decides it (Session 53).
-    energy_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
-    pod_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    pdr_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    meter_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    supply_address_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("addresses.id"))
-    estimated_consumption: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    actual_consumption: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    provider_reference: Mapped[str | None] = mapped_column(String(128), nullable=True)

@@ -53,7 +53,7 @@ export function PhotoUpload({ currentUrl, uploadPath, onUploaded, alt, size = 96
   return (
     <div className="flex items-center gap-4">
       <div
-        className="rounded-full overflow-hidden border border-white/10 light:border-slate-200 bg-slate-800 light:bg-slate-100 flex items-center justify-center shrink-0"
+        className="rounded-full overflow-hidden border border-slate-200 bg-slate-100 flex items-center justify-center shrink-0"
         style={{ width: size, height: size }}
       >
         {displayUrl ? (
@@ -69,7 +69,7 @@ export function PhotoUpload({ currentUrl, uploadPath, onUploaded, alt, size = 96
         <input ref={inputRef} type="file" accept="image/*" onChange={handleFileChange} className="hidden" id={`photo-input-${uploadPath}`} />
         <label
           htmlFor={`photo-input-${uploadPath}`}
-          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/5 light:bg-slate-900/5 hover:bg-white/10 border border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 cursor-pointer transition"
+          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 cursor-pointer transition"
         >
           {uploading ? "Caricamento..." : displayUrl ? "Cambia foto" : "Carica foto"}
         </label>

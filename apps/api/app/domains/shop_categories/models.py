@@ -1,19 +1,16 @@
-"""Le categorie dello Shop (Session 73): a filter the customer sees above
+"""Le categorie dello Shop: a filter the customer sees above
 every shop grid, kept as a layer on top of the products instead of a column
 inside them.
 
-The Shop sells from six places at once -- the three sections of our own
-catalog (`catalog.products`, told apart by `Product.category`) and the three
-imported-product shops (`aliexpress_dropshipping`, `cj_dropshipping`,
-`shopify_dropshipping`, plus the old hand-made `imported_products` shown
-inside the AliExpress tab). Each of them keeps its own product table and
-knows nothing about this domain: nothing here writes to those tables, and
-dropping these two is enough to remove the whole feature.
+The Shop sells from four places at once -- the three sections of our own
+catalog (`catalog.products`, told apart by `Product.category`) and the Shop
+with its own tables (`jav_market`). Each of them keeps its own product table
+and knows nothing about this domain: nothing here writes to those tables,
+and dropping these two is enough to remove the whole feature.
 
 That isolation is the reason the categories live in their own table rather
-than as a `category_id` column on five different product tables: a fourth
-marketplace (see docs/business-rules.md) gains categories by adding a string
-to SHOPS, not a migration per shop.
+than as a `category_id` column on every product table: a new shop gains
+categories by adding a string to SHOPS, not a migration.
 
 `Product.category` (INTERNAL / PARTNER / DROPSHIPPING) is a different thing
 entirely and is left alone: it decides WHICH shop a catalog product belongs
@@ -29,13 +26,10 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base, TimestampMixin, UUIDPKMixin
 
-#: The seven grids a category can belong to. The first three are our own
-#: catalog, and are `Product.category` lower-cased (see shop_for_catalog_
-#: category below) so the mapping never needs a lookup table; the last three
-#: are the marketplaces. The legacy `imported_products` rows have no shop of
-#: their own: they are shown inside the AliExpress tab (Marketplace 3), so
-#: they are categorised under "aliexpress" like everything else there.
-SHOPS = ("internal", "partner", "dropshipping", "aliexpress", "cj", "shopify", "jav_market", "kappa_market", "vaitto_market", "symphonya_market", "soleil_market")
+#: The grids a category can belong to. The first three are our own catalog,
+#: and are `Product.category` lower-cased (see shop_for_catalog_category
+#: below) so the mapping never needs a lookup table; the last is the Shop.
+SHOPS = ("internal", "partner", "dropshipping", "jav_market")
 
 #: The subset served by `catalog.products` -- one product table, three shops.
 CATALOG_SHOPS = ("internal", "partner", "dropshipping")
@@ -49,7 +43,7 @@ def shop_for_catalog_category(category: str | None) -> str:
 
 
 class ShopCategory(UUIDPKMixin, TimestampMixin, Base):
-    """One filter chip in one shop, e.g. "Illuminazione" in Marketplace 1.
+    """One filter chip in one shop, e.g. "Illuminazione" in the Shop.
 
     A category belongs to exactly one shop: the same name may exist in two
     shops (an administrator curates each grid separately), but never twice
@@ -80,6 +74,18 @@ class ShopCategory(UUIDPKMixin, TimestampMixin, Base):
     #: A category switched off keeps its products (nothing is lost) but is
     #: not offered to the customer as a filter.
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    #: Solo per le categorie dello Shop (`shop = "jav_market"`): l'azienda a
+    #: cui vanno gli ordini dei prodotti di questa categoria che non hanno un
+    #: fornitore loro. Così «Integratori» si collega una volta a chi li fa,
+    #: invece di scriverlo su ognuno dei cento prodotti. Chi vince quando
+    #: un prodotto ha sia il suo sia quello della categoria lo decide
+    #: `jav_market.service.resolve_suppliers`. È l'unica chiave verso un
+    #: altro dominio, voluta: senza un vincolo un fornitore cancellato
+    #: lascerebbe categorie che mandano ordini a nessuno.
+    producer_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("jav_market_producers.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
     updated_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
 
@@ -89,9 +95,8 @@ class ShopCategoryProduct(UUIDPKMixin, TimestampMixin, Base):
     puts in it.
 
     `product_id` has **no foreign key**, and that is deliberate: it points at
-    a row in one of five different product tables (`products`,
-    `imported_products`, `cj_products`, `shopify_products`,
-    `aliexpress_products`), which is what `shop` tells apart. This is the one
+    a row in one of two different product tables (`products`,
+    `jav_market_products`), which is what `shop` tells apart. This is the one
     place the isolation of this domain costs something -- the database cannot
     enforce that the product exists, so the service always resolves the id
     against the shop it was sent with, and a deleted product simply leaves a

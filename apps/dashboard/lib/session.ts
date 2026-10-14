@@ -58,6 +58,20 @@ export function decodeRolesFromAccessToken(accessToken: string): string[] {
   }
 }
 
+/** The organization the API put in the access token (`org_id`) -- the BFF
+ * keeps it in the session for the silent refresh, so the login form never
+ * has to know which organization it is logging into. */
+export function decodeOrganizationIdFromAccessToken(accessToken: string): string {
+  try {
+    const payload = accessToken.split(".")[1] ?? "";
+    const json = Buffer.from(payload, "base64url").toString("utf-8");
+    const { org_id } = JSON.parse(json) as { org_id?: string };
+    return org_id ?? "";
+  } catch {
+    return "";
+  }
+}
+
 const API_INTERNAL_URL = process.env.API_INTERNAL_URL ?? "http://localhost:8000";
 
 /**

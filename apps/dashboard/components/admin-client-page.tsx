@@ -1,5 +1,6 @@
 "use client";
 
+import { ClubsPanel } from "@/components/club/clubs-panel";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell, type NavItem } from "@/components/app-shell";
@@ -17,18 +18,9 @@ import { AdminTicketsPanel } from "@/components/admin-tickets-panel";
 import { AdminProductRequestsPanel } from "@/components/admin-product-requests-panel";
 import { AdminCommissionsPanel } from "@/components/admin-commissions-panel";
 import { AdminWalletsPanel } from "@/components/admin-wallets-panel";
-import { AdminPartnersPanel } from "@/components/admin-partners-panel";
 import { AdminFriendReferralClaimsPanel } from "@/components/admin-friend-referral-claims-panel";
-import { AdminInvoiceRedemptionsPanel } from "@/components/admin-invoice-redemptions-panel";
 import { AdminOrdersPanel } from "@/components/admin-orders-panel";
-import { AdminCjPanel } from "@/components/admin-cj-panel";
-import { AdminShopifyPanel } from "@/components/admin-shopify-panel";
 import { MarketplaceRulesCard, ShopSectionsCard } from "@/components/marketplace-rules-card";
-import { AdminAliexpressPanel } from "@/components/admin-aliexpress-panel";
-import { AdminKappaMarketPanel } from "@/components/admin-kappa-market-panel";
-import { AdminVaittoMarketPanel } from "@/components/admin-vaitto-market-panel";
-import { AdminSymphonyaMarketPanel } from "@/components/admin-symphonya-market-panel";
-import { AdminSoleilMarketPanel } from "@/components/admin-soleil-market-panel";
 import { AdminJavMarketPanel } from "@/components/admin-jav-market-panel";
 import { AdminAccountingPanel } from "@/components/admin-accounting-panel";
 import { Pagination, usePagination } from "@/components/pagination";
@@ -52,11 +44,9 @@ async function fetchCustomersForLookup(): Promise<CustomerRead[]> {
 interface AdminClientPageProps {
   initialContracts: ContractRead[];
   email?: string;
-  organizationId?: string;
-  /** UX nicety only -- hides the Stripe settings section for anyone whose
-      token couldn't call it anyway. The backend's own
-      organization.manage_payments permission (SUPER_ADMIN only) is the
-      real enforcement, see docs/cashback-partner-invoices-plan.md. */
+  /** UX nicety only -- hides the SUPER_ADMIN-only controls for anyone whose
+      token couldn't call them anyway. The backend's own permissions are the
+      real enforcement. */
   isSuperAdmin?: boolean;
 }
 
@@ -124,6 +114,15 @@ function contractMatchesStatusFilter(status: string, filter: string): boolean {
 
 const NAV_ITEMS: NavItem[] = [
   {
+    key: "club",
+    label: "Club",
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 21h8m-4-4v4m-5-17h10v5a5 5 0 01-10 0V4zm10 1h3v2a3 3 0 01-3 3M7 5H4v2a3 3 0 003 3" />
+      </svg>
+    ),
+  },
+  {
     key: "overview",
     label: "Panoramica",
     icon: (
@@ -133,8 +132,8 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
-    // Session 52: pratiche first -- one customer's N points, filled in and
-    // paid together, each point still reviewed as its own contract.
+    // Session 52: pratiche first -- one customer's N contracts, filled in and
+    // paid together, each one still reviewed on its own.
     key: "requests",
     label: "Pratiche",
     notificationTypes: ["CONTRACT_CREATED", "CONTRACT_PAID_BEFORE_APPROVAL", "CONTRACT_INSTALMENT_FAILED"],
@@ -239,15 +238,6 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
-    key: "partners",
-    label: "Fornitori Partner",
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4zm6 0a4 4 0 10-4-4" />
-      </svg>
-    ),
-  },
-  {
     key: "friend-referral-claims",
     label: "Omaggi Inviti",
     notificationTypes: ["FRIEND_REFERRAL_REWARD_REQUESTED"],
@@ -258,18 +248,9 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
-    key: "invoice-redemptions",
-    label: "Riscatti Fatture",
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    ),
-  },
-  {
     key: "orders",
     label: "Ordini",
-    notificationTypes: ["IMPORTED_ORDER_CREATED"],
+    notificationTypes: ["ORDER_CREATED", "ORDER_PAYMENT_PROOF_UPLOADED"],
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16.5 7.5h-9v9h9v-9zM3 6a3 3 0 013-3h12a3 3 0 013 3v12a3 3 0 01-3 3H6a3 3 0 01-3-3V6z" />
@@ -277,29 +258,8 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
-    key: "partner-shop",
-    label: "Shop CJ",
-    notificationTypes: ["CJ_ORDER_PAID", "CJ_ORDER_FAILED", "CJ_ORDER_CREATED", "CJ_PAYMENT_REQUIRED", "CJ_SYNC_FAILED"],
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-      </svg>
-    ),
-  },
-  {
-    key: "shopify-products",
-    label: "Shop Shopify",
-    notificationTypes: ["SHOPIFY_ORDER_CREATED", "SHOPIFY_ORDER_PAID", "SHOPIFY_ORDER_FAILED"],
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-      </svg>
-    ),
-  },
-  {
-    // Session 79: il quarto negozio, «Fai la Spesa con Jav». Sta prima
-    // degli altri perche' e' l'unico il cui catalogo scriviamo noi: gli
-    // altri tre li rifornisce un fornitore.
+    // Session 79: lo Shop, «Fai la Spesa con Jav»: il catalogo lo scrive
+    // l'amministratore, nessun fornitore esterno.
     key: "jav-market",
     label: "Fai la Spesa con Jav",
     notificationTypes: ["JAV_MARKET_ORDER_CREATED", "JAV_MARKET_ORDER_PAID"],
@@ -308,65 +268,6 @@ const NAV_ITEMS: NavItem[] = [
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l3-8H5.4M7 13L5.4 5M7 13l-2 5h13" />
         <circle cx="9" cy="20" r="1" />
         <circle cx="17" cy="20" r="1" />
-      </svg>
-    ),
-  },
-  {
-    // Session 87: il quinto negozio, «Market Kappa» -- clone del quarto,
-    // solo Kappa e Robe di Kappa. Subito dopo il quarto perché anche il suo
-    // catalogo lo scriviamo noi.
-    key: "kappa-market",
-    label: "Market Kappa",
-    notificationTypes: ["KAPPA_MARKET_ORDER_CREATED", "KAPPA_MARKET_ORDER_PAID"],
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 4l-4 3 2 4 2-1v10h8V10l2 1 2-4-4-3a4 4 0 01-8 0z" />
-      </svg>
-    ),
-  },  {
-    // Session 88: il sesto negozio, moda di lusso dal feed di Vaitto.
-    key: "vaitto-market",
-    label: "Marketplace VAITTO",
-    notificationTypes: ["VAITTO_MARKET_ORDER_CREATED", "VAITTO_MARKET_ORDER_PAID"],
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 7h14l-1 13H6L5 7zm4 0V5a3 3 0 016 0v2" />
-      </svg>
-    ),
-  },
-  {
-    // Session 89: profumi e cosmetici dall'API di Symphonya («Marketplace 6»).
-    key: "symphonya-market",
-    label: "Shop Symphonya",
-    notificationTypes: ["SYMPHONYA_MARKET_ORDER_CREATED", "SYMPHONYA_MARKET_ORDER_PAID"],
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3h6v3H9zM7 6h10l1 15H6L7 6z" />
-      </svg>
-    ),
-  },
-  {
-    // Session 90: il catalogo affiliato di SoleilDrop, dall'Excel del portale («Market 7»).
-    key: "soleil-market",
-    label: "Shop SoleilDrop",
-    notificationTypes: ["SOLEIL_MARKET_ORDER_CREATED", "SOLEIL_MARKET_ORDER_PAID"],
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v2m0 14v2m9-9h-2M5 12H3m15.36-6.36l-1.42 1.42M7.05 16.95l-1.41 1.41m12.72 0l-1.42-1.42M7.05 7.05 5.64 5.64M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-      </svg>
-    ),
-  },
-
-  {
-    // Session 68: the three shops of imported products, one after the other,
-    // named after their source. The customer sees CJ as "Marketplace 1",
-    // Shopify as "Marketplace 2", AliExpress as "Marketplace 3" (Session 70).
-    key: "imported-products",
-    label: "Shop AliExpress",
-    notificationTypes: ["ALIEXPRESS_ORDER_CREATED", "ALIEXPRESS_ORDER_PAID", "ALIEXPRESS_ORDER_FAILED", "ALIEXPRESS_SYNC_FAILED"],
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4h1.5l1.5 9h9l1.5-6H6M9 20a1 1 0 100-2 1 1 0 000 2zm8 0a1 1 0 100-2 1 1 0 000 2z" />
       </svg>
     ),
   },
@@ -404,16 +305,16 @@ const NAV_ITEMS: NavItem[] = [
     "Miei Clienti" -- a new or existing customer, then the pratica wizard the
     customer uses, the customer pays afterwards from their own area. The old
     single-contract form is tucked away at the bottom, for the rare case that
-    needs it (a contract recorded by hand on a supply point that exists). */
+    needs it (a contract recorded by hand for an existing customer). */
 function AdminNewContractTab({ onCreated }: { onCreated: (contract: ContractRead) => void }) {
   const [advanced, setAdvanced] = useState(false);
   return (
     <div className="space-y-6">
       <PraticheForCustomersPanel mode="admin" />
-      <div className="pt-4 border-t border-white/5 light:border-slate-200">
+      <div className="pt-4 border-t border-slate-200">
         <button
           onClick={() => setAdvanced((v) => !v)}
-          className="text-xs font-semibold text-slate-400 hover:text-orange-400 cursor-pointer"
+          className="text-xs font-semibold text-slate-400 hover:text-brand-600 cursor-pointer"
         >
           {advanced ? "▾" : "▸"} Casi particolari: modulo avanzato a contratto singolo
         </button>
@@ -427,7 +328,7 @@ function AdminNewContractTab({ onCreated }: { onCreated: (contract: ContractRead
   );
 }
 
-export function AdminClientPage({ initialContracts, email, organizationId, isSuperAdmin }: AdminClientPageProps) {
+export function AdminClientPage({ initialContracts, email, isSuperAdmin }: AdminClientPageProps) {
   const [contracts, setContracts] = useState<ContractRead[]>(initialContracts);
   const { data: customersForLookup } = useQuery({
     queryKey: ["admin", "customers"],
@@ -436,7 +337,7 @@ export function AdminClientPage({ initialContracts, email, organizationId, isSup
   const customerNameById = new Map((customersForLookup ?? []).map((c) => [c.id, c.display_name]));
   const queryClient = useQueryClient();
   const [openRequestId, setOpenRequestId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"overview" | "requests" | "list" | "create" | "customers" | "promoters" | "products" | "network" | "tickets" | "product-requests" | "commissions" | "wallets" | "partners" | "friend-referral-claims" | "invoice-redemptions" | "orders" | "imported-products" | "jav-market" | "kappa-market" | "vaitto-market" | "symphonya-market" | "soleil-market" | "partner-shop" | "shopify-products" | "accounting" | "documentation" | "settings">("overview");
+  const [activeTab, setActiveTab] = useState<"club" | "overview" | "requests" | "list" | "create" | "customers" | "promoters" | "products" | "network" | "tickets" | "product-requests" | "commissions" | "wallets" | "friend-referral-claims" | "orders" | "jav-market" | "accounting" | "documentation" | "settings">("club");
   // Filters set by clicking a KPI card on Panoramica, consumed once by the
   // target tab then cleared -- e.g. "Contratti attivi" jumps to "Tutti i
   // Contratti" with statusFilter pre-set to ACTIVE.
@@ -486,8 +387,8 @@ export function AdminClientPage({ initialContracts, email, organizationId, isSup
     if (!expiresAt) return "text-slate-500";
     const delta = new Date(expiresAt).getTime() - nowMs;
     if (delta < 0) return "text-rose-400 font-semibold";
-    if (delta < EXPIRY_URGENT_MS) return "text-amber-400 font-semibold";
-    return "text-slate-300 light:text-slate-600";
+    if (delta < EXPIRY_URGENT_MS) return "text-amber-700 font-semibold";
+    return " text-slate-600";
   };
 
   const handleOpenTransition = (contract: ContractRead) => {
@@ -589,9 +490,9 @@ export function AdminClientPage({ initialContracts, email, organizationId, isSup
   const handleExportContractsCsv = () => {
     downloadCsv(
       `contratti_${new Date().toISOString().slice(0, 10)}`,
-      ["ID Contratto", "Cliente", "Prodotto", "Punto di Fornitura", "Stato", "IBAN", "Creato il", "Attivato il", "Scadenza"],
+      ["ID Contratto", "Cliente", "Prodotto", "Stato", "IBAN", "Creato il", "Attivato il", "Scadenza"],
       filteredContracts.map((c) => [
-        c.id, customerNameById.get(c.customer_id) ?? c.customer_id, c.product_name ?? "", c.supply_point_label ?? "",
+        c.id, customerNameById.get(c.customer_id) ?? c.customer_id, c.product_name ?? "",
         STATUS_LABELS[c.status] ?? c.status, c.iban ?? "", c.created_at, c.activated_at ?? "", c.expires_at ?? "",
       ])
     );
@@ -602,12 +503,12 @@ export function AdminClientPage({ initialContracts, email, organizationId, isSup
       case "ACTIVE":
         return "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
       case "DRAFT":
-        return "bg-slate-500/10 light:bg-slate-200/50 text-slate-400 light:text-slate-500 border-slate-500/20 light:border-slate-300";
+        return " bg-slate-200/50 text-slate-500 border-slate-300";
       case "REJECTED":
       case "CANCELLED":
         return "bg-rose-500/10 text-rose-400 border-rose-500/20";
       default:
-        return "bg-amber-500/10 text-amber-400 border-amber-500/20";
+        return "bg-amber-500/10 text-amber-700 border-amber-500/20";
     }
   };
 
@@ -621,6 +522,8 @@ export function AdminClientPage({ initialContracts, email, organizationId, isSup
         onNavigate={(key) => setActiveTab(key as typeof activeTab)}
         headerTitle="Pannello Amministrativo"
       >
+        {activeTab === "club" && <ClubsPanel />}
+
         {activeTab === "overview" && (
           <>
             <SectionBanner image="contracts" alt="Panoramica" />
@@ -658,29 +561,29 @@ export function AdminClientPage({ initialContracts, email, organizationId, isSup
             <SectionBanner image="contracts" alt="Contratti" />
             {/* Quick Metrics Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-              <div className="glass-card rounded-2xl p-4 border-white/5 light:border-slate-200 bg-slate-950/20 light:bg-slate-50 text-center">
+              <div className="glass-card rounded-2xl p-4 border-slate-200 bg-slate-50 text-center">
                 <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">Totali</span>
-                <span className="text-2xl font-bold text-white light:text-slate-900">{contracts.length}</span>
+                <span className="text-2xl font-bold text-slate-900">{contracts.length}</span>
               </div>
               {["DRAFT", "SUBMITTED", "UNDER_REVIEW", "ACTIVE"].map((status) => (
-                <div key={status} className="glass-card rounded-2xl p-4 border-white/5 light:border-slate-200 bg-slate-950/20 light:bg-slate-50 text-center">
+                <div key={status} className="glass-card rounded-2xl p-4 border-slate-200 bg-slate-50 text-center">
                   <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">
                     {STATUS_LABELS[status] || status}
                   </span>
-                  <span className="text-2xl font-bold text-white light:text-slate-900">{byStatus[status] ?? 0}</span>
+                  <span className="text-2xl font-bold text-slate-900">{byStatus[status] ?? 0}</span>
                 </div>
               ))}
             </div>
 
             {/* Filters Bar */}
-            <div className="flex flex-col sm:flex-row gap-4 items-center justify-between p-4 rounded-2xl bg-slate-900/40 light:bg-slate-50 border border-white/5 light:border-slate-200">
+            <div className="flex flex-col sm:flex-row gap-4 items-center justify-between p-4 rounded-2xl bg-slate-50 border border-slate-200">
               <div className="w-full sm:max-w-xs relative">
                 <input
                   type="text"
                   placeholder="Cerca per UUID contratto o cliente..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full rounded-xl glass-input pl-10 pr-4 py-2 text-xs focus:border-orange-500"
+                  className="w-full rounded-xl glass-input pl-10 pr-4 py-2 text-xs focus:border-brand-500"
                 />
                 <svg className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -688,11 +591,11 @@ export function AdminClientPage({ initialContracts, email, organizationId, isSup
               </div>
 
               <div className="w-full sm:w-auto flex items-center gap-2">
-                <span className="text-xs text-slate-400 light:text-slate-500 shrink-0 font-medium">Stato:</span>
+                <span className="text-xs text-slate-500 shrink-0 font-medium">Stato:</span>
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="w-full sm:w-44 rounded-xl glass-input px-3 py-2 text-xs bg-slate-900 light:bg-white focus:border-orange-500"
+                  className="w-full sm:w-44 rounded-xl glass-input px-3 py-2 text-xs bg-white focus:border-brand-500"
                 >
                   <option value="ALL">Tutti</option>
                   <option value="PENDING_APPROVAL">In attesa di approvazione</option>
@@ -706,7 +609,7 @@ export function AdminClientPage({ initialContracts, email, organizationId, isSup
               <div className="w-full sm:w-auto flex items-center gap-2">
                 <button
                   onClick={handleExportContractsCsv}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 light:bg-slate-900/5 hover:bg-white/10 border border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 text-xs font-semibold transition cursor-pointer whitespace-nowrap"
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 text-xs font-semibold transition cursor-pointer whitespace-nowrap"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -716,11 +619,11 @@ export function AdminClientPage({ initialContracts, email, organizationId, isSup
               </div>
 
               <div className="w-full sm:w-auto flex items-center gap-2">
-                <span className="text-xs text-slate-400 light:text-slate-500 shrink-0 font-medium">Anno:</span>
+                <span className="text-xs text-slate-500 shrink-0 font-medium">Anno:</span>
                 <select
                   value={yearFilter}
                   onChange={(e) => setYearFilter(e.target.value)}
-                  className="w-full sm:w-32 rounded-xl glass-input px-3 py-2 text-xs bg-slate-900 light:bg-white focus:border-orange-500"
+                  className="w-full sm:w-32 rounded-xl glass-input px-3 py-2 text-xs bg-white focus:border-brand-500"
                 >
                   <option value="ALL">Storico completo</option>
                   {contractYears.map((year) => (
@@ -731,13 +634,13 @@ export function AdminClientPage({ initialContracts, email, organizationId, isSup
             </div>
 
             {/* Contract List Table */}
-            <div className="glass-card rounded-2xl border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70 overflow-hidden">
+            <div className="glass-card rounded-2xl border-slate-200 bg-white/70 overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse text-left text-sm">
                   <thead>
-                    <tr className="border-b border-white/5 light:border-slate-200 text-slate-400 light:text-slate-500 font-semibold bg-white/2 light:bg-slate-900/[0.02]">
+                    <tr className="border-b border-slate-200 text-slate-500 font-semibold bg-slate-900/[0.02]">
                       <th className="py-3 px-6">Cliente</th>
-                      <th className="py-3 px-6">Prodotto / Punto di Fornitura</th>
+                      <th className="py-3 px-6">Prodotto</th>
                       <th className="py-3 px-6">Origine</th>
                       <th className="py-3 px-6 text-right">Importo</th>
                       <th className="py-3 px-6">Stato</th>
@@ -745,27 +648,24 @@ export function AdminClientPage({ initialContracts, email, organizationId, isSup
                       <th className="py-3 px-6 text-right">Azioni</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-white/5 light:divide-slate-200">
+                  <tbody className="divide-y divide-slate-200">
                     {contractsPagination.pageItems.map((c) => (
-                      <tr key={c.id} className="text-slate-300 light:text-slate-600 hover:bg-white/5 transition-colors">
+                      <tr key={c.id} className=" text-slate-600 hover:bg-slate-100 transition-colors">
                         <td className="py-4 px-6">
-                          <div className="text-sm font-semibold text-white light:text-slate-900">
+                          <div className="text-sm font-semibold text-slate-900">
                             {customerNameById.get(c.customer_id) ?? "Cliente sconosciuto"}
                           </div>
                           <div className="font-mono text-[10px] text-slate-500">{c.customer_id}</div>
                         </td>
                         <td className="py-4 px-6">
-                          <div className="text-xs font-semibold text-white light:text-slate-900">
+                          <div className="text-xs font-semibold text-slate-900">
                             {c.product_name ?? "Prodotto"}
-                          </div>
-                          <div className="text-[11px] text-slate-400 light:text-slate-500">
-                            {c.supply_point_label ?? "Punto di fornitura"}
                           </div>
                           <div className="font-mono text-[10px] text-slate-500">{c.id}</div>
                           {c.contract_request_id && (
                             <button
                               onClick={() => { setOpenRequestId(c.contract_request_id!); setActiveTab("requests"); }}
-                              className="mt-1 text-[10px] font-semibold text-orange-400 hover:text-orange-300 cursor-pointer"
+                              className="mt-1 text-[10px] font-semibold text-brand-600 hover:text-brand-600 cursor-pointer"
                             >
                               Pratica #{c.contract_request_id.slice(0, 8).toUpperCase()} →
                             </button>
@@ -783,12 +683,12 @@ export function AdminClientPage({ initialContracts, email, organizationId, isSup
                               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border bg-sky-500/10 text-sky-400 border-sky-500/20">
                                 Compilato dal promoter
                               </span>
-                              <div className="text-[11px] text-slate-400 light:text-slate-500 mt-1">
+                              <div className=" text-slate-500 mt-1">
                                 {c.activated_by_promoter_name ?? "—"}
                               </div>
                             </>
                           ) : (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border bg-white/5 light:bg-slate-900/5 text-slate-400 border-white/10 light:border-slate-300">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border bg-slate-900/5 text-slate-400 border-slate-300">
                               {c.created_by_role === "ADMIN"
                                 ? "Creato da amministrazione"
                                 : c.created_by_role === "CUSTOMER"
@@ -807,7 +707,7 @@ export function AdminClientPage({ initialContracts, email, organizationId, isSup
                               product -- see contracts/models.py. */}
                           {c.gross_amount_cents != null ? (
                             <>
-                              <div className="text-sm font-semibold text-white light:text-slate-900 tabular-nums">
+                              <div className="text-sm font-semibold text-slate-900 tabular-nums">
                                 {euro(c.gross_amount_cents)}
                               </div>
                               <div className="text-[10px] text-slate-500 tabular-nums">
@@ -848,13 +748,13 @@ export function AdminClientPage({ initialContracts, email, organizationId, isSup
                           <div className="flex items-center justify-end gap-2">
                             <button
                               onClick={() => setCommissionsContractId(c.id)}
-                              className="px-3 py-1 rounded-lg bg-white/5 light:bg-slate-900/5 hover:bg-white/10 border border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 text-xs font-semibold transition cursor-pointer"
+                              className="px-3 py-1 rounded-lg bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 text-xs font-semibold transition cursor-pointer"
                             >
                               Provvigioni
                             </button>
                             <button
                               onClick={() => handleOpenTransition(c)}
-                              className="px-3 py-1 rounded-lg bg-orange-600/10 hover:bg-orange-600/20 border border-orange-500/20 text-orange-400 text-xs font-semibold transition cursor-pointer"
+                              className="px-3 py-1 rounded-lg bg-brand-600/10 hover:bg-brand-600/20 border border-brand-500/20 text-brand-600 text-xs font-semibold transition cursor-pointer"
                             >
                               Recensisci
                             </button>
@@ -935,22 +835,10 @@ export function AdminClientPage({ initialContracts, email, organizationId, isSup
             <AdminWalletsPanel isSuperAdmin={isSuperAdmin} />
           </div>
         )}
-        {activeTab === "partners" && (
-          <div className="space-y-6">
-            <SectionBanner image="wallets" alt="Fornitori Partner" />
-            <AdminPartnersPanel />
-          </div>
-        )}
         {activeTab === "friend-referral-claims" && (
           <div className="space-y-6">
             <SectionBanner image="customers" alt="Omaggi Inviti" />
             <AdminFriendReferralClaimsPanel />
-          </div>
-        )}
-        {activeTab === "invoice-redemptions" && (
-          <div className="space-y-6">
-            <SectionBanner image="wallets" alt="Riscatti Fatture" />
-            <AdminInvoiceRedemptionsPanel />
           </div>
         )}
         {activeTab === "orders" && (
@@ -964,53 +852,6 @@ export function AdminClientPage({ initialContracts, email, organizationId, isSup
             <SectionBanner image="products" alt="Fai la Spesa con Jav" />
             <MarketplaceRulesCard highlight="jav_market" />
             <AdminJavMarketPanel />
-          </div>
-        )}
-        {activeTab === "kappa-market" && (
-          <div className="space-y-6">
-            <SectionBanner image="products" alt="Market Kappa" />
-            <MarketplaceRulesCard highlight="kappa_market" />
-            <AdminKappaMarketPanel />
-          </div>
-        )}
-        {activeTab === "vaitto-market" && (
-          <div className="space-y-6">
-            <SectionBanner image="products" alt="Marketplace VAITTO" />
-            <MarketplaceRulesCard highlight="vaitto_market" />
-            <AdminVaittoMarketPanel />
-          </div>
-        )}
-        {activeTab === "symphonya-market" && (
-          <div className="space-y-6">
-            <SectionBanner image="products" alt="Shop Symphonya" />
-            <MarketplaceRulesCard highlight="symphonya_market" />
-            <AdminSymphonyaMarketPanel />
-          </div>
-        )}
-        {activeTab === "soleil-market" && (
-          <div className="space-y-6">
-            <SectionBanner image="products" alt="Shop SoleilDrop" />
-            <MarketplaceRulesCard highlight="soleil_market" />
-            <AdminSoleilMarketPanel />
-          </div>
-        )}
-        {activeTab === "imported-products" && (
-          <div className="space-y-6">
-            <SectionBanner image="products" alt="Prodotti AliExpress" />
-            <MarketplaceRulesCard highlight="aliexpress" />
-            <AdminAliexpressPanel />
-          </div>
-        )}
-        {activeTab === "partner-shop" && (
-          <div className="space-y-6">
-            <MarketplaceRulesCard highlight="cj" />
-            <AdminCjPanel />
-          </div>
-        )}
-        {activeTab === "shopify-products" && (
-          <div className="space-y-6">
-            <MarketplaceRulesCard highlight="shopify" />
-            <AdminShopifyPanel />
           </div>
         )}
         {activeTab === "accounting" && (
@@ -1028,20 +869,20 @@ export function AdminClientPage({ initialContracts, email, organizationId, isSup
         {activeTab === "settings" && (
           <div className="space-y-6">
             <SectionBanner image="documentation" alt="Impostazioni" />
-            <AdminOrganizationSettingsPanel isSuperAdmin={isSuperAdmin} organizationId={organizationId} />
+            <AdminOrganizationSettingsPanel />
           </div>
         )}
       </AppShell>
 
       {/* Transition Modal / Drawer Overlay */}
       {selectedContract && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 light:bg-slate-900/40 backdrop-blur-sm animate-fade-in">
-          <div className={`w-full ${needsCommissionPreview ? "max-w-3xl" : "max-w-lg"} max-h-[85vh] overflow-y-auto glass-card rounded-2xl p-6 border-white/10 light:border-slate-300 bg-slate-950 light:bg-white animate-scale-up`}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+          <div className={`w-full ${needsCommissionPreview ? "max-w-3xl" : "max-w-lg"} max-h-[85vh] overflow-y-auto glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up`}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-white light:text-slate-900">Recensisci / Transiziona Stato</h3>
+              <h3 className="text-lg font-bold text-slate-900">Recensisci / Transiziona Stato</h3>
               <button
                 onClick={() => setSelectedContract(null)}
-                className="p-1 hover:bg-white/5 rounded-lg text-slate-400 light:text-slate-500 hover:text-white transition cursor-pointer"
+                className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-900 transition cursor-pointer"
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
@@ -1049,33 +890,33 @@ export function AdminClientPage({ initialContracts, email, organizationId, isSup
               </button>
             </div>
 
-            <div className="p-3 mb-4 rounded-xl bg-white/5 light:bg-slate-900/5 border border-white/5 light:border-slate-200 text-xs text-slate-400 light:text-slate-500 space-y-1">
-              <p>Cliente: <span className="font-semibold text-white light:text-slate-900">{customerNameById.get(selectedContract.customer_id) ?? "Cliente sconosciuto"}</span></p>
-              <p>ID Contratto: <span className="font-mono text-white light:text-slate-900 text-[10px]">{selectedContract.id}</span></p>
-              <p>Email contratto: <span className="font-semibold text-white light:text-slate-900">{selectedContract.email ?? "Non specificata"}</span></p>
-              <p>Stato Attuale: <span className="font-bold text-orange-400">{STATUS_LABELS[selectedContract.status] || selectedContract.status}</span></p>
+            <div className="p-3 mb-4 rounded-xl bg-slate-900/5 border border-slate-200 text-xs text-slate-500 space-y-1">
+              <p>Cliente: <span className="font-semibold text-slate-900">{customerNameById.get(selectedContract.customer_id) ?? "Cliente sconosciuto"}</span></p>
+              <p>ID Contratto: <span className="font-mono text-slate-900 ">{selectedContract.id}</span></p>
+              <p>Email contratto: <span className="font-semibold text-slate-900">{selectedContract.email ?? "Non specificata"}</span></p>
+              <p>Stato Attuale: <span className="font-bold text-brand-600">{STATUS_LABELS[selectedContract.status] || selectedContract.status}</span></p>
             </div>
 
             <div className="mb-5">
-              <p className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase mb-2">Documenti Contrattuali</p>
+              <p className="text-xs font-semibold text-slate-600 uppercase mb-2">Documenti Contrattuali</p>
               <ContractDocumentsPanel contractId={selectedContract.id} isStaff />
             </div>
 
             <div className="mb-5">
-              <p className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase mb-2">
+              <p className="text-xs font-semibold text-slate-600 uppercase mb-2">
                 Fascicolo Completo
               </p>
               <ContractDossierActions contractId={selectedContract.id} />
             </div>
 
             {availableTargets.length === 0 ? (
-              <div className="p-4 rounded-xl bg-white/5 light:bg-slate-900/5 border border-white/5 light:border-slate-200 text-sm text-slate-400 light:text-slate-500 text-center">
+              <div className="p-4 rounded-xl bg-slate-900/5 border border-slate-200 text-sm text-slate-500 text-center">
                 Questo contratto ha raggiunto uno stato finale ({STATUS_LABELS[selectedContract.status] ?? selectedContract.status}) e non può essere transizionato ulteriormente.
                 <div className="flex justify-center mt-4">
                   <button
                     type="button"
                     onClick={() => setSelectedContract(null)}
-                    className="px-4 py-2 rounded-xl bg-white/5 light:bg-slate-900/5 hover:bg-white/10 text-xs font-semibold text-slate-300 light:text-slate-600 border border-white/5 light:border-slate-200 transition cursor-pointer"
+                    className="px-4 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 text-xs font-semibold text-slate-600 border border-slate-200 transition cursor-pointer"
                   >
                     Chiudi
                   </button>
@@ -1084,14 +925,14 @@ export function AdminClientPage({ initialContracts, email, organizationId, isSup
             ) : (
             <form onSubmit={handleExecuteTransition} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300 light:text-slate-600 block">Seleziona Stato di Destinazione</label>
+                <label className="text-xs font-semibold text-slate-600 block">Seleziona Stato di Destinazione</label>
                 <select
                   value={targetStatus}
                   onChange={(e) => setTargetStatus(e.target.value)}
-                  className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-slate-900 light:bg-white focus:border-orange-500"
+                  className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-white focus:border-brand-500"
                 >
                   {availableTargets.map((code) => (
-                    <option key={code} value={code} className="bg-slate-950 light:bg-white">{STATUS_LABELS[code] ?? code} ({code})</option>
+                    <option key={code} value={code} className=" bg-white">{STATUS_LABELS[code] ?? code} ({code})</option>
                   ))}
                 </select>
                 <p className="text-[10px] text-slate-500 mt-1">
@@ -1100,12 +941,12 @@ export function AdminClientPage({ initialContracts, email, organizationId, isSup
               </div>
 
               {needsCommissionPreview && (
-                <div className="space-y-3 p-4 rounded-2xl border border-orange-500/25 bg-slate-900/40 light:bg-orange-50/60">
-                  <p className="text-sm font-bold text-white light:text-slate-900">Anteprima provvigioni</p>
+                <div className="space-y-3 p-4 rounded-2xl border border-brand-500/25 bg-brand-50/60">
+                  <p className="text-sm font-bold text-slate-900">Anteprima provvigioni</p>
                   {commissionPreviewError ? (
                     <p className="text-xs text-rose-400">{(commissionPreviewError as Error).message}</p>
                   ) : !commissionPreview ? (
-                    <div className="h-24 rounded-xl bg-white/5 light:bg-slate-900/5 animate-pulse" />
+                    <div className="h-24 rounded-xl bg-slate-900/5 animate-pulse" />
                   ) : commissionPreview.already_accepted ? (
                     <p className="text-xs text-emerald-400">
                       Anteprima già accettata per questo contratto: la trovi nel registro, pulsante “Provvigioni”.
@@ -1113,14 +954,14 @@ export function AdminClientPage({ initialContracts, email, organizationId, isSup
                   ) : (
                     <>
                       <CommissionPreviewView preview={commissionPreview} />
-                      <label className="flex items-start gap-2 pt-2 border-t border-white/10 light:border-slate-200 cursor-pointer">
+                      <label className="flex items-start gap-2 pt-2 border-t border-slate-200 cursor-pointer">
                         <input
                           type="checkbox"
                           checked={previewChecked}
                           onChange={(e) => setPreviewChecked(e.target.checked)}
-                          className="mt-0.5 accent-orange-500"
+                          className="mt-0.5 accent-brand-500"
                         />
-                        <span className="text-xs text-slate-300 light:text-slate-700">
+                        <span className="text-xs text-slate-700">
                           Ho controllato l&apos;anteprima e accetto che le provvigioni partano come indicato.
                           Resterà salvata nel registro del contratto.
                         </span>
@@ -1131,25 +972,25 @@ export function AdminClientPage({ initialContracts, email, organizationId, isSup
               )}
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300 light:text-slate-600 block">Motivazione</label>
+                <label className="text-xs font-semibold text-slate-600 block">Motivazione</label>
                 <input
                   type="text"
                   required
                   placeholder="Es: Documenti validati con successo"
                   value={transitionReason}
                   onChange={(e) => setTransitionReason(e.target.value)}
-                  className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500"
+                  className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300 light:text-slate-600 block">Note aggiuntive (opzionale)</label>
+                <label className="text-xs font-semibold text-slate-600 block">Note aggiuntive (opzionale)</label>
                 <textarea
                   rows={3}
                   placeholder="Dettagli interni o appunti..."
                   value={transitionNotes}
                   onChange={(e) => setTransitionNotes(e.target.value)}
-                  className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500 resize-none"
+                  className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500 resize-none"
                 />
               </div>
 
@@ -1163,14 +1004,14 @@ export function AdminClientPage({ initialContracts, email, organizationId, isSup
                 <button
                   type="button"
                   onClick={() => setSelectedContract(null)}
-                  className="px-4 py-2 rounded-xl bg-white/5 light:bg-slate-900/5 hover:bg-white/10 text-xs font-semibold text-slate-300 light:text-slate-600 border border-white/5 light:border-slate-200 transition cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 text-xs font-semibold text-slate-600 border border-slate-200 transition cursor-pointer"
                 >
                   Annulla
                 </button>
                 <button
                   type="submit"
                   disabled={transitionLoading || (mustAcceptPreview && (!commissionPreview || !previewChecked))}
-                  className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50"
+                  className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50"
                 >
                   {transitionLoading ? "Salvataggio..." : mustAcceptPreview ? "Accetta anteprima e salva" : "Salva Stato"}
                 </button>

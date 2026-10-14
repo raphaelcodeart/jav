@@ -9,16 +9,14 @@
   No bucket policy grants anonymous access -- the ONLY way to read an object
   is a short-lived presigned URL minted server-side after an authorization
   check (see documents/service.py), and even that presigned URL is proxied
-  through nginx's `location /jav-documents/` (Session 14), which forwards
+  through nginx's `location /jav-documents/`, which forwards
   to MinIO with a fixed internal Host header so the signature (computed
   against the internal endpoint) still validates -- see
   server-migration-guide.md §8 for why that Host rewrite is necessary. A
   presigned URL expires in minutes and is never linked from anywhere a
   search engine could crawl, so it is never indexable.
 
-Backed by the MinIO instance already running in this stack
-(docker-compose.dev.yml) but previously unused by any application code --
-boto3 was a declared dependency with nothing calling it until Session 13.
+Backed by the MinIO instance running in this stack (docker-compose.dev.yml).
 """
 
 import mimetypes
@@ -43,7 +41,7 @@ MAX_DOCUMENTATION_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB -- PDFs, not just pho
 
 # Magic-byte signatures for every content type this module ever accepts.
 # The `Content-Type` an upload arrives with is just a client-supplied HTTP
-# header -- trivially spoofable (rename anything.html to bolletta.pdf, send
+# header -- trivially spoofable (rename anything.html to documento.pdf, send
 # it with Content-Type: application/pdf, and the whitelist check alone would
 # wave it through). Checking the first bytes against the real file format's
 # signature closes that gap: a mismatch is rejected before it ever reaches
@@ -213,7 +211,7 @@ def upload_document(*, file_bytes: bytes, content_type: str, key_prefix: str) ->
 
 def stash_private_file(*, file_bytes: bytes, content_type: str, key_prefix: str) -> str:
     """Un file che serve solo al server per qualche minuto -- il CSV di un
-    import che un worker Celery deve leggere (Session 88). Stesso bucket
+    import che un worker Celery deve leggere. Stesso bucket
     privato dei documenti, ma senza i loro controlli di formato: non è un
     documento di un cliente e non finisce mai in un browser. Chi lo usa lo
     cancella con delete_document_object() quando ha finito."""

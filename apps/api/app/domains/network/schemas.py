@@ -111,7 +111,6 @@ class BranchContractRead(BaseModel):
     customer_phone: str | None
     product_name: str
     value_cents: int
-    supply_point_label: str | None = None
     expires_at: datetime | None = None
     producer_agent_id: uuid.UUID
     producer_name: str

@@ -12,8 +12,8 @@ const PRIVATE = "PRIVATE";
 const BUSINESS = "BUSINESS";
 const BOTH = "BOTH";
 
-/** `products.customer_type` used to hold PMI / ENERGY_INTENSIVE /
-    SOLE_PROPRIETOR / CONDOMINIUM -- a vocabulary that never lined up with
+/** `products.customer_type` used to hold PMI / SOLE_PROPRIETOR /
+    CONDOMINIUM -- a vocabulary that never lined up with
     `customers.kind`, so nothing could compare the two. Old values collapse
     onto BUSINESS; anything unrecognized fails OPEN (visible to everyone),
     because a display filter quietly hiding a product from the whole catalog
@@ -22,7 +22,7 @@ export function normalizeProductCustomerType(value: string | null | undefined): 
   if (!value) return BOTH;
   const upper = value.trim().toUpperCase();
   if (upper === PRIVATE || upper === BUSINESS || upper === BOTH) return upper;
-  if (["SOLE_PROPRIETOR", "PMI", "CONDOMINIUM", "ENERGY_INTENSIVE"].includes(upper)) return BUSINESS;
+  if (["SOLE_PROPRIETOR", "PMI", "CONDOMINIUM"].includes(upper)) return BUSINESS;
   return BOTH;
 }
 
@@ -106,7 +106,7 @@ export function contractPrices(
     whatever billing period its version happens to carry (the admin form
     defaults every version to MONTHLY). */
 export function isRecurringProductType(productType: string | null | undefined): boolean {
-  return ["ENERGY_CONTRACT", "SUBSCRIPTION"].includes((productType ?? "").toUpperCase());
+  return ["SERVICE", "SUBSCRIPTION"].includes((productType ?? "").toUpperCase());
 }
 
 export function formatEuroCents(cents: number): string {

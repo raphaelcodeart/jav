@@ -210,7 +210,7 @@ async def top_up(
     """Admin credits cashback or a plain recharge to a user's wallet --
     creates the wallet lazily if this is its first credit. Gated by
     `wallet.credit` (SUPER_ADMIN only), narrower than the `wallet.manage`
-    used by the rest of this router -- see 0029_wallet_credit_permission.py."""
+    used by the rest of this router -- see rbac/models.py."""
     wallet = await wallet_service.get_or_create_wallet(
         db, organization_id=current_user.organization_id, user_id=payload.user_id
     )

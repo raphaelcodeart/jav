@@ -67,8 +67,8 @@ export function WelcomeBonusCard() {
           </svg>
         </span>
         <div>
-          <p className="text-sm font-bold text-white light:text-slate-900">Omaggio riscattato!</p>
-          <p className="text-xs text-slate-400 light:text-slate-500">
+          <p className="text-sm font-bold text-slate-900">Omaggio riscattato!</p>
+          <p className="text-xs text-slate-500">
             {javCash(bonus?.amount_cents ?? 0)} sono già disponibili sul tuo wallet.
           </p>
         </div>
@@ -79,21 +79,21 @@ export function WelcomeBonusCard() {
   if (!bonus?.available) return null;
 
   return (
-    <div className="relative overflow-hidden rounded-2xl p-5 border border-orange-500/30 bg-gradient-to-br from-orange-500/15 via-amber-500/5 to-transparent">
+    <div className="relative overflow-hidden rounded-2xl p-5 border border-brand-500/30 bg-gradient-to-br from-brand-500/15 via-brand-400/5 to-transparent">
       {/* Decorative glow -- pointer-events-none so it never eats the click. */}
-      <div className="pointer-events-none absolute -top-10 -right-10 w-40 h-40 rounded-full bg-orange-500/20 blur-3xl" />
+      <div className="pointer-events-none absolute -top-10 -right-10 w-40 h-40 rounded-full bg-brand-500/20 blur-3xl" />
       <div className="relative flex flex-col sm:flex-row sm:items-center gap-4">
-        <span className="p-3 rounded-xl bg-orange-500/20 text-orange-400 shrink-0 w-fit">
+        <span className="p-3 rounded-xl bg-brand-500/20 text-brand-600 shrink-0 w-fit">
           <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zM5 12h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
           </svg>
         </span>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-bold text-white light:text-slate-900">
+          <p className="text-sm font-bold text-slate-900">
             Il tuo omaggio di benvenuto ti aspetta
           </p>
-          <p className="text-xs text-slate-400 light:text-slate-500 mt-0.5">
-            Ricevi <strong className="text-orange-400">{javCash(bonus.amount_cents)}</strong> sul tuo
+          <p className="text-xs text-slate-500 mt-0.5">
+            Ricevi <strong className="text-brand-600">{javCash(bonus.amount_cents)}</strong> sul tuo
             wallet, da usare subito per i tuoi acquisti. Puoi riscattarlo una sola volta.
           </p>
           {error && <p className="text-xs text-rose-400 mt-1.5">{error}</p>}
@@ -101,7 +101,7 @@ export function WelcomeBonusCard() {
         <button
           onClick={handleClaim}
           disabled={claiming}
-          className="shrink-0 px-5 py-2.5 rounded-xl bg-gradient-to-r from-orange-600 to-amber-500 hover:from-orange-500 hover:to-amber-400 text-white text-xs font-bold shadow-lg shadow-orange-500/20 transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
+          className="shrink-0 px-5 py-2.5 rounded-xl bg-gradient-to-r from-brand-600 to-brand-400 hover:from-brand-500 hover:to-brand-400 text-white text-xs font-bold shadow-lg shadow-brand-500/20 transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
         >
           {claiming ? "Riscatto in corso..." : "Riscatta il tuo omaggio"}
         </button>

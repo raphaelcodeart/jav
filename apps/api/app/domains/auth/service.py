@@ -1,6 +1,7 @@
 import logging
 import uuid
 from datetime import UTC, datetime, timedelta
+from html import escape, unescape
 
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,7 +30,7 @@ from app.domains.auth.models import (
     Session,
     SpendPin,
 )
-from app.domains.auth.schemas import RegisterRequest
+from app.domains.auth.schemas import RegisterFamilyRequest, RegisterRequest
 from app.domains.organizations.models import Organization
 from app.domains.rbac.service import get_roles_for_user
 from app.domains.users import service as users_service
@@ -184,15 +185,15 @@ async def rotate_refresh_token(
     return new_access_token, new_refresh_token
 
 
-#: How long a just-rotated refresh token is still honoured (Session 85).
+#: How long a just-rotated refresh token is still honoured.
 ROTATION_GRACE_SECONDS = 60
 
 
 async def _within_rotation_grace(db: AsyncSession, session: Session) -> bool:
     """A page fires several calls at once; when the access token has just
     expired each of them refreshes with the SAME refresh token. The first
-    rotates it, and until Session 85 every other one was refused and showed
-    "Sessione scaduta" to a user who was logged in. So a token rotated in the
+    rotates it; refusing every other one would show "Sessione scaduta" to a
+    user who is logged in. So a token rotated in the
     last ROTATION_GRACE_SECONDS is honoured once more (the caller gets a new
     session of its own).
 
@@ -386,6 +387,68 @@ async def register_with_referral(db: AsyncSession, *, organization_id: uuid.UUID
     return user
 
 
+async def register_family(db: AsyncSession, *, payload: RegisterFamilyRequest) -> User:
+    """Un genitore si registra dal link del suo club. Diversamente da
+    register_with_referral nessun promoter: l'account nasce legato al club
+    (users.club_id), ed è da lì che vede quote, corsi e gare. Lo Shop resta
+    quello della piattaforma, uguale per tutti i club."""
+    from app.domains.club import clubs as clubs_service
+    from app.domains.club import referrals as club_referrals
+    from app.domains.customers.models import Customer, CustomerProfile
+    from app.domains.rbac.models import Role, UserRole
+
+    club = await clubs_service.get_club_by_slug(db, slug=payload.club_slug)
+    if club is None:
+        raise RegistrationError("Club non trovato: controlla il link che hai ricevuto dal club.")
+    organization_id = club.organization_id
+    existing = (
+        await db.execute(
+            select(User).where(
+                User.organization_id == organization_id, func.lower(User.email) == payload.email.lower()
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        raise RegistrationError(
+            "Esiste già un account con questa email: accedi, oppure recupera la password se non la ricordi."
+        )
+    role = (
+        await db.execute(
+            select(Role).where(
+                (Role.organization_id == organization_id) | (Role.organization_id.is_(None)),
+                Role.code == "CUSTOMER",
+            )
+        )
+    ).scalars().first()
+    if role is None:
+        raise RegistrationError("Registrazione non disponibile al momento: contatta la segreteria del club.")
+
+    user = User(
+        organization_id=organization_id, club_id=club.id, email=payload.email,
+        password_hash=hash_password(payload.password), status="ACTIVE",
+    )
+    db.add(user)
+    await db.flush()
+    await users_service.mark_privacy_accepted(db, user=user)
+    db.add(UserRole(user_id=user.id, organization_id=organization_id, role_id=role.id))
+    customer = Customer(
+        organization_id=organization_id, user_id=user.id, kind="PRIVATE", email=payload.email, phone=payload.phone,
+    )
+    db.add(customer)
+    await db.flush()
+    db.add(CustomerProfile(customer_id=customer.id, first_name=payload.first_name, last_name=payload.last_name))
+    await club_referrals.record_club_invite(db, club=club, invite_code=payload.invite_code, customer_id=customer.id)
+    await audit_service.record(
+        db, organization_id=organization_id, actor_user_id=user.id,
+        action="auth.family_registered", entity_type="customer", entity_id=str(customer.id),
+        new_value={"email": payload.email, "club_id": str(club.id)},
+    )
+    await db.commit()
+    await db.refresh(user)
+    await send_verification_email(db, user=user)
+    return user
+
+
 EMAIL_VERIFICATION_TOKEN_EXPIRE_MINUTES = 60 * 24
 
 
@@ -477,7 +540,9 @@ class PasswordResetError(Exception):
     pass
 
 
-async def send_account_invite_email(db: AsyncSession, *, user: User, invited_by_display_name: str) -> None:
+async def send_account_invite_email(
+    db: AsyncSession, *, user: User, invited_by_display_name: str, intro: str | None = None
+) -> tuple[str, bool]:
     """The very first email a promoter-created customer ever receives (see
     network/service.py::create_recruited_customer) -- their account already
     exists (random, never-revealed password) but they've never set one
@@ -487,8 +552,19 @@ async def send_account_invite_email(db: AsyncSession, *, user: User, invited_by_
     copy and a much longer expiry (ACCOUNT_INVITE_TOKEN_EXPIRE_MINUTES, not
     PASSWORD_RESET_TOKEN_EXPIRE_MINUTES) since there's no urgency here.
     Completing it also marks the account email-verified -- see
-    reset_password()'s own comment for why that's equally valid proof."""
+    reset_password()'s own comment for why that's equally valid proof.
+
+    `intro` sostituisce la prima frase quando l'invito non viene da un
+    promoter (la segreteria di un club creata dal superadmin, un istruttore):
+    testo semplice, l'escape lo fa questa funzione.
+
+    Restituisce il link e se l'email è partita: senza SMTP chi ha creato
+    l'account può consegnare il link a mano (club/clubs.py::add_staff)."""
     settings = get_settings()
+    intro = escape(intro) if intro else (
+        f"{invited_by_display_name} ha creato per te un account su Jav e attivato "
+        "quanto concordato -- trovi già tutto configurato non appena accedi."
+    )
     token = generate_password_reset_token()
     db.add(
         PasswordResetToken(
@@ -504,23 +580,23 @@ async def send_account_invite_email(db: AsyncSession, *, user: User, invited_by_
         preheader="Il tuo account Jav è pronto",
         heading="Il tuo account Jav è pronto",
         body_html=(
-            f"<p>{invited_by_display_name} ha creato per te un account su Jav e attivato "
-            "quanto concordato -- trovi già tutto configurato non appena accedi.</p>"
+            f"<p>{intro}</p>"
             "<p>Per accedere per la prima volta, scegli subito la tua password personale.</p>"
         ),
         cta_label="Imposta la tua password",
         cta_url=set_password_link,
     )
-    send_html_email_best_effort(
+    sent = send_html_email_best_effort(
         context=f"Account-invite email (user={user.id})",
         to=user.email,
         subject="Il tuo account Jav è pronto",
         html_body=html,
         text_body=(
-            f"{invited_by_display_name} ha creato per te un account su Jav.\n\n"
+            f"{unescape(intro)}\n\n"
             f"Imposta la tua password qui: {set_password_link}"
         ),
     )
+    return set_password_link, sent
 
 
 async def request_password_reset(
@@ -722,7 +798,7 @@ async def verify_otp(db: AsyncSession, *, user_id: uuid.UUID, purpose: str, code
     return True
 
 
-# --- PIN dei JavCash (Session 87) -------------------------------------------------------------
+# --- PIN dei JavCash -------------------------------------------------------------
 #
 # Il cliente sceglie come confermare l'uso dei JavCash al checkout: il codice
 # via email (sempre disponibile) oppure un PIN di quattro cifre scelto da lui.

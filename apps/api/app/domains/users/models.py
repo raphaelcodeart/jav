@@ -15,9 +15,15 @@ class User(UUIDPKMixin, TimestampMixin, Base):
     organization_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("organizations.id"), index=True
     )
+    #: Il club a cui l'account appartiene: genitori, segreteria e istruttori
+    #: di un club. NULL per lo staff della piattaforma (superadmin, chi
+    #: gestisce lo Shop), che entra nei club scegliendoli (club/scope.py).
+    club_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("clubs.id"), nullable=True, index=True
+    )
     email: Mapped[str] = mapped_column(String(255), index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
-    # ACTIVE / FROZEN (added Session 28 -- an admin-frozen account: login is
+    # ACTIVE / FROZEN (an admin-frozen account: login is
     # refused and every existing session revoked immediately, but the row and
     # all its data/history stay exactly as they were, see
     # users/service.py::freeze_user/unfreeze_user and auth/service.py's
@@ -29,11 +35,11 @@ class User(UUIDPKMixin, TimestampMixin, Base):
     # Set once, at self-registration, when the (now-mandatory) privacy
     # checkbox is accepted -- see auth/service.py::register_with_referral.
     # NULL for every account that predates this field (accounts created by
-    # an admin directly, or self-registered before Session 27) -- there is
+    # an admin directly) -- there is
     # no retroactive consent to backfill for those, so this column simply
     # stays NULL for them rather than being defaulted to "accepted".
     privacy_accepted_at: Mapped[datetime | None] = mapped_column(nullable=True)
-    # Profile-completion gate (added Session 27): every account, existing or
+    # Profile-completion gate: every account, existing or
     # new, must have all of these filled before using the dashboard -- see
     # users/service.py::is_profile_complete(). Deliberately on User, not
     # Customer/AgentProfile, since a promoter has no Customer row and this

@@ -2,7 +2,7 @@
 
 Placeholder feature: the actual promotion criteria (personal/group volume
 figures, evaluation window) were never provided by the business
-(docs/open-questions.md #1) -- the numbers seeded in migration 0010 /
+(docs/open-questions.md #1) -- the numbers in
 seed/ranks.py are a reasonable placeholder the user explicitly asked us to
 pick, not confirmed Jav policy. Both volumes computed here are
 CUMULATIVE ("lifetime") totals of contract value (product base price) on
@@ -43,8 +43,7 @@ class RankProgress:
 def _volume_cents():
     """What one contract adds to a volume: its product's price per month.
 
-    Session 84 made a contract's base_price_cents the price of the whole term
-    (it had been the monthly canone), but every rank threshold is calibrated
+    A contract's base_price_cents is the price of the whole term, but every rank threshold is calibrated
     on the monthly figure (S2 = 15 €): the monthly price when the product has
     one, otherwise the old canone back out of the whole-term price -- the
     exact inverse of pricing.contract_billing_periods, so no volume moved."""

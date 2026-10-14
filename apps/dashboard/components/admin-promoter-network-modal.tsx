@@ -35,21 +35,21 @@ export function AdminPromoterNetworkModal({
   const self = branch?.find((m) => m.depth === 0);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 light:bg-slate-900/40 backdrop-blur-sm animate-fade-in">
-      <div className="w-full max-w-6xl max-h-[92vh] overflow-y-auto glass-card rounded-2xl p-6 border-white/10 light:border-slate-300 bg-slate-950 light:bg-white animate-scale-up">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+      <div className="w-full max-w-6xl max-h-[92vh] overflow-y-auto glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up">
         <div className="flex items-start justify-between mb-6 gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-orange-600 to-amber-500 flex items-center justify-center text-white font-bold text-lg shrink-0">
+            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-brand-600 to-brand-400 flex items-center justify-center text-white font-bold text-lg shrink-0">
               {displayName.trim().charAt(0).toUpperCase() || "?"}
             </div>
             <div>
-              <h3 className="text-lg font-bold text-white light:text-slate-900">Rete di {displayName}</h3>
+              <h3 className="text-lg font-bold text-slate-900">Rete di {displayName}</h3>
               <div className="flex items-center gap-2 mt-0.5">
                 {self?.promoter_code && (
                   <span className="font-mono text-[10px] text-slate-500">{self.promoter_code}</span>
                 )}
                 {self?.rank_code && (
-                  <span className="px-2 py-0.5 text-[10px] font-bold rounded-md border bg-white/5 light:bg-slate-900/5 text-slate-300 light:text-slate-600 border-white/10 light:border-slate-300">
+                  <span className="px-2 py-0.5 font-bold rounded-md border bg-slate-900/5 text-slate-600 border-slate-300">
                     {self.rank_code}
                   </span>
                 )}
@@ -61,7 +61,7 @@ export function AdminPromoterNetworkModal({
           </div>
           <button
             onClick={onClose}
-            className="p-1 hover:bg-white/5 rounded-lg text-slate-400 light:text-slate-500 hover:text-white transition cursor-pointer shrink-0"
+            className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-900 transition cursor-pointer shrink-0"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
@@ -73,7 +73,7 @@ export function AdminPromoterNetworkModal({
           <PromoterAziendaPanel agentId={agentId} />
 
           <div>
-            <h4 className="text-sm font-semibold text-white light:text-slate-900 mb-3">Albero della rete</h4>
+            <h4 className="text-sm font-semibold text-slate-900 mb-3">Albero della rete</h4>
             {branchLoading ? (
               <p className="text-sm text-slate-500">Caricamento albero...</p>
             ) : branchError ? (

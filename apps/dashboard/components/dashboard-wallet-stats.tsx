@@ -5,8 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { WalletRead, WalletTransactionRead } from "@/lib/types";
 
 const CASHBACK_SOURCES = new Set([
-  "ORDER_CASHBACK_BASE", "ORDER_CASHBACK_BONUS", "INVOICE_REDEMPTION_BASE", "INVOICE_REDEMPTION_BONUS",
-  "CONTRACT_CASHBACK",
+  "ORDER_CASHBACK_BASE", "ORDER_CASHBACK_BONUS", "CONTRACT_CASHBACK",
 ]);
 
 /** Counts a number up from its previous value to `value` over `durationMs`,
@@ -74,7 +73,7 @@ function StatCard({
 }) {
   const animated = useCountUp(cents);
   const toneClasses: Record<"orange" | "emerald" | "sky", { ring: string; glow: string; text: string; iconBg: string }> = {
-    orange: { ring: "from-orange-500/20 via-orange-500/5", glow: "shadow-orange-500/10", text: "text-orange-400", iconBg: "bg-orange-500/15 text-orange-400" },
+    orange: { ring: "from-brand-500/20 via-brand-500/5", glow: "shadow-brand-500/10", text: "text-brand-600", iconBg: "bg-brand-500/15 text-brand-600" },
     emerald: { ring: "from-emerald-500/20 via-emerald-500/5", glow: "shadow-emerald-500/10", text: "text-emerald-400", iconBg: "bg-emerald-500/15 text-emerald-400" },
     sky: { ring: "from-sky-500/20 via-sky-500/5", glow: "shadow-sky-500/10", text: "text-sky-400", iconBg: "bg-sky-500/15 text-sky-400" },
   };
@@ -82,12 +81,12 @@ function StatCard({
 
   return (
     <div
-      className={`relative overflow-hidden rounded-2xl border border-white/10 light:border-slate-200 bg-gradient-to-br ${t.ring} to-transparent bg-slate-950/60 light:bg-white/80 p-5 shadow-lg ${t.glow} transition-transform hover:-translate-y-0.5`}
+      className={`relative overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br ${t.ring} to-transparent bg-white/80 p-5 shadow-lg ${t.glow} transition-transform hover:-translate-y-0.5`}
     >
       <div className="flex items-start justify-between mb-4">
         <span className={`p-2.5 rounded-xl ${t.iconBg}`}>{icon}</span>
       </div>
-      <p className="text-[10px] font-bold text-slate-400 light:text-slate-500 uppercase tracking-wider mb-1">{label}</p>
+      <p className=" font-bold text-slate-500 uppercase tracking-wider mb-1">{label}</p>
       <p className={`text-3xl font-black tabular-nums ${t.text}`}>
         {formatJavCash(animated)} <span className="text-sm font-bold align-top">JavCash</span>
       </p>
@@ -131,7 +130,7 @@ export function DashboardWalletStats() {
         label="Cashback Accumulato"
         cents={cashbackEarnedCents}
         tone="emerald"
-        hint="Totale ricevuto da ordini e riscatti"
+        hint="Totale ricevuto da ordini e contratti"
         icon={
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V6m0 10v2" />

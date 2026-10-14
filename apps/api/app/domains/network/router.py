@@ -48,14 +48,12 @@ async def _resolve_own_agent_id(
 # Roles that hold the "network.manage" permission (see rbac/models.py
 # DEFAULT_ROLE_PERMISSIONS) -- i.e. org-wide network visibility, not just
 # their own downline. Kept as an explicit role list (matching this
-# function's existing pattern) rather than a live permission-table query:
-# real bug found while building the admin "Apri Rete" promoter drill-down
-# (Session 15) -- this used to check only SUPER_ADMIN/ORGANIZATION_ADMIN,
-# so a plain ADMIN (the actual seeded admin@jav.demo account used
-# throughout this project's own demo/docs) got 403 "No agent profile for
-# this user" on every branch-summary/branch-contracts call for anyone but
-# themselves, even though the SAME admin can already see the whole
-# organization's network via GET /network/agents and /organization/levels.
+# function's existing pattern) rather than a live permission-table query.
+# ADMIN must be in it: checking only SUPER_ADMIN/ORGANIZATION_ADMIN would
+# answer 403 "No agent profile for this user" to a plain ADMIN on every
+# branch-summary/branch-contracts call for anyone but themselves, even
+# though the SAME admin already sees the whole organization's network via
+# GET /network/agents and /organization/levels.
 _BRANCH_ACCESS_BYPASS_ROLES = {"SUPER_ADMIN", "ORGANIZATION_ADMIN", "ADMIN", "SALES_MANAGER"}
 
 # Who still sees a FROZEN member (and their subtree) in a network branch.
@@ -63,7 +61,7 @@ _BRANCH_ACCESS_BYPASS_ROLES = {"SUPER_ADMIN", "ORGANIZATION_ADMIN", "ADMIN", "SA
 # too, despite it bypassing the branch-ownership check above -- gets them
 # pruned out entirely: a frozen member is "completamente sganciato" from
 # the network as far as the field is concerned, and only the admin tier
-# keeps the full picture (Session 37, explicit business rule). Narrower
+# keeps the full picture (explicit business rule). Narrower
 # than _BRANCH_ACCESS_BYPASS_ROLES on purpose: seeing every branch and
 # seeing frozen people are two different privileges.
 _FROZEN_VISIBLE_ROLES = {"SUPER_ADMIN", "ORGANIZATION_ADMIN", "ADMIN"}

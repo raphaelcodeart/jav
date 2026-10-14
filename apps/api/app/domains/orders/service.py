@@ -1,7 +1,5 @@
-import logging
 import uuid
 
-import stripe
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,8 +16,6 @@ from app.domains.orders.models import ORDER_PAYMENT_METHODS, Order
 from app.domains.organizations import service as organizations_service
 from app.domains.users.models import User
 from app.domains.wallets import service as wallets_service
-
-logger = logging.getLogger(__name__)
 
 
 class OrderError(Exception):
@@ -66,14 +62,10 @@ class InvalidOtpError(OrderError):
     auth/service.py::WALLET_CREDIT_SPEND_OTP_PURPOSE."""
 
 
-# Fixed, same "flat, admin can't override it per product" design as
-# invoice_redemptions/models.py::CASHBACK_PERCENTAGE -- both unified at 5%
-# (Session 33, explicit user request), but kept as two separate constants in
-# two different flows rather than one shared import, since they're free to
-# diverge again later. What the customer pays extra, on top of whatever they
-# actually owe in new money, to opt into "riscuoti subito cashback" on an
-# eligible order -- see _credit_order_cashback() below for where it's paid
-# back.
+# Fixed, "flat, admin can't override it per product". What the customer
+# pays extra, on top of whatever they actually owe in new money, to opt into
+# "riscuoti subito cashback" on an eligible order -- see
+# _credit_order_cashback() below for where it's paid back.
 ORDER_CASHBACK_PERCENTAGE = 5
 
 
@@ -103,7 +95,6 @@ async def get_available_payment_methods(db: AsyncSession, *, organization_id: uu
     (so the UI never shows a button that would just fail) read this."""
     return {
         "bank_transfer": await organizations_service.is_bank_transfer_configured(db, organization_id=organization_id),
-        "card": await organizations_service.is_stripe_configured(db, organization_id=organization_id),
     }
 
 
@@ -127,16 +118,15 @@ async def get_quote(
         ),
         "customer_wallet_balance_cents": wallet.balance_cents if wallet else 0,
         "bank_transfer_available": methods["bank_transfer"],
-        "card_available": methods["card"],
         "cashback_available": version.cashback_enabled,
         "cashback_percentage": ORDER_CASHBACK_PERCENTAGE,
     }
 
 
 async def _resolve_display_name(db: AsyncSession, *, organization_id: uuid.UUID, user_id: uuid.UUID) -> str:
-    """Same lookup order as invoice_redemptions/service.py's copy of this --
-    duplicated for the same reason (a private, wallets-domain-local batch
-    helper isn't meant to be imported across domains)."""
+    """Promoter display name, then customer name, then email -- a private
+    copy rather than an import of the wallets domain's batch helper, which
+    isn't meant to be used across domains."""
     agent = (
         await db.execute(
             select(AgentProfile.display_name).where(
@@ -180,14 +170,13 @@ async def to_read_dict(db: AsyncSession, order: Order) -> dict:
         "credit_applied_cents": order.credit_applied_cents,
         # Includes the cashback surcharge (0 when cashback wasn't requested)
         # -- this is the actual amount owed in new money for this order, via
-        # bank transfer or card.
+        # bank transfer.
         "residual_amount_cents": order.amount_cents - order.credit_applied_cents + order.cashback_surcharge_cents,
         "cashback_requested": order.cashback_requested,
         "cashback_surcharge_cents": order.cashback_surcharge_cents,
         "cashback_credited_at": order.cashback_credited_at,
         "status": order.status,
         "payment_method": order.payment_method,
-        "stripe_checkout_session_id": order.stripe_checkout_session_id,
         "payment_proof_uploaded_at": order.payment_proof_uploaded_at,
         "note": order.note,
         "paid_at": order.paid_at,
@@ -247,8 +236,7 @@ async def create_order(
     # the pre-credit-discount amount_cents. Crediting cashback off a higher
     # base than what was genuinely paid new would let a customer manufacture
     # credit from credit already spent -- exactly the invariant this
-    # wallet's whole design (docs/cashback-partner-invoices-plan.md) exists
-    # to prevent.
+    # wallet's whole design exists to prevent.
     residual_before_cashback = amount_cents - credit_applied_cents
     cashback_surcharge_cents = 0
     if cashback_requested:
@@ -274,8 +262,6 @@ async def create_order(
         available = await get_available_payment_methods(db, organization_id=organization_id)
         if payment_method == "BANK_TRANSFER" and not available["bank_transfer"]:
             raise PaymentMethodNotAvailableError("Il pagamento con bonifico non è configurato.")
-        if payment_method == "CARD" and not available["card"]:
-            raise PaymentMethodNotAvailableError("Il pagamento con carta non è configurato.")
 
     wallet = None
     if credit_applied_cents > 0:
@@ -352,19 +338,13 @@ async def _send_order_confirmation_email(
     db: AsyncSession, *, organization_id: uuid.UUID, order: Order, version: ProductVersion
 ) -> None:
     """Best-effort, fires after the order is already committed -- an SMTP
-    hiccup or (for a CARD order) a Stripe hiccup here must never undo an
-    order that has already been created. Explains exactly how to pay: the
-    IBAN for bank transfer, or a real Stripe payment link for card -- a
-    fresh Checkout Session created here specifically for the email, since
-    the residual/attempt the customer sees in their dashboard may create a
-    separate one later (see attach_stripe_checkout_session's "only the
-    latest attempt is honored" rule -- harmless, either link still works
-    until the customer actually pays)."""
+    hiccup here must never undo an order that has already been created.
+    Explains exactly how to pay: the IBAN and the causale for the bank
+    transfer."""
     user = await db.get(User, order.customer_user_id)
     if user is None:
         return
 
-    settings = get_settings()
     residual_cents = order.amount_cents - order.credit_applied_cents + order.cashback_surcharge_cents
     order_code = str(order.id)[:8].upper()
     order_code_line = f"<p>Numero ordine: <strong>#{order_code}</strong></p>"
@@ -373,8 +353,6 @@ async def _send_order_confirmation_email(
         "non appena il pagamento sarà confermato.</p>"
         if order.cashback_requested else ""
     )
-    cta_label: str | None = None
-    cta_url: str | None = None
 
     if order.status == "PAID":
         heading = "Ordine confermato"
@@ -385,34 +363,6 @@ async def _send_order_confirmation_email(
             + (f" (di cui {order.credit_applied_cents / 100:.2f} JavCash)" if order.credit_applied_cents else "")
             + "</p><p>Non è richiesto alcun pagamento aggiuntivo.</p>"
         )
-    elif order.payment_method == "CARD":
-        from app.domains.payments import service as payments_service
-
-        heading = "Completa il pagamento del tuo ordine"
-        body_html = (
-            order_code_line
-            + f"<p>Il tuo ordine per <strong>{version.name}</strong> è stato registrato.</p>"
-            f"<p>Da pagare: <strong>{residual_cents / 100:.2f} &euro;</strong>"
-            + (f" (dopo {order.credit_applied_cents / 100:.2f} JavCash già applicati)" if order.credit_applied_cents else "")
-            + "</p>"
-            + cashback_line
-            + "<p>Completa il pagamento con carta cliccando il pulsante qui sotto.</p>"
-        )
-        try:
-            cta_url = await payments_service.create_checkout_session_for_order(
-                db, organization_id=organization_id, order=order,
-                success_url=f"{settings.public_app_base_url}/customer",
-                cancel_url=f"{settings.public_app_base_url}/customer",
-            )
-            cta_label = "Paga con carta"
-        except payments_service.StripeNotConfiguredError:
-            logger.warning("Order %s confirmation email sent without a Stripe link (Stripe not configured)", order.id)
-        except stripe.error.StripeError:
-            # A real Stripe API problem (bad/revoked key, Stripe outage, ...)
-            # must never take the already-committed order down with it --
-            # the customer can still pay later from "I miei Ordini", which
-            # requests its own fresh session on demand.
-            logger.exception("Order %s confirmation email sent without a Stripe link (Stripe API error)", order.id)
     else:
         bank_settings = await organizations_service.get_settings(db, organization_id=organization_id)
         iban = bank_settings.get("bank_iban")
@@ -440,8 +390,6 @@ async def _send_order_confirmation_email(
         preheader=f"Riepilogo del tuo ordine -- {version.name}",
         heading=heading,
         body_html=body_html,
-        cta_label=cta_label,
-        cta_url=cta_url,
     )
     send_html_email_best_effort(
         context=f"Order confirmation email (order={order.id})",
@@ -458,16 +406,13 @@ async def _send_order_paid_email(
     """Best-effort, fires after the order is already committed PAID -- the
     second of the two customer emails a product order gets (the first is
     _send_order_confirmation_email's "ordine ricevuto" at creation, which
-    deliberately never claims the payment itself is done). Same email
-    regardless of which of the two ways an order reaches PAID: an admin
-    confirming a bank transfer (confirm_payment) or Stripe's webhook
-    confirming a card payment (mark_paid_via_stripe) -- only the method
-    label in the body differs, both call this exact function."""
+    deliberately never claims the payment itself is done), sent once an
+    admin confirms the bank transfer (confirm_payment)."""
     user = await db.get(User, order.customer_user_id)
     if user is None:
         return
 
-    method_label = "Carta (Stripe)" if order.payment_method == "CARD" else "Bonifico bancario"
+    method_label = "Bonifico bancario"
     product_name = version.name if version else "un prodotto"
     paid_at_label = order.paid_at.strftime("%d/%m/%Y %H:%M") if order.paid_at else "-"
     # What actually landed as new money on THIS payment -- not the raw
@@ -519,10 +464,9 @@ async def get_org_scoped(db: AsyncSession, *, organization_id: uuid.UUID, order_
 async def get_owned(
     db: AsyncSession, *, organization_id: uuid.UUID, customer_user_id: uuid.UUID, order_id: uuid.UUID
 ) -> Order | None:
-    """Same ownership-scoped lookup pattern as
-    invoice_redemptions/service.py::get_owned -- backs every customer-facing
-    "my order" mutation (payment-proof upload, payment-method change) so a
-    customer can never touch someone else's order by guessing its id."""
+    """Ownership-scoped lookup -- backs every customer-facing "my order"
+    action (payment-proof upload and download) so a customer can never touch
+    someone else's order by guessing its id."""
     order = await get_org_scoped(db, organization_id=organization_id, order_id=order_id)
     if order is None or order.customer_user_id != customer_user_id:
         return None
@@ -555,12 +499,11 @@ async def _credit_order_cashback(
     actor_user_id: uuid.UUID | None,
 ) -> None:
     """The other half of "riscuoti subito cashback": once an order that
-    opted in reaches PAID (bank transfer admin-confirmed, or Stripe
-    webhook), credits the customer's wallet with exactly what they just
-    paid new for this order -- the pre-surcharge residual (100%) plus the
-    surcharge itself (the 5% bonus) -- as two separate JavCash rows, same
-    "the ledger always shows the split explicitly" reasoning as
-    invoice_redemptions/service.py::confirm_payment's base+bonus pair.
+    opted in reaches PAID (bank transfer admin-confirmed), credits the
+    customer's wallet with exactly what they just paid new for this order
+    -- the pre-surcharge residual (100%) plus the surcharge itself (the 5%
+    bonus) -- as two separate JavCash rows, so the ledger always shows the
+    split explicitly.
     Never more than that: the credited total is always <= what genuinely
     landed as real revenue on this exact order, so this can never manufacture
     credit out of credit already spent (see create_order's
@@ -570,7 +513,7 @@ async def _credit_order_cashback(
     Idempotent two ways at once: the guard below (cashback_credited_at is
     only ever set once) and, independently, credit_wallet()'s own
     idempotency-key dedup (derived from the order id, never client-supplied)
-    -- either alone would be enough to make a retried Stripe webhook a
+    -- either alone would be enough to make a retried confirmation a
     no-op, but there is no reason not to have both."""
     if not order.cashback_requested or order.cashback_credited_at is not None:
         return
@@ -608,20 +551,6 @@ async def confirm_payment(
         raise OrderError("Order not found")
     if order.status != "AWAITING_PAYMENT":
         raise InvalidOrderStateError(f"Cannot confirm payment for an order in status {order.status}")
-    if order.payment_method == "CARD":
-        # This is the manual bank-transfer confirmation action ("Conferma
-        # bonifico ricevuto") -- a CARD order can only ever reach PAID via
-        # mark_paid_via_stripe(), called from the Stripe webhook once
-        # Stripe itself confirms the charge. Refusing it here (not just
-        # hiding the button in admin-orders-panel.tsx) is the actual
-        # enforcement: an admin must never be able to mark a Stripe order
-        # paid without Stripe's own confirmation, matching the same
-        # "browser back on the success page proves nothing" principle for
-        # the admin side too.
-        raise InvalidOrderStateError(
-            "Questo ordine si paga con carta: la conferma arriva automaticamente da Stripe, "
-            "non è richiesta (né consentita) un'azione manuale."
-        )
 
     order.status = "PAID"
     order.paid_by_user_id = actor_user_id
@@ -678,36 +607,6 @@ async def cancel_order(
     return order
 
 
-async def change_payment_method(
-    db: AsyncSession, *, organization_id: uuid.UUID, order: Order, new_payment_method: str
-) -> Order:
-    """Lets a customer switch an AWAITING_PAYMENT order between BANK_TRANSFER
-    and CARD -- e.g. tired of waiting on a bank transfer, wants to pay by
-    card right now instead. The caller (router) has already resolved and
-    ownership-checked `order`. Clearing stripe_checkout_session_id when
-    moving AWAY from CARD is not cosmetic: mark_paid_via_stripe() looks an
-    order up BY that session id, so a stale/abandoned Stripe session left
-    attached could otherwise mark this order paid off a card payment that
-    has nothing to do with the bank transfer the customer switched to."""
-    if order.status != "AWAITING_PAYMENT":
-        raise InvalidOrderStateError(f"Cannot change payment method for an order in status {order.status}")
-    if new_payment_method not in ORDER_PAYMENT_METHODS:
-        raise InvalidPaymentMethodError(f"payment_method must be one of {ORDER_PAYMENT_METHODS}")
-
-    if new_payment_method != order.payment_method:
-        available = await get_available_payment_methods(db, organization_id=organization_id)
-        if new_payment_method == "BANK_TRANSFER" and not available["bank_transfer"]:
-            raise PaymentMethodNotAvailableError("Il pagamento con bonifico non è configurato.")
-        if new_payment_method == "CARD" and not available["card"]:
-            raise PaymentMethodNotAvailableError("Il pagamento con carta non è configurato.")
-        if order.payment_method == "CARD":
-            order.stripe_checkout_session_id = None
-        order.payment_method = new_payment_method
-        await db.commit()
-        await db.refresh(order)
-    return order
-
-
 async def upload_payment_proof(
     db: AsyncSession, *, organization_id: uuid.UUID, order: Order,
     file_bytes: bytes, content_type: str, original_filename: str, actor_user_id: uuid.UUID,
@@ -716,10 +615,9 @@ async def upload_payment_proof(
     an AWAITING_PAYMENT/BANK_TRANSFER order -- purely advisory extra
     evidence for whoever clicks "Conferma bonifico ricevuto" in
     admin-orders-panel.tsx; never changes order.status by itself. Reuses
-    core/storage.py's private documents bucket directly, same as
-    invoice_redemptions/service.py::submit_redemption -- no reason to route
-    this through the `documents` domain, whose contract_id is NOT NULL by
-    design."""
+    core/storage.py's private documents bucket directly -- no reason to
+    route this through the `documents` domain, whose contract_id is NOT
+    NULL by design."""
     from app.core.storage import UploadValidationError
     from app.core.storage import upload_document as storage_upload_document
 
@@ -762,67 +660,3 @@ def presigned_payment_proof_url(order: Order) -> str:
     return storage_presign_document(
         storage_key=order.payment_proof_storage_key, expires_in_seconds=PAYMENT_PROOF_PRESIGNED_URL_TTL_SECONDS
     )
-
-
-async def attach_stripe_checkout_session(db: AsyncSession, *, order: Order, session_id: str) -> Order:
-    """Records which Stripe Checkout Session is currently "live" for this
-    order's residual -- overwrites any previous session id rather than
-    appending, so only the customer's latest checkout attempt is ever
-    honored by the webhook (see payments/service.py). Does not change
-    order.status: the order stays AWAITING_PAYMENT until Stripe confirms
-    payment via the webhook, exactly like a bank transfer stays
-    AWAITING_PAYMENT until an admin confirms it."""
-    order.payment_method = "CARD"
-    order.stripe_checkout_session_id = session_id
-    await db.commit()
-    await db.refresh(order)
-    return order
-
-
-async def mark_paid_via_stripe(
-    db: AsyncSession, *, organization_id: uuid.UUID, stripe_checkout_session_id: str
-) -> Order:
-    """Called only from the Stripe webhook (payments/router.py) once
-    checkout.session.completed fires -- the one case in this whole domain
-    where `PAID` is reached with no human actor, mirroring how
-    reference_invoice_redemption_id credits also have actor_user_id set to
-    whichever admin confirmed them, except here there IS no admin: paid_by_
-    user_id stays NULL, same as an ADMIN_CREDIT's actor_user_id can be NULL
-    for a system-originated row."""
-    stmt = select(Order).where(
-        Order.organization_id == organization_id, Order.stripe_checkout_session_id == stripe_checkout_session_id
-    )
-    order = (await db.execute(stmt)).scalar_one_or_none()
-    if order is None:
-        raise OrderError("Order not found for this Stripe checkout session")
-    if order.status != "AWAITING_PAYMENT":
-        # Stripe can and does retry webhook delivery -- a second delivery
-        # for an already-PAID order is expected, not an error; no-op.
-        return order
-
-    order.status = "PAID"
-    order.paid_at = utcnow()
-
-    version = await db.get(ProductVersion, order.product_version_id)
-    await notifications_service.notify_user(
-        db, organization_id=organization_id, user_id=order.customer_user_id, type_="ORDER_PAID",
-        entity_type="order", entity_id=order.id,
-        title=f"Il tuo ordine per {version.name if version else 'un prodotto'} è confermato",
-        body="Pagamento con carta ricevuto.",
-    )
-    # No actor to exclude here (see docstring above -- Stripe confirmed this,
-    # not a human), unlike confirm_payment's staff notification.
-    await notifications_service.notify_roles(
-        db, organization_id=organization_id, roles=notifications_service.STAFF_NOTIFY_ROLES,
-        type_="ORDER_PAID", entity_type="order", entity_id=order.id,
-        title=f"Pagamento Stripe confermato: {version.name if version else 'ordine'}",
-        body=f"{order.amount_cents / 100:.2f} EUR",
-    )
-    # No actor here either -- Stripe confirmed this, not an admin. See
-    # _credit_order_cashback's own docstring for why this is idempotent
-    # against Stripe's webhook retries.
-    await _credit_order_cashback(db, organization_id=organization_id, order=order, version=version, actor_user_id=None)
-    await db.commit()
-    await db.refresh(order)
-    await _send_order_paid_email(db, order=order, version=version)
-    return order

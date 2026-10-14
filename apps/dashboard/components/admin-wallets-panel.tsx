@@ -18,23 +18,20 @@ const TYPE_LABELS: Record<string, string> = {
 const TYPE_COLORS: Record<string, string> = {
   ADMIN_CREDIT: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
   TRANSFER: "bg-sky-500/10 text-sky-400 border-sky-500/20",
-  PURCHASE_DEBIT: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+  PURCHASE_DEBIT: "bg-amber-500/10 text-amber-700 border-amber-500/20",
   REVERSAL: "bg-rose-500/10 text-rose-400 border-rose-500/20",
 };
 
 // Finer-grained label than TYPE_LABELS alone -- distinguishes a plain admin
-// top-up from the two lines a partner-invoice redemption always writes
-// together (see docs/cashback-partner-invoices-plan.md), without needing to
-// read the free-text note.
+// top-up from the lines an order cashback always writes together, without
+// needing to read the free-text note.
 const SOURCE_LABELS: Record<string, string> = {
   MANUAL_ADMIN: "Ricarica manuale",
   WELCOME_BONUS: "Omaggio di benvenuto",
-  INVOICE_REDEMPTION_BASE: "Riscatto fattura",
-  INVOICE_REDEMPTION_BONUS: "Bonus 5% riscatto fattura",
   ORDER_CASHBACK_BASE: "Cashback ordine",
   ORDER_CASHBACK_BONUS: "Bonus 5% cashback ordine",
   // Automatic, surcharge-free credit on a paid Jav contract --
-  // deliberately a different rule from the two 5% ones above.
+  // deliberately a different rule from the 5% order one above.
   CONTRACT_CASHBACK: "Cashback contratto Jav",
 };
 
@@ -195,33 +192,33 @@ export function AdminWalletsPanel({ isSuperAdmin = false }: AdminWalletsPanelPro
     <div className="space-y-6">
       {/* KPI */}
       <div className="grid grid-cols-2 gap-4">
-        <div className="glass-card rounded-2xl p-4 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70">
+        <div className="glass-card rounded-2xl p-4 border-slate-200 bg-white/70">
           <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Saldo totale wallet</p>
-          <p className="text-xl font-bold text-white light:text-slate-900">{javCash(totalBalance)}</p>
+          <p className="text-xl font-bold text-slate-900">{javCash(totalBalance)}</p>
         </div>
-        <div className="glass-card rounded-2xl p-4 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70">
+        <div className="glass-card rounded-2xl p-4 border-slate-200 bg-white/70">
           <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Totale ricaricato (nel filtro)</p>
           <p className="text-xl font-bold text-emerald-400">{javCash(totalCredited)}</p>
         </div>
       </div>
 
       {/* Wallet balances */}
-      <div className="glass-card rounded-2xl border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70 overflow-hidden">
+      <div className="glass-card rounded-2xl border-slate-200 bg-white/70 overflow-hidden">
         <div className="p-5 pb-3 flex items-center justify-between gap-4">
-          <h3 className="text-sm font-semibold text-white light:text-slate-900">Saldi per utente</h3>
+          <h3 className="text-sm font-semibold text-slate-900">Saldi per utente</h3>
           <input
             type="text"
             placeholder="Cerca per nome, email o indirizzo..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="rounded-xl glass-input px-3 py-1.5 text-xs max-w-xs focus:border-orange-500"
+            className="rounded-xl glass-input px-3 py-1.5 text-xs max-w-xs focus:border-brand-500"
           />
         </div>
         {walletsError && <p className="px-5 pb-3 text-sm text-rose-400">Impossibile caricare i wallet.</p>}
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-left text-xs">
             <thead>
-              <tr className="border-b border-white/5 light:border-slate-200 text-slate-400 light:text-slate-500 font-semibold">
+              <tr className="border-b border-slate-200 text-slate-500 font-semibold">
                 <th className="py-2 px-5">Utente</th>
                 <th className="py-2 px-5">Ruoli</th>
                 <th className="py-2 px-5">Indirizzo</th>
@@ -229,7 +226,7 @@ export function AdminWalletsPanel({ isSuperAdmin = false }: AdminWalletsPanelPro
                 <th className="py-2 px-5 text-right">Azioni</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5 light:divide-slate-200">
+            <tbody className="divide-y divide-slate-200">
               {wallets === undefined ? (
                 <tr><td colSpan={5} className="text-center py-6 text-slate-500">Caricamento...</td></tr>
               ) : filteredWallets.length === 0 ? (
@@ -237,19 +234,19 @@ export function AdminWalletsPanel({ isSuperAdmin = false }: AdminWalletsPanelPro
               ) : (
                 walletsPagination.pageItems.map((w) => (
                   <Fragment key={w.id}>
-                    <tr className="text-slate-300 light:text-slate-600">
+                    <tr className=" text-slate-600">
                       <td className="py-2 px-5">
-                        <div className="font-medium text-white light:text-slate-900">{w.owner_display_name}</div>
+                        <div className="font-medium text-slate-900">{w.owner_display_name}</div>
                         <div className="text-[10px] text-slate-500">{w.owner_email}</div>
                       </td>
                       <td className="py-2 px-5">{w.owner_roles.join(", ") || "—"}</td>
                       <td className="py-2 px-5 font-mono text-[10px]">{w.address}</td>
-                      <td className="py-2 px-5 text-right font-semibold text-orange-400"><JavCashAmount cents={w.balance_cents} /></td>
+                      <td className="py-2 px-5 text-right font-semibold text-brand-600"><JavCashAmount cents={w.balance_cents} /></td>
                       <td className="py-2 px-5 text-right">
                         {isSuperAdmin ? (
                           <button
                             onClick={() => openTopUp(w.user_id)}
-                            className="px-2.5 py-1 rounded-lg bg-orange-600/10 hover:bg-orange-600/20 border border-orange-500/20 text-orange-400 text-[11px] font-semibold transition cursor-pointer"
+                            className="px-2.5 py-1 rounded-lg bg-brand-600/10 hover:bg-brand-600/20 border border-brand-500/20 text-brand-600 text-[11px] font-semibold transition cursor-pointer"
                           >
                             {topUpForUserId === w.user_id ? "Annulla" : "Ricarica"}
                           </button>
@@ -259,11 +256,11 @@ export function AdminWalletsPanel({ isSuperAdmin = false }: AdminWalletsPanelPro
                       </td>
                     </tr>
                     {isSuperAdmin && topUpForUserId === w.user_id && (
-                      <tr className="bg-white/2 light:bg-slate-900/[0.02]">
+                      <tr className=" bg-slate-900/[0.02]">
                         <td colSpan={5} className="px-5 py-3">
                           <form onSubmit={(e) => handleTopUp(e, w.user_id)} className="flex items-end gap-2">
                             <div className="space-y-1 flex-1 max-w-[160px]">
-                              <label className="text-[10px] font-semibold text-slate-300 light:text-slate-600 uppercase block">Importo (JavCash)</label>
+                              <label className=" font-semibold text-slate-600 uppercase block">Importo (JavCash)</label>
                               <input
                                 required
                                 autoFocus
@@ -271,20 +268,20 @@ export function AdminWalletsPanel({ isSuperAdmin = false }: AdminWalletsPanelPro
                                 value={topUpAmount}
                                 onChange={(e) => setTopUpAmount(e.target.value)}
                                 placeholder="0,00"
-                                className="w-full rounded-lg glass-input px-3 py-1.5 text-sm focus:border-orange-500"
+                                className="w-full rounded-lg glass-input px-3 py-1.5 text-sm focus:border-brand-500"
                               />
                             </div>
                             <div className="space-y-1 flex-1">
-                              <label className="text-[10px] font-semibold text-slate-300 light:text-slate-600 uppercase block">Nota (opzionale)</label>
+                              <label className=" font-semibold text-slate-600 uppercase block">Nota (opzionale)</label>
                               <input
                                 value={topUpNote}
                                 onChange={(e) => setTopUpNote(e.target.value)}
                                 placeholder="Cashback ordine..."
-                                className="w-full rounded-lg glass-input px-3 py-1.5 text-sm focus:border-orange-500"
+                                className="w-full rounded-lg glass-input px-3 py-1.5 text-sm focus:border-brand-500"
                               />
                             </div>
                             <button type="submit" disabled={topUpLoading}
-                              className="px-4 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50 shrink-0">
+                              className="px-4 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50 shrink-0">
                               {topUpLoading ? "..." : "Conferma"}
                             </button>
                           </form>
@@ -310,7 +307,7 @@ export function AdminWalletsPanel({ isSuperAdmin = false }: AdminWalletsPanelPro
         <select
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value)}
-          className="rounded-xl glass-input px-3 py-2 text-xs bg-slate-900 light:bg-white focus:border-orange-500"
+          className="rounded-xl glass-input px-3 py-2 text-xs bg-white focus:border-brand-500"
         >
           <option value="ALL">Tutti i tipi</option>
           <option value="ADMIN_CREDIT">Solo ricariche/cashback</option>
@@ -319,7 +316,7 @@ export function AdminWalletsPanel({ isSuperAdmin = false }: AdminWalletsPanelPro
         </select>
         <button
           onClick={handleExportCsv}
-          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 light:bg-slate-900/5 hover:bg-white/10 border border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 text-xs font-semibold transition cursor-pointer"
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 text-xs font-semibold transition cursor-pointer"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -334,11 +331,11 @@ export function AdminWalletsPanel({ isSuperAdmin = false }: AdminWalletsPanelPro
       {transactionsError && <p className="text-sm text-rose-400">Impossibile caricare le transazioni.</p>}
 
       {/* Global transaction ledger */}
-      <div className="glass-card rounded-2xl border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70 overflow-hidden">
+      <div className="glass-card rounded-2xl border-slate-200 bg-white/70 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-left text-xs">
             <thead>
-              <tr className="border-b border-white/5 light:border-slate-200 text-slate-400 light:text-slate-500 font-semibold">
+              <tr className="border-b border-slate-200 text-slate-500 font-semibold">
                 <th className="py-3 px-5">Da</th>
                 <th className="py-3 px-5">A</th>
                 <th className="py-3 px-5">Tipo</th>
@@ -347,7 +344,7 @@ export function AdminWalletsPanel({ isSuperAdmin = false }: AdminWalletsPanelPro
                 <th className="py-3 px-5 text-right">Azioni</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5 light:divide-slate-200">
+            <tbody className="divide-y divide-slate-200">
               {isLoading && (
                 <tr><td colSpan={6} className="text-center py-8 text-slate-500">Caricamento...</td></tr>
               )}
@@ -357,7 +354,7 @@ export function AdminWalletsPanel({ isSuperAdmin = false }: AdminWalletsPanelPro
               {transactionsPagination.pageItems.map((t) => (
                 <Fragment key={t.id}>
                   <tr
-                    className="text-slate-300 light:text-slate-600 hover:bg-white/5 transition-colors cursor-pointer"
+                    className=" text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
                     onClick={() => setExpandedId(expandedId === t.id ? null : t.id)}
                   >
                     <td className="py-3 px-5">{t.from_display_name ?? "Sistema"}</td>
@@ -367,7 +364,7 @@ export function AdminWalletsPanel({ isSuperAdmin = false }: AdminWalletsPanelPro
                         {transactionLabel(t)}
                       </span>
                     </td>
-                    <td className="py-3 px-5 text-right font-semibold text-orange-400"><JavCashAmount cents={t.amount_cents} /></td>
+                    <td className="py-3 px-5 text-right font-semibold text-brand-600"><JavCashAmount cents={t.amount_cents} /></td>
                     <td className="py-3 px-5">{new Date(t.created_at).toLocaleString("it-IT")}</td>
                     <td className="py-3 px-5 text-right">
                       {t.type !== "REVERSAL" && (
@@ -382,20 +379,17 @@ export function AdminWalletsPanel({ isSuperAdmin = false }: AdminWalletsPanelPro
                     </td>
                   </tr>
                   {expandedId === t.id && (
-                    <tr className="bg-white/2 light:bg-slate-900/[0.02]">
+                    <tr className=" bg-slate-900/[0.02]">
                       <td colSpan={6} className="px-5 py-4 text-xs space-y-1.5">
-                        {t.note && <p><span className="text-slate-500">Nota:</span> <span className="text-slate-300 light:text-slate-600">{t.note}</span></p>}
+                        {t.note && <p><span className="text-slate-500">Nota:</span> <span className=" text-slate-600">{t.note}</span></p>}
                         {t.reference_contract_id && (
-                          <p><span className="text-slate-500">Contratto collegato:</span> <span className="font-mono text-[10px] text-slate-300 light:text-slate-600">{t.reference_contract_id}</span></p>
+                          <p><span className="text-slate-500">Contratto collegato:</span> <span className="font-mono text-slate-600">{t.reference_contract_id}</span></p>
                         )}
-                        {(t.reference_order_id || t.reference_imported_order_id || t.reference_cj_order_id || t.reference_shopify_order_id || t.reference_aliexpress_order_id) && (
-                          <p><span className="text-slate-500">Ordine collegato:</span> <span className="font-mono text-[10px] text-slate-300 light:text-slate-600">{t.reference_order_id ?? t.reference_imported_order_id ?? t.reference_cj_order_id ?? t.reference_shopify_order_id ?? t.reference_aliexpress_order_id}</span> <span className="text-slate-600">(vedi Ordini)</span></p>
+                        {t.reference_order_id && (
+                          <p><span className="text-slate-500">Ordine collegato:</span> <span className="font-mono text-slate-600">{t.reference_order_id}</span> <span className="text-slate-600">(vedi Ordini)</span></p>
                         )}
-                        {t.reference_invoice_redemption_id && (
-                          <p><span className="text-slate-500">Riscatto collegato:</span> <span className="font-mono text-[10px] text-slate-300 light:text-slate-600">{t.reference_invoice_redemption_id}</span> <span className="text-slate-600">(vedi Riscatti Fatture)</span></p>
-                        )}
-                        {t.from_address && <p><span className="text-slate-500">Indirizzo mittente:</span> <span className="font-mono text-[10px] text-slate-300 light:text-slate-600">{t.from_address}</span></p>}
-                        {t.to_address && <p><span className="text-slate-500">Indirizzo destinatario:</span> <span className="font-mono text-[10px] text-slate-300 light:text-slate-600">{t.to_address}</span></p>}
+                        {t.from_address && <p><span className="text-slate-500">Indirizzo mittente:</span> <span className="font-mono text-slate-600">{t.from_address}</span></p>}
+                        {t.to_address && <p><span className="text-slate-500">Indirizzo destinatario:</span> <span className="font-mono text-slate-600">{t.to_address}</span></p>}
                         <p className="font-mono text-[10px] text-slate-500">{t.id}</p>
                       </td>
                     </tr>

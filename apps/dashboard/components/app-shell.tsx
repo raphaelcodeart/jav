@@ -1,14 +1,18 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import Image from "next/image";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AccountGate } from "@/components/account-gate";
 import { AreaSwitcher, useDualRoleAreas } from "@/components/area-switcher";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { ShopCartButton, ShopCartPanel } from "@/components/shop-cart";
 import { CartCheckoutModal, CartCheckoutShop } from "@/components/cart-checkout-modal";
+import { LanguageSwitcher } from "@/components/language-switcher";
+import { Javbot } from "@/components/javbot/javbot";
+import { useI18n } from "@/lib/i18n/provider";
+import type { Translator } from "@/lib/i18n/translate";
 import type { NotificationRead } from "@/lib/types";
 
 export interface NavItem {
@@ -20,6 +24,9 @@ export interface NavItem {
       dot -- e.g. Anagrafiche Promoter opts into PROMOTER_APPROVAL_REQUESTED.
       A nav item with no notificationTypes never shows a dot. */
   notificationTypes?: string[];
+  /** Il titolo del gruppo nel menu laterale ("Club", "Shop", ...): una voce
+      che cambia gruppo rispetto alla precedente apre un'intestazione. */
+  group?: string;
 }
 
 interface AppShellProps {
@@ -46,41 +53,10 @@ interface AppShellProps {
 }
 
 // How many nav items fit comfortably in the mobile bottom tab bar before the
-// rest fold into the "Altro" drawer button -- matches the classic
-// native-app pattern (4-5 primary tabs max).
+// rest fold into the "Altro" sheet -- the classic native-app pattern (4-5
+// primary tabs max).
 const MOBILE_TAB_COUNT = 4;
 
-const NOTIFICATION_TYPE_LABELS: Record<string, string> = {
-  CONTRACT_CREATED: "Nuovo contratto",
-  TICKET_CREATED: "Nuovo ticket",
-  PRODUCT_REQUEST_CREATED: "Nuova richiesta prodotto",
-  PRODUCT_REQUEST_CUSTOMER_REPLY: "Risposta su una richiesta prodotto",
-  PRODUCT_REQUEST_REPLY: "Risposta alla tua richiesta",
-  PROMOTER_APPROVAL_REQUESTED: "Promoter da approvare",
-  PROMOTER_APPROVED: "Promoter approvato",
-  PROMOTER_REJECTED: "Promoter non approvato",
-  COMMISSION_EARNED: "Nuova provvigione",
-  CASHBACK_RECEIVED: "Cashback ricevuto",
-  WALLET_TRANSFER_RECEIVED: "JavCash ricevuti",
-  INVOICE_REDEMPTION_VERIFIED: "Fattura verificata",
-  INVOICE_REDEMPTION_REJECTED: "Fattura rifiutata",
-  ORDER_CREDIT_APPLIED: "JavCash usati per un ordine",
-  ORDER_PAID: "Ordine confermato",
-  ORDER_PAYMENT_PROOF_UPLOADED: "Prova di pagamento caricata",
-  INVOICE_REDEMPTION_PAYMENT_PROOF_UPLOADED: "Prova di pagamento riscatto caricata",
-  IMPORTED_ORDER_CREATED: "Nuovo ordine Acquisti Jav",
-  CJ_ORDER_CREATED: "Nuovo ordine Shop Jav Partner",
-  CJ_ORDER_PAID: "Ordine Shop Jav Partner pagato",
-  CJ_ORDER_FAILED: "Ordine Shop Jav Partner da controllare",
-  CJ_PAYMENT_REQUIRED: "Pagamento CJ richiesto",
-  SHOPIFY_ORDER_CREATED: "Nuovo ordine Shopify",
-  SHOPIFY_ORDER_PAID: "Ordine Shopify pagato",
-  SHOPIFY_ORDER_FAILED: "Ordine Shopify da controllare",
-  ALIEXPRESS_ORDER_CREATED: "Nuovo ordine AliExpress",
-  ALIEXPRESS_ORDER_PAID: "Ordine AliExpress pagato",
-  ALIEXPRESS_ORDER_FAILED: "Ordine AliExpress da controllare",
-  ORDER_SHIPPED: "Aggiornamento spedizione",
-};
 
 const NOTIFICATION_TYPE_ICONS: Record<string, ReactNode> = {
   CONTRACT_CREATED: (
@@ -116,34 +92,29 @@ const NOTIFICATION_TYPE_ICONS: Record<string, ReactNode> = {
   WALLET_TRANSFER_RECEIVED: (
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
   ),
-  INVOICE_REDEMPTION_VERIFIED: (
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-  ),
-  INVOICE_REDEMPTION_REJECTED: (
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-  ),
   ORDER_CREDIT_APPLIED: (
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a2 2 0 00-2-2H7a2 2 0 00-2 2m16 0v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6m16 0V9a2 2 0 00-2-2H5a2 2 0 00-2 2v3m16 0h-4a1 1 0 00-1 1v0a1 1 0 001 1h4" />
   ),
   ORDER_PAID: (
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16.5 7.5h-9v9h9v-9zM3 6a3 3 0 013-3h12a3 3 0 013 3v12a3 3 0 01-3 3H6a3 3 0 01-3-3V6z" />
   ),
-  IMPORTED_ORDER_CREATED: (
+  ORDER_CREATED: (
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16.5 7.5h-9v9h9v-9zM3 6a3 3 0 013-3h12a3 3 0 013 3v12a3 3 0 01-3 3H6a3 3 0 01-3-3V6z" />
-  ),  ORDER_SHIPPED: (
+  ),
+  ORDER_SHIPPED: (
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0" />
   ),
 };
 
-function timeAgo(iso: string): string {
+function timeAgo(iso: string, t: Translator): string {
   const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (seconds < 60) return "adesso";
+  if (seconds < 60) return t("time.now");
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} min fa`;
+  if (minutes < 60) return t("time.minutesAgo", { n: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} ${hours === 1 ? "ora" : "ore"} fa`;
+  if (hours < 24) return t(hours === 1 ? "time.hourAgo" : "time.hoursAgo", { n: hours });
   const days = Math.floor(hours / 24);
-  return `${days} ${days === 1 ? "giorno" : "giorni"} fa`;
+  return t(days === 1 ? "time.dayAgo" : "time.daysAgo", { n: days });
 }
 
 async function fetchNotifications(): Promise<NotificationRead[]> {
@@ -154,11 +125,13 @@ async function fetchNotifications(): Promise<NotificationRead[]> {
 
 /** Bell icon + unread badge + dropdown -- polls every 25s so a new
     notification shows up without a manual refresh, without needing
-    WebSockets for what is, for now, a low-volume internal tool. */
+    WebSockets for what is, for now, a low-volume internal tool. The bell
+    rings (a short wiggle) whenever the unread count goes up. */
 function NotificationBell({ onOpenNotification }: { onOpenNotification: (n: NotificationRead) => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
+  const { t } = useI18n();
 
   const { data: notifications } = useQuery({
     queryKey: ["notifications", "mine"],
@@ -193,87 +166,117 @@ function NotificationBell({ onOpenNotification }: { onOpenNotification: (n: Noti
 
   return (
     <div className="relative" ref={ref}>
-      <button
+      <motion.button
+        key={unreadCount}
+        animate={unreadCount > 0 ? { rotate: [0, -14, 12, -8, 5, 0] } : undefined}
+        transition={{ duration: 0.7 }}
+        whileTap={{ scale: 0.9 }}
         onClick={() => setOpen((v) => !v)}
-        className="relative flex h-9 w-9 items-center justify-center rounded-full bg-white/5 light:bg-slate-900/5 hover:bg-white/10 light:hover:bg-slate-900/10 text-slate-300 light:text-slate-600 transition cursor-pointer"
-        aria-label="Notifiche"
+        className="relative flex h-10 w-10 items-center justify-center rounded-2xl bg-white ring-1 ring-ink-200 shadow-soft text-ink-700 hover:text-brand-600 cursor-pointer"
+        aria-label={unreadCount > 0 ? t("notifications.unreadAria", { n: unreadCount }) : t("notifications.title")}
       >
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
         </svg>
-        {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white">
-            {unreadCount > 9 ? "9+" : unreadCount}
-          </span>
-        )}
-      </button>
-
-      {open && (
-        <div className="absolute right-0 top-11 z-50 w-80 max-h-[420px] overflow-y-auto rounded-xl border border-white/10 light:border-slate-200 bg-slate-900 light:bg-white shadow-xl animate-scale-up">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 light:border-slate-100 sticky top-0 bg-slate-900 light:bg-white">
-            <p className="text-sm font-semibold text-white light:text-slate-900">Notifiche</p>
-            {unreadCount > 0 && (
-              <button
-                onClick={handleMarkAllRead}
-                className="text-[11px] text-orange-400 hover:text-orange-300 transition cursor-pointer"
-              >
-                Segna tutte come lette
-              </button>
-            )}
-          </div>
-          {list.length === 0 ? (
-            <p className="text-xs text-slate-500 text-center py-8">Nessuna notifica.</p>
-          ) : (
-            <div className="divide-y divide-white/5 light:divide-slate-100">
-              {list.map((n) => (
-                <button
-                  key={n.id}
-                  onClick={() => handleClick(n)}
-                  className={`w-full flex items-start gap-3 px-4 py-3 text-left transition cursor-pointer hover:bg-white/5 light:hover:bg-slate-50 ${
-                    !n.is_read ? "bg-orange-500/5" : ""
-                  }`}
-                >
-                  <span className="p-1.5 rounded-lg bg-orange-500/10 text-orange-400 shrink-0 mt-0.5">
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      {NOTIFICATION_TYPE_ICONS[n.type] ?? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01" />}
-                    </svg>
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-1.5">
-                      <span className="text-xs font-semibold text-white light:text-slate-900 truncate">{n.title}</span>
-                      {!n.is_read && <span className="w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0" />}
-                    </span>
-                    {n.body && <span className="block text-[11px] text-slate-400 light:text-slate-500 mt-0.5 line-clamp-2">{n.body}</span>}
-                    <span className="block text-[10px] text-slate-500 mt-1">
-                      {NOTIFICATION_TYPE_LABELS[n.type] ?? n.type} · {timeAgo(n.created_at)}
-                    </span>
-                  </span>
-                </button>
-              ))}
-            </div>
+        <AnimatePresence>
+          {unreadCount > 0 && (
+            <motion.span
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0 }}
+              className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-500 px-1 text-[10px] font-bold text-white ring-2 ring-white animate-pulse-ring"
+            >
+              {unreadCount > 9 ? "9+" : unreadCount}
+            </motion.span>
           )}
-        </div>
-      )}
+        </AnimatePresence>
+      </motion.button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -8, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.97 }}
+            transition={{ type: "spring", stiffness: 460, damping: 32 }}
+            className="absolute right-0 top-12 z-50 w-[22rem] max-w-[calc(100vw-2rem)] max-h-[440px] overflow-y-auto rounded-2xl bg-white shadow-lift ring-1 ring-ink-200 origin-top-right"
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-ink-100 sticky top-0 bg-white/95 backdrop-blur">
+              <p className="font-display text-sm text-ink-900">{t("notifications.title")}</p>
+              {unreadCount > 0 && (
+                <button onClick={handleMarkAllRead} className="text-xs font-semibold text-brand-600 hover:text-brand-700 cursor-pointer">
+                  {t("notifications.markAllRead")}
+                </button>
+              )}
+            </div>
+            {list.length === 0 ? (
+              <div className="text-center py-10 px-6">
+                <div className="mx-auto h-12 w-12 rounded-2xl bg-accent-100 text-accent-700 flex items-center justify-center text-xl mb-3">✓</div>
+                <p className="text-sm text-ink-500">{t("notifications.empty")}</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-ink-100">
+                {list.map((n, i) => (
+                  <motion.button
+                    key={n.id}
+                    initial={{ opacity: 0, x: 8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: Math.min(i, 8) * 0.03 }}
+                    onClick={() => handleClick(n)}
+                    className={`w-full flex items-start gap-3 px-4 py-3 text-left cursor-pointer hover:bg-ink-50 ${!n.is_read ? "bg-brand-50/60" : ""}`}
+                  >
+                    <span className="h-8 w-8 rounded-xl bg-brand-500/10 text-brand-600 shrink-0 flex items-center justify-center">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        {NOTIFICATION_TYPE_ICONS[n.type] ?? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01" />}
+                      </svg>
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1.5">
+                        <span className="text-sm font-semibold text-ink-900 truncate">{n.title}</span>
+                        {!n.is_read && <span className="w-2 h-2 rounded-full bg-brand-500 shrink-0" />}
+                      </span>
+                      {n.body && <span className="block text-xs text-ink-500 mt-0.5 line-clamp-2">{n.body}</span>}
+                      <span className="block text-[11px] text-ink-400 mt-1">
+                        {t.dyn(`notification.${n.type}`, n.type)} · {timeAgo(n.created_at, t)}
+                      </span>
+                    </span>
+                  </motion.button>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
 function LogoMark({ compact = false }: { compact?: boolean }) {
   return (
-    <div className="flex items-center rounded-xl bg-white p-1.5 shadow-sm shrink-0">
-      <Image
-        src="/logo.png"
-        alt="Jav"
-        width={compact ? 32 : 40}
-        height={compact ? 29 : 36}
-        priority
-        className="h-auto w-auto"
-      />
+    <div className="flex items-center gap-3 min-w-0">
+      <motion.div whileHover={{ rotate: -6, scale: 1.05 }} className="shrink-0 rounded-2xl bg-white shadow-soft ring-1 ring-ink-100 p-1">
+        <Image src="/logo.png" alt="Jav" width={compact ? 36 : 44} height={compact ? 33 : 40} priority className="h-auto w-auto" />
+      </motion.div>
+      {!compact && (
+        <div className="min-w-0 leading-tight">
+          <p className="font-display text-lg text-ink-900">JAV</p>
+          <p className="text-[11px] font-semibold tracking-wide text-ink-500 truncate">Judo Arte e Vida</p>
+        </div>
+      )}
     </div>
   );
 }
 
-/** Top-right icon cluster: theme toggle + avatar menu (classic dashboard corner). */
+function initialsOf(email?: string) {
+  return ((email || "?").split("@")[0] ?? "?")
+    .split(/[._-]/)
+    .map((p) => p[0] ?? "")
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+/** Avatar menu in the top-right corner (classic dashboard corner). */
 function UserMenu({ email, roleLabel, onOpenSettings }: { email?: string; roleLabel: string; onOpenSettings?: () => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -286,14 +289,8 @@ function UserMenu({ email, roleLabel, onOpenSettings }: { email?: string; roleLa
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, []);
 
-  const initials = ((email || "?").split("@")[0] ?? "?")
-    .split(/[._-]/)
-    .map((p) => p[0] ?? "")
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-
   const { hasBothRoles, isCustomerArea } = useDualRoleAreas();
+  const { t } = useI18n();
 
   async function handleLogout() {
     // A full page load, and whatever the call answered (Session 85): a soft
@@ -303,62 +300,87 @@ function UserMenu({ email, roleLabel, onOpenSettings }: { email?: string; roleLa
     window.location.assign("/login");
   }
 
+  const itemClass = "w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-ink-700 hover:bg-ink-50 hover:text-ink-900 cursor-pointer";
+
   return (
     <div className="relative" ref={ref}>
-      <button
+      <motion.button
+        whileHover={{ scale: 1.06 }}
+        whileTap={{ scale: 0.92 }}
         onClick={() => setOpen((v) => !v)}
-        className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-tr from-orange-600 to-amber-500 text-xs font-bold text-white shadow-md cursor-pointer"
-        aria-label="Menu utente"
+        className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 text-xs font-bold text-white shadow-brand ring-2 ring-white cursor-pointer font-display"
+        aria-label={t("shell.userMenu")}
       >
-        {initials}
-      </button>
+        {initialsOf(email)}
+      </motion.button>
 
-      {open && (
-        <div className="absolute right-0 top-11 z-50 w-56 rounded-xl border border-white/10 light:border-slate-200 bg-slate-900 light:bg-white shadow-xl animate-scale-up overflow-hidden">
-          <div className="px-4 py-3 border-b border-white/5 light:border-slate-100">
-            <p className="truncate text-sm font-semibold text-white light:text-slate-900">{email}</p>
-            <p className="truncate text-xs text-slate-400 light:text-slate-500">{roleLabel}</p>
-          </div>
-          {hasBothRoles && (
-            <Link
-              href={isCustomerArea ? "/promoter" : "/customer"}
-              onClick={() => setOpen(false)}
-              className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-200 light:text-slate-700 hover:bg-white/5 light:hover:bg-slate-50 transition cursor-pointer"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4M16 17H4m0 0l4 4m-4-4l4-4" />
-              </svg>
-              {isCustomerArea ? "Passa a modalità promoter" : "Passa a modalità cliente"}
-            </Link>
-          )}
-          {/* Session 87: le Impostazioni del cliente (il PIN dei JavCash) si
-              raggiungono anche da qui, dove le cerca chi è abituato alle app. */}
-          {onOpenSettings && (
-            <button
-              onClick={() => { setOpen(false); onOpenSettings(); }}
-              className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-200 light:text-slate-700 hover:bg-white/5 light:hover:bg-slate-50 transition cursor-pointer"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              Impostazioni
-            </button>
-          )}
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-rose-400 light:text-rose-600 hover:bg-white/5 light:hover:bg-slate-50 transition cursor-pointer"
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -8, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.97 }}
+            transition={{ type: "spring", stiffness: 460, damping: 32 }}
+            className="absolute right-0 top-12 z-50 w-60 rounded-2xl bg-white shadow-lift ring-1 ring-ink-200 overflow-hidden origin-top-right"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
-            Esci
-          </button>
-        </div>
-      )}
+            <div className="px-4 py-3 border-b border-ink-100 bg-gradient-to-br from-brand-50 to-white">
+              <p className="truncate text-sm font-semibold text-ink-900">{email}</p>
+              <p className="truncate text-xs text-ink-500">{roleLabel}</p>
+            </div>
+            {hasBothRoles && (
+              <Link href={isCustomerArea ? "/promoter" : "/customer"} onClick={() => setOpen(false)} className={itemClass}>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4M16 17H4m0 0l4 4m-4-4l4-4" />
+                </svg>
+                {isCustomerArea ? t("shell.switchToPromoter") : t("shell.switchToCustomer")}
+              </Link>
+            )}
+            {/* Session 87: le Impostazioni del cliente (il PIN dei JavCash) si
+                raggiungono anche da qui, dove le cerca chi è abituato alle app. */}
+            {onOpenSettings && (
+              <button onClick={() => { setOpen(false); onOpenSettings(); }} className={itemClass}>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                {t("shell.settings")}
+              </button>
+            )}
+            <button onClick={handleLogout} className={`${itemClass} text-rose-600 hover:text-rose-700`}>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+              {t("shell.logout")}
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
+
+function greeting(t: Translator): string {
+  const h = new Date().getHours();
+  if (h < 12) return t("shell.goodMorning");
+  if (h < 18) return t("shell.goodAfternoon");
+  return t("shell.goodEvening");
+}
+
+const COLLAPSE_KEY = "jav-sidebar-collapsed";
+const COLLAPSE_EVENT = "jav-sidebar-collapsed-change";
+
+// The collapsed rail is a per-browser preference read from localStorage --
+// through useSyncExternalStore, so the server render (no localStorage) and
+// the first client render agree, then the stored value takes over.
+function subscribeCollapsed(onChange: () => void) {
+  window.addEventListener(COLLAPSE_EVENT, onChange);
+  window.addEventListener("storage", onChange);
+  return () => {
+    window.removeEventListener(COLLAPSE_EVENT, onChange);
+    window.removeEventListener("storage", onChange);
+  };
+}
+const readCollapsed = () => localStorage.getItem(COLLAPSE_KEY) === "1";
 
 export function AppShell({
   roleLabel,
@@ -373,12 +395,20 @@ export function AppShell({
   showCart = false,
   centerHeaderActions = false,
 }: AppShellProps) {
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const { t } = useI18n();
   // Il carrello vive qui, non dentro lo Shop: si apre da qualunque scheda, e
   // il checkout deve restare raggiungibile anche dopo averlo aperto da "I
   // miei Ordini" o dalla Contabilità.
   const [cartOpen, setCartOpen] = useState(false);
   const [cartCheckoutShop, setCartCheckoutShop] = useState<CartCheckoutShop | null>(null);
+  // Remembered per browser: whoever prefers the slim rail keeps it.
+  const collapsed = useSyncExternalStore(subscribeCollapsed, readCollapsed, () => false);
+
+  function toggleCollapsed() {
+    localStorage.setItem(COLLAPSE_KEY, collapsed ? "0" : "1");
+    window.dispatchEvent(new Event(COLLAPSE_EVENT));
+  }
 
   const { data: notifications } = useQuery({
     queryKey: ["notifications", "mine"],
@@ -392,205 +422,227 @@ export function AppShell({
     if (targetKey) onNavigate(targetKey);
   }
 
-  const sidebarContent = (
-    <div className="flex h-full flex-col">
-      <div className="px-5 pt-6 pb-5">
-        <LogoMark />
-      </div>
-
-      <nav className="flex-1 overflow-y-auto px-3 space-y-1">
-        {navItems.map((item) => {
-          const active = item.key === activeKey;
-          const hasUnread = item.notificationTypes?.some((t) => unreadTypes.has(t)) ?? false;
-          return (
-            <button
-              key={item.key}
-              onClick={() => {
-                onNavigate(item.key);
-                setMobileOpen(false);
-              }}
-              className={`w-full flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-all cursor-pointer group ${
-                active
-                  ? "bg-gradient-to-r from-orange-600/15 to-amber-500/10 text-orange-300 light:text-orange-700 shadow-[inset_0_0_0_1px_rgba(139,92,246,0.25)]"
-                  : "text-slate-400 light:text-slate-500 hover:bg-white/5 light:hover:bg-slate-900/5 hover:text-white light:hover:text-slate-900"
-              }`}
-            >
-              <span
-                className={`relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors ${
-                  active
-                    ? "bg-orange-500/20 text-orange-400 light:bg-orange-100 light:text-orange-600"
-                    : "bg-white/5 light:bg-slate-900/5 text-current opacity-80 group-hover:opacity-100 group-hover:bg-white/10 light:group-hover:bg-slate-900/10"
-                }`}
-              >
-                {item.icon}
-                {hasUnread && (
-                  <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-rose-500 border-2 border-slate-950 light:border-white" />
-                )}
-              </span>
-              <span className="flex-1 text-left truncate">{item.label}</span>
-              {active && <span className="h-1.5 w-1.5 rounded-full bg-orange-500 shrink-0" />}
-            </button>
-          );
-        })}
-      </nav>
-
-      <div className="p-4 border-t border-white/5 light:border-slate-900/5 mt-2">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 light:text-slate-400">
-          {roleLabel}
-        </p>
-      </div>
-    </div>
-  );
+  const name = (email ?? "").split("@")[0]?.split(/[._-]/)[0] ?? "";
+  const displayName = name ? name.charAt(0).toUpperCase() + name.slice(1) : "";
+  const sidebarWidth = collapsed ? "lg:w-[88px]" : "lg:w-72";
+  const contentPad = collapsed ? "lg:pl-[88px]" : "lg:pl-72";
 
   return (
     <div className="min-h-screen">
-      {/* Desktop sidebar */}
-      <aside className="hidden lg:block fixed inset-y-0 left-0 z-30 w-64 border-r border-white/5 light:border-slate-900/5 bg-slate-950/70 light:bg-white/70 backdrop-blur-xl">
-        {sidebarContent}
+      {/* Desktop sidebar: a floating white rail with an active pill that
+          slides between items (shared layout animation). */}
+      <aside className={`hidden lg:flex fixed inset-y-0 left-0 z-30 p-3 transition-[width] duration-300 ${sidebarWidth}`}>
+        <div className="flex h-full w-full flex-col rounded-3xl bg-white/90 backdrop-blur-xl ring-1 ring-ink-200/70 shadow-soft overflow-hidden">
+          <div className={`flex items-center ${collapsed ? "justify-center" : "justify-between"} px-4 pt-5 pb-4`}>
+            <LogoMark compact={collapsed} />
+          </div>
+
+          <nav className="flex-1 overflow-y-auto overflow-x-hidden px-3 space-y-1">
+            {navItems.map((item, index) => {
+              const active = item.key === activeKey;
+              const hasUnread = item.notificationTypes?.some((t) => unreadTypes.has(t)) ?? false;
+              const opensGroup = !!item.group && item.group !== navItems[index - 1]?.group;
+              return (
+                <Fragment key={item.key}>
+                {opensGroup && !collapsed && (
+                  <p className="px-3 pt-4 pb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-ink-400">{item.group}</p>
+                )}
+                {opensGroup && collapsed && index > 0 && <div className="mx-3 my-2 h-px bg-ink-100" />}
+                <button
+                  key={item.key}
+                  onClick={() => onNavigate(item.key)}
+                  title={collapsed ? item.label : undefined}
+                  className={`relative w-full flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-semibold cursor-pointer group ${
+                    collapsed ? "justify-center" : ""
+                  } ${active ? "text-white" : "text-ink-600 hover:text-ink-900 hover:bg-ink-50"}`}
+                >
+                  {active && (
+                    <motion.span
+                      layoutId="sidebar-active"
+                      className="absolute inset-0 rounded-2xl bg-gradient-to-r from-brand-500 to-brand-600 shadow-brand"
+                      transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                    />
+                  )}
+                  <span
+                    className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-transform group-hover:scale-110 [&_svg]:h-5 [&_svg]:w-5 ${
+                      active ? "bg-white/20" : "bg-ink-100/80 text-ink-600 group-hover:bg-brand-50 group-hover:text-brand-600"
+                    }`}
+                  >
+                    {item.icon}
+                    {hasUnread && <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-accent-400 ring-2 ring-white" />}
+                  </span>
+                  {!collapsed && <span className="relative flex-1 text-left truncate">{item.label}</span>}
+                </button>
+                </Fragment>
+              );
+            })}
+          </nav>
+
+          <div className="p-3">
+            {!collapsed && (
+              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-ink-800 to-ink-950 p-4 text-white mb-2">
+                <div className="absolute -right-4 -top-6 font-display text-6xl text-white/10 select-none" aria-hidden="true">柔</div>
+                <p className="text-[11px] uppercase tracking-[0.18em] text-accent-300 font-bold">{t("shell.yourRole")}</p>
+                <p className="font-display text-sm mt-1 truncate">{roleLabel}</p>
+              </div>
+            )}
+            <button
+              onClick={toggleCollapsed}
+              className="w-full flex items-center justify-center gap-2 rounded-xl py-2 text-xs font-semibold text-ink-500 hover:bg-ink-50 hover:text-ink-900 cursor-pointer"
+              aria-label={collapsed ? t("shell.expandMenu") : t("shell.collapseMenu")}
+            >
+              <motion.svg animate={{ rotate: collapsed ? 180 : 0 }} className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 6l-6 6 6 6" />
+              </motion.svg>
+              {!collapsed && t("shell.collapse")}
+            </button>
+          </div>
+        </div>
       </aside>
 
-      {/* Mobile sidebar (drawer) */}
-      {mobileOpen && (
-        <div className="lg:hidden fixed inset-0 z-50 flex">
-          <div
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-fade-in"
-            onClick={() => setMobileOpen(false)}
-          />
-          <aside className="relative z-10 w-72 h-full bg-slate-950 light:bg-white border-r border-white/5 light:border-slate-900/5 animate-scale-up">
-            {sidebarContent}
-          </aside>
-        </div>
-      )}
-
-      {/* Mobile bottom tab bar -- app-style primary navigation for phones,
-          big touch-target buttons mirroring how a native app puts its main
-          sections in a bottom bar with icons. */}
-      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 flex items-stretch border-t border-white/5 light:border-slate-900/5 bg-slate-950/95 light:bg-white/95 backdrop-blur-xl pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_16px_rgba(0,0,0,0.2)]">
-        {navItems.slice(0, MOBILE_TAB_COUNT).map((item) => {
-          const active = item.key === activeKey;
-          const hasUnread = item.notificationTypes?.some((t) => unreadTypes.has(t)) ?? false;
-          return (
-            <button
-              key={item.key}
-              onClick={() => onNavigate(item.key)}
-              className={`flex-1 flex flex-col items-center justify-center gap-1 py-2.5 cursor-pointer transition-colors ${
-                active ? "text-orange-400" : "text-slate-400 light:text-slate-500"
-              }`}
-            >
-              <span
-                className={`relative flex h-9 w-9 items-center justify-center rounded-xl transition-colors [&_svg]:h-6 [&_svg]:w-6 ${
-                  active ? "bg-orange-500/15" : ""
-                }`}
-              >
-                {item.icon}
-                {hasUnread && (
-                  <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-rose-500 border-2 border-slate-950 light:border-white" />
-                )}
-              </span>
-              <span className="text-[10px] font-semibold truncate max-w-[72px]">{item.label}</span>
-            </button>
-          );
-        })}
-        {navItems.length > MOBILE_TAB_COUNT && (
-          <button
-            onClick={() => setMobileOpen(true)}
-            className="flex-1 flex flex-col items-center justify-center gap-1 py-2.5 cursor-pointer text-slate-400 light:text-slate-500"
-          >
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl">
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </span>
-            <span className="text-[10px] font-semibold">Altro</span>
-          </button>
-        )}
-      </nav>
-
-      {/* Persistent top bar -- classic dashboard layout: page title left, icon
-          cluster (theme toggle + avatar/logout menu) in the top-right corner. */}
-      <header className="sticky top-0 z-40 flex items-center justify-between gap-4 border-b border-white/5 light:border-slate-900/5 bg-slate-950/80 light:bg-white/80 backdrop-blur-md px-4 sm:px-6 lg:px-8 lg:ml-64 h-16">
-        <div className="flex items-center gap-3 min-w-0">
-          <button
-            onClick={() => setMobileOpen(true)}
-            className="lg:hidden p-2 -ml-2 rounded-lg text-slate-300 light:text-slate-600 hover:bg-white/5 light:hover:bg-slate-900/5 cursor-pointer shrink-0"
-            aria-label="Apri il menu"
-          >
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
-          <div className="lg:hidden">
-            <LogoMark compact />
+      {/* Top bar: greeting on the left, icon cluster on the right. */}
+      <header className={`sticky top-0 z-40 ${contentPad} transition-[padding] duration-300`}>
+        <div className="flex items-center justify-between gap-3 px-4 sm:px-6 lg:px-8 h-[72px] bg-white/75 backdrop-blur-xl border-b border-ink-100/80">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="lg:hidden">
+              <LogoMark compact />
+            </div>
+            <div className="min-w-0 hidden sm:block">
+              {/* The greeting depends on the user's clock, which the server
+                  doesn't have: the text may differ after hydration, on purpose. */}
+              <p className="text-xs font-semibold text-ink-500" suppressHydrationWarning>
+                {greeting(t)}
+                {displayName ? `, ${displayName}` : ""} 👋
+              </p>
+              {headerTitle && <p className="font-display text-base text-ink-900 truncate">{headerTitle}</p>}
+            </div>
           </div>
-          {headerTitle && (
-            <h1 className="hidden lg:block truncate text-base font-semibold text-white light:text-slate-900">
-              {headerTitle}
-            </h1>
-          )}
-        </div>
 
-        <div className="flex items-center gap-3 shrink-0">
-          {showCart && <ShopCartButton onOpen={() => setCartOpen(true)} />}
-          <AreaSwitcher />
-          <NotificationBell onOpenNotification={handleOpenNotification} />
-          <ThemeToggle />
-          <UserMenu
-            email={email}
-            roleLabel={roleLabel}
-            onOpenSettings={navItems.some((item) => item.key === "settings") ? () => onNavigate("settings") : undefined}
-          />
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            {showCart && <ShopCartButton onOpen={() => setCartOpen(true)} />}
+            <LanguageSwitcher />
+            <AreaSwitcher />
+            <NotificationBell onOpenNotification={handleOpenNotification} />
+            <UserMenu
+              email={email}
+              roleLabel={roleLabel}
+              onOpenSettings={navItems.some((item) => item.key === "settings") ? () => onNavigate("settings") : undefined}
+            />
+          </div>
         </div>
       </header>
 
-      {/* Desktop quick-nav bar -- the same "big app-style buttons" idea as the
-          mobile bottom bar, but as a fixed guide pinned under the header on
-          every page in desktop mode, so the primary sections are always one
-          big click away without depending on the (smaller-text) sidebar. */}
-      <nav className="hidden lg:flex sticky top-16 z-30 items-stretch gap-2 overflow-x-auto border-b border-white/5 light:border-slate-900/5 bg-slate-950/80 light:bg-white/80 backdrop-blur-md px-6 py-3 lg:ml-64 [scrollbar-width:thin]">
-        {navItems.map((item) => {
-          const active = item.key === activeKey;
-          const hasUnread = item.notificationTypes?.some((t) => unreadTypes.has(t)) ?? false;
-          return (
-            <button
-              key={item.key}
-              onClick={() => onNavigate(item.key)}
-              className={`relative flex shrink-0 items-center gap-2.5 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all cursor-pointer [&_svg]:h-5 [&_svg]:w-5 ${
-                active
-                  ? "bg-gradient-to-r from-orange-600 to-amber-500 text-white shadow-lg shadow-orange-500/20"
-                  : "bg-white/5 light:bg-slate-900/5 text-slate-300 light:text-slate-600 hover:bg-white/10 light:hover:bg-slate-900/10 hover:text-white light:hover:text-slate-900"
-              }`}
+      {/* Main content: each section enters with a short fade/rise. Motion
+          leaves `transform: none` once it settles, so fixed-position modals
+          inside never get re-anchored to <main> (see globals.css). */}
+      <div className={`${contentPad} transition-[padding] duration-300`}>
+        <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 pb-32 lg:pb-10">
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={activeKey}
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
             >
-              {item.icon}
-              <span className="whitespace-nowrap">{item.label}</span>
-              {hasUnread && (
-                <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-rose-500 border-2 border-slate-950 light:border-white" />
+              {(headerTitle || headerSubtitle || headerActions) && (
+                <div className={`mb-7 flex flex-col gap-4 ${centerHeaderActions ? "" : "md:flex-row md:items-end md:justify-between"}`}>
+                  <div className="min-w-0">
+                    {headerTitle && <h1 className="text-2xl sm:text-3xl text-ink-900">{headerTitle}</h1>}
+                    {headerSubtitle && <div className="text-sm text-ink-500 mt-1.5">{headerSubtitle}</div>}
+                  </div>
+                  {headerActions && <div className={centerHeaderActions ? "w-full" : "flex flex-wrap gap-3"}>{headerActions}</div>}
+                </div>
               )}
-            </button>
-          );
-        })}
-      </nav>
-
-      {/* Main content */}
-      <div className="lg:pl-64">
-        <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 pb-24 lg:pb-8 animate-slide-up">
-          {(headerTitle || headerSubtitle || headerActions) && (
-            <div
-              className={`mb-8 flex flex-col gap-4 ${
-                centerHeaderActions ? "" : "md:flex-row md:items-center md:justify-between"
-              }`}
-            >
-              <div>
-                <h1 className="lg:hidden text-2xl font-bold tracking-tight text-white light:text-slate-900 sm:text-3xl">
-                  {headerTitle}
-                </h1>
-                {headerSubtitle && <div className="text-sm text-slate-400 light:text-slate-500 mt-1">{headerSubtitle}</div>}
-              </div>
-              {headerActions && <div className={centerHeaderActions ? "w-full" : "flex gap-3"}>{headerActions}</div>}
-            </div>
-          )}
-          <AccountGate>{children}</AccountGate>
+              <AccountGate>{children}</AccountGate>
+            </motion.div>
+          </AnimatePresence>
         </main>
       </div>
+
+      {/* Mobile bottom tab bar: a floating pill above the home indicator,
+          big touch targets, a bubble that slides to the active tab. */}
+      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 px-3 pb-[max(env(safe-area-inset-bottom),12px)] pointer-events-none">
+        <div className="pointer-events-auto mx-auto max-w-md flex items-stretch rounded-[28px] bg-white/95 backdrop-blur-xl ring-1 ring-ink-200 shadow-lift p-1.5">
+          {navItems.slice(0, MOBILE_TAB_COUNT).map((item) => {
+            const active = item.key === activeKey;
+            const hasUnread = item.notificationTypes?.some((t) => unreadTypes.has(t)) ?? false;
+            return (
+              <button
+                key={item.key}
+                onClick={() => onNavigate(item.key)}
+                className={`relative flex-1 flex flex-col items-center justify-center gap-0.5 py-2 rounded-3xl cursor-pointer ${active ? "text-white" : "text-ink-500"}`}
+              >
+                {active && (
+                  <motion.span
+                    layoutId="tabbar-active"
+                    className="absolute inset-0 rounded-3xl bg-gradient-to-b from-brand-500 to-brand-600 shadow-brand"
+                    transition={{ type: "spring", stiffness: 480, damping: 34 }}
+                  />
+                )}
+                <span className="relative flex h-7 w-7 items-center justify-center [&_svg]:h-6 [&_svg]:w-6">
+                  {item.icon}
+                  {hasUnread && <span className="absolute -top-0.5 -right-1 h-2.5 w-2.5 rounded-full bg-accent-400 ring-2 ring-white" />}
+                </span>
+                <span className="relative text-[10px] font-bold truncate max-w-[72px]">{item.label}</span>
+              </button>
+            );
+          })}
+          {navItems.length > MOBILE_TAB_COUNT && (
+            <button onClick={() => setMoreOpen(true)} className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2 rounded-3xl cursor-pointer text-ink-500">
+              <span className="flex h-7 w-7 items-center justify-center">
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </span>
+              <span className="text-[10px] font-bold">{t("shell.more")}</span>
+            </button>
+          )}
+        </div>
+      </nav>
+
+      {/* Mobile "Altro": every section as a big tile in a bottom sheet. */}
+      <AnimatePresence>
+        {moreOpen && (
+          <div className="lg:hidden fixed inset-0 z-50 flex items-end">
+            <motion.div className="absolute inset-0 bg-ink-900/35 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setMoreOpen(false)} />
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", stiffness: 380, damping: 36 }}
+              className="relative w-full rounded-t-[32px] bg-white p-5 pb-[max(env(safe-area-inset-bottom),20px)] shadow-lift max-h-[80vh] overflow-y-auto"
+            >
+              <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-ink-200" aria-hidden="true" />
+              <p className="font-display text-ink-900 mb-4">{t("shell.allSections")}</p>
+              <div className="grid grid-cols-3 gap-3">
+                {navItems.map((item, i) => {
+                  const active = item.key === activeKey;
+                  return (
+                    <motion.button
+                      key={item.key}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.025 }}
+                      whileTap={{ scale: 0.94 }}
+                      onClick={() => {
+                        onNavigate(item.key);
+                        setMoreOpen(false);
+                      }}
+                      className={`flex flex-col items-center gap-2 rounded-2xl p-3 text-center cursor-pointer ring-1 ${
+                        active ? "bg-brand-500 text-white ring-brand-500 shadow-brand" : "bg-ink-50 text-ink-700 ring-ink-100"
+                      }`}
+                    >
+                      <span className="flex h-10 w-10 items-center justify-center [&_svg]:h-6 [&_svg]:w-6">{item.icon}</span>
+                      <span className="text-[11px] font-bold leading-tight">{item.label}</span>
+                    </motion.button>
+                  );
+                })}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {showCart && (
         <ShopCartPanel
@@ -607,9 +659,12 @@ export function AppShell({
           }}
         />
       )}
-      {cartCheckoutShop && (
-        <CartCheckoutModal shop={cartCheckoutShop} onClose={() => setCartCheckoutShop(null)} />
-      )}
+      {cartCheckoutShop && <CartCheckoutModal shop={cartCheckoutShop} onClose={() => setCartCheckoutShop(null)} />}
+
+      {/* JAVBOT, l'assistente: qui una volta sola, quindi in ogni pagina
+          privata di ogni ruolo. Cambia scheda con lo stesso onNavigate del
+          menu, e solo verso sezioni che quest'area ha davvero. */}
+      <Javbot navKeys={navItems.map((item) => item.key)} onNavigate={(key) => onNavigate(key)} />
     </div>
   );
 }

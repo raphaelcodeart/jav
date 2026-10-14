@@ -14,8 +14,8 @@ const STATE_LABELS: Record<string, string> = {
 };
 
 const STATE_COLORS: Record<string, string> = {
-  INVITED: "bg-white/5 light:bg-slate-900/5 text-slate-400 border-white/10 light:border-slate-300",
-  IN_PROGRESS: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+  INVITED: " bg-slate-900/5 text-slate-400 border-slate-300",
+  IN_PROGRESS: "bg-amber-500/10 text-amber-700 border-amber-500/20",
   ACTIVE: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
 };
 
@@ -77,7 +77,7 @@ export function FriendReferralsPanel({ organizationId }: { organizationId?: stri
     return <p className="text-sm text-rose-400">Impossibile caricare i tuoi inviti.</p>;
   }
   if (!data) {
-    return <div className="glass-card rounded-2xl p-6 border-white/5 light:border-slate-200 animate-pulse h-40" />;
+    return <div className="glass-card rounded-2xl p-6 border-slate-200 animate-pulse h-40" />;
   }
 
   const towardsNext = data.active_total % data.reward_every;
@@ -86,15 +86,15 @@ export function FriendReferralsPanel({ organizationId }: { organizationId?: stri
   return (
     <div className="space-y-6">
       {/* Link personale */}
-      <div className="glass-card rounded-2xl p-6 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70">
-        <h3 className="text-lg font-semibold text-white light:text-slate-900">Invita un amico</h3>
-        <p className="text-xs text-slate-400 light:text-slate-500 mt-1 mb-4">
+      <div className="glass-card rounded-2xl p-6 border-slate-200 bg-white/70">
+        <h3 className="text-lg font-semibold text-slate-900">Invita un amico</h3>
+        <p className="text-xs text-slate-500 mt-1 mb-4">
           Condividi il tuo link: chi si iscrive da qui compare nella tua lista. <strong>Ogni{" "}
           {data.reward_every} amici</strong> che attivano un contratto Jav puoi richiedere{" "}
           <strong>{data.reward_description}</strong> &mdash; non solo per i primi {data.reward_every}:
           il premio si ripete a {data.reward_every * 2}, {data.reward_every * 3} e cosi via.
         </p>
-        <code className="block w-full truncate rounded-xl bg-white/5 light:bg-slate-900/5 border border-white/10 light:border-slate-300 px-3 py-2.5 text-xs font-mono text-slate-300 light:text-slate-600 mb-3">
+        <code className="block w-full truncate rounded-xl bg-slate-900/5 border border-slate-300 px-3 py-2.5 text-xs font-mono text-slate-600 mb-3">
           {personalLink() || `…/r/${data.code}`}
         </code>
         {/* One tap straight into the app they actually use. "Copia link" is
@@ -106,13 +106,13 @@ export function FriendReferralsPanel({ organizationId }: { organizationId?: stri
       </div>
 
       {/* Avanzamento verso l'omaggio */}
-      <div className="glass-card rounded-2xl p-6 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70">
+      <div className="glass-card rounded-2xl p-6 border-slate-200 bg-white/70">
         <div className="flex flex-wrap items-end justify-between gap-4 mb-4">
           <div>
             <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
               Amici invitati con contratto attivo
             </p>
-            <p className="text-3xl font-bold text-white light:text-slate-900 tabular-nums">
+            <p className="text-3xl font-bold text-slate-900 tabular-nums">
               {data.active_total}
               <span className="text-base font-semibold text-slate-500"> / {data.invited_total} iscritti</span>
             </p>
@@ -126,16 +126,16 @@ export function FriendReferralsPanel({ organizationId }: { organizationId?: stri
               {claimLoading ? "Invio..." : `Richiedi ${data.reward_description}`}
             </button>
           ) : (
-            <p className="text-xs text-slate-400 light:text-slate-500">
-              Ne mancano <strong className="text-orange-400">{data.missing_for_next_reward}</strong> per{" "}
+            <p className="text-xs text-slate-500">
+              Ne mancano <strong className="text-brand-600">{data.missing_for_next_reward}</strong> per{" "}
               {data.reward_description}
             </p>
           )}
         </div>
 
-        <div className="h-2 rounded-full bg-white/5 light:bg-slate-900/10 overflow-hidden">
+        <div className="h-2 rounded-full bg-slate-900/10 overflow-hidden">
           <div
-            className="h-full rounded-full bg-gradient-to-r from-orange-500 to-amber-400 transition-all"
+            className="h-full rounded-full bg-gradient-to-r from-brand-500 to-brand-400 transition-all"
             style={{ width: `${Math.min(100, progress)}%` }}
           />
         </div>
@@ -147,11 +147,11 @@ export function FriendReferralsPanel({ organizationId }: { organizationId?: stri
         )}
 
         {data.claims.length > 0 && (
-          <div className="mt-5 pt-4 border-t border-white/5 light:border-slate-200 space-y-2">
+          <div className="mt-5 pt-4 border-t border-slate-200 space-y-2">
             <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Le tue richieste</p>
             {data.claims.map((c) => (
               <div key={c.id} className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                <span className="text-slate-300 light:text-slate-600">
+                <span className=" text-slate-600">
                   Omaggio per {c.milestone} amici attivi
                 </span>
                 <div className="flex items-center gap-2">
@@ -162,7 +162,7 @@ export function FriendReferralsPanel({ organizationId }: { organizationId?: stri
                         ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                         : c.status === "REJECTED"
                           ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
-                          : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                          : "bg-amber-500/10 text-amber-700 border-amber-500/20"
                     }`}
                   >
                     {CLAIM_STATUS_LABELS[c.status] ?? c.status}
@@ -175,9 +175,9 @@ export function FriendReferralsPanel({ organizationId }: { organizationId?: stri
       </div>
 
       {/* La lista */}
-      <div className="glass-card rounded-2xl border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70 overflow-hidden">
+      <div className="glass-card rounded-2xl border-slate-200 bg-white/70 overflow-hidden">
         <div className="px-5 pt-5 pb-3">
-          <h4 className="text-sm font-semibold text-white light:text-slate-900">Gli amici che hai invitato</h4>
+          <h4 className="text-sm font-semibold text-slate-900">Gli amici che hai invitato</h4>
         </div>
         {data.referrals.length === 0 ? (
           <p className="text-center py-10 text-slate-500 text-sm">
@@ -185,11 +185,11 @@ export function FriendReferralsPanel({ organizationId }: { organizationId?: stri
           </p>
         ) : (
           <>
-            <div className="divide-y divide-white/5 light:divide-slate-200">
+            <div className="divide-y divide-slate-200">
               {pagination.pageItems.map((r) => (
                 <div key={r.id} className="px-5 py-3 flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-medium text-white light:text-slate-900">{r.display_name}</p>
+                    <p className="text-sm font-medium text-slate-900">{r.display_name}</p>
                     <p className="text-[11px] text-slate-500">Iscritto il {formatDate(r.invited_at)}</p>
                   </div>
                   <span

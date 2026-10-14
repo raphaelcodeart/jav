@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 
 class JavMarketSettingsRead(BaseModel):
     enabled: bool
-    #: Session 80: l'ordine pagato parte da solo verso le aziende.
+    #: L'ordine pagato parte da solo verso le aziende.
     auto_forward: bool
     shipping_mode: str
     shipping_flat_cents: int
@@ -22,6 +22,11 @@ class JavMarketSettingsRead(BaseModel):
     min_order_cents: int
     #: Merce IVA inclusa da cui la spedizione è gratis; None = mai.
     free_shipping_threshold_cents: int | None
+    #: Da dove partono le email ai fornitori (anche Reply-To e copia
+    #: nascosta); None = il mittente predefinito dell'SMTP.
+    supplier_email_from: str | None = None
+    #: La firma in fondo alla lettera al fornitore.
+    supplier_email_signature: str | None = None
 
 
 class JavMarketSettingsUpdate(BaseModel):
@@ -34,6 +39,9 @@ class JavMarketSettingsUpdate(BaseModel):
     min_order_cents: int | None = Field(default=None, ge=0, le=10_000_000)
     #: 0 spegne la spedizione gratuita (diventa NULL).
     free_shipping_threshold_cents: int | None = Field(default=None, ge=0, le=10_000_000)
+    #: Stringa vuota = torna al mittente predefinito / alla firma predefinita.
+    supplier_email_from: str | None = Field(default=None, max_length=255)
+    supplier_email_signature: str | None = Field(default=None, max_length=1000)
 
 
 class ProducerWrite(BaseModel):
@@ -118,6 +126,8 @@ class JavMarketAddress(BaseModel):
 
 class JavMarketOrderSelfCreateRequest(BaseModel):
     variant_id: uuid.UUID
+    #: L'atleta della famiglia per cui è il materiale (facoltativo).
+    athlete_id: uuid.UUID | None = None
     quantity: int = Field(ge=1, le=10)
     address: JavMarketAddress
     credit_applied_cents: int = Field(default=0, ge=0)
@@ -130,6 +140,8 @@ class JavMarketCartOrderRequest(BaseModel):
     """Il checkout del carrello: cosa si compra lo dice il carrello sul
     server, non il browser."""
 
+    #: L'atleta della famiglia per cui è il materiale (facoltativo).
+    athlete_id: uuid.UUID | None = None
     address: JavMarketAddress
     credit_applied_cents: int = Field(default=0, ge=0)
     payment_method: str = "BANK_TRANSFER"
@@ -151,15 +163,18 @@ class JavMarketOrderCancelRequest(BaseModel):
     reason: str = Field(min_length=1, max_length=500)
 
 
-class JavMarketOrderPaymentMethodUpdate(BaseModel):
-    payment_method: str
-
-
 class JavMarketShipRequest(BaseModel):
     tracking_number: str | None = Field(default=None, max_length=128)
     tracking_url: str | None = Field(default=None, max_length=1000)
     tracking_company: str | None = Field(default=None, max_length=128)
 
 
-class CheckoutSessionRead(BaseModel):
-    checkout_url: str
+class SupplierDispatchSendRequest(BaseModel):
+    """L'email a un fornitore come l'amministratore l'ha riletta (e magari
+    corretta) nell'anteprima, con le righe d'ordine che contiene: si manda
+    quello che si è visto, non quello che nel frattempo è entrato in coda."""
+
+    to_email: str = Field(min_length=3, max_length=255)
+    subject: str = Field(min_length=1, max_length=255)
+    body_text: str = Field(min_length=1, max_length=20000)
+    item_ids: list[uuid.UUID] = Field(min_length=1, max_length=1000)

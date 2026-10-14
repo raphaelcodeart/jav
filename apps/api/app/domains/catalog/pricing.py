@@ -27,7 +27,7 @@ from app.domains.catalog.models import ProductVersion
 # --- Who a product may be sold to -------------------------------------------
 #
 # `products.customer_type` used to be a free string with a vocabulary
-# (PMI, ENERGY_INTENSIVE, SOLE_PROPRIETOR, CONDOMINIUM) that did not line up
+# (PMI, SOLE_PROPRIETOR, CONDOMINIUM) that did not line up
 # with `customers.kind` (PRIVATE, SOLE_PROPRIETOR, COMPANY, CONDOMINIUM) --
 # two enums nobody ever compared, so no product was ever filtered by who the
 # buyer was. The business question is genuinely binary ("privati", "aziende /
@@ -46,7 +46,6 @@ _LEGACY_PRODUCT_CUSTOMER_TYPES = {
     "SOLE_PROPRIETOR": BUSINESS_PRODUCT_CUSTOMER_TYPE,
     "PMI": BUSINESS_PRODUCT_CUSTOMER_TYPE,
     "CONDOMINIUM": BUSINESS_PRODUCT_CUSTOMER_TYPE,
-    "ENERGY_INTENSIVE": BUSINESS_PRODUCT_CUSTOMER_TYPE,
 }
 
 # --- Who pays VAT -----------------------------------------------------------
@@ -207,7 +206,7 @@ BILLING_PERIOD_MONTHS = {"MONTHLY": 1, "QUARTERLY": 3, "ANNUAL": 12}
 #: listed price, whatever billing period/duration its version happens to
 #: carry -- the admin form defaults every version to MONTHLY / 12 months,
 #: and a t-shirt must never be sold in 12 rate.
-RECURRING_PRODUCT_TYPES = frozenset({"ENERGY_CONTRACT", "SUBSCRIPTION"})
+RECURRING_PRODUCT_TYPES = frozenset({"SERVICE", "SUBSCRIPTION"})
 
 
 def contract_billing_periods(version: ProductVersion, *, product_type: str | None) -> int:
@@ -229,13 +228,10 @@ def contract_net_amount_cents(version: ProductVersion, *, product_type: str | No
     """The taxable amount of a whole Jav contract paid in one go
     ("soluzione unica"), VAT excluded: `base_price_cents` itself.
 
-    Session 49 to 83 `base_price_cents` was the monthly canone and this
-    returned canone x the periods of the term, for every way of paying. But
-    paying over time costs more than paying at once (149 € in one go, 12 x
-    18,30 € in rate), so since Session 84 the one-go price is the product's
-    price and the rate have their own, `monthly_price_cents` -- see
-    contract_instalments_net_amount_cents. Migration 0064 multiplied every
-    existing contract price out, so nothing changed price with it.
+    Paying over time costs more than paying at once (149 € in one go, 12 x
+    18,30 € in rate), so the one-go price is the product's price and the
+    rate have their own, `monthly_price_cents` -- see
+    contract_instalments_net_amount_cents.
 
     `initial_fee_cents` and `recurring_fee_cents` exist on the version but
     have never been charged by any code path in this project, so folding

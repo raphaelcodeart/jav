@@ -1,27 +1,32 @@
-"""La pratica di attivazione: più punti di fornitura, un contratto per punto,
-un pagamento solo.
+"""La pratica: più contratti, compilati e pagati insieme.
 
-Business rule (Session 52), as the business put it: a customer with ten POD
-is ten contracts -- ten for the customer, ten for the promoter, each with its
-own package, its own approval, its own instalments and its own commissions --
-but the customer fills in who they are once, uploads their identity once,
-chooses a package for each point, and pays once.
+Business rule, as the business put it: a customer who signs up
+for ten services has ten contracts -- ten for the customer, ten for the
+promoter, each with its own package, its own approval, its own instalments
+and its own commissions -- but the customer fills in who they are once,
+uploads their identity once, chooses a package for each contract, and pays
+once.
 
-The flow a pratica follows (reshaped in Session 53, as the business asked):
+In the code a contract of the pratica is called a "point" (a line of the
+pratica): the routes and the dashboard speak of points, the database of
+contracts.
+
+The flow a pratica follows, as the business asked:
 
 1. Everything once, at the start: holder (nome, cognome, email, PEC, IBAN),
-   supply address, and "quanti POD hai?". The pratica is created DRAFT with
-   that many points already there -- each a real DRAFT contract with its own
-   supply point, so a half-finished pratica survives a closed browser. No
-   POD/PDR code is asked.
+   address, and how many contracts. The pratica is created DRAFT with that
+   many points already there -- each a real DRAFT contract, so a
+   half-finished pratica survives a closed browser.
 2. Shared documents (identity, fiscal code...), once, on the pratica.
-3. For each POD, the contract to activate. The package decides whether the
-   point is luce or gas, and its price is frozen on the contract then.
+3. For each point, the package to activate; its price is frozen on the
+   contract then.
 4. Submit: every point leaves DRAFT together and enters the ordinary review
    flow. From here on each contract lives its own life.
-5. Payment (customer only): one Checkout Session for every payable contract
-   in the pratica -- one line each, or one subscription with one item each.
-   See payments/service.py::create_checkout_session_for_request.
+5. Payment (customer only): one bank transfer for every payable contract in
+   the pratica, with the plan the customer chose -- the whole amount, or the
+   first instalment of each. An administrator confirms it arrived
+   (confirm_bank_transfer), and every later instalment one by one
+   (instalments.py::confirm_manually).
 
 Nothing here computes a commission or activates anything: that stays where
 it has always been, in contracts/service.py::transition_contract, one
@@ -46,53 +51,18 @@ from app.domains.contracts.models import (
     Contract,
     ContractInstalment,
     ContractRequest,
-    ContractRequestCheckout,
 )
-from app.domains.customers.models import Address, Company, Customer, CustomerProfile, SupplyPoint
+from app.domains.customers.models import Company, Customer, CustomerProfile
 from app.domains.network.models import AgentProfile
 from app.domains.notifications import service as notifications_service
 
-#: A condominium can have dozens of meters; beyond this it is a job for the
-#: back office, not a web form.
+#: Beyond this many contracts at once it is a job for the back office, not a
+#: web form.
 MAX_POINTS_PER_REQUEST = 50
-
-#: Stripe's own ceiling on the items of one subscription. An instalment plan
-#: puts one item per contract, so a pratica with more payable contracts than
-#: this can only be paid in one go (or split into two pratiche).
-MAX_SUBSCRIPTION_LINES = 20
 
 
 class ContractRequestError(Exception):
     pass
-
-
-#: The two kinds of point a pratica asks for up front. A POD is an
-#: electricity meter and takes only luce packages; a PDR is a gas meter and
-#: takes only gas packages. The kind is fixed when the point is created
-#: ("quanti POD? quanti PDR?"), so the package list can be filtered before
-#: anything is chosen -- a gas offer on a POD is not a choice to correct
-#: later, it is a contract that cannot exist.
-POD = "ELECTRICITY"
-PDR = "GAS"
-POINT_KIND_LABELS = {POD: "POD", PDR: "PDR"}
-
-
-def point_kind_label(energy_type: str | None) -> str:
-    return POINT_KIND_LABELS.get(energy_type or "", "POD")
-
-
-def _check_package_fits_point(supply_point: SupplyPoint | None, product: Product, version: ProductVersion) -> None:
-    """A typed point accepts only packages of its own energy. An untyped
-    point (drafts from before PDR existed) still accepts anything, and the
-    package types it, as it always did."""
-    if supply_point is None or supply_point.energy_type is None:
-        return
-    if product.energy_type != supply_point.energy_type:
-        kind = point_kind_label(supply_point.energy_type)
-        wanted = "luce" if supply_point.energy_type == POD else "gas"
-        raise ContractRequestError(
-            f"“{version.name}” non si può attivare su un {kind}: su un {kind} vanno solo offerte {wanted}."
-        )
 
 
 @dataclass(frozen=True)
@@ -111,13 +81,13 @@ class HolderData:
     pec: str | None
     iban: str | None
     address: AddressData
-    #: Session 85: PRIVATE or a business kind; None = the customer's kind.
+    #: PRIVATE or a business kind; None = the customer's kind.
     kind: str | None = None
     #: A business pratica only: ragione sociale and the legal
     #: representative's fiscal code (first/last name above are theirs).
     company_name: str | None = None
     legal_rep_fiscal_code: str | None = None
-    #: Session 89: a private holder's fiscal code; the birth date and place
+    #: A private holder's fiscal code; the birth date and place
     #: (Belfiore code) of whoever is named above, holder or legal rep.
     fiscal_code: str | None = None
     birth_date: date | None = None
@@ -129,7 +99,7 @@ PRATICA_KINDS = frozenset({"PRIVATE", "SOLE_PROPRIETOR", "COMPANY", "CONDOMINIUM
 
 
 def pratica_kind(request: ContractRequest, customer: Customer | None) -> str:
-    """Who the contracts of this pratica are for (Session 85): the kind chosen
+    """Who the contracts of this pratica are for: the kind chosen
     in its data form, or -- a pratica opened before that existed -- the
     customer's. Decides VAT, which packages fit, the PEC and the documents,
     in place of customer.kind everywhere a pratica is at hand."""
@@ -163,13 +133,6 @@ def _request_address(request: ContractRequest) -> AddressData | None:
     )
 
 
-def _point_label(energy_type: str | None, address: Address) -> str:
-    from app.domains.customers.service import ENERGY_TYPE_LABELS
-
-    kind = ENERGY_TYPE_LABELS.get(energy_type or "", "Punto di fornitura")
-    return f"{kind} - {address.street}, {address.city}"
-
-
 async def _customer_name(db: AsyncSession, customer: Customer | None) -> str:
     if customer is None:
         return "Cliente"
@@ -196,7 +159,7 @@ def _check_holder(kind: str, holder: "HolderData") -> None:
     """A partita IVA (company, ditta, condominium) must give a PEC as well
     as an email: it is where a business receives what has legal weight. And
     a business contract is signed by its legal representative: ragione
-    sociale and their fiscal code are required (Session 85), their name is
+    sociale and their fiscal code are required, their name is
     the holder's. A private customer is asked for none of it."""
     _check_person(kind, holder)
     if not pricing.is_business_customer(kind):
@@ -210,7 +173,7 @@ def _check_holder(kind: str, holder: "HolderData") -> None:
 
 
 def _check_person(kind: str, holder: "HolderData") -> None:
-    """Session 89: everyone who signs -- the private holder or the legal
+    """Everyone who signs -- the private holder or the legal
     representative -- gives fiscal code, birth date and place. Whether the
     code matches them is NOT blocking, by the user's choice: it is reported
     by fiscal_code_problems() as a warning, in the wizard and to staff."""
@@ -232,7 +195,7 @@ def _check_person(kind: str, holder: "HolderData") -> None:
 
 def fiscal_code_problems(request: ContractRequest) -> list[str]:
     """What in the signer's fiscal code does not match name, surname, birth
-    date and place -- a warning, never a block (Session 89). Empty for a
+    date and place -- a warning, never a block. Empty for a
     pratica opened before birth data was asked."""
     code = request.holder_fiscal_code or request.legal_rep_fiscal_code
     if not (code and request.holder_birth_date and request.holder_first_name and request.holder_last_name):
@@ -260,8 +223,8 @@ def _apply_holder_kind(request: ContractRequest, kind: str, holder: "HolderData"
 def _assert_draft(request: ContractRequest) -> None:
     if request.status != "DRAFT":
         raise ContractRequestError(
-            "La pratica è già stata inviata: i POD e i contratti scelti non si possono più modificare. "
-            "Per aggiungere un altro POD apri una nuova pratica."
+            "La pratica è già stata inviata: i contratti scelti non si possono più modificare. "
+            "Per aggiungere un altro contratto apri una nuova pratica."
         )
 
 
@@ -288,14 +251,12 @@ async def create_request(
     actor_role: str,
     promoter_agent_id: uuid.UUID | None,
     points_count: int = 1,
-    pdr_count: int = 0,
     product_version_id: uuid.UUID | None = None,
 ) -> ContractRequest:
-    """Opens a DRAFT pratica with its holder, its address and -- answering
-    "quanti POD hai? quanti PDR hai?" -- that many points already created,
-    each a DRAFT contract waiting for its package (`points_count` is the POD
-    count). `product_version_id` (the customer started from a package in the
-    catalog) pre-chooses it for every point of its own energy.
+    """Opens a DRAFT pratica with its holder, its address and `points_count`
+    points already created, each a DRAFT contract waiting for its package.
+    `product_version_id` (the customer started from a package in the
+    catalog) pre-chooses it for every point.
 
     For a customer acting alone, their referrer is resolved first: a customer
     whose promoter has left with nobody active above must be told before
@@ -334,17 +295,14 @@ async def create_request(
     await audit_service.record(
         db, organization_id=organization_id, actor_user_id=actor_user_id,
         action="contract_request.created", entity_type="contract_request", entity_id=str(request.id),
-        new_value={"customer_id": str(customer_id), "created_by_role": actor_role, "pod": points_count, "pdr": pdr_count},
+        new_value={"customer_id": str(customer_id), "created_by_role": actor_role, "points": points_count},
     )
     await db.commit()
     await db.refresh(request)
-    await set_points_count(
-        db, request=request, pod_count=points_count, pdr_count=pdr_count, actor_user_id=actor_user_id
-    )
+    await set_points_count(db, request=request, count=points_count, actor_user_id=actor_user_id)
     if product_version_id is not None:
         await set_product_for_all(
             db, request=request, product_version_id=product_version_id, actor_user_id=actor_user_id,
-            skip_if_no_point_fits=True,
         )
     await db.refresh(request)
     return request
@@ -354,15 +312,13 @@ async def update_holder(
     db: AsyncSession, *, request: ContractRequest, holder: HolderData, actor_user_id: uuid.UUID
 ) -> ContractRequest:
     """Holder data and address can change while the pratica is a draft, and
-    every point follows -- except a point that was deliberately moved to an
-    address of its own, which keeps it. Commits."""
+    every point follows. Commits."""
     _assert_draft(request)
     customer = await db.get(Customer, request.customer_id)
     kind = _holder_kind(customer, holder)
     _check_holder(kind, holder)
     previous_kind = pratica_kind(request, customer)
     _apply_holder_kind(request, kind, holder)
-    previous_address = _request_address(request)
     request.holder_first_name = holder.first_name
     request.holder_last_name = holder.last_name
     request.email = holder.email
@@ -380,15 +336,6 @@ async def update_holder(
         contract.pec = holder.pec
         contract.iban = holder.iban
         contract.updated_at = utcnow()
-        supply_point = await db.get(SupplyPoint, contract.supply_point_id)
-        address = await db.get(Address, supply_point.supply_address_id) if supply_point else None
-        if address is not None and (
-            previous_address is None
-            or (address.street, address.city, address.province, address.postal_code)
-            == (previous_address.street, previous_address.city, previous_address.province, previous_address.postal_code)
-        ):
-            _apply_address(address, holder.address)
-            supply_point.label = _point_label(supply_point.energy_type, address)
     if kind != previous_kind:
         await _reprice_for_kind(db, request=request, kind=kind)
     await audit_service.record(
@@ -424,14 +371,7 @@ async def _reprice_for_kind(db: AsyncSession, *, request: ContractRequest, kind:
         contract.updated_at = utcnow()
 
 
-def _apply_address(address: Address, data: AddressData) -> None:
-    address.street = data.street.strip()
-    address.city = data.city.strip()
-    address.province = data.province.strip().upper()
-    address.postal_code = data.postal_code.strip()
-
-
-# --- I POD della pratica ------------------------------------------------------
+# --- I contratti della pratica ------------------------------------------------
 
 
 async def _producer_for_new_point(
@@ -482,44 +422,21 @@ async def _load_package(db: AsyncSession, *, request: ContractRequest, product_v
     return version, product
 
 
-async def add_point(
-    db: AsyncSession, *, request: ContractRequest, actor_user_id: uuid.UUID, energy_type: str = POD
-) -> Contract:
-    """One more POD (luce) or PDR (gas) in a draft pratica: a supply point
-    of that kind at the pratica's address, and a DRAFT contract for it with
-    no package yet. Commits."""
-    from app.domains.customers.models import SupplyPoint as SupplyPointModel
-
+async def add_point(db: AsyncSession, *, request: ContractRequest, actor_user_id: uuid.UUID) -> Contract:
+    """One more contract in a draft pratica: a DRAFT contract with no package
+    yet. Commits."""
     _assert_draft(request)
-    address_data = _request_address(request)
-    if address_data is None:
-        raise ContractRequestError("Inserisci l'indirizzo di fornitura prima di aggiungere i POD.")
     if len(await list_points(db, request=request)) >= MAX_POINTS_PER_REQUEST:
         raise ContractRequestError(
-            f"Una pratica può contenere al massimo {MAX_POINTS_PER_REQUEST} punti di fornitura: "
+            f"Una pratica può contenere al massimo {MAX_POINTS_PER_REQUEST} contratti: "
             "per gli altri apri una seconda pratica."
         )
     producer_agent_id, substituted_for = await _producer_for_new_point(db, request=request)
 
-    address = Address(organization_id=request.organization_id, customer_id=request.customer_id, kind="SUPPLY",
-                      street="", city="", province="", postal_code="")
-    _apply_address(address, address_data)
-    db.add(address)
-    await db.flush()
-    supply_point = SupplyPointModel(
-        organization_id=request.organization_id,
-        customer_id=request.customer_id,
-        energy_type=energy_type,
-        supply_address_id=address.id,
-        label=_point_label(energy_type, address),
-    )
-    db.add(supply_point)
-    await db.flush()
-
     try:
         contract = await contract_service.create_contract(
             db, organization_id=request.organization_id, customer_id=request.customer_id,
-            supply_point_id=supply_point.id, product_version_id=None,
+            product_version_id=None,
             producer_agent_id=producer_agent_id, actor_user_id=actor_user_id,
             correlation_id=str(uuid.uuid4()), contract_request_id=request.id, notify_staff=False,
             email=request.email, holder_first_name=request.holder_first_name,
@@ -540,108 +457,52 @@ async def add_point(
 
 
 async def set_points_count(
-    db: AsyncSession, *, request: ContractRequest, pod_count: int | None, pdr_count: int | None,
-    actor_user_id: uuid.UUID,
+    db: AsyncSession, *, request: ContractRequest, count: int, actor_user_id: uuid.UUID
 ) -> list[Contract]:
-    """"Quanti POD hai? Quanti PDR hai?": adds or removes points of each kind
-    until the pratica has exactly that many (None leaves a kind as it is).
-    Removing takes the most recent points first, and among them the ones
-    without a contract chosen -- never the work already done when there is
-    an empty point to drop instead. Commits.
-
-    Untyped draft points (created before PDR existed, when every point was
-    "a POD") are counted as POD and typed as such on the way."""
+    """"Quanti contratti?": adds or removes points until the pratica has
+    exactly that many. Removing takes the most recent points first, and
+    among them the ones without a package chosen -- never the work already
+    done when there is an empty point to drop instead. Commits."""
     _assert_draft(request)
-    points = await list_points(db, request=request)
-    for contract in points:
-        supply_point = await db.get(SupplyPoint, contract.supply_point_id)
-        if supply_point is not None and supply_point.energy_type is None and contract.status == "DRAFT":
-            supply_point.energy_type = POD
-    await db.commit()
-
-    kinds = {c.id: (await db.get(SupplyPoint, c.supply_point_id)).energy_type for c in points}
-    wanted = {
-        POD: pod_count if pod_count is not None else sum(1 for k in kinds.values() if k == POD),
-        PDR: pdr_count if pdr_count is not None else sum(1 for k in kinds.values() if k == PDR),
-    }
-    if wanted[POD] < 0 or wanted[PDR] < 0:
-        raise ContractRequestError("Il numero di POD e di PDR non può essere negativo.")
-    others = sum(1 for k in kinds.values() if k not in (POD, PDR))
-    total = wanted[POD] + wanted[PDR] + others
-    if total < 1:
-        raise ContractRequestError("Una pratica deve avere almeno un POD o un PDR.")
-    if total > MAX_POINTS_PER_REQUEST:
+    if count < 1:
+        raise ContractRequestError("Una pratica deve avere almeno un contratto.")
+    if count > MAX_POINTS_PER_REQUEST:
         raise ContractRequestError(
-            f"Una pratica può contenere al massimo {MAX_POINTS_PER_REQUEST} punti di fornitura (POD + PDR): "
+            f"Una pratica può contenere al massimo {MAX_POINTS_PER_REQUEST} contratti: "
             "per gli altri apri una seconda pratica."
         )
-
-    # Remove first, so the total never crosses the ceiling on the way.
-    for energy_type in (POD, PDR):
-        of_kind = [c for c in points if kinds[c.id] == energy_type]
-        excess = len(of_kind) - wanted[energy_type]
-        if excess <= 0:
-            continue
-        drafts = [c for c in of_kind if c.status == "DRAFT"]
+    points = await list_points(db, request=request)
+    excess = len(points) - count
+    if excess > 0:
+        drafts = [c for c in points if c.status == "DRAFT"]
         removable = sorted(drafts, key=lambda c: (c.product_version_id is not None, -c.created_at.timestamp()))
         if len(removable) < excess:
-            raise ContractRequestError(
-                f"Non si possono togliere {excess} {point_kind_label(energy_type)}: alcuni non sono più modificabili."
-            )
+            raise ContractRequestError(f"Non si possono togliere {excess} contratti: alcuni non sono più modificabili.")
         for contract in removable[:excess]:
             await _cancel_point(db, request=request, contract=contract, actor_user_id=actor_user_id)
-    for energy_type in (POD, PDR):
-        have = sum(1 for c in points if kinds[c.id] == energy_type)
-        for _ in range(max(0, wanted[energy_type] - have)):
-            await add_point(db, request=request, actor_user_id=actor_user_id, energy_type=energy_type)
+    for _ in range(max(0, -excess)):
+        await add_point(db, request=request, actor_user_id=actor_user_id)
     return await list_points(db, request=request)
 
 
 async def get_point(db: AsyncSession, *, request: ContractRequest, contract_id: uuid.UUID) -> Contract:
     contract = await db.get(Contract, contract_id)
     if contract is None or contract.contract_request_id != request.id:
-        raise ContractRequestError("POD non trovato in questa pratica.")
-    return contract
-
-
-async def update_point_address(
-    db: AsyncSession, *, request: ContractRequest, contract: Contract, address_data: AddressData,
-    actor_user_id: uuid.UUID,
-) -> Contract:
-    """Moves one POD to an address other than the pratica's -- the second
-    home, the shop downstairs. Commits."""
-    _assert_draft(request)
-    if contract.status != "DRAFT":
-        raise ContractRequestError("Questo POD non si può più modificare.")
-    supply_point = await db.get(SupplyPoint, contract.supply_point_id)
-    address = await db.get(Address, supply_point.supply_address_id) if supply_point else None
-    if supply_point is None or address is None:
-        raise ContractRequestError("Punto di fornitura non trovato.")
-    previous = {"street": address.street, "city": address.city}
-    _apply_address(address, address_data)
-    supply_point.label = _point_label(supply_point.energy_type, address)
-    contract.updated_at = request.updated_at = utcnow()
-    await audit_service.record(
-        db, organization_id=request.organization_id, actor_user_id=actor_user_id,
-        action="contract_request.point_address_updated", entity_type="contract", entity_id=str(contract.id),
-        previous_value=previous, new_value={"street": address.street, "city": address.city},
-    )
-    await db.commit()
-    await db.refresh(contract)
+        raise ContractRequestError("Contratto non trovato in questa pratica.")
     return contract
 
 
 async def remove_point(
     db: AsyncSession, *, request: ContractRequest, contract: Contract, actor_user_id: uuid.UUID
 ) -> None:
-    """Takes a POD out of a draft pratica. The contract is CANCELLED, not
-    deleted: its creation is already in the audit trail and the history
-    should say what became of it. The last POD cannot go."""
+    """Takes a contract out of a draft pratica. The contract is CANCELLED,
+    not deleted: its creation is already in the audit trail and the history
+    should say what became of it. The last one cannot go."""
     _assert_draft(request)
     if contract.status != "DRAFT":
-        raise ContractRequestError("Questo POD non si può più togliere dalla pratica.")
+        raise ContractRequestError("Questo contratto non si può più togliere dalla pratica.")
     if len(await list_points(db, request=request)) <= 1:
-        raise ContractRequestError("Una pratica deve avere almeno un POD o un PDR.")
+        raise ContractRequestError("Una pratica deve avere almeno un contratto.")
     await _cancel_point(db, request=request, contract=contract, actor_user_id=actor_user_id)
 
 
@@ -650,7 +511,7 @@ async def _cancel_point(
 ) -> None:
     await contract_service.transition_contract(
         db, organization_id=request.organization_id, contract=contract, to_status="CANCELLED",
-        actor_user_id=actor_user_id, reason="POD tolto dalla pratica prima dell'invio", notes=None,
+        actor_user_id=actor_user_id, reason="Contratto tolto dalla pratica prima dell'invio", notes=None,
         correlation_id=str(uuid.uuid4()),
     )
     request.updated_at = utcnow()
@@ -658,16 +519,8 @@ async def _cancel_point(
 
 
 async def _assign_package(db: AsyncSession, *, contract: Contract, version: ProductVersion, product: Product) -> None:
-    """A POD takes only luce packages, a PDR only gas ones; an untyped
-    point (older drafts) is typed by its package. Freezes the price. Does
-    not commit."""
-    supply_point = await db.get(SupplyPoint, contract.supply_point_id)
-    _check_package_fits_point(supply_point, product, version)
-    if supply_point is not None:
-        supply_point.energy_type = product.energy_type
-        address = await db.get(Address, supply_point.supply_address_id)
-        if address is not None:
-            supply_point.label = _point_label(product.energy_type, address)
+    """Freezes the price of the chosen package on the contract. Does not
+    commit."""
     await contract_service.freeze_price(db, contract=contract, version=version, customer_kind=await contract_kind(db, contract))
 
 
@@ -675,10 +528,10 @@ async def set_point_product(
     db: AsyncSession, *, request: ContractRequest, contract: Contract, product_version_id: uuid.UUID,
     actor_user_id: uuid.UUID,
 ) -> Contract:
-    """Chooses (or changes) the contract to activate on one POD. Commits."""
+    """Chooses (or changes) the package of one contract. Commits."""
     _assert_draft(request)
     if contract.status != "DRAFT":
-        raise ContractRequestError("Il contratto di questo POD non si può più cambiare.")
+        raise ContractRequestError("Il pacchetto di questo contratto non si può più cambiare.")
     version, product = await _load_package(db, request=request, product_version_id=product_version_id)
     previous = str(contract.product_version_id) if contract.product_version_id else None
     await _assign_package(db, contract=contract, version=version, product=product)
@@ -695,9 +548,9 @@ async def set_point_product(
 
 
 #: A contract whose package staff may still change: the money has not moved
-#: yet and nothing has been activated. Session 71 -- before this, a package
-#: chosen wrongly by the customer could only be fixed by rejecting the
-#: contract and starting a new pratica.
+#: yet and nothing has been activated. Without this, a package chosen
+#: wrongly by the customer could only be fixed by rejecting the contract
+#: and starting a new pratica.
 STAFF_REPACKAGE_STATUSES = frozenset(
     {"DRAFT", "SUBMITTED", "DOCUMENTS_PENDING", "UNDER_REVIEW", "APPROVED", "PAYMENT_PENDING"}
 )
@@ -707,16 +560,12 @@ async def staff_set_point_product(
     db: AsyncSession, *, request: ContractRequest, contract: Contract, product_version_id: uuid.UUID,
     actor_user_id: uuid.UUID,
 ) -> Contract:
-    """An administrator fixes the package of one POD, also on a pratica
-    already sent -- never once it is paid, being charged or active, because
-    the price is frozen at payment and the commissions follow it. Commits."""
+    """An administrator fixes the package of one contract, also on a pratica
+    already sent -- never once it is paid or active, because the price is
+    frozen at payment and the commissions follow it. Commits."""
     if contract.paid_at is not None:
         raise ContractRequestError(
             "Questo contratto è già pagato: il pacchetto non si cambia più. Respingilo e apri una nuova pratica."
-        )
-    if contract.stripe_subscription_id is not None and contract.billing_stopped_at is None:
-        raise ContractRequestError(
-            "Gli addebiti a rate di questo contratto sono attivi: interrompili prima di cambiare il pacchetto."
         )
     if contract.status not in STAFF_REPACKAGE_STATUSES:
         raise ContractRequestError(
@@ -740,27 +589,17 @@ async def staff_set_point_product(
 
 async def set_product_for_all(
     db: AsyncSession, *, request: ContractRequest, product_version_id: uuid.UUID, actor_user_id: uuid.UUID,
-    skip_if_no_point_fits: bool = False,
 ) -> int:
-    """"Stessa offerta per tutti i POD" (or all the PDR): applied to every
-    draft point the package fits -- a luce offer lands on the POD only, a
-    gas one on the PDR only. Returns how many received it. Commits."""
+    """"Stesso pacchetto per tutti": applied to every draft contract of the
+    pratica. Returns how many received it. Commits."""
     _assert_draft(request)
     version, product = await _load_package(db, request=request, product_version_id=product_version_id)
     applied = 0
     for contract in await list_points(db, request=request):
         if contract.status != "DRAFT":
             continue
-        supply_point = await db.get(SupplyPoint, contract.supply_point_id)
-        if supply_point is not None and supply_point.energy_type not in (None, product.energy_type):
-            continue
         await _assign_package(db, contract=contract, version=version, product=product)
         applied += 1
-    if applied == 0:
-        if skip_if_no_point_fits:
-            return 0
-        wanted = "PDR" if product.energy_type == PDR else "POD"
-        raise ContractRequestError(f"“{version.name}” non si può attivare su nessun punto: in questa pratica non ci sono {wanted}.")
     request.updated_at = utcnow()
     await audit_service.record(
         db, organization_id=request.organization_id, actor_user_id=actor_user_id,
@@ -809,17 +648,17 @@ async def submit_request(db: AsyncSession, *, request: ContractRequest, actor_us
     _assert_draft(request)
     points = await list_points(db, request=request)
     if not points:
-        raise ContractRequestError("Aggiungi almeno un punto di fornitura prima di inviare la pratica.")
+        raise ContractRequestError("Aggiungi almeno un contratto prima di inviare la pratica.")
     missing = [p for p in points if p.product_version_id is None]
     if missing:
         raise ContractRequestError(
-            f"Scegli il contratto da attivare per {'il punto' if len(missing) == 1 else f'i {len(missing)} punti'} "
+            f"Scegli il pacchetto per {'il contratto' if len(missing) == 1 else f'i {len(missing)} contratti'} "
             "ancora senza, poi invia la pratica."
         )
     if not (request.holder_first_name and request.holder_last_name and request.email and _request_address(request)):
         raise ContractRequestError("Completa i dati dell'intestatario e l'indirizzo prima di inviare la pratica.")
     if not (request.holder_birth_date and request.holder_birth_place_code):
-        # A draft opened before Session 89: the data form asks them now.
+        # A draft saved before these were asked: the data form asks them now.
         raise ContractRequestError(
             "Mancano data e luogo di nascita di chi firma: torna al passo «Dati», completali, poi invia."
         )
@@ -881,7 +720,7 @@ async def submit_request(db: AsyncSession, *, request: ContractRequest, actor_us
         new_value={"points": len(points)},
     )
     # Filled in FOR the customer -- by their promoter, or by the
-    # administration (Session 66): either way the customer is the one who
+    # administration: either way the customer is the one who
     # pays, so they are told it is waiting for them.
     filled_in_for_customer = request.created_by_role in ("PROMOTER", "ADMIN") and customer is not None
     promoter_name = None
@@ -897,7 +736,8 @@ async def submit_request(db: AsyncSession, *, request: ContractRequest, actor_us
                 title="I tuoi contratti sono pronti da pagare",
                 body=(
                     f"{who} ha compilato per te la pratica {_code(request)} con "
-                    f"{len(points)} POD. Controllala in “I miei Contratti” e procedi con il pagamento."
+                    f"{len(points)} {'contratto' if len(points) == 1 else 'contratti'}. "
+                    "Controllala in “I miei Contratti” e procedi con il pagamento."
                 ),
             )
     await db.commit()
@@ -915,7 +755,7 @@ def _email_customer_about_promoter_pratica(
     *, request: ContractRequest, customer: Customer, promoter_name: str | None, points: list[Contract]
 ) -> None:
     """Somebody filled the pratica in for the customer -- their promoter
-    (Session 55) or the administration (Session 66): the customer is the one
+    or the administration: the customer is the one
     who pays, so they have to find out it is waiting. Best-effort and after
     the commit -- the pratica is sent either way."""
     import html
@@ -932,9 +772,9 @@ def _email_customer_about_promoter_pratica(
     total = sum(int(p.gross_amount_cents or 0) for p in points)
     body_html = (
         f"<p>{who} ha preparato per te la pratica <strong>{_code(request)}</strong> con "
-        f"<strong>{len(points)} POD</strong>, per un totale di <strong>{total / 100:.2f} €</strong> "
-        "in un'unica soluzione.</p>"
-        "<p>Ogni POD è un contratto a sé. Accedi alla tua area, controlla i contratti in "
+        f"<strong>{len(points)} {'contratto' if len(points) == 1 else 'contratti'}</strong>, "
+        f"per un totale di <strong>{total / 100:.2f} €</strong> in un'unica soluzione.</p>"
+        "<p>Accedi alla tua area, controlla i contratti in "
         "<em>I miei Contratti</em> e completa il pagamento: puoi pagare in un'unica soluzione o a rate. "
         "Se non hai ancora impostato la password, usa il link di invito che ti è arrivato.</p>"
     )
@@ -951,31 +791,25 @@ def _email_customer_about_promoter_pratica(
         ),
         text_body=(
             f"{promoter_name or 'Il tuo promoter'} ha preparato per te la pratica {_code(request)} con "
-            f"{len(points)} POD. Accedi a I miei Contratti per controllarla e pagare."
+            f"{len(points)} {'contratto' if len(points) == 1 else 'contratti'}. "
+            "Accedi a I miei Contratti per controllarla e pagare."
         ),
     )
 
 
-#: What «Sblocca pratica» marks on a card checkout opened before the unlock:
-#: paid anyway (an old tab), it pays nothing and staff are told to refund.
-UNLOCKED_CHECKOUT_OUTCOME = "ANNULLATO: pratica sbloccata"
-
 
 async def unlock_request(
     db: AsyncSession, *, request: ContractRequest, actor_user_id: uuid.UUID
-) -> tuple[ContractRequest, list[str]]:
-    """«Sblocca pratica» (Session 89): a pratica sent but not paid goes back
+) -> ContractRequest:
+    """«Sblocca pratica»: a pratica sent but not paid goes back
     to draft -- every contract still alive with it -- so the customer, their
     promoter or staff can choose the packages again, then send it and pay
     the new total. Approvals already given are lost: the pratica is reviewed
     again once sent.
 
-    Refused when anything was paid (a contract, an instalment, a card
-    checkout), while instalments are being charged, or once the customer
-    uploaded a bank transfer receipt. A transfer only announced is undone
-    (the total will change). Card checkouts still open are marked so that,
-    paid from an old tab, they pay nothing; returns their Stripe session
-    ids, for the caller to expire. Commits."""
+    Refused when anything was paid (a contract, an instalment), or once the
+    customer uploaded a bank transfer receipt. A transfer only announced is
+    undone (the total will change). Commits."""
     if request.status != "SUBMITTED":
         raise ContractRequestError("Si sblocca solo una pratica inviata e non ancora pagata.")
     points = await list_points(db, request=request)
@@ -984,8 +818,6 @@ async def unlock_request(
         raise ContractRequestError("Questa pratica non ha contratti da riaprire.")
     if any(c.paid_at is not None for c in points):
         raise ContractRequestError("La pratica è già pagata, anche solo in parte: non si può sbloccare.")
-    if any(c.stripe_subscription_id is not None and c.billing_stopped_at is None for c in points):
-        raise ContractRequestError("La pratica ha addebiti a rate attivi: non si può sbloccare.")
     paid_instalment = (
         await db.execute(
             select(ContractInstalment.id).where(
@@ -995,15 +827,6 @@ async def unlock_request(
     ).first()
     if paid_instalment is not None:
         raise ContractRequestError("Una rata della pratica è già pagata: non si può sbloccare.")
-    checkouts = list(
-        (
-            await db.execute(
-                select(ContractRequestCheckout).where(ContractRequestCheckout.contract_request_id == request.id)
-            )
-        ).scalars()
-    )
-    if any(c.completed_at is not None for c in checkouts):
-        raise ContractRequestError("C'è un pagamento con carta registrato su questa pratica: non si può sbloccare.")
     if request.payment_proof_uploaded_at is not None and request.bank_transfer_requested_at is not None:
         raise ContractRequestError(
             "Il cliente ha caricato la ricevuta del bonifico: controlla prima il bonifico, la pratica non si sblocca."
@@ -1021,16 +844,11 @@ async def unlock_request(
         if contract.payment_method == "BANK_TRANSFER":
             contract.payment_method = None
             contract.payment_plan = None
-            contract.payment_discount_cents = 0
     request.bank_transfer_requested_at = None
     request.bank_transfer_total_cents = None
     request.status = "DRAFT"
     request.submitted_at = None
     request.updated_at = utcnow()
-    open_sessions = []
-    for checkout in checkouts:
-        checkout.outcome = UNLOCKED_CHECKOUT_OUTCOME
-        open_sessions.append(checkout.stripe_checkout_session_id)
     await audit_service.record(
         db, organization_id=request.organization_id, actor_user_id=actor_user_id,
         action="contract_request.unlocked", entity_type="contract_request", entity_id=str(request.id),
@@ -1043,13 +861,13 @@ async def unlock_request(
             type_="CONTRACT_CREATED", entity_type="contract_request", entity_id=request.id,
             title=f"La pratica {_code(request)} è di nuovo modificabile",
             body=(
-                "Puoi cambiare i contratti scelti per i tuoi POD e PDR in “I miei Contratti” (Riprendi), "
+                "Puoi cambiare i pacchetti scelti in “I miei Contratti” (Riprendi), "
                 "poi inviarla di nuovo e pagare il nuovo totale."
             ),
         )
     await db.commit()
     await db.refresh(request)
-    return request, open_sessions
+    return request
 
 
 async def cancel_request(db: AsyncSession, *, request: ContractRequest, actor_user_id: uuid.UUID) -> ContractRequest:
@@ -1081,6 +899,17 @@ def payable_points(points: list[Contract]) -> list[Contract]:
     return [c for c in points if contract_service.is_payable(c)]
 
 
+async def point_labels(db: AsyncSession, points: list[Contract]) -> dict[uuid.UUID, str]:
+    """"Abbonamento annuale — Contratto 1A2B3C4D": what the customer sees on
+    the payment screen, one line per contract."""
+    out = {}
+    for contract in points:
+        version = await db.get(ProductVersion, contract.product_version_id) if contract.product_version_id else None
+        point = f"Contratto {str(contract.id)[:8].upper()}"
+        out[contract.id] = f"{version.name} — {point}" if version else point
+    return out
+
+
 @dataclass(frozen=True)
 class RequestPlanOption:
     plan: payment_plans.PaymentPlan
@@ -1089,33 +918,19 @@ class RequestPlanOption:
     rounding_difference_cents: int
     available: bool
     unavailable_reason: str | None
-    #: Session 64: the price before the one-go discount, and the discount.
-    list_total_cents: int = 0
-    discount_percentage: int = 0
-    discount_cents: int = 0
 
 
-def plan_options(points: list[Contract], *, discount_percentage: int = 0) -> list[RequestPlanOption]:
+def plan_options(points: list[Contract]) -> list[RequestPlanOption]:
     """Every plan, priced for these contracts: each contract split on its own
     (exactly the instalment its own schedule will record), then added up. The
-    customer sees one monthly figure; each contract still owns its line."""
+    customer sees one transfer amount per month; each contract still owns its
+    instalment."""
     options = []
     for plan in payment_plans.PAYMENT_PLANS:
-        breakdowns = [
-            payment_plans.breakdown_for(
-                plan, payment_plans.plan_gross_cents(plan, c),
-                discount_percentage=payment_plans.one_go_discount_percentage(c, discount_percentage),
-            )
-            for c in points
-        ]
+        breakdowns = [payment_plans.contract_breakdown(plan, c) for c in points]
         reason = None
         if any(b.instalment_cents <= 0 for b in breakdowns):
             reason = "Importo troppo basso per questa modalità."
-        elif plan.instalments > 1 and len(points) > MAX_SUBSCRIPTION_LINES:
-            reason = (
-                f"A rate si possono pagare al massimo {MAX_SUBSCRIPTION_LINES} contratti insieme: "
-                "scegli la soluzione unica oppure dividi i punti in due pratiche."
-            )
         options.append(
             RequestPlanOption(
                 plan=plan,
@@ -1124,21 +939,16 @@ def plan_options(points: list[Contract], *, discount_percentage: int = 0) -> lis
                 rounding_difference_cents=sum(b.rounding_difference_cents for b in breakdowns),
                 available=bool(points) and reason is None,
                 unavailable_reason=reason,
-                list_total_cents=sum(payment_plans.plan_gross_cents(plan, c) for c in points),
-                discount_percentage=discount_percentage if any(b.discount_cents for b in breakdowns) else 0,
-                discount_cents=sum(b.discount_cents for b in breakdowns),
             )
         )
     return options
 
 
 async def cashback_total_cents(
-    db: AsyncSession, *, points: list[Contract], discount_percentage: int = 0,
-    plan: payment_plans.PaymentPlan | None = None,
+    db: AsyncSession, *, points: list[Contract], plan: payment_plans.PaymentPlan | None = None,
 ) -> int:
-    """JavCash these contracts earn; with `discount_percentage`, when paid in
-    one go at that discount (the cashback follows what is paid); with an
-    instalment `plan`, on the rate price (Session 84)."""
+    """JavCash these contracts earn: in one go on the one-go price, with an
+    instalment `plan` on the rate price."""
     total = 0
     for contract in points:
         if contract.product_version_id is None or not contract.gross_amount_cents:
@@ -1146,134 +956,11 @@ async def cashback_total_cents(
         version = await db.get(ProductVersion, contract.product_version_id)
         if version is not None:
             gross = payment_plans.plan_gross_cents(plan, contract) if plan is not None else int(contract.gross_amount_cents)
-            paid = gross - payment_plans.discount_cents_for(
-                gross, payment_plans.one_go_discount_percentage(contract, discount_percentage)
-            )
-            total += pricing.contract_cashback_cents(version=version, gross_amount_cents=paid)
+            total += pricing.contract_cashback_cents(version=version, gross_amount_cents=gross)
     return total
 
 
-async def apply_checkout(
-    db: AsyncSession,
-    *,
-    checkout: ContractRequestCheckout,
-    stripe_invoice_id: str | None,
-    stripe_subscription_id: str | None,
-    stripe_customer_id: str | None,
-    subscription_items: dict[str, str],
-) -> str:
-    """A Checkout Session of a pratica completed: every contract it covered
-    is paid, each exactly as if it had been paid on its own -- its own first
-    instalment, its own JavCash, its own activation if already approved.
-
-    `subscription_items` maps contract id -> Stripe subscription item id, for
-    an instalment plan: it is what lets each later monthly invoice line find
-    its contract (contracts/service.py::record_subscription_invoice).
-
-    A contract already paid by another session (the customer paid twice, in
-    two tabs) is not paid again: staff are told to refund that line. Returns
-    what happened, in words. Commits."""
-    from app.domains.contracts import service as contracts_service
-
-    if checkout.completed_at is not None:
-        return f"pratica {str(checkout.contract_request_id)[:8].upper()}: pagamento già registrato"
-    if checkout.outcome == UNLOCKED_CHECKOUT_OUTCOME:
-        # Opened before «Sblocca pratica», paid anyway from an old tab: its
-        # lines are the old packages and prices. Nothing is paid with it.
-        code = str(checkout.contract_request_id)[:8].upper()
-        checkout.completed_at = utcnow()
-        checkout.outcome = "PAGATO DOPO LO SBLOCCO: nessun contratto pagato, da rimborsare"
-        await notifications_service.notify_roles(
-            db, organization_id=checkout.organization_id, roles=notifications_service.STAFF_NOTIFY_ROLES,
-            type_="CONTRACT_PAID_REJECTED", entity_type="contract_request", entity_id=checkout.contract_request_id,
-            title=f"Pratica {code}: pagamento da rimborsare",
-            body=(
-                "Il cliente ha pagato con carta una pagina di pagamento aperta prima che la pratica fosse "
-                "sbloccata. Nessun contratto è stato segnato come pagato: rimborsa il pagamento da Stripe."
-            ),
-        )
-        await db.commit()
-        return f"pratica {code}: pagata dopo lo sblocco, da rimborsare"
-
-    plan = payment_plans.plan_by_key(checkout.payment_plan)
-    request = await db.get(ContractRequest, checkout.contract_request_id)
-    paid: list[Contract] = []
-    duplicates: list[Contract] = []
-    for line in checkout.lines:
-        contract = await db.get(Contract, uuid.UUID(line["contract_id"]))
-        if contract is None or contract.contract_request_id != checkout.contract_request_id:
-            continue
-        if contract.paid_at is not None:
-            duplicates.append(contract)
-            continue
-        contract.payment_plan = checkout.payment_plan
-        contract.payment_method = "CARD"
-        contract.payment_discount_cents = (
-            int(line.get("discount_cents") or 0) if plan is not None and plan.instalments <= 1 else 0
-        )
-        if stripe_subscription_id:
-            contract.stripe_subscription_id = stripe_subscription_id
-            contract.stripe_subscription_item_id = subscription_items.get(str(contract.id))
-            contract.stripe_customer_id = stripe_customer_id
-        contract.updated_at = utcnow()
-        await db.commit()
-        contract = await contracts_service.record_card_payment(
-            db, organization_id=checkout.organization_id, contract=contract,
-            stripe_invoice_id=stripe_invoice_id, notify_staff=False,
-        )
-        if plan is not None and plan.instalments > 1:
-            await contracts_service.credit_contract_instalment_cashback(
-                db, organization_id=checkout.organization_id, contract=contract, instalment_number=1
-            )
-        paid.append(contract)
-
-    code = str(checkout.contract_request_id)[:8].upper()
-    checkout.completed_at = utcnow()
-    checkout.stripe_subscription_id = stripe_subscription_id
-    checkout.stripe_customer_id = stripe_customer_id
-    outcome = f"pratica {code}: {len(paid)} contratti pagati"
-    if duplicates:
-        outcome += f", {len(duplicates)} già pagati in precedenza"
-    checkout.outcome = outcome[:255]
-
-    if paid:
-        await notifications_service.notify_roles(
-            db, organization_id=checkout.organization_id, roles=notifications_service.STAFF_NOTIFY_ROLES,
-            type_="CONTRACT_PAID_BEFORE_APPROVAL", entity_type="contract_request", entity_id=checkout.contract_request_id,
-            title=f"Pratica {code} pagata: {len(paid)} {'contratto' if len(paid) == 1 else 'contratti'}",
-            body=(
-                f"Pagamento con carta ({plan.label.lower() if plan else checkout.payment_plan}). "
-                "Ogni contratto si attiva appena approvi i suoi documenti e accetti la sua anteprima provvigioni."
-            ),
-        )
-        customer = await db.get(Customer, request.customer_id) if request else None
-        if customer is not None and customer.user_id is not None:
-            await notifications_service.notify_user(
-                db, organization_id=checkout.organization_id, user_id=customer.user_id,
-                type_="CONTRACT_PAID_BEFORE_APPROVAL", entity_type="contract_request",
-                entity_id=checkout.contract_request_id,
-                title="Pagamento ricevuto",
-                body=(
-                    f"Abbiamo ricevuto il pagamento della pratica {code}. "
-                    "Ogni contratto si attiva appena i suoi documenti sono approvati."
-                ),
-            )
-    if duplicates:
-        await notifications_service.notify_roles(
-            db, organization_id=checkout.organization_id, roles=notifications_service.STAFF_NOTIFY_ROLES,
-            type_="CONTRACT_PAID_REJECTED", entity_type="contract_request", entity_id=checkout.contract_request_id,
-            title=f"Pagamento doppio sulla pratica {code}",
-            body=(
-                f"{len(duplicates)} contratti erano già stati pagati: "
-                + ", ".join(_code(c) for c in duplicates)
-                + ". Rimborsa quelle righe su Stripe" + (" e interrompi i loro addebiti." if stripe_subscription_id else ".")
-            ),
-        )
-    await db.commit()
-    return outcome
-
-
-# --- Pagamento con bonifico (Session 65) ---------------------------------------
+# --- Pagamento con bonifico ---------------------------------------------------
 
 
 class BankTransferError(Exception):
@@ -1282,7 +969,7 @@ class BankTransferError(Exception):
 
 def bank_transfer_pending(request: ContractRequest, points: list[Contract]) -> bool:
     """Announced by the customer, not yet confirmed, and still something to
-    pay by transfer (a card payment afterwards settles it too)."""
+    pay by transfer."""
     return (
         request.bank_transfer_requested_at is not None
         and request.bank_transfer_confirmed_at is None
@@ -1291,29 +978,34 @@ def bank_transfer_pending(request: ContractRequest, points: list[Contract]) -> b
 
 
 async def request_bank_transfer(
-    db: AsyncSession, *, request: ContractRequest, actor_user_id: uuid.UUID
+    db: AsyncSession, *, request: ContractRequest, actor_user_id: uuid.UUID,
+    plan_key: str = payment_plans.PLAN_FULL,
 ) -> ContractRequest:
-    """The customer pays the whole pratica by transfer: a single payment, at
-    the full one-go price -- no discount for paying by bank transfer
-    (Session 86, business decision; until then the one-go card discount
-    applied to a transfer too). Nothing is paid until an administrator
-    confirms the money arrived. Commits."""
+    """The customer pays the pratica by transfer, with the plan they chose:
+    the whole amount in one transfer, or the first instalment of each
+    contract now and the others a month apart. Never a discount for paying
+    by bank transfer (business decision). Nothing is paid until an
+    administrator confirms the money arrived. Commits."""
     from app.domains.organizations import service as organizations_service
 
     if not await organizations_service.is_bank_transfer_configured(db, organization_id=request.organization_id):
         raise BankTransferError("Il pagamento con bonifico non è disponibile al momento.")
+    plan = payment_plans.plan_by_key(plan_key)
+    if plan is None:
+        raise BankTransferError("Modalità di pagamento non valida.")
     points = payable_points(await list_points(db, request=request))
     if not points:
         raise BankTransferError("In questa pratica non c'è nessun contratto da pagare.")
-    percentage = 0
+    option = next(o for o in plan_options(points) if o.plan.key == plan.key)
+    if not option.available:
+        raise BankTransferError(option.unavailable_reason or "Questa modalità di pagamento non è disponibile.")
     total = 0
     for contract in points:
-        gross = int(contract.gross_amount_cents or 0)
-        contract.payment_plan = payment_plans.PLAN_FULL
+        contract.payment_plan = plan.key
         contract.payment_method = "BANK_TRANSFER"
-        contract.payment_discount_cents = 0
         contract.updated_at = utcnow()
-        total += gross
+        # The first transfer: the whole amount, or each contract's first instalment.
+        total += payment_plans.contract_breakdown(plan, contract).instalment_cents
     request.bank_transfer_requested_at = utcnow()
     request.bank_transfer_total_cents = total
     request.bank_transfer_confirmed_at = None
@@ -1323,13 +1015,14 @@ async def request_bank_transfer(
     await audit_service.record(
         db, organization_id=request.organization_id, actor_user_id=actor_user_id,
         action="contract_request.bank_transfer_requested", entity_type="contract_request",
-        entity_id=str(request.id), new_value={"total_cents": total, "contracts": len(points), "discount": percentage},
+        entity_id=str(request.id), new_value={"total_cents": total, "contracts": len(points), "payment_plan": plan.key},
     )
+    first = "" if plan.instalments <= 1 else f" (prima rata di {plan.instalments})"
     await notifications_service.notify_roles(
         db, organization_id=request.organization_id, roles=notifications_service.STAFF_NOTIFY_ROLES,
         type_="CONTRACT_REQUEST_BANK_TRANSFER", entity_type="contract_request", entity_id=request.id,
         title=f"Pratica {code}: il cliente paga con bonifico",
-        body=f"{total / 100:.2f} EUR per {len(points)} {'contratto' if len(points) == 1 else 'contratti'}. "
+        body=f"{total / 100:.2f} EUR{first} per {len(points)} {'contratto' if len(points) == 1 else 'contratti'}. "
              "Conferma quando lo ricevi, dalla pratica.",
         exclude_user_id=actor_user_id,
     )
@@ -1378,10 +1071,11 @@ def payment_proof_url(request: ContractRequest) -> str | None:
 async def confirm_bank_transfer(
     db: AsyncSession, *, request: ContractRequest, actor_user_id: uuid.UUID
 ) -> list[Contract]:
-    """An administrator saw the transfer arrive: every contract announced for
-    transfer is paid, each exactly as a card payment would record it (its
-    instalment row at the discounted price, its JavCash, its activation if
-    already approved). Returns the contracts paid. Commits."""
+    """An administrator saw the (first) transfer arrive: every contract
+    announced for transfer is paid, each on its own -- its first instalment
+    row, its JavCash, its activation if already approved. Later instalments
+    are confirmed one by one (instalments.py::confirm_manually). Returns the
+    contracts paid. Commits."""
     from app.domains.contracts import service as contracts_service
 
     points = await list_points(db, request=request)
@@ -1391,9 +1085,9 @@ async def confirm_bank_transfer(
     for contract in points:
         if contract.payment_method != "BANK_TRANSFER" or not contract_service.is_payable(contract):
             continue
-        contract = await contracts_service.record_card_payment(
-            db, organization_id=request.organization_id, contract=contract, notify_staff=False,
-            bank_transfer_confirmed_by=actor_user_id,
+        contract = await contracts_service.record_transfer_payment(
+            db, organization_id=request.organization_id, contract=contract,
+            confirmed_by_user_id=actor_user_id, notify_staff=False,
         )
         paid.append(contract)
     request.bank_transfer_confirmed_at = utcnow()
@@ -1430,11 +1124,9 @@ async def _instalment_summary(db: AsyncSession, contract_ids: list[uuid.UUID]) -
     )
     out: dict[uuid.UUID, dict] = {}
     for row in rows:
-        entry = out.setdefault(row.contract_id, {"total": row.instalments_total, "paid": 0, "failed": 0})
+        entry = out.setdefault(row.contract_id, {"total": row.instalments_total, "paid": 0})
         if row.status == "PAID":
             entry["paid"] += 1
-        elif row.status == "FAILED":
-            entry["failed"] += 1
     return out
 
 
@@ -1472,8 +1164,6 @@ async def summaries(db: AsyncSession, requests: list[ContractRequest]) -> list[d
         if agent_ids
         else {}
     )
-    instalments = await _instalment_summary(db, [c.id for c in contracts])
-
     out = []
     for r in requests:
         points = by_request.get(r.id, [])
@@ -1486,7 +1176,7 @@ async def summaries(db: AsyncSession, requests: list[ContractRequest]) -> list[d
             "code": _code(r),
             "customer_id": r.customer_id,
             "customer_name": customer_names.get(r.customer_id),
-            # Session 85: the pratica's own kind (privato / azienda).
+            # The pratica's own kind (privato / azienda).
             "customer_kind": pratica_kind(r, customers.get(r.customer_id)),
             "holder_kind": r.holder_kind,
             "status": r.status,
@@ -1513,7 +1203,6 @@ async def summaries(db: AsyncSession, requests: list[ContractRequest]) -> list[d
                 for c in live
             ),
             "payment_plans": sorted({c.payment_plan for c in live if c.paid_at is not None and c.payment_plan}),
-            "instalments_failed": sum(instalments.get(c.id, {}).get("failed", 0) for c in live),
             "bank_transfer_pending": bank_transfer_pending(r, points),
             "bank_transfer_total_cents": r.bank_transfer_total_cents,
             "bank_transfer_requested_at": r.bank_transfer_requested_at,
@@ -1547,24 +1236,16 @@ async def _notes_author(db: AsyncSession, request: ContractRequest) -> str | Non
     return user.email if user else None
 
 
-async def detail(db: AsyncSession, *, request: ContractRequest, include_checkouts: bool) -> dict:
+async def detail(db: AsyncSession, *, request: ContractRequest) -> dict:
     """Everything one screen needs about a pratica: the summary, the holder,
-    and every point with its supply address, package, price, documents
-    completeness and instalments."""
+    and every contract with its package, price, documents completeness and
+    instalments."""
     from app.domains.documents import service as documents_service
 
     [summary] = await summaries(db, [request])
     points = await list_points(db, request=request)
-    # POD first, then PDR, each numbered on its own: "POD 1, POD 2, PDR 1".
-    point_types = {c.id: (await db.get(SupplyPoint, c.supply_point_id)) for c in points}
-    point_types = {cid: (sp.energy_type if sp else None) for cid, sp in point_types.items()}
-    points.sort(key=lambda c: (point_types[c.id] == PDR, c.created_at))
-    positions: dict[uuid.UUID, int] = {}
-    seen: dict[str, int] = {}
-    for c in points:
-        kind = point_kind_label(point_types[c.id])
-        seen[kind] = seen.get(kind, 0) + 1
-        positions[c.id] = seen[kind]
+    # Numbered in the order they were added: "Contratto 1, Contratto 2".
+    positions = {c.id: n for n, c in enumerate(points, start=1)}
     rows = await contract_service.to_read_dicts(db, points)
     customer = await db.get(Customer, request.customer_id)
     kind = pratica_kind(request, customer)
@@ -1572,8 +1253,6 @@ async def detail(db: AsyncSession, *, request: ContractRequest, include_checkout
 
     enriched = []
     for contract, row in zip(points, rows, strict=True):
-        supply_point = await db.get(SupplyPoint, contract.supply_point_id)
-        address = await db.get(Address, supply_point.supply_address_id) if supply_point else None
         slots = await documents_service.get_contract_documents_status(
             db, organization_id=request.organization_id, contract=contract, customer_kind=kind
         )
@@ -1584,21 +1263,11 @@ async def detail(db: AsyncSession, *, request: ContractRequest, include_checkout
         enriched.append({
             **row,
             "position": positions[contract.id],
-            "point_kind": point_kind_label(point_types[contract.id]),
-            "meter_number": supply_point.meter_number if supply_point else None,
-            "street": address.street if address else None,
-            "city": address.city if address else None,
-            "province": address.province if address else None,
-            "postal_code": address.postal_code if address else None,
             "product_id": product.id if product else None,
             "documents_missing": sum(1 for s in slots if s["required"] and s["document"] is None),
             "documents_rejected": sum(1 for s in slots if s["document"] is not None and s["document"].status == "REJECTED"),
             "instalments_total": instalments.get(contract.id, {}).get("total"),
             "instalments_paid": instalments.get(contract.id, {}).get("paid", 0),
-            "instalments_failed": instalments.get(contract.id, {}).get("failed", 0),
-            #: Stripe is still charging this contract every month -- what the
-            #: "Interrompi addebiti" action applies to.
-            "billing_active": contract.stripe_subscription_id is not None and contract.billing_stopped_at is None,
         })
 
     out = {
@@ -1620,8 +1289,7 @@ async def detail(db: AsyncSession, *, request: ContractRequest, include_checkout
         "holder_birth_place_code": request.holder_birth_place_code,
         "fiscal_code_problems": fiscal_code_problems(request),
         "points": enriched,
-        "checkouts": [],
-        #: What the documents step still lacks (Session 82) -- the wizard
+        #: What the documents step still lacks -- the wizard
         #: will not go past it, and submit_request refuses, until empty.
         "notes_updated_at": request.notes_updated_at,
         "notes_author": await _notes_author(db, request),
@@ -1629,29 +1297,4 @@ async def detail(db: AsyncSession, *, request: ContractRequest, include_checkout
             db, request=request, customer_kind=kind
         ),
     }
-    if include_checkouts:
-        checkouts = list(
-            (
-                await db.execute(
-                    select(ContractRequestCheckout)
-                    .where(ContractRequestCheckout.contract_request_id == request.id)
-                    .order_by(ContractRequestCheckout.created_at.desc())
-                )
-            ).scalars()
-        )
-        out["checkouts"] = [
-            {
-                "id": c.id,
-                "created_at": c.created_at,
-                "payment_plan": c.payment_plan,
-                "total_cents": c.total_cents,
-                "instalment_cents": c.instalment_cents,
-                "contracts": len(c.lines),
-                "completed_at": c.completed_at,
-                "stripe_checkout_session_id": c.stripe_checkout_session_id,
-                "stripe_subscription_id": c.stripe_subscription_id,
-                "outcome": c.outcome,
-            }
-            for c in checkouts
-        ]
     return out

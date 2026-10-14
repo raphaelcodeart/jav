@@ -5,9 +5,15 @@ Questo file viene letto all'inizio di ogni sessione. Contiene le cose che
 convenzioni, trappole già pagate una volta, e i comandi esatti che funzionano
 su questo server.
 
-Per la ricostruzione completa da zero (server nuovo, o progetto rifatto per
-un'altra azienda) la guida è `docs/server-migration-guide.md` — §12 è un
-runbook pensato per essere eseguito passo per passo, verifiche comprese.
+Jav è un gestionale per palestre e club di judo: portale famiglie (quote,
+prove di pagamento, certificati, gare, Jav Ranking), segreteria, istruttori,
+più la base generica su cui è costruito (rete commerciale e provvigioni,
+contratti, catalogo e ordini, Shop, portafoglio JavCash, assistenza). La
+specifica del dominio club è `docs/club-portal.md`.
+
+Per installare da zero (server nuovo, o un nuovo club) la guida è
+`docs/server-migration-guide.md` — §12 è un runbook pensato per essere
+eseguito passo per passo, verifiche comprese.
 
 ---
 
@@ -16,8 +22,8 @@ runbook pensato per essere eseguito passo per passo, verifiche comprese.
 **Questo server ospita l'installazione su `jav.ecodo.ai`.** Non esiste un
 ambiente di staging: quello che si deploya qui è quello che vedono gli utenti.
 L'HTTPS lo fa Caddy sull'host (`/etc/caddy/sites/jav.caddy`, copia di
-`infrastructure/caddy/jav.caddy`); il nginx dello stack ascolta solo su
-`127.0.0.1:8081`.
+`infrastructure/caddy/jav.caddy`), che rinnova da solo il certificato; il
+nginx dello stack ascolta solo su `127.0.0.1:8081` ed è il router interno.
 
 **"dev" qui significa produzione.** Lo stack gira con
 `docker-compose.dev.yml` e `ENVIRONMENT=development` nel `.env`, ma è
@@ -38,10 +44,8 @@ docker compose -f docker-compose.dev.yml up -d <servizio>
 di `api` anche se costruite dallo stesso sorgente: vanno **ricostruite**
 insieme ad `api` a ogni deploy del backend, e poi ricreate con
 `--force-recreate`. Il solo `--force-recreate` le riavvia con il codice
-vecchio. È successo (Session 87): per una settimana i lavori automatici
-giravano su codice di otto giorni prima, e la sync notturna dei prodotti
-AliExpress falliva a ogni giro su una colonna rinominata — un cliente ha
-trovato non disponibile un prodotto che per noi era in vendita.
+vecchio, e i lavori automatici (quote mensili, promemoria, chiusura gare)
+girerebbero su codice superato senza che nessuno se ne accorga.
 
 ```bash
 set -o pipefail   # un build fallito deve fermare tutto: niente `| grep` che ne nasconda l'errore
@@ -58,54 +62,59 @@ docker compose -f docker-compose.dev.yml images | grep jav   # stesse date
 Il database di test viene **cancellato e ricreato** all'inizio di ogni
 sessione di pytest (`tests/conftest.py`, `drop_all` + `create_all`). Puntarlo
 al database reale distrugge i dati di produzione. Il nome giusto è
-`jav_test`, **mai** `jav`: controllalo nella stringa di
-connessione ogni volta, prima di premere invio.
+`jav_test`, **mai** `jav`: controllalo nella stringa di connessione ogni
+volta, prima di premere invio.
 
 Gli hostname `postgres` e `minio` del `.env` esistono solo dentro la rete
-Docker: dall'host non risolvono. In più sull'host gira un *altro* Postgres
-su `127.0.0.1:5432`, con credenziali diverse — puntarci dà
-`password authentication failed for user "jav"`, che sembra una password
-sbagliata ma è il server sbagliato. Usa gli IP dei container:
+Docker (`jav-dev_default`): dall'host non risolvono, e Postgres non è
+pubblicato sull'host. Il modo più semplice è far girare i test in un
+container sulla stessa rete, con il sorgente montato (così si prova il codice
+attuale, non quello cotto nell'immagine):
 
 ```bash
-cd /opt/webapps/jav/apps/api
-POSTGRES_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' \
-  $(docker compose -f ../../docker-compose.dev.yml ps -q postgres))
-MINIO_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' \
-  $(docker compose -f ../../docker-compose.dev.yml ps -q minio))
-set -a && . <(grep -E "^(S3_|MINIO_|POSTGRES_PASSWORD)" /opt/webapps/jav/.env) && set +a
-export S3_ENDPOINT_URL="http://$MINIO_IP:9000"
-TEST_DATABASE_URL="postgresql+psycopg://jav:${POSTGRES_PASSWORD}@${POSTGRES_IP}:5432/jav_test" \
-  .venv/bin/python -m pytest -q
+cd /opt/webapps/jav
+PG=$(grep '^POSTGRES_PASSWORD=' .env | cut -d= -f2)
+docker compose -f docker-compose.dev.yml exec -T postgres \
+  psql -U jav -d postgres -qc "CREATE DATABASE jav_test OWNER jav;"   # la prima volta
+docker run --rm -u 0 --network jav-dev_default -v "$PWD/apps/api:/src" -w /src \
+  --env-file .env -e S3_ENDPOINT_URL=http://minio:9000 \
+  -e TEST_DATABASE_URL="postgresql+psycopg://jav:${PG}@postgres:5432/jav_test" \
+  --entrypoint sh jav-dev-api -c 'pip install -q pytest pytest-asyncio polyfactory aiosqlite && python -m pytest -q'
 ```
 
-Le variabili S3 servono davvero: i test dei documenti caricano file veri su
-MinIO. Senza, falliscono con `EndpointConnectionError`.
+In alternativa, da un venv sull'host, gli IP dei container
+(`docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' …`)
+al posto di `postgres` e `minio`.
 
-La suite completa impiega ~2,5 minuti: lanciala in background e nel
-frattempo fai altro. Il driver è `psycopg`, non `asyncpg`. Il venv
-`apps/api/.venv` ogni tanto è indietro rispetto a `pyproject.toml` (è già
-successo con `stripe`): se la *collection* fallisce su un
-`ModuleNotFoundError`, installa il pacchetto e vai avanti.
+Le variabili S3 servono davvero: i test dei documenti e delle prove di
+pagamento caricano file veri su MinIO. Senza, falliscono con
+`EndpointConnectionError`.
+
+Se `drop_all` fallisce con `DependentObjectsStillExist`, il database di test
+contiene tabelle che i modelli non conoscono più (una tabella tolta): non è
+un bug, ricrea `jav_test` vuoto (`DROP DATABASE jav_test WITH (FORCE)`).
+
+La suite completa impiega ~5 minuti: lanciala in background e nel frattempo
+fai altro. Il driver è `psycopg`, non `asyncpg`.
 
 ---
 
 ## 3. Verifiche prima di un deploy
 
 ```bash
-cd apps/api      && .venv/bin/python -c "import app.main"   # vedi sotto
+python -c "import app.main, app.celery_app"            # nel container, vedi §2
 cd apps/dashboard && pnpm typecheck && pnpm build
 ```
 
 `import app.main` non è pedanteria: un `NameError` in un router non lo prende
 nessun test (i test esercitano i servizi, non le rotte) e si manifesta come
-un 500 al primo utente che apre quella schermata. È già successo.
+un 500 al primo utente che apre quella schermata.
 
-`pnpm lint` **non passa** su questo repository: ci sono 15 errori
-preesistenti, quasi tutti `react-hooks/set-state-in-effect`. Il criterio non
-è "lint verde" ma "lint non peggiora": conta gli errori prima e dopo, o
-verifica che i tuoi file non compaiano nell'elenco. Stessa cosa per `mypy` e
-per `ruff` su `alembic/` e `tests/`.
+`pnpm lint` **non passa** su questo repository: ci sono errori preesistenti,
+quasi tutti `react-hooks/set-state-in-effect`. Il criterio non è "lint verde"
+ma "lint non peggiora": conta gli errori prima e dopo, o verifica che i tuoi
+file non compaiano nell'elenco. Stessa cosa per `mypy` e per `ruff` su
+`tests/`.
 
 `react-hooks/set-state-in-effect` è comunque un **errore**, non un warning:
 nel codice nuovo i valori si derivano durante il render, non si sincronizzano
@@ -115,111 +124,123 @@ con un `useEffect`.
 
 ## 4. Migrazioni e schema
 
+La storia delle migrazioni è ripartita da zero: c'è **una sola migrazione
+iniziale**, `apps/api/alembic/versions/0001_schema_iniziale.py` (revision
+`"0001"`), generata dai modelli. Le chiavi esterne sono create dopo tutte le
+tabelle, perché molte si citano a vicenda; la sequenza
+`shop_order_number_seq` è scritta a mano (autogenerate non la crea).
+
 Una modifica ai modelli richiede tre cose, non una:
 
-1. un file nuovo in `apps/api/alembic/versions/` (numerazione progressiva
-   `00NN_nome.py`, `down_revision` = la revision precedente);
+1. un file nuovo in `apps/api/alembic/versions/`: il prossimo è
+   `0002_nome.py` con `down_revision = "0001"`, poi `0003_…` e così via;
 2. `./scripts/backup.sh` **prima** di applicarla in produzione;
-3. `./scripts/dump-schema.sh` dopo, e il diff di `docs/database-schema.sql`
-   committato insieme al resto.
+3. `./scripts/dump-schema.sh dev --from-migrations` dopo (costruisce un
+   database usa e getta dalle migrazioni con l'immagine `api` già
+   ricostruita), e il diff di `docs/database-schema.sql` committato insieme al
+   resto.
 
 Il punto 3 sembra burocrazia e non lo è: quel file è l'artefatto con cui si
-ricostruisce il database su un altro server, ed è già andato fuori
-sincrono due volte (mancavano interi domini). Il diff deve contenere
-**solo** ciò che la migrazione dichiara di fare: se contiene altro, qualcuno
-ha modificato il database a mano.
+verifica una reinstallazione. Il diff deve contenere **solo** ciò che la
+migrazione dichiara di fare: se contiene altro, qualcuno ha modificato il
+database a mano.
 
 Il container `api` esegue `alembic upgrade head` da solo all'avvio. Non serve
 lanciarlo a parte dopo un `up -d`.
 
 Lo schema da solo non basta a far partire l'applicazione: permessi, ruoli,
-gradi e piano provvigioni sono **dati**, non struttura. Vedi
-`docs/server-migration-guide.md` §6.1 e `python -m app.seed.bootstrap`.
+gradi e piano provvigioni sono **dati**, non struttura, e li crea
+`python -m app.seed.bootstrap` (idempotente: rilanciarlo riallinea permessi e
+ruoli al codice). Vedi `docs/server-migration-guide.md` §6.1.
 
 ---
 
 ## 5. Regole di dominio che non si negoziano
 
-Sono scritte per esteso in `docs/business-rules.md`; qui l'essenziale.
+Sono scritte per esteso in `docs/business-rules.md` e `docs/club-portal.md`;
+qui l'essenziale.
 
 - **Ogni calcolo economico è server-side.** Il browser sceglie una chiave
-  (`FULL`, `MONTHLY_12`, un id prodotto), mai un importo. Un prezzo che
-  arriva dal frontend non si usa nemmeno per visualizzarlo.
+  (`FULL`, `MONTHLY_12`, un id prodotto, le quote da pagare), mai un
+  importo. Un prezzo che arriva dal frontend non si usa nemmeno per
+  visualizzarlo.
 - **L'idempotenza si ottiene con un vincolo UNIQUE su una chiave
   deterministica**, mai con un flag applicativo e mai con un UUID generato
-  al volo dal client. Bonus, cashback, provvigioni e pagamenti non devono
-  poter essere accreditati due volte: è già successo, e la causa era un
-  `retry` dopo un errore di invio email.
-- **I webhook Stripe si verificano con la firma**, e l'`event.id` si registra
-  *prima* di eseguire qualsiasi handler.
+  al volo dal client. Bonus, cashback, provvigioni, quote e pagamenti non
+  devono poter essere creati o accreditati due volte.
+- **Si paga con bonifico o con JavCash.** Non esistono pagamenti con carta:
+  un bonifico lo conferma l'amministratore (ordini, contratti, rate), oppure
+  — per le quote del club — lo dichiara il genitore caricando la prova.
 - **Gli snapshot sono congelati**: la rete al momento dell'attivazione, il
-  prezzo al momento della creazione del contratto. Non si ricalcolano mai a
-  posteriori.
-- **Marketplace (CJ = 1, Shopify = 2, AliExpress = 3, «Fai la Spesa con
-  Jav» = 4, «Market Kappa» = 5, «Marketplace VAITTO» = 6)**: regole solo in `domains/marketplaces/rules.py` — **nessuno sconto a chi paga
-  con bonifico** (tolto nella Session 86: non si può fare, vale ovunque, anche
-  per i contratti) e **mai un aumento sulla carta** (vietato in Italia);
-  niente cashback; JavCash 30% sui nuovi prodotti e mai 100% (max 99,
-  vincolo nel DB). I tre shop sono domini isolati
-  (`cj_dropshipping`, `shopify_dropshipping`, `aliexpress_dropshipping`,
-  `jav_market`, `kappa_market`, `vaitto_market`, `symphonya_market`, `soleil_market`) ma la *gestione* è unificata: ordini cliente, ordini admin e
-  Contabilità mostrano una lista sola. Un quinto shop si costruisce clonando
-  uno di questi domini e riusando `rules.py`, non copiandone le regole —
-  `jav_market` (Session 79) è l'esempio più recente, ed è anche l'unico
-  senza fornitore: il catalogo lo scrive l'amministratore. `kappa_market`
-  (Session 87, solo Kappa e Robe di Kappa) è il suo clone, e `vaitto_market`
-  (Session 88) il clone di Kappa rifornito da un feed CSV (`feed.py`);
-  `symphonya_market` (Session 89, «Shop Beauty» per il cliente) è il clone di
-  VAITTO rifornito dall'API di Symphonya; `soleil_market` (Session 90,
-  «Fai la Spesa con Jav 2» per il cliente, prima «Market 7») è il clone di
-  Symphonya rifornito dall'API affiliati SoleilDrop (dal 13/10/2026) o
-  dall'Excel del portale. La
-  chiave è `soleil_market` e non `soleildrop_market` perché `carts.shop` e
-  `shop_categories.shop` sono `String(16)`. VAITTO, Symphonya e SoleilDrop
-  calcolano il JavCash con la stessa formula (prezzo ÷ 1,22 − costo, metà
-  in JavCash): se cambia in uno, va cambiata negli altri. **Ogni vetrina cliente va a
-  pagine** (`marketplaces/paging.py`, rotte `…/page`, «Mostra altri
-  prodotti»): mai restituire tutto il catalogo in una risposta (Symphonya
-  erano 63 MB e mezzo GB di RAM per apertura) -- regola dell'utente.
-- **Disco**: ogni build lascia le immagini vecchie senza nome; a fine
-  sessione `docker image prune -f && docker builder prune -f` (mai
-  `volume prune`; lo fa anche il cron della domenica). Il 2026-10-02 il
-  disco era al 97% e i test fallivano.
-- **Backup** (`scripts/backup.sh`, cron 04:00): database con rotazione
-  7 giorni / settimanali / mensili + `.env`, solo sul server (scelta
-  dell'utente); prova di ripristino ogni domenica (`verify-backup.sh`);
-  un errore avvisa lo staff nell'app.
-- **Il carrello** (`domains/carts`) è uno per (cliente, negozio): righe di
-  negozi diversi non possono finire nello stesso ordine, perché le regole si
-  escludono a vicenda. Un ordine porta N righe e **il denaro resta sulla
-  testata** — è la ragione per cui pagamenti, webhook e Contabilità non sono
-  cambiati quando il carrello è arrivato.
-- **L'IVA si aggiunge al prezzo esposto** (Session 78), non è contenuta:
-  `vat_mode` sull'ordine dice quale regola valeva, perché prima era il
-  contrario e le stesse colonne hanno significato opposto.
-- **Le credenziali dei fornitori non si scrivono a mano nel DB**: Shopify e
-  AliExpress si collegano con un giro OAuth dal pannello ("Collega...") e
-  rinnovano i token da soli; nessun endpoint restituisce mai un secret,
-  solo "configurato" e le ultime 4 cifre.
+  prezzo al momento della creazione del contratto, l'importo di una quota al
+  momento in cui è emessa. Non si ricalcolano mai a posteriori.
+- **Club** (`domains/club`):
+  - **più club sulla stessa piattaforma**: ogni query del dominio filtra per
+    `club_id` (le funzioni ricevono un `ClubScope`), e su quale club lavora
+    una richiesta lo decide solo `club/scope.py` — mai un id che arriva dal
+    browser. Lo Shop, il catalogo e JavCash sono della piattaforma, uno per
+    tutti i club;
+  - le quote sono UNIQUE per (atleta, tipo, periodo): i job mensili e di
+    inizio stagione possono girare due volte senza effetti;
+  - **la prova di pagamento caricata segna subito le quote come pagate**; la
+    segreteria può rifiutarla (le quote tornano da pagare e il genitore
+    viene avvisato), ma nessuna prova resta in attesa di qualcuno;
+  - l'età per il piano si calcola **al 1° settembre** della stagione, come
+    nelle categorie federali (salvo `plan_locked`);
+  - senza certificato agonistico valido alla data della gara non ci si
+    iscrive a una gara che lo richiede;
+  - la cintura attuale e il Jav Ranking si **calcolano** dallo storico e dai
+    risultati, non si salvano mai a mano.
+- **Shop** (`jav_market`, catalogo scritto dall'amministratore): regole in
+  `domains/marketplaces/rules.py`. JavCash mai al 100% del prezzo (max 99,
+  vincolo nel DB). **La vetrina cliente va a pagine**
+  (`marketplaces/paging.py`, rotte `…/page`): mai restituire tutto il
+  catalogo in una risposta.
+- **L'IVA si aggiunge al prezzo esposto** negli ordini dello Shop:
+  `vat_mode` sull'ordine dice quale regola valeva quando è stato creato.
+- **Il carrello** (`domains/carts`) è uno per (cliente, negozio). Un ordine
+  porta N righe e **il denaro resta sulla testata**.
 - **Un'email che non parte non deve mai far fallire l'operazione che la
   precede** — c'è `send_html_email_best_effort()` per questo. Con due
   eccezioni volute: i link di reset password e i codici OTP, dove se l'invio
   fallisce l'utente *deve* saperlo.
+- **Disco**: ogni build lascia le immagini vecchie senza nome; a fine
+  sessione `docker image prune -f && docker builder prune -f` (mai
+  `volume prune`).
+- **Backup** (`scripts/backup.sh`): database con rotazione 7 giorni /
+  settimanali / mensili + `.env`, prova di ripristino settimanale
+  (`verify-backup.sh`); i lavori pianificati sono in
+  `docs/server-migration-guide.md` §4.8.
 
 ---
 
 ## 6. Interfaccia
 
-- Tutto ciò che vede un utente è **in italiano**, incluso ogni messaggio di
-  errore. Chi usa questa applicazione non è tecnico: "Si è verificato un
-  errore" è un fallimento, non un messaggio.
+- L'interfaccia è in **tre lingue: portoghese (pt-PT, la predefinita),
+  inglese e italiano**, scelte con la bandierina in alto (cookie `jav_lang`,
+  letto dal layout radice). Un testo nuovo non si scrive nel componente: si
+  aggiunge una chiave nei tre file di `apps/dashboard/lib/i18n/messages/`
+  (`it.ts` è la sorgente, `pt.ts` ed `en.ts` non compilano se manca una
+  chiave) e si usa `const { t, fmt } = useI18n()`; importi e date con
+  `fmt.euro` / `fmt.shortDate`, mai con `"it-IT"` scritto a mano. Per le
+  etichette che arrivano come codice dall'API (cinture, livelli, traguardi)
+  `t.dyn(\`chiave.${codice}\`, etichettaApi)`.
+  **Tradotto finora**: login e recupero password, barra e menu, area
+  famiglie del club. Ancora solo in italiano: admin, promoter, staff, Shop,
+  contratti, wallet, e i messaggi che arrivano dal backend (errori, notifiche,
+  email, motivi di non idoneità a una gara).
+- Ogni messaggio, anche di errore, è scritto per chi lo legge. Chi usa questa
+  applicazione — un genitore dal telefono — non è tecnico: "Si è verificato
+  un errore" è un fallimento, non un messaggio.
 - Il `detail` di un errore FastAPI 422 è un **array**, non una stringa.
   Passarlo a React produce `[object Object]` sullo schermo. La traduzione sta
   in `apps/dashboard/lib/api-error.ts`: usala, non reinventarla.
-- Dark e light: ogni classe di colore ha la sua variante `light:`. Un
-  componente nuovo va guardato in entrambi i temi.
-- Tailwind v4, niente file di configurazione del tema. Il colore del brand
-  (`orange-*`/`amber-*`) è scritto a mano in ogni componente.
+- Il redesign in corso (vedi `docs/implementation-progress.md`) porta a un
+  **tema chiaro unico** con i colori del club (rosso, giallo, grigio) come
+  token Tailwind v4 in `apps/dashboard/app/globals.css`: un componente nuovo
+  usa i token e i componenti di `components/ui/`, non classi colore scritte
+  a mano.
+- Animazioni ed effetti 3D rispettano sempre `prefers-reduced-motion`.
 
 ---
 
@@ -231,7 +252,7 @@ motivo per cui è ricostruibile.
 | Quando | Cosa |
 |---|---|
 | sempre, a fine lavoro | `docs/implementation-progress.md` — una voce per sessione, in italiano, che dice cosa è cambiato **e perché** |
-| nuova regola di business | `docs/business-rules.md` |
+| nuova regola di business | `docs/business-rules.md` (o `docs/club-portal.md` se è del club) |
 | nuova tabella o colonna | `docs/database-model.md` **e** `docs/database-schema.sql` (rigenerato) |
 | cambia qualcosa per l'utente | `docs/user-guide.md` |
 | cambia l'installazione | `docs/server-migration-guide.md` — e §15 se cambia il modo di **verificarla** |
@@ -258,17 +279,20 @@ il cosa si legge dal diff.
 ## 9. Come è fatto
 
 FastAPI + SQLAlchemy async + Alembic + Pydantic v2 su PostgreSQL 16, Celery
-con Redis, MinIO per i file, Next.js 16 (App Router) davanti, tutto dietro
-nginx, tutto in Docker Compose.
+con Redis, MinIO per i file, Next.js 16 (App Router) davanti, nginx come
+router interno, Caddy sull'host per l'HTTPS, tutto in Docker Compose.
 
 ```
 apps/api/app/domains/<dominio>/   models.py schemas.py service.py router.py
+apps/api/app/domains/club/        atleti, piani, quote, prove, certificati, cinture,
+                                  corsi e presenze, gare, ranking, medaglie, job
 apps/api/app/core/                config, db, security, storage, email
-apps/api/alembic/versions/        migrazioni
+apps/api/alembic/versions/        migrazioni (0001_schema_iniziale.py, poi 0002_…)
 apps/api/tests/                   pytest
 apps/dashboard/app/               rotte Next.js (+ BFF in app/api/proxy)
-apps/dashboard/components/        UI
-infrastructure/nginx/             nginx.conf
+apps/dashboard/components/        UI (components/ui/ = sistema di componenti)
+infrastructure/nginx/             nginx.conf (router interno, solo HTTP)
+infrastructure/caddy/             jav.caddy (sito Caddy sull'host)
 scripts/                          backup, restore, deploy, migrate, dump-schema
 ```
 
@@ -286,10 +310,10 @@ non *cosa* fa la riga sotto.
 ## 10. Reinstallare tutto su un altro server
 
 La procedura completa, con le verifiche, è `docs/server-migration-guide.md`
-(§4 per un doppione di questo sistema, §12 per un'altra azienda, §14 per i
-Marketplace). In sintesi, nell'ordine:
+(§4 per un doppione di questo sistema, §12 per un nuovo club). In sintesi,
+nell'ordine:
 
-1. Server Ubuntu con `docker.io docker-compose-v2 git openssl`; clona
+1. Server Ubuntu con `docker.io docker-compose-v2 git openssl caddy`; clona
    `https://github.com/raphaelcodeart/jav` in `/opt/webapps/jav`.
 2. `.env` da `.env.example`, con segreti nuovi (guida §4.2).
 3. `docker compose -f docker-compose.dev.yml build && … up -d`: il container
@@ -297,10 +321,9 @@ Marketplace). In sintesi, nell'ordine:
 4. Dati minimi: `python -m app.seed.bootstrap` (organizzazione, permessi,
    ruoli, gradi, piano provvigioni, primo amministratore) — oppure il
    ripristino di un backup con dati (`scripts/restore.sh`).
-5. nginx + HTTPS (§4.6), crontab di backup e certificato (§4.8).
-6. Dall'interfaccia: SMTP, Stripe (webhook con `checkout.session.completed`,
-   `invoice.paid`, `invoice.payment_failed`), IBAN, prodotti, poi i
-   Marketplace (§14).
+5. Caddy + HTTPS (§4.6), crontab dei backup (§4.8).
+6. Dall'interfaccia: SMTP, IBAN e intestatario del conto, piani del club,
+   corsi, prodotti dello Shop.
 
 `docs/database-schema.sql` è il **modello della struttura** (solo struttura,
 nessun dato), generato da un database costruito da Alembic: serve a

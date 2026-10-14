@@ -11,17 +11,31 @@ logger = logging.getLogger(__name__)
 # Alembic autogenerate) sees all tables, even though nothing else here references
 # these imports directly.
 from app.domains.accounting.router import router as accounting_router
-from app.domains.aliexpress_dropshipping import models as _aliexpress_models  # noqa: F401
-from app.domains.aliexpress_dropshipping.router import router as aliexpress_router
 from app.domains.audit import models as _audit_models  # noqa: F401
 from app.domains.auth import models as _auth_models  # noqa: F401
 from app.domains.auth.router import router as auth_router
-from app.domains.catalog import models as _catalog_models  # noqa: F401
 from app.domains.carts import models as _carts_models  # noqa: F401
 from app.domains.carts.router import router as carts_router
+from app.domains.catalog import models as _catalog_models  # noqa: F401
 from app.domains.catalog.router import router as catalog_router
-from app.domains.cj_dropshipping import models as _cj_models  # noqa: F401
-from app.domains.cj_dropshipping.router import router as cj_router
+from app.domains.club import contact_models as _club_contact_models  # noqa: F401
+from app.domains.club import models as _club_models  # noqa: F401
+from app.domains.club import site_models as _club_site_models  # noqa: F401
+from app.domains.club.accounting_router import (
+    admin_accounting_router,
+    family_accounting_router,
+    platform_accounting_router,
+)
+from app.domains.club.contact_router import (
+    contact_club_router,
+    contact_platform_router,
+    contact_public_router,
+)
+from app.domains.club.router import admin_router as club_admin_router
+from app.domains.club.router import clubs_router
+from app.domains.club.router import router as club_router
+from app.domains.club.router import staff_router as club_staff_router
+from app.domains.club.site_router import public_site_router, site_admin_router, site_family_router
 from app.domains.commissions import models as _commissions_models  # noqa: F401
 from app.domains.commissions.router import router as commissions_router
 from app.domains.contracts import models as _contracts_models  # noqa: F401
@@ -35,15 +49,11 @@ from app.domains.documents import models as _documents_models  # noqa: F401
 from app.domains.documents.router import router as documents_router
 from app.domains.friend_referrals import models as _friend_referrals_models  # noqa: F401
 from app.domains.friend_referrals.router import router as friend_referrals_router
-from app.domains.imported_products import models as _imported_products_models  # noqa: F401
-from app.domains.imported_products.router import router as imported_products_router
-from app.domains.integrations.router import router as integrations_router
-from app.domains.invoice_redemptions import models as _invoice_redemptions_models  # noqa: F401
-from app.domains.invoice_redemptions.router import router as invoice_redemptions_router
-from app.domains.kappa_market import models as _kappa_market_models  # noqa: F401
-from app.domains.kappa_market.router import router as kappa_market_router
 from app.domains.jav_market import models as _jav_market_models  # noqa: F401
 from app.domains.jav_market.router import router as jav_market_router
+from app.domains.javbot import models as _javbot_models  # noqa: F401
+from app.domains.javbot.router import public_router as javbot_public_router
+from app.domains.javbot.router import router as javbot_router
 from app.domains.marketplaces import models as _marketplaces_models  # noqa: F401
 from app.domains.marketplaces.router import router as marketplaces_router
 from app.domains.network import models as _network_models  # noqa: F401
@@ -55,10 +65,6 @@ from app.domains.orders.router import router as orders_router
 from app.domains.organizations import models as _organizations_models  # noqa: F401
 from app.domains.organizations.router import router as organizations_router
 from app.domains.outbox import models as _outbox_models  # noqa: F401
-from app.domains.partners import models as _partners_models  # noqa: F401
-from app.domains.partners.router import router as partners_router
-from app.domains.payments import models as _payments_models  # noqa: F401
-from app.domains.payments.router import router as payments_router
 from app.domains.product_requests import models as _product_requests_models  # noqa: F401
 from app.domains.product_requests.router import router as product_requests_router
 from app.domains.rbac import models as _rbac_models  # noqa: F401
@@ -68,14 +74,6 @@ from app.domains.referral.router import router as referral_router
 from app.domains.reports.router import router as reports_router
 from app.domains.shop_categories import models as _shop_categories_models  # noqa: F401
 from app.domains.shop_categories.router import router as shop_categories_router
-from app.domains.shopify_dropshipping import models as _shopify_models  # noqa: F401
-from app.domains.shopify_dropshipping.router import router as shopify_router
-from app.domains.vaitto_market import models as _vaitto_market_models  # noqa: F401
-from app.domains.symphonya_market import models as _symphonya_market_models  # noqa: F401
-from app.domains.soleil_market import models as _soleil_market_models  # noqa: F401
-from app.domains.vaitto_market.router import router as vaitto_market_router
-from app.domains.symphonya_market.router import router as symphonya_market_router
-from app.domains.soleil_market.router import router as soleil_market_router
 from app.domains.support import models as _support_models  # noqa: F401
 from app.domains.support.router import router as support_router
 from app.domains.users import models as _users_models  # noqa: F401
@@ -113,6 +111,19 @@ app.include_router(commissions_router, prefix="/api")
 app.include_router(customers_router, prefix="/api")
 app.include_router(catalog_router, prefix="/api")
 app.include_router(carts_router, prefix="/api")
+app.include_router(club_router, prefix="/api")
+app.include_router(club_admin_router, prefix="/api")
+app.include_router(club_staff_router, prefix="/api")
+app.include_router(clubs_router, prefix="/api")
+app.include_router(admin_accounting_router, prefix="/api")
+app.include_router(platform_accounting_router, prefix="/api")
+app.include_router(family_accounting_router, prefix="/api")
+app.include_router(public_site_router, prefix="/api")
+app.include_router(site_admin_router, prefix="/api")
+app.include_router(site_family_router, prefix="/api")
+app.include_router(contact_public_router, prefix="/api")
+app.include_router(contact_club_router, prefix="/api")
+app.include_router(contact_platform_router, prefix="/api")
 app.include_router(reports_router, prefix="/api")
 app.include_router(support_router, prefix="/api")
 app.include_router(product_requests_router, prefix="/api")
@@ -120,25 +131,15 @@ app.include_router(documents_router, prefix="/api")
 app.include_router(notifications_router, prefix="/api")
 app.include_router(documentation_router, prefix="/api")
 app.include_router(wallets_router, prefix="/api")
-app.include_router(partners_router, prefix="/api")
-app.include_router(invoice_redemptions_router, prefix="/api")
 app.include_router(orders_router, prefix="/api")
-app.include_router(imported_products_router, prefix="/api")
-app.include_router(cj_router, prefix="/api")
-app.include_router(shopify_router, prefix="/api")
-app.include_router(aliexpress_router, prefix="/api")
 app.include_router(jav_market_router, prefix="/api")
-app.include_router(kappa_market_router, prefix="/api")
-app.include_router(vaitto_market_router, prefix="/api")
-app.include_router(symphonya_market_router, prefix="/api")
-app.include_router(soleil_market_router, prefix="/api")
 app.include_router(marketplaces_router, prefix="/api")
 app.include_router(shop_categories_router, prefix="/api")
 app.include_router(friend_referrals_router, prefix="/api")
 app.include_router(organizations_router, prefix="/api")
-app.include_router(integrations_router, prefix="/api")
-app.include_router(payments_router, prefix="/api")
 app.include_router(users_router, prefix="/api")
+app.include_router(javbot_router, prefix="/api")
+app.include_router(javbot_public_router, prefix="/api")
 
 
 @app.on_event("startup")

@@ -3,8 +3,8 @@
 Status: no source document (`Allegato_A_Piano_Carriera_Regolamento_Provvigionale.pdf`)
 was present in the repository at the time this was written. Every numeric threshold,
 percentage and formula below is a **placeholder** used to make the system runnable and
-testable. None of it should be treated as the real Jav commercial policy until
-confirmed. Every placeholder is also listed in `open-questions.md` with the exact
+testable. None of it should be treated as the real commercial policy of the club
+until confirmed. Every placeholder is also listed in `open-questions.md` with the exact
 config location to change once real figures are available.
 
 ## Money
@@ -33,7 +33,7 @@ Configured via the `ranks` table, not hardcoded. Seed values used for demo/tests
 `single_branch_cap_percentage` defaults to 33% for every rank (see "Regola del 33%"
 below) but is per-rank, per-plan-version configurable.
 
-### Rank promotion progress (PLACEHOLDER, added Session 15)
+### Rank promotion progress (PLACEHOLDER)
 
 `personal_volume_threshold_cents` / `group_volume_threshold_cents` were present
 in the schema since the very first migration but always left at 0 (never
@@ -74,7 +74,7 @@ per-promoter "Apri Rete" drill-down (same shared component). An agent already
 at the top rank (no higher `level` exists for their `rule_version`) shows
 "qualifica massima raggiunta" instead of a bar.
 
-### Automatic monthly rank evaluation (PLACEHOLDER, added Session 20)
+### Automatic monthly rank evaluation (PLACEHOLDER)
 
 Separate axis from the progress display above, and from the same unconfirmed
 placeholder thresholds: `commissions/services/rank_evaluation.py` actually
@@ -104,13 +104,12 @@ pending the real `Allegato_A_...Regolamento_Provvigionale.pdf`:
   MANUAL) and `audit_log`, and the affected agent gets an in-app
   notification.
 
-### Promoter disattivato: il contratto risale allo sponsor attivo (Session 38) {#terminated-promoter-fallback}
+### Promoter disattivato: il contratto risale allo sponsor attivo {#terminated-promoter-fallback}
 
 A customer's referring promoter can be deactivated (`agent_profiles.status =
 TERMINATED`) months after that customer signed up. `create_contract()` refuses
 to attribute a contract to a non-ACTIVE agent — correctly: a contract that
-activates and pays nobody is the failure documented in
-`paid-contract-commission-audit.md`. The result was a customer who could not
+activates and pays nobody is a silent loss for the network. The result was a customer who could not
 activate anything, ever, and saw only "Si è verificato un errore imprevisto"
 (the refusal escaped `POST /contracts/mine` as an unhandled 500). Three real
 customers were in this state when it was found.
@@ -146,50 +145,31 @@ sponsor rather than block.
   and does transfer. No product enables the bonus today, so this is currently
   theoretical — flag it if that changes.
 
-## Pagamento del contratto: unica, 3 rate, 12 rate (Session 44) {#contract-payment}
+## Pagamento del contratto: unica, 3 rate, 12 rate {#contract-payment}
 
-**Contracts only.** The Shop's own checkout (orders, imported orders) is a
-separate, already-working flow and is untouched: an order is a purchase, a
-contract is a subscription to a service.
+**Contracts only.** The Shop's own checkout (orders) is a separate flow: an
+order is a purchase, a contract is a subscription to a service. Club fees
+are a third, separate flow (`club-portal.md`).
 
-### Sconto per il pagamento in unica soluzione (Session 64) {#full-payment-discount}
-
-Chi paga il contratto (o l'intera pratica) **tutto subito con carta** ha uno
-sconto sul prezzo: **32%** di default, impostabile in Impostazioni (0 = nessuno
-sconto). 3 e 12 rate restano a prezzo pieno.
-
-- Lo sconto si applica al prezzo IVA inclusa, arrotondato al centesimo: è lo
-  stesso che scontare il prezzo netto e poi aggiungere l'IVA (180 − 32% + IVA).
-- Il prezzo del contratto (`gross_amount_cents`) non cambia; lo sconto scelto si
-  congela sul contratto (`payment_discount_cents`) quando il cliente sceglie la
-  soluzione unica, e tutto ciò che segue (rata registrata, cashback, anteprima
-  provvigioni) usa quanto pagato davvero. Un cambio dell'impostazione vale solo
-  per i pagamenti successivi.
-- Il **cashback** di un pagamento unico scontato è calcolato su quanto pagato
-  (open-questions #18). I gettoni provvigionali non cambiano.
-- **Bonifico della pratica (Session 65)**: il cliente può scegliere "Paga con
-  bonifico" nel checkout finale. È sempre una soluzione unica, con lo stesso
-  sconto, congelato su ogni contratto al momento della scelta. I contratti
-  risultano pagati solo quando un amministratore conferma "bonifico ricevuto"
-  dalla pratica: da lì tutto (rata registrata, cashback, attivazione) segue lo
-  stesso percorso del pagamento con carta. Il cliente può caricare la ricevuta;
-  un pagamento con carta fatto dopo chiude comunque la pratica.
-- Un bonifico confermato a mano dallo staff su un contratto per cui il cliente
-  non l'aveva scelto è a prezzo pieno.
-- Percentuale confermata dall'azienda: 32%. Cambiandola, i pagamenti già
-  scelti o fatti restano con lo sconto di allora.
+**Il pagamento è sempre un bonifico.** Il cliente sceglie il piano e annuncia
+il bonifico (`POST /contract-requests/{id}/bank-transfer`, corpo facoltativo
+`{"payment_plan": "FULL" | "INSTALMENTS_3" | "MONTHLY_12"}`, default `FULL`);
+può caricare la ricevuta. Il **primo bonifico** vale l'intero importo (FULL)
+oppure la prima rata di ogni contratto. Un amministratore lo conferma
+(`POST /contract-requests/{id}/bank-transfer/confirm`, oppure
+`contracts/service.py::record_transfer_payment` per un contratto singolo); ogni
+rata successiva si conferma **una per una**
+(`POST /contracts/{id}/instalments/{number}/confirm`). Nessun piano ha uno
+sconto: un bonifico costa quanto il prezzo del contratto.
 
 ### Quando si può pagare {#contract-prepayment}
 
-**Changed in Session 49: subito, senza aspettare i documenti.** Per explicit
-business request, the customer can pay as soon as the contract exists —
-straight from the activation wizard, documents skipped, nothing approved yet.
-`contracts/service.py::PREPAYABLE_STATUSES` = `SUBMITTED`,
+Subito, senza aspettare i documenti: il cliente può pagare appena il
+contratto esiste. `contracts/service.py::PREPAYABLE_STATUSES` = `SUBMITTED`,
 `DOCUMENTS_PENDING`, `UNDER_REVIEW`, `APPROVED`, `PAYMENT_PENDING`;
 `is_payable()` also requires a frozen amount and `paid_at IS NULL`.
 
-**Paying is not activating.** Business rule, restated by the business in the
-same session: *le provvigioni partono solo all'approvazione*. So:
+**Paying is not activating.** *Le provvigioni partono solo all'approvazione*:
 
 - Payment confirmed while the documents are not yet approved → `paid_at` is
   set, the JavCash is credited, staff are notified
@@ -198,158 +178,77 @@ same session: *le provvigioni partono solo all'approvazione*. So:
 - Administrator approves → `APPROVED → PAYMENT_PENDING` as always, and
   `transition_contract` sees `paid_at` already set and continues straight to
   `PAID → ACTIVATION_PENDING → ACTIVE`. That is the only point commissions
-  and the network snapshot are produced, exactly as before.
+  and the network snapshot are produced.
 - Payment confirmed when the documents are already approved
-  (`PAYMENT_PENDING`) → unchanged: `PAID` → `ACTIVE` immediately.
+  (`PAYMENT_PENDING`) → `PAID` → `ACTIVE` immediately.
 - **Rejecting a paid contract** notifies staff (`CONTRACT_PAID_REJECTED`):
-  refund, the credited JavCash and, on an instalment plan, cancelling the
-  Stripe subscription are human decisions, never automatic. A payment that
-  lands on a contract already rejected is still recorded (the money moved),
-  earns no JavCash, and raises the same notification.
+  refund and the credited JavCash are human decisions, never automatic. A
+  payment confirmed on a contract already rejected is still recorded (the
+  money moved), earns no JavCash, and raises the same notification.
 
 ### Le tre modalità
 
 | Piano | Come funziona |
 |---|---|
-| **Soluzione unica** | Un addebito, `mode="payment"`. |
-| **3 rate mensili** | Abbonamento Stripe, prima rata subito, altre due addebitate da sole. |
-| **12 rate mensili** | Identico, con 12 rate. |
+| **Soluzione unica** (`FULL`) | Un bonifico per l'intero importo. |
+| **3 rate mensili** (`INSTALMENTS_3`) | Primo bonifico = prima rata; le altre due le conferma l'amministrazione quando arrivano. |
+| **12 rate mensili** (`MONTHLY_12`) | Identico, con 12 rate. |
 
-3 rate and 12 rate are **the same mechanism** and differ only in the count.
-No external financing provider is involved — Jav splits its own
-invoice — so this needs no capability beyond ordinary card payments. (This is
-what the earlier "finanziaria Stripe" question turned out to mean; see
-`open-questions.md` #12.)
-
-**Everything is created through the API, per contract.** No Stripe Product or
-Price is defined in the dashboard: the Price is built inline from
-`contracts.gross_amount_cents`, the amount already frozen on that contract
-with that customer's VAT. A fixed Price would have to be re-made by hand on
-every price change and would know nothing about who is buying.
-
-**A subscription runs forever unless told to stop**, so "12 rate" is made
-true explicitly: `cancel_at` is set on the subscription right after it
-exists, rather than counting invoices as they arrive — one missed webhook
-delivery would otherwise keep charging somebody who had finished paying.
+3 and 12 rate are **the same mechanism** and differ only in the count. The
+instalment schedule (`contract_instalments`) is created when the first
+payment is confirmed; each row is `SCHEDULED` until an administrator confirms
+it, then `PAID` with `payment_source = ADMIN` and `confirmed_by_user_id`.
 
 ### Gli arrotondamenti, detti e non nascosti
 
-A Stripe subscription bills the **same** amount every period, and a price
-rarely divides evenly by 3 or 12. The instalment is rounded to the cent and
-the plan's real total (`instalment × N`) is **shown next to each option**,
-with the difference from the contract spelled out when there is one — at most
-6 cents for 12 instalments, and exactly 0 for every price currently in the
-catalog (249,00 divides cleanly by both 3 and 12).
-
-The two obvious alternatives are worse: adding the remainder to the first
-invoice requires a Stripe Product created **per contract**
-(`add_invoice_items` cannot take an inline product), littering the account
-with one object per sale to recover a few cents; and silently rounding up
-overcharges without saying so.
-
-### Cosa rende un contratto pagato
-
-Only the **verified webhook**. The success URL is never proof — a customer
-can open it by hand. On `checkout.session.completed` a contract already
-approved moves `PAYMENT_PENDING → PAID` (one not yet approved only gets
-`paid_at`, see above), which auto-cascades to `ACTIVE` through the
-existing state machine, so commissions are calculated at exactly the same
-point as for any other contract. For an instalment plan this happens on the
-**first** payment: the contract is in force and the rest is collected
-automatically.
+A price rarely divides evenly by 3 or 12. The instalment is rounded to the
+cent and the plan's real total (`instalment × N`) is **shown next to each
+option**, with the difference from the contract spelled out when there is
+one — at most 6 cents for 12 instalments.
 
 ### Prezzo del contratto: unica soluzione e prezzo mensile {#contract-price-periods}
 
 **Only for recurring product types** (`pricing.RECURRING_PRODUCT_TYPES` =
-`ENERGY_CONTRACT`, `SUBSCRIPTION`). A `PHYSICAL` or `DIGITAL` product always
-costs its listed price once, whatever `billing_period` / duration its version
-carries, and never has a rate price. Shop orders never went through this
-and still charge `base_price_cents` once.
+`SERVICE`, `SUBSCRIPTION`). A `PHYSICAL` or `DIGITAL` product always costs
+its listed price once, whatever `billing_period` / duration its version
+carries, and never has a rate price.
 
-Business decision, Session 84 (replaces Session 49's "canone × mesi"): paying
-in rate costs more than paying at once, and not by one fixed percentage, so a
-package has **two prices**, both net of VAT:
+Paying in rate may cost more than paying at once, so a package can have
+**two prices**, both net of VAT:
 
 - `base_price_cents` = the whole term **in unica soluzione**
   (`pricing.contract_net_amount_cents`);
 - `monthly_price_cents` = the **rata mensile**; paid in rate the contract costs
   `monthly × contract_duration_months` (`pricing.contract_instalments_net_amount_cents`).
-  **12 rate and 3 rate split the same total** (3 rate = Klarna-style "in tre").
+  **12 rate and 3 rate split the same total.**
 
-VAT (business customers only) is added to each total. The contract freezes
-both at creation: `net/vat/gross_amount_cents` (one go) and
+With no monthly price the rate split the one-go price. VAT (business
+customers only) is added to each total. The contract freezes both at
+creation: `net/vat/gross_amount_cents` (one go) and
 `instalments_net/vat/gross_amount_cents` (rate). Every plan-dependent amount
-(options, Stripe lines, instalment schedule, cashback, commission preview,
-accounting, dossier) reads `payment_plans.plan_gross_cents` / `chosen_amounts`,
-never `gross_amount_cents` directly.
+(options, instalment schedule, cashback, commission preview, accounting,
+dossier) reads `payment_plans.plan_gross_cents` / `chosen_amounts`, never
+`gross_amount_cents` directly.
 
-The listino given by the business (Session 84):
-
-| Pacchetto | Unica soluzione | 12 rate | 3 rate |
-|---|---|---|---|
-| Privati, Energia circolare | 149 € (no IVA) | 18,30 €/mese = 219,60 € | 219,60 € |
-| P.IVA, Energia circolare | 249 € + IVA = 303,78 € | 25 € + IVA = 30,50 €/mese = 366 € | 366 € |
-| Condomini e aziende > 15 kW | 350 € + IVA = 427 € | 35 € + IVA = 42,70 €/mese ≈ 512 € | ≈ 512 € |
-
-**No monthly price** (every product right after migration 0064, which
-multiplied `base_price_cents` out so no price moved): the rate split the
-one-go price, as before. The **one-go discount** (org setting
-`contract_full_payment_discount_percentage`, default 32%) applies **only** to
-contracts without a rate price (`payment_plans.one_go_discount_percentage`):
-with two prices the advantage is already in them, and 32% off 149 € would
-sell the package at 101 €.
-
-Rank volumes stay on the **monthly** figure (`rank_progress._volume_cents`:
-monthly price, else the old canone backed out of the whole-term price) —
+Rank volumes stay on the **monthly** figure (`rank_progress._volume_cents`) —
 every rank threshold is calibrated on it.
 
 ### Cashback JavCash sul contratto: quando arriva {#contract-cashback-timing}
 
 `product_versions.contract_cashback_percentage` of what the customer pays
-(VAT included) — set to **100** on the Jav products in Session 49
-(*cashback dell'intero importo*). It is credited **when the money arrives**,
-not at activation:
+(VAT included), **0 by default** (`open-questions.md` #9). It is credited
+**when the money arrives**, not at activation:
 
-- **Soluzione unica** (or a bank transfer an admin confirms): the whole
-  amount at once, key `contract-cashback:{contract_id}`, guard
-  `contracts.cashback_credited_at`.
-- **3 / 12 rate**: **one instalment at a time** (business decision: a
-  customer who stops paying after month one must not already hold the year
-  in JavCash). The first instalment is credited by the
-  `checkout.session.completed` handler (key `…:first`); every later one by
-  `invoice.paid` with `billing_reason = subscription_cycle` (key
-  `…:{invoice_id}`). The first invoice's own `invoice.paid`
-  (`subscription_create`) deliberately credits nothing, so it can never
-  double the first month. The amount is the plan's instalment, never the
-  invoice's own figure. Approval of a prepaid instalment contract adds
-  nothing on top.
+- **Soluzione unica**: the whole amount at once, key
+  `contract-cashback:{contract_id}`, guard `contracts.cashback_credited_at`.
+- **3 / 12 rate**: by default **one instalment at a time** (a customer who
+  stops paying after month one must not already hold the year in JavCash),
+  key `contract-cashback:{contract_id}:rata-{n}` — the same month confirmed
+  twice is still one month. The amount is the plan's instalment, never what
+  the transfer said. See also `#instalment-cashback` for the "intero in
+  anticipo" setting.
 
-### Rate successive
-
-**Stripe configuration required**: the webhook endpoint must have
-`invoice.paid` and `invoice.payment_failed` enabled in addition to
-`checkout.session.completed` — without them Stripe still charges every month
-but the app never hears of it. The subscription id is read from both invoice
-shapes (`invoice.subscription` before API "basil",
-`invoice.parent.subscription_details.subscription` after).
-
-`invoice.paid` / `invoice.payment_failed` are recorded in the audit log. A
-failed monthly charge notifies **both** the staff and the customer and
-**does not** suspend the contract: one declined card is not grounds for
-automatically cutting off somebody's energy supply — that is a decision for a
-human with the context.
-
-### Idempotenza a livello di evento {#stripe-event-idempotency}
-
-`stripe_webhook_events` records the Stripe `event.id` **before** any handler
-runs; the UNIQUE constraint decides which of two concurrent deliveries
-proceeds. Previously the webhook relied on each handler happening to be
-idempotent on its own — true for the flows that existed, but an instalment
-plan fires `invoice.paid` every month for the same subscription, so "the same
-event again" and "the next instalment" had to stop being indistinguishable.
-Stripe promises at-least-once delivery, not exactly-once.
-
-## Anteprima provvigioni e provvigioni per rata (Session 50) {#commission-preview}
+## Anteprima provvigioni e provvigioni per rata {#commission-preview}
 
 Business rules stated by the business: *solo i contratti danno provvigioni*;
 the administrator's approval is what sets them going, so the administrator
@@ -380,9 +279,9 @@ times, **each slice when that instalment has really been paid**.
   actually written. If the network changes between acceptance and activation
   the frozen snapshot at activation wins — the log shows both, it does not
   pretend they are the same.
-- A contract approved before this existed and paid through Stripe does **not**
-  activate on its own: the payment is recorded and it waits for an
-  administrator to accept the preview.
+- A contract paid before its preview was accepted does **not** activate on
+  its own: the payment is recorded and it waits for an administrator to
+  accept the preview.
 
 ### Le rate e le quote di provvigione {#commission-instalments}
 
@@ -404,26 +303,22 @@ times, **each slice when that instalment has really been paid**.
   snapshot frozen at activation. `ContractActivated` no longer calculates
   anything for a contract that has instalment rows (it would pay the first
   slice twice); `ContractRenewed` is unchanged.
-- Who confirms a payment: instalment 1 → the checkout webhook (or staff
-  confirming a bank transfer); later ones → `invoice.paid`
-  (`billing_reason = subscription_cycle`), matched by Stripe invoice id.
-  A failed charge marks the row FAILED with its invoice id and releases
-  nothing; staff can confirm it by hand
+- Who confirms a payment: an administrator, always. Instalment 1 with the
+  first bank transfer; later ones one by one
   (`POST /contracts/{id}/instalments/{n}/confirm`, audit
-  `contract.instalment_confirmed_manually`), and Stripe's later retry of that
-  same invoice then finds it already paid. `UNIQUE (contract_id, number)` and
-  `UNIQUE stripe_invoice_id` make a double release impossible.
+  `contract.instalment_confirmed_manually`). `UNIQUE (contract_id, number)`
+  makes a double release impossible.
 
-## Cashback dei contratti pagati a rate: intero in anticipo o rata per rata (Session 59) {#instalment-cashback}
+## Cashback dei contratti pagati a rate: intero in anticipo o rata per rata {#instalment-cashback}
 
-Il cashback JavCash di un contratto Jav (percentuale del prodotto sul
-totale IVA inclusa, Session 49) arriva **tutto subito** se il contratto è
+Il cashback JavCash di un contratto (percentuale del prodotto sul
+totale IVA inclusa) arriva **tutto subito** se il contratto è
 pagato in unica soluzione. Per 3 o 12 rate lo decide l'amministratore in
 **Impostazioni → Cashback dei contratti pagati a rate**
 (`organizations.settings.contract_instalment_cashback_mode`):
 
-- `PER_INSTALMENT` — **predefinito**, la regola dalla Session 49: una parte a
-  ogni rata incassata (Stripe o confermata a mano), così chi smette di pagare
+- `PER_INSTALMENT` — **predefinito**: una parte a ogni rata confermata
+  dall'amministrazione, così chi smette di pagare
   non ha ricevuto il cashback delle rate mancanti.
 - `UPFRONT` — alla **prima rata** il cliente riceve in un'unica ricarica il
   cashback dell'**intero contratto**, e nulla sulle rate successive. Rischio
@@ -438,23 +333,19 @@ credit_contract_instalment_cashback`):
   chiave `contract-cashback:<contratto>`, la stessa del pagamento unico) non
   riceve mai il cashback per rata, anche se l'impostazione viene cambiata dopo.
 - La chiave di idempotenza per rata è il **numero della rata**
-  (`contract-cashback:<contratto>:rata-<n>`), non la fattura Stripe: una rata
-  fallita, confermata a mano dall'amministratore e poi riaddebitata con
-  successo da Stripe sulla stessa fattura dà cashback una volta sola.
-- **Una rata confermata a mano** dall'amministratore (bonifico, carta
-  sistemata al telefono) dà il suo cashback come una incassata da Stripe:
-  prima non ne dava nessuno.
+  (`contract-cashback:<contratto>:rata-<n>`): la stessa rata confermata due
+  volte dà cashback una volta sola.
 - Nessun cashback su un contratto respinto o cessato.
 - La schermata di pagamento del cliente dice come arriverà il cashback, secondo
   l'impostazione.
 
-## La pratica di attivazione (Session 52) {#contract-request}
+## La pratica {#contract-request}
 
-**Regola, detta dal business:** un cliente con 10 POD firma **10 contratti** —
-10 per il cliente, 10 per il promoter, ognuno con il suo pacchetto, la sua
+**Regola:** un cliente che sottoscrive 3 servizi firma **3 contratti** — 3
+per il cliente, 3 per il promoter, ognuno con il suo pacchetto, la sua
 approvazione, le sue rate e le sue provvigioni — ma compila i propri dati una
-volta, carica il documento d'identità una volta, sceglie il pacchetto punto per
-punto e **paga una volta**.
+volta, carica il documento d'identità una volta e **paga con un bonifico
+solo**.
 
 La pratica (`contract_requests`) è il contenitore che rende possibile tutto
 questo. **Non possiede niente che possieda già un contratto**: stato,
@@ -464,136 +355,78 @@ non tocca gli altri.
 
 **Ogni contratto appartiene a una pratica** (`contracts.contract_request_id`,
 NOT NULL). Un contratto creato fuori dal flusso (admin "Nuovo Contratto", le
-vecchie rotte `/contracts/mine` e `/contracts/for-customer`) riceve una pratica
-di un solo contratto. I contratti esistenti prima della migrazione 0042 hanno
-ciascuno la propria, con **lo stesso id del contratto**.
+rotte `/contracts/mine` e `/contracts/for-customer`) riceve una pratica di un
+solo contratto.
 
-**Sblocca pratica (Session 89).** Una pratica inviata ma non pagata
-(nessun contratto o rata pagati, nessun pagamento con carta, nessuna
-ricevuta di bonifico, niente addebiti a rate) può essere riportata in
-compilazione dall'amministrazione, per cambiare i pacchetti scelti. Tutti
-i contratti vivi tornano bozza; le approvazioni si perdono e la pratica,
-reinviata, si rivede da capo; il bonifico solo annunciato si annulla; un
-link di pagamento aperto prima non paga più niente.
+Nel codice e nelle rotte i contratti della pratica si chiamano ancora
+`points` (`/contract-requests/{id}/points/...`, `points_count`): vuol dire
+"contratto della pratica", nient'altro.
 
-**Chi firma e il suo codice fiscale (Session 89).** Nei dati della pratica
-chi firma -- l'intestatario privato o, per un'azienda, il legale
-rappresentante -- dà codice fiscale, data e luogo di nascita (un comune,
-anche soppresso, o uno Stato estero, scelto dall'elenco). Il codice fiscale
-si controlla con cognome, nome, data e luogo, e si controlla anche il
-carattere di controllo. L'omocodia è accettata. Il sesso non si chiede: il
-giorno vale com'è o +40. **Per scelta dell'utente il controllo non blocca**:
-se il codice non torna i dati si salvano lo stesso, il form avvisa
-(«Continua comunque») e la scheda pratica mostra «Codice fiscale da
-verificare». Bloccano solo il codice mancante o non di 16 caratteri, data e
-luogo mancanti e chi firma minorenne. Chi firma dev'essere maggiorenne. Una bozza aperta
-prima di questa regola non si invia finché questi dati non ci sono.
+**Sblocca pratica.** Una pratica inviata ma non pagata (nessun contratto o
+rata pagati, nessuna ricevuta di bonifico) può essere riportata in
+compilazione dall'amministrazione, per cambiare i pacchetti scelti. Tutti i
+contratti vivi tornano bozza; le approvazioni si perdono e la pratica,
+reinviata, si rivede da capo; il bonifico solo annunciato si annulla.
+
+**Chi firma e il suo codice fiscale.** Nei dati della pratica chi firma --
+l'intestatario privato o, per un'azienda, il legale rappresentante -- dà
+codice fiscale, data e luogo di nascita (un comune, anche soppresso, o uno
+Stato estero, scelto dall'elenco). Il codice fiscale si controlla con
+cognome, nome, data e luogo, e si controlla anche il carattere di controllo.
+L'omocodia è accettata. **Il controllo non blocca**: se il codice non torna i
+dati si salvano lo stesso, il form avvisa («Continua comunque») e la scheda
+pratica mostra «Codice fiscale da verificare». Bloccano solo il codice
+mancante o non di 16 caratteri, data e luogo mancanti e chi firma minorenne.
 
 ### Il percorso
 
-Ridisegnato in Session 53 su richiesta esplicita: **tutti i dati una volta
-all'inizio, poi "quanti POD hai?", poi i POD sono già creati e si sceglie solo
-il contratto per ciascuno. Il codice POD non si chiede.**
-
 1. **Dati**, in un'unica schermata: intestatario (nome, cognome, email, PEC,
-   IBAN), **indirizzo di fornitura** (`contract_requests.street/city/
-   province/postal_code`) e **"Quanti POD hai?"** (contatore o numero, 1–50).
-   La pratica nasce `DRAFT` con quel numero di POD già creati: ognuno è un
-   contratto `DRAFT` senza pacchetto, con un supply point all'indirizzo della
-   pratica e **nessun codice POD/PDR** e **nessun tipo energia**
-   (`supply_points.energy_type` nullable). Cambiare il numero in bozza
-   aggiunge POD o toglie **prima quelli senza contratto scelto**, i più
-   recenti per primi; un POD tolto va in `CANCELLED` (nuova transizione `DRAFT
-   → CANCELLED`). Cambiare l'indirizzo della pratica sposta tutti i POD che
-   erano ancora a quell'indirizzo; un POD spostato su un indirizzo suo lo
-   tiene.
-   - Il produttore delle provvigioni si risolve **per POD**, con le stesse
-     regole di sempre (promoter che compila, o referente del cliente con
-     risalita al primo sponsor attivo, auditata).
-2. **Documenti d'identità** sulla pratica: identità, codice fiscale, visura
-   (per chi la deve dare), più una **bolletta facoltativa** per chi ha
-   un'unica bolletta con tutti i punti.
-3. **Un contratto per ogni POD**: tutti i pacchetti INTERNAL attivi adatti
-   alla tipologia di cliente, oppure "Stesso contratto per tutti i POD".
-   **È il pacchetto a decidere se il POD è luce o gas** (il supply point prende
-   `energy_type` del prodotto) e **il prezzo si congela sul contratto in quel
-   momento** (`contracts/service.py::freeze_price`). Un vincolo CHECK
+   IBAN), indirizzo dell'intestatario e **quanti contratti** (1–50). La
+   pratica nasce `DRAFT` con quel numero di contratti `DRAFT` senza
+   pacchetto; in bozza se ne aggiungono o tolgono (un contratto tolto va in
+   `CANCELLED`, transizione `DRAFT → CANCELLED`).
+   - Il produttore delle provvigioni si risolve **per contratto** (promoter
+     che compila, o referente del cliente con risalita al primo sponsor
+     attivo, auditata).
+2. **Documenti** sulla pratica: identità, codice fiscale, visura (per chi ha
+   partita IVA).
+3. **Un pacchetto per ogni contratto**, oppure "Stesso pacchetto per tutti".
+   **Il prezzo si congela sul contratto in quel momento**
+   (`contracts/service.py::freeze_price`). Un vincolo CHECK
    (`ck_contracts_product_required`) impedisce a un contratto senza pacchetto
-   di uscire da `DRAFT`. Facoltativi per POD: un indirizzo diverso, la bolletta
-   o la foto del contatore.
-4. **Invio** (`submit`): tutti i POD passano insieme `DRAFT → SUBMITTED →
+   di uscire da `DRAFT`.
+4. **Invio** (`submit`): tutti i contratti passano insieme `DRAFT → SUBMITTED →
    DOCUMENTS_PENDING`, e ciascuno va da solo in `UNDER_REVIEW` appena i
    **suoi** documenti obbligatori ci sono. Lo staff riceve **una** notifica
-   per pratica. Dopo l'invio POD e contratti scelti non si modificano più: un
-   altro POD è una nuova pratica.
+   per pratica. Dopo l'invio i contratti scelti non si modificano più: un
+   altro contratto è una nuova pratica.
 5. **Pagamento**, solo dal cliente (il promoter compila e invia, non paga).
-
-Senza codice POD non c'è più il controllo "stesso POD con due contratti in
-corso": l'identificazione del punto reale avviene sulla bolletta, in verifica
-documenti.
 
 ### Documenti: pratica o contratto
 
 Un documento appartiene **a un contratto oppure a una pratica, mai a
 entrambi** (`ck_documents_one_owner`). Per ogni casella di un contratto vale
-il documento **del contratto se c'è, altrimenti quello della pratica**: la
-bolletta del singolo punto vince su quella comune. Caricare un documento sulla
-pratica rivaluta tutti i suoi contratti (`maybe_advance_to_under_review`). Il
-fascicolo (zip/Drive) di ogni contratto include anche i documenti della
-pratica.
+il documento **del contratto se c'è, altrimenti quello della pratica**.
+Caricare un documento sulla pratica rivaluta tutti i suoi contratti
+(`maybe_advance_to_under_review`). Il fascicolo (zip) di ogni contratto
+include anche i documenti della pratica.
 
 ### Un pagamento, N contratti
 
 Paga **ogni contratto della pratica inviato, prezzato e non ancora pagato**
-(`is_payable`). Un solo piano per pagamento (unica soluzione, 3 o 12 rate).
+(`is_payable`), con **un solo piano** (unica soluzione, 3 o 12 rate) e **un
+solo bonifico**: l'importo del primo bonifico è la somma, per ogni contratto,
+dell'intero prezzo o della sua prima rata (`bank_transfer_total_cents` nelle
+`payment-options`). Ogni contratto registra la sua rata e il suo cashback; il
+cliente vede la somma. La conferma dell'amministratore sulla pratica conferma
+tutti i suoi contratti insieme, con una notifica sola.
 
-- **Unica soluzione**: una Checkout Session con **una riga per contratto**.
-- **Rate**: **un solo abbonamento Stripe con una voce per contratto**. Ogni
-  mese un solo addebito sulla carta, una fattura con N righe.
-- L'importo di ogni riga è la rata **di quel contratto**
-  (`breakdown_for(piano, prezzo del contratto)`), quindi ogni contratto
-  registra esattamente la sua rata e il suo cashback; il cliente vede la somma.
-- **Limite Stripe: 20 voci per abbonamento.** Oltre 20 contratti da pagare
-  insieme le rate non sono offerte (resta l'unica soluzione, o due pratiche).
-- Ogni sessione aperta viene congelata in `contract_request_checkouts`
-  (quali contratti, quali importi) **prima** di mandare il cliente su Stripe;
-  il webhook paga quello che dice quella riga. Le sessioni precedenti ancora
-  aperte vengono fatte scadere. Se comunque due sessioni arrivano a buon fine,
-  i contratti già pagati **non vengono ripagati**: lo staff riceve l'avviso
-  "Pagamento doppio" e rimborsa quelle righe.
-- Ogni riga del prodotto inline porta `metadata.contract_id`; al completamento
-  si legge l'abbonamento e si salva su ogni contratto il suo
-  `stripe_subscription_item_id`. Ogni `invoice.paid` successivo viene letto
-  **riga per riga dall'API** (il payload del webhook non contiene tutte le
-  righe) e ogni riga registra la rata del suo contratto: cashback con chiave
-  `contract-cashback:{contract}:{invoice}`, provvigioni per rata come da
-  Session 50. `contract_instalments.stripe_invoice_id` è ora unico **per
-  contratto**, non globalmente.
-- Una rata non riscossa manda **un** avviso allo staff e **uno** al cliente
-  per tutta la pratica.
-- **Cosa legge il cliente su Stripe** (Session 56). Per un abbonamento la
-  pagina di Stripe mostra solo "X € al mese": un cliente ha visto "340,00 € al
-  mese" per una pratica da 1.020 € e non ha capito che erano 3 rate. Ogni
-  Checkout della pratica porta ora sopra il pulsante di pagamento
-  (`custom_text.submit`) il piano scritto per intero — "Paghi 3 rate mensili da
-  340,00 €, per un totale di 1.020,00 € (3 contratti)… gli addebiti si fermano
-  da soli dopo la 3ª rata" — e ogni riga la sua descrizione ("3 rate mensili da
-  140,00 € · totale 420,00 €", oppure "Pagamento unico").
-
-### Interrompere gli addebiti di un contratto
-
-"Interrompi addebiti" (`POST /contracts/{id}/stop-billing`, staff) toglie
-dall'abbonamento **solo la voce di quel contratto** (senza proration); se era
-l'ultima voce, o l'abbonamento era di quel contratto soltanto, annulla
-l'abbonamento. Segna `billing_stopped_at`. Il rimborso di quanto già incassato
-resta una decisione umana sul pannello Stripe.
-
-### Il catalogo è una vetrina; il promoter compila per il cliente (Session 55)
+### Il catalogo è una vetrina; il promoter compila per il cliente
 
 - **Si attiva solo con la pratica.** In "I miei Contratti" e in Home i pacchetti
   Jav hanno il pulsante **Dettagli**, non più "Attiva Contratto": si
   leggono, e il popup porta a "Attiva nuovo contratto", cioè la stessa pratica
-  del pulsante in alto (con quel pacchetto già scelto per ogni POD).
+  del pulsante in alto (con quel pacchetto già scelto per ogni contratto).
 - **Il promoter fa la stessa procedura al posto del cliente**, da "Miei
   Clienti": per un cliente appena registrato (la pratica si apre subito dopo
   la registrazione) o per uno già esistente. La pratica e ogni contratto
@@ -621,39 +454,31 @@ resta una decisione umana sul pannello Stripe.
 - **Promoter**: le pratiche dei clienti per cui può agire (propri, o
   ereditati da un promoter disattivato sotto di lui) — compilare, documenti,
   inviare; **non pagare**.
-- **Staff** (`contracts.review`): vede tutte le pratiche e i tentativi di
-  pagamento. Approvare e respingere restano **per contratto**, con la stessa
+- **Staff** (`contracts.review`): vede tutte le pratiche e i bonifici
+  annunciati. Approvare e respingere restano **per contratto**, con la stessa
   anteprima provvigioni obbligatoria; "Approva i N contratti in revisione"
   manda N transizioni, ciascuna con il checksum della sua anteprima.
 
 Un utente può essere cliente e promoter insieme: si controllano entrambe le
 relazioni, non il primo ruolo del token.
 
-### Correggere il pacchetto di un POD (Session 71) {#staff-repackage}
+### Correggere il pacchetto di un contratto {#staff-repackage}
 
-Il cliente sceglie il pacchetto punto per punto, e può sbagliarlo o non
-sceglierlo affatto. Fino alla Session 71 nessuno poteva più rimediare: la
-pratica del cliente non era modificabile dall'amministrazione (che poteva
-riprendere solo le proprie bozze) e dopo l'invio non era modificabile da
-nessuno — restava respingere il contratto e rifare la pratica.
-
-Ora lo **staff** può scegliere o cambiare il pacchetto di un singolo POD dal
-dettaglio della pratica (bottone "Scegli pacchetto" / "Cambia pacchetto",
-`requests.py::staff_set_point_product`, stessa rotta
+Il cliente sceglie il pacchetto contratto per contratto, e può sbagliarlo o
+non sceglierlo affatto. Lo **staff** può scegliere o cambiare il pacchetto di
+un singolo contratto dal dettaglio della pratica (bottone "Scegli pacchetto" /
+"Cambia pacchetto", `requests.py::staff_set_point_product`, stessa rotta
 `PUT /contract-requests/{id}/points/{contract_id}/product` che usa il
 cliente: è l'accesso a decidere quale delle due regole si applica).
 
 Il confine è il denaro, non lo stato della pratica: si cambia finché quel
 contratto è in `DRAFT`, `SUBMITTED`, `DOCUMENTS_PENDING`, `UNDER_REVIEW`,
-`APPROVED` o `PAYMENT_PENDING` **e** non è pagato (`paid_at`), non ha
-addebiti Stripe attivi e non è attivo. Il prezzo viene ricongelato subito e
-il punto di fornitura diventa luce o gas secondo il pacchetto scelto; il
-cambio finisce nell'audit log (`contract.package_changed_by_staff`) con
-pacchetto e importo di prima e di dopo. Un link di pagamento già inviato al
-cliente resta all'importo vecchio: dopo la correzione il cliente deve
-riaprire il pagamento dalla sua area.
+`APPROVED` o `PAYMENT_PENDING` **e** non è pagato (`paid_at`) e non è attivo.
+Il prezzo viene ricongelato subito; il cambio finisce nell'audit log
+(`contract.package_changed_by_staff`) con pacchetto e importo di prima e di
+dopo.
 
-## Contract economics: IVA, tipo cliente, cashback, bonus (Session 38) {#contract-economics}
+## Contract economics: IVA, tipo cliente, cashback, bonus {#contract-economics}
 
 Three rules that had **no server-side implementation at all** before this,
 plus the two configuration switches they hang off.
@@ -693,7 +518,7 @@ implementations.
 ### Chi puo comprare cosa {#product-audience}
 
 `products.customer_type` existed but nothing ever read it, and its vocabulary
-(PMI, ENERGY_INTENSIVE, ...) did not line up with `customers.kind` (COMPANY,
+(PMI, ...) did not line up with `customers.kind` (COMPANY,
 ...), so the two could never be compared. It now holds the binary business
 answer: **PRIVATE / BUSINESS / BOTH** (legacy values still parse and collapse
 onto BUSINESS). A customer is only offered contracts their kind may activate,
@@ -714,17 +539,14 @@ than stored in a fourth column that could drift:
 | `AUTOMATIC_INTERNAL_SERVICE` | Contratti Jav e formazione (`contract_cashback_percentage > 0`) | **Automatico, senza il +5%**: pagare il contratto e' esso stesso cio' che genera il credito. |
 | `NO_CASHBACK` | Tutto il resto, incluso ogni prodotto esistente oggi | Nessun accredito. |
 
-The partner-invoice redemption (`invoice_redemptions`, the other 5% rule) is a
-separate domain entirely and is **not touched** by any of this.
-
 The contract credit is a percentage of the **gross** (VAT included), i.e. of
 what the customer actually handed over -- never a pre-discount or otherwise
 inflated base. Exactly-once is enforced twice: `contracts.cashback_credited_at`
 as the readable guard, and the deterministic wallet idempotency key
 `contract-cashback:{contract_id}` against the UNIQUE constraint on
-`wallet_transactions` for the case the guard is raced (a replayed webhook).
-`source = "CONTRACT_CASHBACK"`, distinct from `ORDER_CASHBACK_BASE` and
-`INVOICE_REDEMPTION_BASE` precisely so accounting can tell the three apart.
+`wallet_transactions` for the case the guard is raced (two administrators
+confirming at once). `source = "CONTRACT_CASHBACK"`, distinct from
+`ORDER_CASHBACK_BASE` precisely so accounting can tell them apart.
 
 ### Bonus primo segnalatore {#first-referrer-bonus}
 
@@ -787,15 +609,14 @@ Commissions are generated exactly once, when a contract transitions into `ACTIVE
 
 **Term / expiry**: entering `ACTIVE` or `RENEWED` sets `contracts.activated_at` to
 that moment and computes `contracts.expires_at` as `activated_at +
-product_versions.contract_duration_months` (12 by default for an energy contract;
+product_versions.contract_duration_months` (12 by default for a yearly service;
 `NULL` for a one-off `DIGITAL`/`PHYSICAL` product with no renewal concept). Every
 renewal restarts both fields from the renewal's own timestamp — `expires_at` is never
 retroactively recomputed if the product version's duration later changes, matching the
 "frozen at the moment it happens" pattern used for network snapshots and commission
 calculations elsewhere in this document.
 
-**Who can move a contract through this pipeline (confirmed, then extended,
-Session 29)**: `PATCH /contracts/{id}/status` (manual, per-hop transitions)
+**Who can move a contract through this pipeline**: `PATCH /contracts/{id}/status` (manual, per-hop transitions)
 still requires `contracts.review`, held by
 ADMIN/BACK_OFFICE_OPERATOR/SUPER_ADMIN/ORGANIZATION_ADMIN, **never** by
 CUSTOMER or PROMOTER (see `rbac/models.py`'s `DEFAULT_ROLE_PERMISSIONS`) --
@@ -808,7 +629,7 @@ and `POST /contracts/mine` (self-service, own account only, own referring
 promoter only) both land on the exact same `Contract` row shape and the
 exact same state machine.
 
-### Self-service contract activation ("Attiva Contratto", Session 29) {#contract-self-service}
+### Self-service contract activation ("Attiva Contratto") {#contract-self-service}
 
 Per explicit request, a customer can now activate a Jav (`category
 = INTERNAL`) product without any promoter/admin action to get it started:
@@ -816,8 +637,7 @@ Per explicit request, a customer can now activate a Jav (`category
 - **`POST /contracts/mine`** (`contracts/router.py::create_my_contract`,
   no special permission -- `get_current_user` only, same "self-checkout,
   own account only" shape as `POST /orders/mine`): takes a
-  `product_version_id` plus the supply-point details (address, POD/PDR,
-  meter number) collected by the new `contract-activation-wizard.tsx`.
+  `product_version_id` collected by `contract-activation-wizard.tsx`.
   `contracts/service.py::create_contract_self_service`:
   1. Resolves the customer's own record from `current_user.user_id`.
   2. Rejects anything that isn't an `INTERNAL` product (DROPSHIPPING/
@@ -830,11 +650,7 @@ Per explicit request, a customer can now activate a Jav (`category
      guarantees this attribution always exists. No attribution found ->
      `SelfServiceContractError`, loudly, rather than silently attributing
      to nobody and breaking commissions later.
-  4. Creates the `SupplyPoint`/`Address` (reusing
-     `customers/service.py::add_supply_point` directly -- bypassing its
-     normal `customers.update`-gated router, the same "call the service,
-     skip the staff-only endpoint" pattern used elsewhere for self-service).
-  5. Creates the `Contract` (`DRAFT`) and immediately transitions it
+  4. Creates the `Contract` (`DRAFT`) and immediately transitions it
      `SUBMITTED` → `DOCUMENTS_PENDING` -- self-service has no "save as
      draft, decide whether to send it later" step the way a promoter/admin
      building one up by hand does.
@@ -873,7 +689,7 @@ Per explicit request, a customer can now activate a Jav (`category
     target for a manual click; the cascade happens server-side, so picking
     "APPROVED" there simply comes back already at `PAYMENT_PENDING`.
 
-## Condivisione dei link: bottoni per app, non solo copia (Session 45) {#share-buttons}
+## Condivisione dei link: bottoni per app, non solo copia {#share-buttons}
 
 Every place a link is shared — the promoter's personal link, "Invita un
 amico", a single product a promoter recommends, and the personal link an
@@ -905,13 +721,13 @@ One component, `components/share-buttons.tsx`, backs all of it: adding a
 destination is one entry in its `TARGETS` list and it appears everywhere at
 once.
 
-## "Invita un amico": rete a un livello, staccata, senza provvigioni (Session 39) {#friend-referrals}
+## "Invita un amico": rete a un livello, staccata, senza provvigioni {#friend-referrals}
 
 A **second, completely separate** referral structure, added on explicit
 request: "non c'entra nulla con l'attuale rete, è una cosa staccata e separata
 che ogni cliente ha".
 
-- **Naming (Session 39, corrected same day)**: the feature is **"Invita un
+- **Naming**: the feature is **"Invita un
   amico"** everywhere a person can read it. The first pass used
   "segnala/segnalatore", which the business rejected -- in Italian *segnalare*
   carries a reporting-on-somebody connotation, wrong for what is meant to be
@@ -969,7 +785,7 @@ che ogni cliente ha".
   staff are told about a request (`FRIEND_REFERRAL_REWARD_REQUESTED`); the
   requester is told the outcome (`FRIEND_REFERRAL_REWARD_HANDLED`).
 
-## "Lavora con noi": quali documenti si firmano (Session 40) {#collaboration-documents}
+## "Lavora con noi": quali documenti si firmano {#collaboration-documents}
 
 Becoming a promoter has always required accepting a collaboration agreement
 and confirming with an emailed OTP. Two things were wrong with it until now:
@@ -1060,7 +876,7 @@ un consenso a un testo che non avevano mai visto.
   `network_snapshot_id` on the contract. Subsequent moves of any agent in that chain
   never retroactively change attribution, past calculations, or past ledger entries.
 
-### New promoter suggest-then-approve workflow (added Session 17)
+### New promoter suggest-then-approve workflow
 
 Every new collaborator, however they're created, only ever gets SUGGESTED --
 never immediately live:
@@ -1109,9 +925,9 @@ for each ascendant beneficiary (by increasing distance):
 This guarantees the same differential is never paid twice up the chain — each
 ascendant is only credited the marginal amount their rank adds over what has already
 been recognized below them. See `commission-engine-specification.md` for the full
-algorithm including the 33% cap and Energia Circolare handling.
+algorithm including the 33% cap.
 
-## Commission payment tracking (added Session 16)
+## Commission payment tracking
 
 `commission_movements.status`/`paid_date` existed since the very first migration
 but nothing ever set anything other than `ACCRUED` -- the admin dashboard's
@@ -1159,13 +975,6 @@ calculator, so it can be unit tested against the matrix in
 `commission-engine-specification.md §33% rule test matrix` without invoking the full
 engine.
 
-## Energia Circolare (PLACEHOLDER — see open-questions.md #3)
-
-Treated in v1 as a product flag (`products.code` / `product_versions` metadata) that
-can carry its own `commission_plan_version_id`, so Energia Circolare contracts can use
-different rules without touching the shared calculator code. No Energia-specific bonus
-formula is implemented yet — only the extension point.
-
 ## Renewals & reversals
 
 - A renewal is a status transition on the **same** contract row (`ACTIVE`/`EXPIRED` →
@@ -1199,7 +1008,7 @@ formula is implemented yet — only the extension point.
   open a ticket directly "about this contract" instead of the admin having to guess
   which one they mean from free text.
 
-### Richiesta di chiusura account (Session 89)
+### Richiesta di chiusura account
 
 - Dalle Impostazioni del cliente, «Richiedi chiusura account» apre un ticket
   di categoria `CHIUSURA_ACCOUNT` (`POST /support/tickets/account-closure`,
@@ -1210,7 +1019,7 @@ formula is implemented yet — only the extension point.
 - Una sola richiesta aperta (OPEN o IN_PROGRESS) per utente: la seconda
   risponde 409. La categoria non compare nel modulo «Nuovo ticket».
 
-### Search, filter, and deletion (added Session 19)
+### Search, filter, and deletion
 
 - The admin ticket list (`AdminTicketsPanel`) can be filtered by opener
   (customer/promoter), category, and status, plus a free-text search over
@@ -1244,7 +1053,7 @@ formula is implemented yet — only the extension point.
   removed -- the audit trail survives even though the ticket itself no
   longer does.
 
-## Notifications (added Session 17)
+## Notifications
 
 See `database-model.md §7` for the table shape. Behavior:
 
@@ -1307,7 +1116,7 @@ See `database-model.md §7` for the table shape. Behavior:
 - If no photo has been uploaded, `photo_url` is `NULL` and every list/detail view
   shows a generic person icon -- never a broken `<img>` tag.
 
-## Contract documents (added Session 14)
+## Contract documents
 
 - Every contract requires `IDENTITY`, `FISCAL_CODE`, and `UTILITY_BILL`
   (`documents/service.py::BASE_REQUIRED_DOCUMENT_TYPES`); a customer of kind
@@ -1318,7 +1127,7 @@ See `database-model.md §7` for the table shape. Behavior:
   any behavior, so treating it as configurable today would be pretending.
 - A `SOLE_PROPRIETOR` (ditta individuale / partita IVA) is **offered** the
   `CHAMBER_OF_COMMERCE` slot but is never blocked by it
-  (`CHAMBER_OF_COMMERCE_OPTIONAL_KINDS`, added Session 45). They are a
+  (`CHAMBER_OF_COMMERCE_OPTIONAL_KINDS`). They are a
   business for VAT (`catalog/pricing.py`), but a professionista with a
   partita IVA is not in the Registro Imprese and has no visura to give:
   demanding one would strand exactly the customers who cannot produce it,
@@ -1326,7 +1135,7 @@ See `database-model.md §7` for the table shape. Behavior:
   The slot carries `required: false`, and the auto-advance to `UNDER_REVIEW`
   gates only on the required ones.
 - Beyond the fixed slots, anyone who can upload to a contract can attach
-  **extra documents** of type `OTHER` (added Session 45), each carrying a
+  **extra documents** of type `OTHER`, each carrying a
   `description` its uploader writes ("Carta d'identità retro", "Delega
   firmata", "Contratto di locazione"). The description is mandatory for
   `OTHER` and ignored for every other type: a slot document is already named
@@ -1359,21 +1168,17 @@ See `database-model.md §7` for the table shape. Behavior:
   private bucket, presigned-URL-only access, never a public or guessable
   link.
 
-## Il fascicolo di un contratto (Session 48) {#contract-dossier}
+## Il fascicolo di un contratto {#contract-dossier}
 
 Un contratto non vive solo qui dentro: prima o poi la pratica va mandata a
-un fornitore, a un commercialista, a un legale. Fino a Session 48 l'unico
-modo era aprire gli allegati uno per uno dai link a scadenza, risalvarli a
-mano, e ricopiare i dati del cliente da tre schermate diverse.
+un commercialista o a un legale, e aprire gli allegati uno per uno dai link
+a scadenza non è un modo di lavorare.
 
 - **Il contenuto lo costruisce un solo modulo**, `contracts/dossier.py`:
   tutti gli allegati del contratto più un PDF riassuntivo di contratto e
-  cliente. Due sbocchi -- uno zip scaricato dal browser
-  (`GET /contracts/{id}/dossier.zip`) o una cartella su Google Drive
-  (`POST /contracts/{id}/dossier/drive`) -- e un solo posto che decide cosa
-  ci finisce dentro, così le due strade non possono divergere.
-- **Nome**: `<nome cliente>-<id contratto>`, per l'archivio e per la
-  cartella. Il nome cliente è quello mostrato ovunque nel gestionale
+  cliente, scaricati come zip dal browser
+  (`GET /contracts/{id}/dossier.zip`).
+- **Nome**: `<nome cliente>-<id contratto>`. Il nome cliente è quello mostrato ovunque nel gestionale
   (`customers/service.py::display_name_for`), l'id è l'UUID intero. Gli
   accenti restano; spariscono solo i caratteri che romperebbero un percorso
   (`/ \ : * ? " < > |`, i controlli), i punti e gli spazi finali (Windows li
@@ -1381,8 +1186,7 @@ mano, e ricopiare i dati del cliente da tre schermate diverse.
   nel database) e i nomi riservati DOS.
 - **Il PDF contiene tutto** quello che serve a chi legge la pratica senza
   avere accesso al gestionale: intestatario, tipologia, codice fiscale e
-  P.IVA, dati societari, recapiti, indirizzi, punto di fornitura con POD/PDR
-  e matricola, prodotto, importi netto/IVA/lordo, modalità e stato del
+  P.IVA, dati societari, recapiti, indirizzi, prodotto, importi netto/IVA/lordo, modalità e stato del
   pagamento, IBAN, promoter che ha attivato e promoter che ha portato il
   cliente, e l'elenco degli allegati con il loro stato di verifica.
 - **Un allegato irrecuperabile non fa fallire il fascicolo.** Se un file non
@@ -1394,25 +1198,8 @@ mano, e ricopiare i dati del cliente da tre schermate diverse.
   l'ha anche il cliente per i propri documenti; qui si scarica l'intero
   fascicolo di una pratica -- anagrafica, IBAN, riferimenti di pagamento --
   ed è roba da amministrazione, cioè esattamente le stesse persone che quei
-  documenti li verificano uno per uno. Ogni download e ogni invio su Drive
-  finiscono nell'audit log (`contract.dossier_downloaded`,
-  `contract.dossier_sent_to_drive`).
-- **Google Drive** (`integrations/google_drive.py`): un amministratore
-  autorizza una volta il proprio account, e da lì in poi il pulsante
-  funziona per tutti gli amministratori dell'organizzazione. Lo scope è
-  `drive.file`, non `drive`: l'applicazione vede e tocca soltanto ciò che ha
-  creato lei, non può leggere né elencare il resto di quel Drive. Il refresh
-  token vive in `Organization.settings` con lo stesso trattamento delle
-  chiavi Stripe: non torna mai indietro da nessuna risposta.
-- **Premere due volte "Invia su Drive" non duplica niente**: se la cartella
-  esiste già viene riusata, e un file con lo stesso nome viene sostituito,
-  non affiancato. Il criterio è il nome, perché il nome è ciò che vede chi
-  apre la cartella.
-- L'upload è **resumable**, non multipart: Drive documenta il multipart fino
-  a 5 MB e un allegato qui può arrivare a 15 (`MAX_DOCUMENT_BYTES`).
-  Scegliere la strada che funziona solo per i file piccoli significa
-  aspettare la prima foto di bolletta fatta con un telefono recente per
-  scoprirlo.
+  documenti li verificano uno per uno. Ogni download finisce nell'audit log
+  (`contract.dossier_downloaded`).
 
 ## Password reset
 
@@ -1428,10 +1215,10 @@ mano, e ricopiare i dati del cliente da tre schermate diverse.
   reading its reset link. This is a genuine, working fallback, not a stub: the
   link is real and valid the moment it's generated, only its delivery channel
   differs.
-- **Branded HTML email (fixed Session 33)**: this was the one email in the
+- **Branded HTML email**: this was the one email in the
   whole platform still sent as plain text via a separate, since-removed
   `core/email.py::send_email()` helper -- every other email (OTP codes,
-  cashback credited, order/redemption notifications, ...) already used the
+  cashback credited, order notifications, ...) already used the
   shared branded template (`core/email_templates.py::render_email`, logo +
   consistent styling + a CTA button). Password reset now uses the exact
   same `send_html_email`/`render_email` path as everything else, so it is
@@ -1441,40 +1228,13 @@ mano, e ricopiare i dati del cliente da tre schermate diverse.
   old password may have leaked, so anyone still logged in with it is logged out.
   It also clears `failed_login_attempts`/`locked_until`, so completing a reset is
   the normal way out of a lockout, and marks the account email-verified if it
-  wasn't already (Session 36 -- see `#account-gates`: clicking an emailed link is
+  wasn't already (see `#account-gates`: clicking an emailed link is
   the same proof of inbox control the dedicated verification link gives).
 - Both endpoints are rate-limited per client IP (`core/rate_limit.py`, Redis
   fixed-window counter) -- 5 requests/5min for `forgot-password`, 10/5min for
   `reset-password` -- independent of the per-account lockout in `authenticate()`.
 
-### Delegated reset delivery for the two shared admin accounts (Session 37)
-
-`superadmin@example.com` and `admin@example.com` are shared role
-mailboxes nobody reads day to day, which made "dimenticata password" a dead
-end for exactly the two accounts that most need a recovery path. For these
-two addresses **only**, the reset email is delivered to a named delegate
-(`auth/service.py::PASSWORD_RESET_DELEGATE_EMAIL` /
-`PASSWORD_RESET_DELEGATE_FOR`) instead of the account's own inbox.
-
-- **Only the delivery address changes.** The token is still bound to the
-  admin account, the audit row still names that account, and that account
-  is the one whose password actually changes. This is not an alias, not a
-  shared login, and nothing about the delegate's own user record is touched.
-- The email **names which admin account** the link is for -- the delegate
-  receives resets for two different accounts, so without it the two would be
-  indistinguishable in their inbox.
-- `audit_log.new_value` records `delivered_to` **only** when the delivery was
-  redirected, so a redirected admin reset stands out to an auditor rather
-  than looking like every other reset. The token itself is still never
-  written there (see the bullet above).
-- **Accepted security trade-off, deliberate**: whoever controls the delegate
-  mailbox can take over both admin accounts at will. That is the point of
-  the override. It is therefore intentionally *not* editable from the admin
-  dashboard -- changing it takes a code change + deploy, which leaves a
-  reviewable git trail, rather than being a setting any admin-tier account
-  could silently repoint at themselves.
-
-## Internal wallet (added Session 21)
+## Internal wallet
 
 Every user (customer or promoter, whether or not they also hold the other
 role) has an internal EUR wallet, styled after a cryptocurrency wallet: an
@@ -1493,7 +1253,7 @@ money, by design.
   `BACK_OFFICE_OPERATOR` -- same sensitivity tier as
   `commissions.evaluate_ranks`). The wallet is created lazily on first
   credit if the recipient never had one.
-- **Omaggio di benvenuto (Session 37)**: every account can claim a one-off
+- **Omaggio di benvenuto**: every account can claim a one-off
   **20 JavCash** welcome bonus (`wallets/service.py::WELCOME_BONUS_CENTS`,
   `source = "WELCOME_BONUS"`), via a card on the dashboard home that
   disappears for good once claimed. Self-service, authentication-only, and
@@ -1542,13 +1302,10 @@ money, by design.
   notification (`CASHBACK_RECEIVED` / `WALLET_TRANSFER_RECEIVED`). An
   `ADMIN_CREDIT` (the "Ricarica" top-up above) also gets a branded email
   (`wallets/service.py::credit_wallet` → `_send_wallet_credited_email`,
-  added Session 32) -- best-effort, fires after the credit is already
-  committed. The one exception: a partner-invoice cashback credit
-  (`reference_invoice_redemption_id` set) is skipped here on purpose, since
-  `invoice_redemptions/service.py::confirm_payment` already sends its own
-  richer email (partner name, base+bonus split) right after calling
-  `credit_wallet()` -- this flag is exactly how the two are told apart, so
-  a redemption credit never doubles up on emails.
+  ) -- best-effort, fires after the credit is already
+  committed. The one exception: a credit tied to an order
+  (`reference_order_id` set) is skipped here on purpose, since the order's
+  own "pagamento completato" email already mentions the cashback.
 - **Admin visibility**: `GET /wallets/admin` lists every wallet's balance
   org-wide; `GET /wallets/admin/{user_id}` and
   `GET /wallets/admin/{user_id}/transactions` show one user's wallet and
@@ -1556,153 +1313,17 @@ money, by design.
   looking at a user who never transacted sees "no wallet yet");
   `GET /wallets/admin/transactions` is the global ledger, filterable by
   type/user, with CSV export in the dashboard.
-- **Peer-to-peer transfer is denied by default** (`Wallet.can_transfer`,
-  added Session 23) for every wallet, customer or promoter -- an admin must
+- **Peer-to-peer transfer is denied by default** (`Wallet.can_transfer`) for every wallet, customer or promoter -- an admin must
   enable it individually per promoter (`PATCH
   /wallets/admin/{user_id}/transfer-permission`, `wallet.manage`-gated).
   Deliberately per-wallet, not a role grant: opening it for "all promoters"
   would be wrong the first time only some of them should have it, which is
   exactly today's situation.
 
-## Partner-invoice cashback (added Session 23)
+## Product cashback -- "riscuoti subito cashback"
 
-A second, entirely separate way wallet credit enters the system, alongside
-the plain admin `ADMIN_CREDIT` top-up above -- see
-`docs/cashback-partner-invoices-plan.md` for the full design rationale and
-`database-model.md` for the schema. Summary:
-
-- **What it is**: Jav brokers for external energy suppliers
-  (`partners`, e.g. Eviso). A customer or promoter who already pays one of
-  these directly can redeem part of that spend as internal wallet credit,
-  by uploading proof of payment (`invoice_redemptions`) and then paying Jav
-  5% of the confirmed amount by bank transfer (or card -- see Session 33 below). Once that 5% is confirmed
-  received, the wallet is credited 100% + a further 5% bonus.
-- **Cardinal rule**: credit is minted **only** against a real, confirmed
-  external payment (the 5%, bank transfer or card) -- never against spending existing credit.
-  Paying a Jav product with wallet credit (once Phase 4/checkout exists)
-  must never itself generate more credit, or the system would create value
-  from nothing.
-- **Lifecycle**: `SUBMITTED` (uploaded) → `PAYMENT_PENDING` (an admin
-  confirmed the real amount and a payment reference code was generated) →
-  `CREDITED` (the 5% payment arrived, confirmed by an admin or automatically by the Stripe webhook; two `wallet_transactions`
-  rows are written -- `INVOICE_REDEMPTION_BASE` and `INVOICE_REDEMPTION_BONUS`,
-  never one combined row, both carrying `reference_invoice_redemption_id`).
-  `REJECTED` is reachable from `SUBMITTED` or `PAYMENT_PENDING`.
-- **Carta all'invio: JavCash subito, controllo dopo (Session 89, scelta
-  dell'utente, 2026-10-04).** Nel modulo il cliente sceglie «Carta, subito»
-  o «Bonifico». Con la carta la richiesta nasce già `PAYMENT_PENDING`
-  sull'importo **dichiarato** (`confirmed_amount_cents` = dichiarato,
-  `verified_at` NULL), il cliente paga subito il 5% su Stripe e alla
-  conferma del webhook arrivano i JavCash (100% + 5%) senza nessun
-  amministratore; `review_status` diventa PENDING e lo staff riceve un
-  avviso. Dopo, l'amministratore controlla la fattura: **APPROVED** o
-  **REJECTED** con motivo (il cliente lo riceve). Un rifiuto **non tocca il
-  wallet** -- lo storno, se serve, lo fa lo staff a mano (il cliente può
-  aver già speso i JavCash: «gli telefoneremo») -- e **il 5% pagato non si
-  rimborsa**. Se il cliente, prima di pagare, passa al bonifico, la
-  richiesta torna `SUBMITTED` e segue il percorso del bonifico. Il bonifico
-  non cambia: verifica dell'importo, bonifico, «Conferma bonifico
-  ricevuto», ricarica; e l'amministratore non può mai confermare a mano un
-  pagamento con carta. Rischio accettato dall'utente: con la carta il
-  cliente spende subito JavCash su un importo che ha scritto lui.
-- **Percentage unified to 5% (Session 33)**: was 3% until Session 33, changed
-  to match `orders/service.py::ORDER_CASHBACK_PERCENTAGE` (the per-product
-  "riscuoti subito cashback" figure, see below) at explicit user request --
-  one consistent number wherever "cashback" appears in the product, not two
-  different ones depending on which flow. Still two separate constants in
-  two files (`invoice_redemptions/models.py::CASHBACK_PERCENTAGE` and
-  `orders/service.py::ORDER_CASHBACK_PERCENTAGE`), just kept in sync by
-  convention, not by sharing an import.
-- **No OCR today**: the customer types the amount they read; an admin always
-  verifies against the uploaded document before anything is unlocked. This
-  is a deliberate simplification, not a stub -- the flow is fully functional
-  without automated reading, just slower per-request for the admin.
-- **Real partners configured (Session 31)**: the org previously had zero
-  `Partner` rows -- the redemption dropdown was empty and the "Nuova
-  richiesta" button correctly disabled itself (see the empty-state fix
-  earlier in this same file's history). Three real partners were added via
-  the existing `POST /partners` admin endpoint: **Jav** itself
-  (deliberately included first -- lets a customer redeem cashback on their
-  own Jav bill too, not only on an external supplier's), **Eviso**,
-  and **Aenergy**. Logos: Jav's own (`example.com/img/logo.png`)
-  and a verified real Eviso logo (hotlinked from `eviso.it`, visually
-  confirmed before use) are set; Aenergy's `logo_url` was deliberately left
-  `null` rather than guessing at an unverified company/logo for a
-  real third-party trademark shown to customers -- set it via the admin
-  Partner panel once the correct one is confirmed.
-- **Where the document lives**: NOT the `documents` table (that one's
-  `contract_id` is NOT NULL by design, for contract KYC documents) --
-  `invoice_redemptions` carries its own `storage_key` in the same private
-  bucket via `core/storage.py`.
-- **Spending side (Phase 4, added Session 24; self-checkout + card payments
-  added Session 26)**: `Product.category` (`INTERNAL`/`DROPSHIPPING`/
-  `PARTNER`) and `ProductVersion.credit_discount_percentage` (0-100,
-  enforced to 0 for `INTERNAL`) gate a new `orders` domain -- deliberately
-  NOT `Contract` (`Contract.supply_point_id` is NOT NULL by design, every
-  contract is an energy supply; an order for e.g. a partner t-shirt has no
-  equivalent). Either an admin or the customer themselves (self-checkout)
-  picks a DROPSHIPPING/PARTNER product version and how much wallet credit
-  to apply (capped by both the product's percentage and the customer's
-  balance, previewed via `GET /orders/quote` or `/orders/quote/mine` first);
-  that amount is debited immediately via a `PURCHASE_DEBIT` wallet-transaction
-  type (the mirror of `ADMIN_CREDIT`: `to_wallet_id` NULL instead of
-  `from_wallet_id` NULL). The residual is paid one of two ways: **bank
-  transfer**, confirmed by an admin exactly like a contract's `PAID`
-  transition, or **card via Stripe** (`app/domains/payments/`), confirmed
-  automatically by a webhook once `checkout.session.completed` fires -- the
-  only case in this domain where `PAID` is reached with no human actor. If
-  credit alone covers 100%, the order skips straight to `PAID` regardless of
-  payment method. Cancelling an `AWAITING_PAYMENT` order reverses the exact
-  `PURCHASE_DEBIT` row via `reverse_transaction()` (extended to handle a
-  debit with no recipient wallet), refunding the customer precisely.
-- **Payment method availability is gated, not just visually disabled**:
-  bank transfer requires an IBAN set in `Organization.settings`
-  (`bank_iban`, admin-editable, `organization.manage` permission); card
-  requires BOTH a Stripe secret key and publishable key set (a separate,
-  stricter `organization.manage_payments` permission -- **SUPER_ADMIN
-  only**, deliberately narrower than the bank IBAN's permission tier). A
-  frontend must never render a payment-method button for an unconfigured
-  method; `create_order()` independently rejects the request server-side
-  regardless (`PaymentMethodNotAvailableError`), so this is enforced even if
-  the frontend were bypassed. Stripe secret/webhook keys are never returned
-  in full by any endpoint, only "configured yes/no" plus the secret key's
-  last 4 characters -- same principle as a password never round-tripped in
-  plaintext.
-- **Stripe webhook is per-organization and unauthenticated by design**:
-  `POST /payments/stripe/webhook/{organization_id}` takes no auth
-  dependency -- the Stripe signature, verified against THAT organization's
-  own webhook secret, is the authentication. The organization id in the URL
-  is what a SUPER_ADMIN pastes into their own Stripe Dashboard's webhook
-  config, and is what keeps one endpoint correct for every tenant in
-  principle, even though this deployment currently has one organization.
-  **Needs a dedicated nginx location to actually be reachable (bug found and
-  fixed Session 33)**: this route lives under `/api/`, which nginx normally
-  routes entirely to the dashboard's BFF, not FastAPI -- see
-  `infrastructure/nginx/nginx.conf`'s `location /api/payments/stripe/webhook/`
-  and `server-migration-guide.md §8` bug #15. Without it every webhook
-  delivery 404s and no card order/redemption is ever auto-confirmed.
-- **Redemption fee now also payable by card, with a proof-upload option for
-  bank transfer (Session 33)**: originally the redemption fee could only
-  be paid by bank transfer with a reference code, manually reconciled by an
-  admin with no self-service card option and no proof upload. It now works
-  exactly like an order's residual: `invoice_redemptions.payment_method`
-  (default `BANK_TRANSFER` at `verify()` time, switchable to `CARD` via
-  `PATCH /invoice-redemptions/mine/{id}/payment-method` while still
-  `PAYMENT_PENDING`), a Stripe Checkout Session for exactly
-  `payment_due_cents()` (`POST
-  /invoice-redemptions/mine/{id}/checkout-session`), and an optional
-  bank-transfer receipt upload (`POST
-  /invoice-redemptions/mine/{id}/payment-proof`, purely advisory, same
-  private-bucket pattern as an order's payment proof). `confirm_payment()`
-  (the manual admin action) refuses a `CARD`-method redemption
-  server-side -- only the Stripe webhook may credit those, same anti-fraud
-  rule as an order (see `security-model.md`).
-
-## Product cashback -- "riscuoti subito cashback" (added Session 33)
-
-A third, separate way wallet credit enters the system (alongside the plain
-admin top-up and the partner-invoice redemption above), this time earned
-directly from a Shop purchase rather than an external bill:
+A separate way wallet credit enters the system (alongside the plain admin
+top-up and the contract cashback), earned directly from a catalog purchase:
 
 - **Per-product toggle**: an admin can enable `cashback_enabled` on any
   DROPSHIPPING/PARTNER product version (never on an INTERNAL Jav
@@ -1715,12 +1336,10 @@ directly from a Shop purchase rather than an external bill:
   AFTER any wallet-credit discount is already applied, never before it).
   Cashback can only be requested when that residual is greater than zero --
   a 100%-credit-covered order has nothing left to earn cashback on.
-- **Payout**: once the order reaches `PAID` -- an admin confirming a bank
-  transfer, or the Stripe webhook for a card charge -- the whole extra
-  payment (the residual actually paid + the 5% surcharge) is credited back
-  to the customer's wallet as JavCash, as two separate transaction rows
-  (`ORDER_CASHBACK_BASE`/`ORDER_CASHBACK_BONUS`), exactly mirroring the
-  partner-invoice redemption's base+bonus split above.
+- **Payout**: once the order reaches `PAID` -- an admin confirming the bank
+  transfer -- the whole extra payment (the residual actually paid + the 5%
+  surcharge) is credited back to the customer's wallet as JavCash, as two
+  separate transaction rows (`ORDER_CASHBACK_BASE`/`ORDER_CASHBACK_BONUS`).
 - **Anti-fraud, by explicit request**: the credited amount is always
   computed from the real new money paid in *that* order, never a
   pre-discount or otherwise inflated base -- so a customer can never use
@@ -1731,14 +1350,14 @@ directly from a Shop purchase rather than an external bill:
   "Internal wallet" above / `security-model.md` -- any self-checkout order
   that applies `credit_applied_cents > 0` requires a fresh emailed OTP,
   regardless of whether cashback was also requested on the same order.
-- **Sblocco dell'account (Session 88)**: solo il superadmin può segnare
+- **Sblocco dell'account**: solo il superadmin può segnare
   come fatti per un cliente i controlli d'ingresso (email, privacy,
   profilo). Email e privacy si segnano; codice fiscale e residenza vanno
   scritti (mai inventati), e lo sblocco senza profilo completo si rifiuta.
   Ogni sblocco è nell'audit (`user.account_unlocked`) con chi l'ha fatto: la
   privacy così «accettata» è raccolta dal superadmin, non un clic del
   cliente.
-- **PIN dei JavCash al posto dell'email (Session 87)**: dalle sue
+- **PIN dei JavCash al posto dell'email**: dalle sue
   Impostazioni il cliente può scegliere di confermare l'uso dei JavCash con
   un **PIN di 4 cifre** scelto da lui invece del codice via email. Regole:
   per attivarlo, cambiarlo o spegnerlo serve la **password dell'account**
@@ -1751,63 +1370,59 @@ directly from a Shop purchase rather than an external bill:
   `auth/service.py::request_spend_code` / `verify_spend_code`: la regola
   vive in un punto solo, e un checkout nuovo deve usare quelle due funzioni.
 
-## "JavCash" -- wallet balance/transaction labeling (added Session 33)
+## "JavCash" -- wallet balance/transaction labeling
 
 Purely a dashboard label, not a new concept: every wallet balance and
-transaction amount (top-ups, redemption/cashback credits, peer transfers,
+transaction amount (top-ups, cashback credits, peer transfers,
 purchase debits) is displayed with a "JavCash" suffix instead of a euro
 sign, to keep it visually unmistakable from *real* money. Real-money
-amounts -- what a customer actually paid via Stripe or bank transfer on an
-order or a redemption fee -- are always shown in genuine EUR, labeled with
-the payment method. No schema or currency-field change; `wallets.currency`
+amounts -- what a customer actually paid by bank transfer on an order, a
+contract or a club fee -- are always shown in genuine EUR. No schema or currency-field change; `wallets.currency`
 is still `"EUR"` in the database, this is presentation-only.
 
-## Accounting / "Contabilità" (added Session 33)
+## Accounting / "Contabilità"
 
 A new customer-facing dashboard section (`GET /accounting/mine`, no
 permission beyond authentication -- same pattern as `GET /wallets/me`)
 merges a user's own `wallet_transactions` (JavCash movements) and their
-own paid orders' real-money payments (EUR, tagged Bonifico/Carta) into one
+own paid orders' and contracts' real-money payments (EUR, bank transfer) into one
 chronological, filterable feed with running totals per category and a CSV
 export. Computed on the fly from the two existing tables (see
 `database-model.md` §14) -- deliberately not a new persisted table, so
 there is nothing here that can drift from the wallet ledger or the orders
 table, which remain the actual source of truth for their own domains.
 
-### Session 54: totali, pagamenti dei contratti, dettaglio collegato {#accounting-detail}
+### Totali, pagamenti dei contratti, dettaglio collegato {#accounting-detail}
 
 - **I pagamenti dei contratti ci sono.** Ogni rata pagata
   (`contract_instalments.status = PAID`) è un movimento `CONTRACT_PAYMENT`
-  in euro: carta se incassata da Stripe (`STRIPE_CHECKOUT`/`STRIPE_INVOICE`),
-  bonifico se confermata a mano dall'amministrazione (`ADMIN`). Una rata = una
+  in euro, sempre bonifico confermato dall'amministrazione (`ADMIN`). Una rata = una
   riga, alla data in cui è stata incassata. Anche il cashback JavCash di un
   contratto porta ora il suo `contract_id`.
 - **I totali li calcola il server** (`GET /accounting/mine/summary`,
   `accounting/service.py::my_summary`) dagli stessi movimenti dell'elenco, così
-  le card e la lista non possono dire cose diverse: totale speso (carta +
-  bonifico) e ripartizione, speso nel mese corrente, per ordini / riscatti /
-  contratti, saldo JavCash (dal wallet), JavCash ricevuti e spesi, cashback
+  le card e la lista non possono dire cose diverse: totale speso, speso nel
+  mese corrente, per ordini / contratti, saldo JavCash (dal wallet), JavCash ricevuti e spesi, cashback
   ricevuto (fonti `*_CASHBACK_*` e `CONTRACT_CASHBACK`), contratti attivi,
   rate pagate e **prossima rata** (somma delle rate previste nello stesso
-  giorno, contratti con addebiti non interrotti). **Provvigioni** solo se
+  giorno). **Provvigioni** solo se
   l'account è anche un promoter: totale maturato, da incassare (`ACCRUED`/
   `PAYABLE`/`SCHEDULED`), pagate; `REVERSED`/`CANCELLED` escluse.
 - **Dettaglio** (`GET /accounting/mine/detail?ref=…`, e
   `/accounting/admin/detail` per lo staff con `wallet.manage`;
-  `accounting/details.py`): `wallet:<id>`, `order:<id>` (ordine normale o
-  "Acquisti Jav"), `redemption:<id>`, `contract:<id>`. Stessa forma per
+  `accounting/details.py`): `wallet:<id>`, `order:<id>`, `contract:<id>`. Stessa forma per
   tutti: dati, **cronologia con data e ora al secondo e chi ha agito**
-  (creazione, ricevuta del bonifico caricata, pagamento confermato "Stripe
-  (automatico)" o dall'amministratore, cashback accreditato, annullamento,
+  (creazione, ricevuta del bonifico caricata, pagamento confermato
+  dall'amministratore, cashback accreditato, annullamento,
   approvazione, ogni rata incassata, prossima rata), le rate di un contratto,
   e i riferimenti collegati. Lato cliente tutto è limitato alle proprie cose:
   ciò che non è suo risulta "non trovato", mai "vietato".
 - **Tutto collegato**: ogni riga apre il suo dettaglio; il chip "Ordine /
-  Riscatto / Contratto #…" apre quella cosa, che elenca tutti i movimenti che
+  Contratto #…" apre quella cosa, che elenca tutti i movimenti che
   ha prodotto (pagamento in euro, JavCash usati, cashback), ognuno apribile a
   sua volta.
 
-## Account gates (Session 27)
+## Account gates
 
 Three independent, self-service gates block dashboard use until satisfied,
 each with its own acceptance state persisted on `users`/`agent_profiles` and
@@ -1818,9 +1433,8 @@ backend action independently requires the same state.
 - **Privacy consent**: `users.privacy_accepted_at`, set once at
   self-registration (`RegisterRequest.accept_privacy`, a required checkbox --
   the request is rejected server-side if unticked). NULL for every account
-  that predates this field (admin-created accounts, or self-registered
-  before Session 27) -- there is no retroactive consent to backfill, so it
-  simply stays NULL for those.
+  created by an administrator -- there is no retroactive consent to
+  backfill, so it simply stays NULL for those.
 - **Email verification** (new registrations only): `users.email_verified_at`
   (a column that already existed, previously unused). Registration sends a
   branded confirmation email (`core/email_templates.py`) with a link to
@@ -1830,8 +1444,7 @@ backend action independently requires the same state.
   existed before this feature shipped is grandfathered as already-verified
   (the 0026 migration backfills `email_verified_at = COALESCE(email_verified_at,
   created_at)` for every NULL row) -- nobody who was already using the
-  product gets a surprise "confirm your email" wall. The rule applies only
-  going forward, to accounts created after Session 27.
+  product gets a surprise "confirm your email" wall.
 - **Profile completion** (fiscal code + residence address): `users.fiscal_code`
   + `residence_street/city/province/postal_code/country`. Unlike email
   verification, this one is deliberately retroactive -- **every** account,
@@ -1853,256 +1466,140 @@ backend action independently requires the same state.
   rendering the blocking modal) -- there is no scenario where blocking a
   SUPER_ADMIN's own dashboard behind a fiscal-code popup makes sense.
 
-**Notification emails** (also Session 27, same branded-HTML-shell mechanism):
-cashback credited (`invoice_redemptions/service.py::confirm_payment`, fires
-after the wallet credit) and a new support ticket opened
+**Notification emails** (same branded-HTML-shell mechanism):
+an admin wallet top-up (`wallets/service.py::credit_wallet`) and a new
+support ticket opened
 (`support/service.py::create_ticket`, sent to
 `Organization.settings.admin_notification_email`, defaulting to
-`info@example.com` -- `organizations/service.py::DEFAULT_ADMIN_NOTIFICATION_EMAIL`,
+`admin@example.com` -- `organizations/service.py::DEFAULT_ADMIN_NOTIFICATION_EMAIL`,
 admin-editable via the existing company-settings PATCH). All best-effort:
 an SMTP hiccup is logged, never blocks the underlying action (ticket
 creation, cashback crediting, registration all already committed by the
 time the email send is attempted).
 
-## Store orders vs. Jav contracts -- and the Session 28 e-commerce pass
+## Store orders vs. contracts
 
 Two structurally different things both live under "products", and this
 distinction is load-bearing, not cosmetic:
 
-- **Jav (`category=INTERNAL`) products** are the matrix a real
-  energy-supply **Contract** is created from (`POST /contracts`) -- these
-  are what a promoter earns commissions on, and what shows up in the
-  network/commission engine. They never go through the `orders` domain at
-  all (`orders/service.py::_get_sellable_product_version` explicitly
-  rejects INTERNAL products with a "si acquistano come contratto" error).
-- **DROPSHIPPING/PARTNER products** are a separate, purely additional perk:
-  a customer's cashback wallet balance can be spent on them via the `orders`
+- **`category=INTERNAL` products** are the matrix a **Contract** is created
+  from (`POST /contracts`, the pratica) -- these are what a promoter earns
+  commissions on, and what shows up in the network/commission engine. They
+  never go through the `orders` domain at all
+  (`orders/service.py::_get_sellable_product_version` explicitly rejects
+  INTERNAL products with a "si acquistano come contratto" error).
+- **DROPSHIPPING/PARTNER catalog products** (catalog categories, not
+  external suppliers) are an e-commerce-style purchase through the `orders`
   domain (self-checkout, `POST /orders/mine`) -- no commission, no network
-  effect, just an e-commerce-style purchase paid partly in wallet credit and
-  partly by bank transfer or card.
+  effect, paid partly in wallet credit and partly by bank transfer.
+- The **Shop** (`jav_market`) is a third, separate catalog with variants
+  (sizes) and shipping — equipment, judogi — see `#jav-market`.
 
-**Session 28** brought the store/order side of this up to a real e-commerce
-standard, per explicit request ("rendilo un ecommerce professionale"):
+Orders show the product photo (`ProductVersion.image_url` →
+`OrderRead.product_image_url`) everywhere, open a product detail before
+checkout, and are listed in "I miei Ordini" with their status. The
+order-confirmation email (`orders/service.py::_send_order_confirmation_email`,
+best-effort, after commit) gives the IBAN and causale for the bank transfer,
+or confirms that credit covered everything. `ProductVersion.
+credit_discount_percentage` is clamped to 0 for `INTERNAL` products
+(`catalog/service.py::_clamp_credit_discount`); `orders/service.py::
+get_quote()`/`max_creditable_cents()` read that product's own value, never a
+global constant.
 
-- **Product photo everywhere a product/order shows one**: `ProductVersion.
-  image_url` (already existed, admin-uploadable since an earlier session)
-  now also flows through to `OrderRead.product_image_url`
-  (`orders/service.py::to_read_dict` joins it in) -- the same photo appears
-  as a thumbnail on every order row, admin or customer side, not just the
-  shop grid. A shared `product-thumbnail.tsx` component renders it (or a
-  neutral package-icon placeholder when there is none) everywhere, so the
-  "no photo yet" look is consistent instead of each screen inventing its
-  own fallback.
-- **Product detail page before checkout**: clicking a purchasable
-  (DROPSHIPPING/PARTNER) product card opens `product-detail-modal.tsx`
-  first -- full description, price breakdown, photo -- rather than jumping
-  straight from the grid card into the checkout flow, matching how a real
-  storefront works. INTERNAL (Jav) products never get this
-  treatment; those stay contract-only.
-- **"I miei Ordini"** (`customer-orders-panel.tsx`, new customer-dashboard
-  tab): every order the customer has placed, with its status (in attesa di
-  pagamento / pagato / annullato) and a "Paga ora" action on an unpaid one
-  -- exactly the "reservation list" the request asked for, so a customer
-  never has to remember what they bought or track down how to finish
-  paying for it. The existing `admin-orders-panel.tsx` (already a full
-  gestionale -- create, confirm bank transfer, cancel, filter by status)
-  gained the same photo thumbnails for consistency.
-- **Order-confirmation email** (`orders/service.py::_send_order_confirmation_email`,
-  fires at the end of `create_order()`, after the order is already
-  committed): summarizes what was bought and explains exactly how to pay --
-  the IBAN + causale for a bank-transfer residual, or a real, freshly-minted
-  Stripe payment link for a card residual, or a simple "no payment needed"
-  confirmation when credit covered everything. Best-effort like every other
-  email in this project: both `EmailNotConfiguredError` (SMTP off) and any
-  `stripe.error.StripeError` (bad/revoked key, Stripe outage) are caught so
-  a payment-provider hiccup can never take an already-created order down
-  with it -- the customer can still get a fresh Stripe link later from "I
-  miei Ordini".
-- **Stripe checkout opens in a new tab, never a full-page redirect**
-  (`window.open(checkout_url, "_blank", "noopener,noreferrer")` in both
-  `product-checkout-modal.tsx` and `customer-orders-panel.tsx`) -- per
-  explicit request: if Stripe fails or the customer changes their mind
-  mid-payment, the dashboard tab they were already on is never lost.
-- **Dashboard header images**: the Wikimedia-hotlinked `SectionBanner`
-  images (dim/dark, and "commissions"/"wallets" sharing one photo) were
-  replaced with brighter, distinct, locally-bundled photos per section
-  (`apps/dashboard/public/images/header-*.jpg`) -- same "bundle it locally,
-  don't hotlink" convention `documentation-header.jpg` already established.
+## Chi può aprire una pratica di attivazione {#pratica-authors}
 
-### Session 29 follow-up: verified, then polished further
-
-The user asked to re-verify two things before continuing -- both checked
-against the live database, not just the code:
-
-- **Per-product credit-discount percentage**: confirmed correct end-to-end,
-  no bug found. `ProductVersion.credit_discount_percentage` is clamped to 0
-  for `INTERNAL` products and 0-100 for DROPSHIPPING/PARTNER
-  (`catalog/service.py::_clamp_credit_discount`); `orders/service.py::
-  get_quote()`/`max_creditable_cents()` read that product's own value, never
-  a global constant. Live-verified: a 69,00€ PARTNER product with a
-  30%-in-credits version correctly quoted `max_creditable_cents: 2070`
-  (exactly 30% of 6900) via `GET /orders/quote/mine`.
-- **Contract flow authority**: see "Who can move a contract through this
-  pipeline" above -- confirmed staff-only, not a customer self-service
-  flow; documented since the user asked to double check their own mental
-  model of it.
-
-Then, cosmetic/UX polish on top of the already-correct backend:
-
-- **Product showcase redesign** (`customer-products-panel.tsx`): bigger,
-  bolder price and "crediti usabili" (computed from that product's own
-  price × discount %, shown in euro, not just a percentage badge) side by
-  side at the bottom of each card; a discount ribbon and category chip
-  overlaid on the photo; hover zoom on the image, card lift + glow, and a
-  staggered fade-in on the grid; the whole photo stays clickable through to
-  `product-detail-modal.tsx`, which got the same bigger price/credits
-  treatment plus a full-width gradient "Acquista ora" button.
-- **Energy header photo swapped again**: from a ground-level solar-panel
-  row to a bright aerial shot of a full solar farm (blue sky, vivid green)
-  -- more strikingly "energia" and more luminous than the previous pick,
-  per explicit feedback that the header art should lean into energy/light
-  themes and brightness specifically.
-- **Cashback-redemption camera capture upgraded to a real live viewfinder**
-  (`camera-capture-modal.tsx`, `getUserMedia` + a `<video>` preview +
-  canvas-frame capture) -- the previous "Scatta foto" button (Session 27)
-  used a plain `<input capture="environment">`, which only opens a camera
-  on some mobile browsers and does nothing at all on desktop (no webcam
-  access). The new modal opens an actual live camera preview everywhere a
-  camera exists, with a clear error+fallback state (close and use "Carica
-  file") when it can't get camera access at all.
-- **Desktop top nav bar added** alongside the existing sidebar
-  (`app-shell.tsx`) -- big pill buttons for every nav item, pinned under
-  the header on every page, mirroring the mobile bottom bar's "always one
-  tap away" idea; the mobile bottom bar's own touch targets were also
-  enlarged. This closes the gap left after Session 27 only shipped the
-  mobile half of "primary tools as big buttons, bottom on mobile / top on
-  desktop."
-
-## Chi può aprire una pratica di attivazione (Session 66) {#pratica-authors}
-
-Una pratica è sempre la stessa cosa — intestatario, N POD, un'offerta per POD,
-documenti — e cambia solo chi la compila:
+Una pratica è sempre la stessa cosa — intestatario, N contratti, un pacchetto
+per contratto, documenti — e cambia solo chi la compila:
 
 - **il cliente**, per sé (`created_by_role="CUSTOMER"`): guadagna il promoter
   che lo ha portato (o il primo sponsor attivo sopra di lui);
 - **il promoter**, per un cliente suo (`PROMOTER`): guadagna lui, e il cliente
   riceve notifica ed email per pagare dalla propria area;
-- **l'amministrazione** (`ADMIN`, Session 66): può indicare a quale promoter
+- **l'amministrazione** (`ADMIN`): può indicare a quale promoter
   attribuirla (validato ACTIVE); senza indicazione vale la regola del
   self-service. Il cliente riceve lo stesso avviso.
 
-**Il pagamento è sempre del cliente**: promoter e staff non possono aprire il
-checkout né pagarlo (la pratica accetta il pagamento solo dall'intestatario);
+**Il pagamento è sempre del cliente**: promoter e staff non possono
+annunciare il bonifico al suo posto (la pratica accetta il pagamento solo dall'intestatario);
 lo staff può però confermare un bonifico ricevuto. Chi ha compilato la pratica
 resta scritto sulla pratica e su ogni contratto.
 
-## Marketplace: i tre shop di prodotti importati (Sessions 67-71) {#marketplace}
+## Lo Shop {#marketplace}
 
-Tre fonti, tre tabelle separate, una sola promessa al cliente:
+Un solo negozio, `jav_market` («Fai la Spesa con Jav» nell'interfaccia):
+attrezzatura, judogi, cinture, materiale. Nessun fornitore esterno collegato
+via API: il catalogo lo scrive l'amministratore. Le regole comuni (JavCash,
+IVA, spedizione) stanno in `domains/marketplaces/rules.py`, pensato perché un
+eventuale secondo negozio le riusi invece di copiarle.
 
-| Nello Shop del cliente | Fonte | Dominio / tabelle | Admin |
-|---|---|---|---|
-| **Marketplace 1** | CJ Dropshipping (API) | `cj_dropshipping` | Shop CJ |
-| **Marketplace 2** | Shopify (Admin API) | `shopify_dropshipping` | Shop Shopify |
-| **Marketplace 3** | AliExpress (Dropshipping API) | `aliexpress_dropshipping` | Shop AliExpress |
+### «Fai la Spesa con Jav» {#jav-market}
 
-(Numerazione e nomi del menu decisi dall'utente in Session 70.)
-
-Il vecchio plugin "a mano" (`imported_products`, Session 34) resta in piedi
-sotto lo stesso Marketplace 3, come scheda secondaria "Prodotti inseriti a
-mano": serviva quando AliExpress non aveva API e continua a funzionare per
-qualunque prodotto si voglia vendere senza fornitore collegato. I suoi 5
-prodotti di prova sono stati cancellati in Session 71 (nessun ordine li
-aveva mai usati).
-
-I tre shop sono **domini isolati**: tabelle proprie, client proprio, ordini
-propri. Quello che NON è isolato, per scelta esplicita dell'utente (Session
-34), è la gestione: "I miei Ordini" del cliente, "Ordini" dell'admin e la
-Contabilità mostrano un elenco unico, con un tag interno `source` che il
-cliente non vede mai.
-
-### La spedizione AliExpress: costo reale, con un minimo {#marketplace-shipping}
-
-Dalla Session 76 la spedizione dei prodotti AliExpress **non è un forfait**.
-Si chiede ad AliExpress quanto costa davvero
-(`aliexpress.ds.freight.query`, per prodotto / SKU / quantità /
-destinazione) e si addebita:
-
-    spedizione addebitata = max(costo reale AliExpress, minimo configurato)
-
-Il minimo è il campo delle impostazioni che prima era il forfait
-(`shipping_minimum_cents`): cambiarlo dall'admin cambia il checkout subito,
-senza toccare codice. **A zero il minimo non esiste** e si paga esattamente
-il costo reale — è la configurazione scelta dall'utente il 21/09/2026, dopo
-aver visto che il catalogo va da 1,99 a 44,16 EUR di spedizione vera. Il
-meccanismo resta nel codice e si riattiva rimettendo un importo.
-
-**Il minimo vale una volta per ordine, mai per articolo.** Tre prodotti con
-1,20 di spedizione ciascuno fanno 3,60 di costo reale e 5,90 addebitati,
-non 17,70. Il costo reale di un ordine è la **somma delle righe**: la DS API
-di AliExpress quota il freight per prodotto e non espone una quotazione di
-carrello, quindi sommare è un'operazione nostra, non sua.
-
-**Se non si riesce a sapere quanto costa spedire, non si vende.** È l'unico
-errore del dominio senza ripiego (`AliexpressShippingUnavailableError`):
-addebitare il minimo vorrebbe dire decidere che AliExpress spedisce a meno
-di 5,90 senza averglielo chiesto, e incassare 5,90 su una spedizione da 20
-euro; addebitare zero è peggio. Un'opzione senza prezzo non è una
-spedizione gratis: è un'opzione di cui AliExpress non ha detto il costo. Nel
-carrello questo si vede come sezione non acquistabile con la ragione
-scritta, non come errore.
-
-**Tre numeri congelati sull'ordine**, non uno: quanto è costata
-(`supplier_shipping_cents`, e per riga sugli item), il minimo in vigore quel
-giorno (`minimum_shipping_cents`) e quanto ha pagato il cliente
-(`shipping_cents`). Il margine di spedizione è la differenza fra l'ultimo e
-il primo, e senza tutti e tre non sarebbe ricostruibile. Sugli ordini
-precedenti i primi due sono NULL — "non rilevato", che è la verità: uno zero
-direbbe che spedire non costava niente e gonfierebbe ogni margine passato.
-
-**Ad AliExpress non si manda mai il nostro numero.** Il minimo riguarda solo
-ciò che addebitiamo al cliente; l'ordine verso il fornitore porta i suoi
-dati logistici reali.
-
-Il freight si tiene in cache mezz'ora per (organizzazione, prodotto, SKU,
-quantità, destinazione): un cliente che alza e abbassa la quantità non deve
-costare una chiamata ogni volta, e la chiave contiene tutto ciò che può
-cambiare il prezzo, quindi cambiare variante o quantità produce una chiave
-nuova senza che nessuno debba invalidare niente.
-
-**Attenzione al nome di un campo**: nella risposta di `ds.freight.query`
-`shipping_fee_cent` **non porta centesimi**, porta un importo ("1.99" =
-1,99 EUR). Verificato sul gateway vero nella Session 76, dopo che la
-Session 71 lo aveva lasciato segnato come da verificare. Leggerlo come
-centesimi divideva ogni spedizione per cento, ed è il tipo di errore che
-non si vede finché il numero non tocca il prezzo.
-
-Con `shipping_mode = INCLUDED` non cambia nulla rispetto a prima: il minimo
-entra nel prezzo di listino e al checkout non si addebita spedizione.
-
-### Marketplace 4: «Fai la Spesa con Jav» {#jav-market}
-
-Il quarto negozio (Session 79) segue tutte le regole di questa sezione --
-JavCash solo da spendere e mai per intero, niente cashback, bonifico
-scontato, IVA aggiunta al prezzo, carrello con una spedizione sola -- e ne
-ha una sua: **il catalogo lo scrive l'amministratore**, non un fornitore.
+Il negozio segue le regole di `marketplaces/rules.py` -- JavCash solo da
+spendere e mai per intero, niente cashback, nessuno sconto per il bonifico,
+IVA aggiunta al prezzo, carrello con una spedizione sola -- e **il catalogo
+lo scrive l'amministratore**. Un ordine può indicare **per quale atleta** è
+(`jav_market_orders.athlete_id`, facoltativo, verificato sulla famiglia del
+cliente).
 
 Ne discende il resto. Non ci sono prezzi ricalcolati a ogni sync, né cambio
 valuta, né ricarico su un costo: il prezzo è quello di vendita. La
 spedizione è un importo fisso e non un minimo, perché senza fornitore non
-esiste un costo reale da confrontare. E non c'è un ordine da inoltrare: un
-ordine pagato aspetta che l'amministratore lo spedisca e ne segni il
-tracking, che è anche il momento in cui il cliente riceve l'email.
+esiste un costo reale da confrontare. Il tracking lo segna l'amministratore
+quando il fornitore glielo manda, ed è anche il momento in cui il cliente
+riceve l'email.
 
-**L'ordine pagato va all'azienda**, a mano con un pulsante o da solo se
-`auto_forward` è acceso (nasce spento: mandare una email a un'azienda vera
-è un'azione verso l'esterno). Parte **una email per azienda**, con solo le
-sue righe, l'indirizzo di consegna e le note del cliente — mai i prezzi che
-il cliente ha pagato, che mostrerebbero il ricarico. Solo un ordine già
-pagato si inoltra. Un'azienda senza email o una riga senza azienda vengono
-segnalate allo staff e scritte in `forward_error`, mai saltate in silenzio.
-Il reinvio è ammesso: qui non si crea niente dall'altra parte, a differenza
-di AliExpress dove un secondo invio sarebbe un secondo acquisto.
+**Chi è il fornitore di un prodotto (ottobre 2026).** Il fornitore scelto
+sul prodotto (`jav_market_products.producer_id`); se manca, quello della
+**prima categoria** del prodotto (per `position`, poi nome) che ne ha uno
+(`shop_categories.producer_id`, solo per le categorie dello Shop). Il
+prodotto vince sulla categoria. Una categoria nascosta al cliente conta lo
+stesso. La regola sta in un posto solo, `jav_market.service.resolve_suppliers`.
+Il fornitore così risolto si **congela sulla riga d'ordine**
+(`jav_market_order_items.producer_id` e `producer_name`) alla creazione:
+spostare dopo un prodotto su un'altra azienda non dirotta gli ordini già
+fatti. Eccezione voluta: una riga nata **senza** fornitore prende quello di
+oggi finché non parte (così assegnarlo dopo basta a farla partire), e viene
+congelata quando parte.
+
+**L'ordine pagato va al fornitore, per riga.** Una riga è «da mandare»
+finché `supplier_dispatch_id` è NULL (ordine pagato, non ancora spedito né
+consegnato). Tre strade, che segnano le stesse righe e quindi non mandano
+mai due volte la stessa merce:
+
+- **«Fornitori da avvisare»** (la strada normale): gli ordini pagati
+  raccolti per fornitore. «Prepara email» genera una lettera in italiano
+  (saluto, un blocco per ordine con numero, data, righe «quantità ×
+  prodotto – variante», indirizzo di consegna, telefono e note del cliente,
+  richiesta di rispondere con corriere e tracking, firma dalle impostazioni)
+  che l'amministratore può correggere — destinatario, oggetto e testo —
+  prima di «Invia». Si mandano **le righe che c'erano nell'anteprima**, non
+  quelle arrivate nel frattempo.
+- il pulsante **«Invia alle aziende»** sul singolo ordine, senza anteprima:
+  manda solo le righe non ancora partite;
+- l'**invio automatico** al pagamento, se `auto_forward` è acceso (nasce
+  spento: mandare una email a un'azienda vera è un'azione verso l'esterno).
+
+In ogni caso **mai i prezzi** che il cliente ha pagato, che mostrerebbero il
+ricarico, e solo ordini già pagati. L'email parte da
+`jav_market_settings.supplier_email_from` (es. info@…), che è anche
+Reply-To e copia nascosta: la risposta col tracking torna lì e la casella
+conserva ogni ordine mandato (è il modo di rimandarne uno perso). Vuoto = il
+mittente predefinito dell'SMTP.
+
+**Un'email non partita non segna niente.** L'invio dalla coda usa
+`send_html_email` e non la versione «best effort» (eccezione voluta a
+CLAUDE.md §5: qui l'email *è* l'operazione): se l'SMTP non è configurato o
+rifiuta, l'amministratore riceve un messaggio chiaro e le righe restano da
+mandare. Solo un'email partita crea una riga in
+`jav_market_supplier_dispatches` (con il testo esatto) e la collega alle
+righe d'ordine. Contro il doppio clic le righe si bloccano (`FOR UPDATE`) e
+devono essere ancora tutte da mandare e di quel fornitore: il secondo
+invio riceve un 409 «aggiorna la pagina» prima di spedire. Un ordine passa
+a `fulfillment_status = SENT` quando tutte le sue righe con un fornitore
+sono partite (dal pulsante sul singolo ordine, come prima, basta un
+fornitore avvisato). Un fornitore senza email o una riga senza fornitore
+vengono mostrati (coda: elenco «righe senza fornitore»; pulsante: allo staff
+e in `forward_error`), mai saltati in silenzio.
 
 **L'azienda produttrice ha una scheda sua** e il suo nome si congela sulla
 riga d'ordine: è il motivo per cui questo negozio esiste — qui si sa chi fa
@@ -2117,596 +1614,53 @@ spedizione esclusa, prima dei JavCash. Sotto il minimo il carrello si apre
 e dice quanto manca, ma non si paga e `create_order` rifiuta l'ordine (anche
 con «Acquista subito»). Valori in `jav_market_settings.min_order_cents`
 (0 = nessun minimo) e `free_shipping_threshold_cents` (NULL = mai gratis),
-modificabili dalle Impostazioni del negozio. Gli altri Marketplace non hanno
-queste regole.
+modificabili dalle Impostazioni del negozio.
 
-### AliExpress: disponibilità quasi in tempo reale (Session 87) {#aliexpress-live}
-
-Un prodotto importato da AliExpress può sparire o esaurirsi in qualunque
-momento. Tre livelli, dal più largo al più stretto: la **sync completa ogni
-3 ore**; la **rilettura della scheda** quando il cliente la apre (se
-l'ultima lettura ha più di 10 minuti); la **rilettura delle righe prima di
-creare l'ordine** (2 minuti), prima di JavCash, codice e pagamento. Nessuno
-può quindi pagare un articolo che AliExpress ha già tolto.
-
-Due regole: la sync aggiorna solo ciò che decide AliExpress (costo, scorte,
-disponibilità, foto) e mai ciò che decide l'amministratore (nome,
-descrizione, JavCash, ricarico, prezzo a mano, acceso/spento, categorie); e
-un AliExpress che non risponde non spegne niente — si resta sull'ultima
-lettura buona. Il caso che resta scoperto è l'esaurimento nei secondi dopo il
-pagamento: l'ordine al fornitore fallisce e lo staff riceve l'avviso, come
-prima.
-
-Dalla Session 88 la stessa lettura controlla anche che AliExpress **spedisca
-in Italia**: un prodotto senza nessuna spedizione con un prezzo si nasconde
-al cliente («Non spedibile in Italia») e torna da solo quando la spedizione
-riappare. Un AliExpress che non risponde non nasconde niente.
-
-### Vetrina dei Marketplace a pagine (Session 89) {#shop-paging}
+### Vetrina a pagine {#shop-paging}
 
 Regola dell'utente: **il server non deve mai bloccarsi o rallentare perché un
-negozio ha tanti prodotti.** Ogni Marketplace (CJ, Shopify, AliExpress, Fai la
-Spesa con Jav, Market Kappa, VAITTO, Shop Beauty) dà al cliente **48
-prodotti alla volta**; sotto la griglia «N di M prodotti» e il pulsante
+negozio ha tanti prodotti.** Lo Shop dà al cliente **48 prodotti alla
+volta**; sotto la griglia «N di M prodotti» e il pulsante
 **«Mostra altri prodotti»**. Ricerca e categoria cercano in tutto il negozio
 (le filtra il server, non il browser). Un prodotto acceso che non si può
-vendere (esaurito, non spedibile in Italia) non lascia pagine a metà. Un
-Marketplace nuovo deve usare la stessa vetrina a pagine
-(`marketplaces/paging.py`), mai restituire tutto il catalogo. Restano in una
-sola risposta solo i pacchetti/contratti e il vecchio AliExpress a mano,
-cataloghi scritti dall'amministratore e piccoli per natura.
+vendere (esaurito) non lascia pagine a metà. Un negozio nuovo deve usare la
+stessa vetrina a pagine (`marketplaces/paging.py`), mai restituire tutto il
+catalogo. Restano in una sola risposta solo i pacchetti/contratti, piccoli
+per natura.
 
-### «Marketplace SYMPHONYA» («Shop Beauty» per il cliente) {#symphonya-market}
+## Categorie degli shop {#shop-categories}
 
-Profumi e cosmetici dal grossista Symphonya (symphonya.eu), Session 89. Per
-il cliente si chiama **«Shop Beauty»** (nome scelto dall'utente il
-2026-10-02; è un'impostazione, `marketplace_labels.symphonya_market`), in
-amministrazione «Shop Symphonya». Stesse regole del Marketplace VAITTO, da
-cui è clonato:
+Ogni shop ha le **sue** categorie: il catalogo interno (una serie per
+sezione: `internal`, `partner`, `dropshipping`) e lo Shop (`jav_market`).
 
-- il catalogo arriva dall'API di Symphonya, **spento**: si accende per marca
-  o categoria. **Online per i clienti dal 2026-10-02**: acceso tutto ciò che
-  è vendibile (31.794 prodotti su 31.885); i prodotti nuovi dei prossimi
-  import arrivano ancora spenti;
-- **prezzo al cliente = prezzo consigliato al pubblico di Symphonya (rrp),
-  IVA inclusa**; dove Symphonya non lo dà, il costo più il 40% e l'IVA;
-- **JavCash dal guadagno, stessa formula di VAITTO** (dal 2026-10-02):
-  guadagno = prezzo IVA inclusa ÷ 1,22 − costo a noi così com'è (niente
-  spedizione, niente IVA sul costo); JavCash = metà del guadagno, in % del
-  prezzo IVA inclusa, per difetto. Es. 58,62 € ÷ 1,22 = 48,05 − 25,42 =
-  22,63, metà 11,31 = 19,3% → **19%**. Un articolo con guadagno ≤ 0 non si
-  vende. Il campo «Spedizione nostra per prodotto» (`shipping_cost_cents`)
-  resta in tabella ma non entra più nel calcolo;
-- **spedizione al cliente: 10 € a ordine**, come VAITTO;
-- **vetrina a pagine**, come tutti i Marketplace (vedi «Vetrina dei
-  Marketplace a pagine»): con il catalogo intero in una sola risposta erano
-  63 MB, 8 secondi e ~500 MB di memoria del server per ogni apertura;
-- **ordini a mano** su symphonya.eu: Symphonya vende all'ingrosso (minimo
-  d'ordine 99 €, bonifico anticipato) e spedisce a noi, non al cliente.
-
-### «Marketplace SOLEIL» («Market 7» per il cliente) {#soleil-market}
-
-Il catalogo affiliato di **SoleilDrop** (soleildrop.com), Session 90. Per il
-cliente si chiamava **«Market 7»**; dal 13/10/2026 si chiama **«Fai la Spesa
-con Jav 2»** (scelta dell'utente; impostazione
-`marketplace_labels.soleil_market`), in amministrazione «Shop SoleilDrop».
-**Online per i clienti dal 2026-10-13**: 5179 referenze dall'API, tutte
-accese; spedizione fissa **10 €** a ordine, pagata dal cliente.
-Clone di Shop Beauty con le **stesse regole** (scelta dell'utente: «uguali
-per tutti i negozi»):
-
-- SoleilDrop è un gestionale con un portale per gli affiliati in
-  dropshipping e **non ha un'API da leggere** (il suo connettore spinge il
-  catalogo dentro PrestaShop o WooCommerce). Il catalogo arriva quindi
-  dall'**Excel di «Il Mio Catalogo → Esporta → Excel generico (.xlsx)»**,
-  caricato a mano nel pannello (va bene anche lo stesso file salvato come
-  CSV). Va esportato «Tutte quelle in elenco»: una referenza che manca dal
-  file smette di essere comprabile (salvo file troncato, < metà dei noti);
-- i prodotti nuovi arrivano **spenti**: si accendono per marca o categoria;
-- **prezzo al cliente = «Prezzo vendita (ivato)» del file** (il prezzo che
-  l'affiliato ha fissato nel portale); dove manca, il «Prezzo Soleil» più
-  il 40% e l'IVA; il «Prezzo Soleil» è il nostro costo (IVA esclusa);
-- **JavCash dal guadagno, stessa formula di VAITTO e Symphonya**;
-- il file non dice quante scorte ci sono, solo «Disponibile Sì/No»:
-  disponibile = nessun limite, «No» = non comprabile;
-- **ordini a mano** nel portale SoleilDrop, che spedisce al cliente;
-- spedizione al cliente: un'impostazione del negozio (come gli altri).
-
-**API affiliati SoleilDrop v1 (dal 13/10/2026)** — SoleilDrop ha pubblicato
-l'API (https://www.soleildrop.com/api-affiliati.html, v1 del 08/10/2026).
-Con la chiave «sdk_…» nelle impostazioni (si scrive, non si rilegge):
-
-- **catalogo** da `GET /catalog?all=1` ogni 3 ore (o «Importa adesso»),
-  con le stesse regole dell'Excel; chiave = codice SoleilDrop, come la
-  colonna «Codice», quindi i due ingressi aggiornano gli stessi prodotti.
-  Il `sell_price` dell'API è senza IVA: si porta IVA inclusa con l'aliquota
-  della referenza. **Nel catalogo reale `sell_price` è vuoto per tutte le
-  referenze** (13/10/2026): vale il prezzo di riserva, costo + 40% + IVA,
-  e quella formula oggi usa il **22% fisso** anche per gli alimentari al 10%
-  e al 4% (`vat_rate` dell'API: 22, 10, 4, 5) -- **da correggere**, come lo
-  scorporo dell'IVA al checkout, che usa l'aliquota del negozio. Si vende solo a pezzi (`units.piece`). Se l'API elenca
-  più id di quante referenze manda, non si spegne niente;
-- **ordini** con `POST /orders`, `external_ref` = «JAV-<numero>»:
-  SoleilDrop non duplica mai lo stesso riferimento, quindi rimandare è
-  sicuro. Si mandano solo codici, quantità, indirizzo e note: **nessun
-  prezzo nostro** (né `sell_price` né `total_paid`). Pagati dal wallet
-  prepagato: con credito insufficiente → WAITING_WALLET (202) e notifica
-  allo staff, poi riparte da solo alla ricarica. 409/429/5xx/rete → RETRY
-  (job ogni 10 min); altri errori → ERROR + notifica. Invio automatico solo
-  se `auto_forward` è acceso (nasce spento);
-- **stato e tracking** dal webhook `POST /api/soleil-market/webhook/{org}`
-  (HMAC-SHA256 del corpo grezzo con il segreto, doppioni scartati con
-  `X-Soleil-Delivery`) e, come riserva, `GET /orders?since=` ogni 30 min.
-  Spedito/consegnato avvisano il cliente una volta; annullato da SoleilDrop
-  → notifica allo staff, il rimborso al cliente è a mano;
-- senza chiave tutto resta come prima (Excel + ordini a mano).
-
-### Marketplace 6: «Marketplace VAITTO» {#vaitto-market}
-
-Clone di Market Kappa, indipendente, rifornito dal feed di Vaitto (Session
-88). Per il cliente era «Marketplace 5»; oggi il nome impostato
-dall'amministratore è **«Top Brand»** (in amministrazione «Marketplace
-VAITTO»). **Online per i clienti dal 2026-10-02** (2.005 prodotti vendibili
-accesi, spedizione 10 € a ordine). Regole scelte dall'utente:
-
-- **tutto il catalogo si importa, spento**: un prodotto nuovo del feed è
-  INACTIVE; si accende per marca o categoria (mai «tutto» con un clic);
-- **prezzo = prezzo suggerito da Vaitto + nostro ricarico** (Session 88,
-  seconda scelta dell'utente: il ricarico è 0 di base, sovrascrivibile per
-  prodotto, e si aggiunge sopra il suggerito senza arrotondamenti); l'IVA si
-  aggiunge al checkout come in ogni Marketplace; il costo all'ingrosso lo
-  vede solo l'amministratore (le condizioni di Vaitto vietano di mostrarlo ai
-  consumatori); il listino Vaitto si mostra barrato solo se è più alto del
-  nostro prezzo;
-- **JavCash**: uguale per tutti (percentuale del negozio) oppure **dal
-  nostro guadagno** -- formula dell'utente (Session 89, 2026-10-02):
-  guadagno = prezzo al cliente IVA inclusa ÷ (1 + IVA) − costo Vaitto così
-  com'è (niente spedizione, niente IVA sul costo); JavCash = la quota
-  scelta (di norma metà) del guadagno in % del prezzo IVA inclusa, per
-  difetto, sulla variante che rende meno. Es. Moose Knuckles a 450 €: 450 ÷
-  1,22 = 368,85 − 129,38 = 239,47, metà 119,73 = 26,6% → **26%** (il cliente
-  può usare 117 €). Una variante con guadagno ≤ 0 **non si vende**. La
-  formula di prima (Session 88: prezzo − (costo + 5 €) × 1,22) non si usa
-  più, e «Spedizione nostra per prodotto» è sparita dal pannello;
-- **IVA**: con il prezzo del marchio («Sell at brand RRP», `price_basis`
-  «rrp») l'IVA è dentro il prezzo e al checkout si scorpora; con il prezzo
-  dal ricarico («markup») si aggiunge, come negli altri Marketplace. Lo dice
-  il feed; una percentuale
-  scritta a mano su un prodotto resta finché non la si riporta alla regola;
-- un prezzo **scritto a mano** resta finché qualcuno non lo riporta al
-  ricarico; l'import aggiorna solo costo, listino, scorte, disponibilità e
-  categoria, mai nome, descrizione, foto scelte, stato, JavCash o ricarico;
-- ciò che sparisce dal feed smette di essere comprabile ma non si cancella;
-  un feed con meno della metà dei prodotti noti non spegne i mancanti;
-- **gli ordini non partono da soli**: l'ordine pagato resta nel pannello con
-  SKU, EAN, link e indirizzo, e lo si inserisce a mano su vaitto.com.
-
-### CJ: disponibilità quasi in tempo reale (Session 88) {#cj-live}
-
-Come AliExpress (vedi sopra): sync ogni 3 ore, rilettura della scheda
-all'apertura (10 minuti) e delle righe prima dell'ordine (2 minuti), avviso
-allo staff se la sync si rompe. La spedizione era già chiesta a CJ dal vivo a
-ogni checkout.
-
-### Marketplace 5: «Market Kappa» {#kappa-market}
-
-Il quinto negozio (Session 87) è un clone di «Fai la Spesa con Jav»: stesse
-regole, stesso funzionamento, catalogo scritto dall'amministratore. È
-dedicato **solo** ai marchi Kappa e Robe di Kappa, e l'utente lo ha voluto
-**indipendente**: tabelle, rotte, menu e carrello suoi, mai mescolato al
-catalogo di «Fai la Spesa con Jav». Nei testi le «aziende produttrici» si
-chiamano **marchi**.
-
-L'EAN è lo `sku` della variante: è l'unico codice che identifica davvero un
-capo (articolo + colore + taglia), ed è quello da usare per aggiornare le
-scorte da un nuovo file di magazzino.
-
-
-Un carrello per **(cliente, negozio)**, non uno solo per tutto. Al cliente
-se ne mostra uno, diviso in sezioni: il totale in cima è la somma, il
-pulsante di pagamento è per sezione. Il motivo non è tecnico ma di regole:
-
-- i Marketplace hanno indirizzo di consegna, spedizione, IVA congelata e
-  sconto bonifico; il catalogo interno non ha niente di tutto questo e ha
-  invece il «riscuoti subito cashback», che nei Marketplace **è vietato**;
-- righe con regole che si escludono a vicenda non possono finire nello
-  stesso ordine, quindi non stanno nello stesso carrello.
-
-Conseguenze da conoscere, tutte già implementate:
-
-- **Nel carrello non ci sono prezzi.** Ogni lettura li ricalcola dal
-  listino di quel momento; il prezzo si congela solo sull'ordine. Un
-  articolo messo nel carrello a gennaio si paga al prezzo di quando lo si
-  compra, che è anche l'unico che il cliente vede prima di confermare.
-- **La spedizione si conta una volta per ordine**, non per riga.
-- **Il tetto JavCash si calcola riga per riga**: la percentuale di ogni
-  prodotto sul valore di quel prodotto, quantità compresa. Il tetto
-  dell'ordine è la loro somma, mai oltre l'intero ordine meno un centesimo.
-  **La spedizione non conta**: i JavCash scontano la merce, non il
-  corriere. Così il tetto è esattamente quello che il cliente ottiene
-  sommando a mano le percentuali dei prodotti che ha nel carrello, e un
-  numero che si può rifare a mano è un numero di cui ci si fida.
-
-  Quello che la finestra mostra è `min(tetto, saldo del wallet)`: se il
-  saldo è più basso, è lui il limite, e va detto — altrimenti il cliente
-  crede che il tetto sia sbagliato.
-
-  Nella Session 75 era una media pesata sull'ordine, e **era sbagliata**:
-  la media va arrotondata a percentuale intera, e l'arrotondamento non
-  rispetta i singoli prodotti. Un articolo da 5 EUR al 99% accanto a uno da
-  500 EUR allo 0% dava una media dell'1%, cioè 5,05 EUR spendibili — più di
-  quanto il primo concedesse, presi da un prodotto che di JavCash non ne
-  accetta affatto; in altre combinazioni toglieva mezzo euro a chi ne aveva
-  diritto. **Un prodotto non presta mai il suo diritto a un altro.**
-
-  Con una riga sola il calcolo torna identico a un acquisto singolo (la
-  quota di spedizione è tutta sua), quindi comprare un articolo dal
-  carrello o dalla sua scheda dà lo stesso tetto.
-- **Un OTP solo** per checkout, non uno per riga.
-- **Una riga invendibile non blocca il carrello**: si apre lo stesso, la
-  riga è segnata con il motivo e il pagamento è sospeso finché non la si
-  toglie. Pagare il resto in silenzio consegnerebbe un ordine diverso da
-  quello composto dal cliente.
-- **L'ordine si crea prima, il carrello si svuota dopo.** Se la creazione
-  fallisce il cliente ritrova il carrello intatto.
-
-Un ordine porta N righe (`<shop>_order_items`); **il denaro resta sulla
-testata** — importo, spedizione, IVA, sconto bonifico, JavCash, sessione
-Stripe. È la ragione per cui pagamenti, webhook, Contabilità ed email non
-sono cambiati quando il carrello è arrivato.
-
-**Ogni ordine ha un numero progressivo** (`shop_order_number_seq`,
-`marketplaces/models.py`), assegnato dal database e condiviso da tutti i
-negozi: in "I miei Ordini" i tre Marketplace stanno insieme, e tre "ordine
-1042" diversi non si potrebbero distinguere. Si parte da 1000. È il numero
-che finisce nelle email e che il cliente detta al telefono; gli ordini
-creati prima della sequenza continuano a chiamarsi con le prime cifre del
-loro UUID, perché rinominarli li renderebbe irrintracciabili.
-
-**L'ordine vero al fornitore parte solo a pagamento avvenuto**, e solo se
-l'amministratore ha acceso l'invio automatico. Con `auto_forward` spento
-— com'è dal 21/09/2026 — un ordine pagato aspetta in "Marketplace
-AliExpress → Ordini" che qualcuno prema "Crea su AliExpress": una verifica
-umana prima di spendere davvero.
-
-**Le email di un ordine sono tre, non una.** Conferma d'ordine alla
-creazione (cosa hai ordinato, come pagarlo), **ricevuta al pagamento
-confermato** (cosa hai pagato: articoli, spedizione, JavCash, sconto
-bonifico, totale, metodo, IVA contenuta), spedito/consegnato con il
-tracking. La ricevuta ripete l'elenco invece di rimandare alla prima
-email: una ricevuta che non si basta da sola non è una ricevuta. Parte da
-`_mark_paid()` e da nessun altro punto, ed è protetta dal doppio invio
-dalle guardie `AWAITING_PAYMENT` dei due chiamanti — un webhook Stripe
-ripetuto non manda una seconda ricevuta.
-
-**Il cliente non sa mai da quale fornitore arriva la merce.** Nessuna
-stringa rivolta al cliente nomina AliExpress, CJ o Shopify: le schede si
-chiamano «Marketplace 1/2/3» (rinominabili dall'amministratore), le email
-sono firmate Jav, `tracking_company` è salvato ma non mostrato, e
-i nomi dei fornitori compaiono solo nelle notifiche allo staff. L'unico
-residuo è il link di tracciamento, che punta al sito del corriere quando il
-fornitore lo restituisce, altrimenti a 17track.
-
-**Il margine si misura su tutte le righe.** Il costo fornitore di un ordine
-è la somma delle righe: contare solo la testata dichiarerebbe i ricavi di
-tutte e i costi di una.
-
-**CJ quota il carrello intero in una chiamata**, perché `products` nella
-sua API di freight è una lista: il prezzo che torna è quello della
-spedizione unica. Sommare quotazioni separate farebbe pagare al cliente più
-spedizioni di quante ne partono. Per lo stesso motivo un ordine CJ non può
-mettere insieme righe da **magazzini diversi**: `startCountryCode` è uno
-solo, e magazzino e corriere stanno sulla testata dell'ordine fornitore.
-Chi ci prova legge il perché invece di vedersi creare un ordine che CJ
-rifiuta.
-
-**Lo split del fornitore.** Le API accettano già più righe (AliExpress
-`product_items`, CJ `products`, Shopify `line_items`), ma un ordine Jav
-può diventare più ordini fornitore: AliExpress li spezza per venditore e
-risponde con una lista di numeri, CJ tiene magazzino e corriere sulla
-testata. Per questo il numero d'ordine del fornitore e il tracking stanno
-**sulla riga**, non solo sulla testata. Quando i numeri non si possono
-abbinare con certezza alle righe, lo staff riceve un avviso invece di
-vedersi attribuire un tracking a caso.
-
-### Come si collega ciascuno {#marketplace-credentials}
-
-| Shop | Credenziali | Dove si mettono |
-|---|---|---|
-| CJ | API key (cjdropshipping.com → My CJ → Authorization → API) | Shop CJ → Impostazioni |
-| Shopify | App del **Dev Dashboard**: Client ID + Client secret, oppure un vecchio token `shpat_` | Shop Shopify → Impostazioni |
-| AliExpress | App **Drop Shipping** di openservice.aliexpress.com: App Key + App Secret | Shop AliExpress → Impostazioni |
-
-Shopify e AliExpress richiedono, dopo le credenziali, **l'installazione/
-autorizzazione sul negozio o sull'account**, che è un giro OAuth: l'admin
-preme "Collega", approva sul portale del fornitore e torna su una pagina di
-esito (`/admin/shopify-connected`, `/admin/aliexpress-connected`). Gli
-indirizzi da registrare nei due portali:
-
-- Shopify — URL dell'app `https://jav.ecodo.ai`, URL di
-  reindirizzamento `https://jav.ecodo.ai/api/shopify/oauth/callback`;
-- AliExpress — Callback URL
-  `https://jav.ecodo.ai/api/aliexpress/oauth/callback`.
-
-I token non si scrivono mai a mano: Shopify con l'app del Dev Dashboard usa
-il *client credentials grant* (token di 24 ore, rinnovato 5 minuti prima
-della scadenza e dopo un 401) o il token offline dell'installazione;
-AliExpress rilascia un token a scadenza con il suo `refresh_token`, rinnovato
-allo stesso modo. Nessun secret viene mai restituito da un endpoint: solo
-"configurato" e le ultime 4 cifre.
-
-I nomi "Marketplace 1/2/3" sono impostazioni (`organizations.settings.marketplace_labels`,
-card "Regole dei Marketplace" in cima a ciascuna delle tre pagine admin). Il
-cliente non vede mai la fonte.
-
-**Ogni sezione dello Shop si accende, si spegne e si rinomina** (Session 72).
-Le tre schede che vengono dal catalogo nostro — "Jav" (INTERNAL),
-"Prodotti Partner" (PARTNER), "Offerte Jav" (DROPSHIPPING) — hanno nome e
-interruttore in `organizations.settings.shop_sections`
-(`{internal|partner|dropshipping: {label, enabled}}`, tutto acceso finché un
-amministratore non dice il contrario), card **"Sezioni dello Shop del
-cliente"** nella pagina Prodotti. Le tre schede dei Marketplace hanno il
-proprio interruttore ("Shop visibile ai clienti") nelle impostazioni del
-rispettivo shop e il nome nella card Regole dei Marketplace. Due regole che
-si sommano: **una scheda Marketplace compare solo se è accesa E ha almeno un
-prodotto in vendita** — accesa con catalogo vuoto, il cliente non vede
-niente. L'interruttore di visibilità dei tre shop **si salva da solo** al
-clic: prima cambiava solo il modulo e chi non premeva "Salva" credeva di
-aver acceso lo shop mentre i clienti continuavano a non vederlo. Il titolo dello Shop del cliente è **"Fai la
-spesa con Jav"**; la vecchia scheda di catalogo DROPSHIPPING, che
-aveva quel nome, ora si chiama "Offerte Jav".
-
-Regole comuni (`apps/api/app/domains/marketplaces/rules.py`, l'unico posto dove vivono):
-
-- **Stesso prezzo con bonifico e con carta: nessuno sconto bonifico**
-  (Session 86, decisione dell'azienda: «non possiamo fare sconto se paghi con
-  bonifico»). Fino alla Session 85 il bonifico toglieva il 5%
-  (`marketplace_bank_transfer_discount_percentage`): ora
-  `rules.get_bank_transfer_discount_percentage` e
-  `rules.bank_transfer_discount_cents` danno sempre 0, il valore salvato
-  nelle impostazioni viene ignorato e cancellato al primo salvataggio, e il
-  campo per impostarlo non c'è più. La colonna `bank_transfer_discount_cents`
-  resta sugli ordini: è quanto è stato scontato davvero sugli ordini vecchi,
-  e i pannelli la mostrano solo quando è maggiore di zero. Vale anche per il
-  bonifico delle pratiche di contratto (vedi sotto). Mai un aumento sulla
-  carta.
-- **IVA inclusa nel prezzo** (Session 74). Il prezzo mostrato è quello
-  finale, come impone il Codice del Consumo (artt. 14-15) verso i
-  consumatori: nessun "+IVA" da aggiungere al totale. L'IVA **contenuta**
-  nel prezzo si legge nel checkout, nell'email di conferma e nel dettaglio
-  dell'ordine ("IVA inclusa nel prezzo (22%)"), e viene congelata
-  sull'ordine (`vat_percentage`, `vat_amount_cents`). Aliquota:
-  `marketplace_vat_percentage`, default **22**, massimo 30, modificabile
-  nella card Regole dei Marketplace; un cambio non tocca gli ordini già
-  fatti. Base imponibile = importo − sconto bonifico: lo sconto abbassa il
-  prezzo, quindi abbassa l'IVA, mentre **il JavCash non la riduce** perché
-  è un mezzo di pagamento, non uno sconto (conseguenza visibile: con molto
-  JavCash l'IVA contenuta può superare l'importo ancora da pagare). Il
-  margine mostrato all'amministratore è al netto di IVA e sconto: l'IVA non
-  è un nostro ricavo.
-- **Niente cashback, JavCash solo in parte.** I prodotti dei Marketplace non
-  generano cashback: servono a spendere il JavCash, mai per il 100% del
-  prezzo. Un prodotto nuovo entra al **30%**; l'amministratore può alzarlo
-  fino al **99%** (vincolo anche nel database). Con JavCash serve l'OTP.
-- **Niente aumento sulla carta**: in Italia la maggiorazione sui pagamenti
-  con carta dei consumatori è vietata (PSD2 art. 62(4), D.Lgs. 11/2010 art. 3
-  c. 4, Codice del Consumo art. 62). Le Sessions 67-68 avevano un +5% sulla
-  carta, mai andato in produzione; dalla 68 alla 85 c'era invece uno sconto
-  del 5% sul bonifico, tolto nella 86.
-
-## Shop Jav Partner: CJ Dropshipping (Session 60) {#partner-shop}
-
-Un secondo negozio "importato", accanto ad "Acquisti Jav", collegato
-davvero all'API di CJ Dropshipping. Tabelle e gestione proprie
-(`cj_dropshipping`), esperienza del cliente identica agli altri negozi.
-
-**Per il cliente, uguale a tutto lo Shop.** I prodotti compaiono nella
-categoria **"Marketplace 1"** dello Shop (Session 64; dalla Session 62 alla 63
-erano dentro "Fai la spesa con Jav"):
-al cliente non si dice mai da dove arriva un prodotto (né CJ né "Partner" in
-finestra prodotto, pagina Stripe, Contabilità). Checkout con JavCash (codice via email), bonifico o carta, ordine in "I miei
-Ordini", movimenti in Contabilità. Questi prodotti **non generano cashback**:
-servono a spendere JavCash, come gli Acquisti Jav. In più: variante,
-quantità (1–10), indirizzo di consegna (precompilato dal profilo, telefono
-obbligatorio per il corriere), stato della spedizione e tracking.
-
-**Nessun importo arriva dal browser.** Prezzo della variante e spedizione si
-ricalcolano sul server alla creazione dell'ordine; la spedizione è il
-preventivo reale di CJ per quella variante, quantità e destinazione (l'opzione
-più economica), con cache di 30 minuti. Conta `totalPostageFee`, ciò che CJ
-addebita davvero (sdoganamento incluso), non il prezzo base `logisticPrice`
-(Session 63). Il costo CJ di un ordine comprende anche l'IVA di importazione
-IOSS (~22% del prodotto): stimata per i margini finché CJ non restituisce
-l'importo reale.
-
-**Prezzo di vendita.** `costo CJ (USD) × cambio × (1 + ricarico%) + ricarico
-fisso`, poi arrotondato **sempre per eccesso** a ,90 / ,99 o al centesimo: un
-arrotondamento non può mai abbassare il margine. Ricarico generale predefinito 100% (costo 10 → prezzo 20 prima di cambio e
-arrotondamento, Session 61). Ricarico per singolo prodotto
-opzionale, già sceglibile nella finestra di importazione (se uguale al
-generale non viene salvato e il prodotto segue le Impostazioni); prezzo fisso per variante opzionale (non segue più il costo).
-Spedizione: la paga il cliente al costo reale (predefinito) oppure è inclusa
-nel prezzo (stima della spedizione più economica sommata al prezzo, e al
-checkout spedizione 0). Ogni cambio delle regole ricalcola subito tutti i
-prezzi; il costo e il cambio usati restano congelati sull'ordine, così il
-margine di un ordine passato non cambia.
-
-**JavCash usabili.** Percentuale per prodotto (predefinita 100%, impostabile),
-calcolata sul totale compresa la spedizione.
-
-**Stati.** `status` è il pagamento del cliente (come ogni ordine);
-`fulfillment_status` è il pacco: NOT_SENT → SENDING → SENT (su CJ, non pagato)
-→ PROCESSING (pagato su CJ) → SHIPPED → DELIVERED, oppure ERROR (invio
-rifiutato) / CJ_CANCELLED. Un ordine si invia a CJ **solo se pagato dal
-cliente**. Si annulla (con restituzione dei JavCash) solo finché non è pagato.
-
-**Pagamento a CJ senza saldo precaricato (Session 63) {#partner-shop-payment}.**
-Tre fatti distinti per ogni ordine: pagamento del cliente (`status`), ordine su
-CJ (`fulfillment_status`), pagamento a CJ (`cj_payment_status`). Flusso
-ibrido, automatico di default:
-
-1. Il cliente paga (bonifico confermato, Stripe, o tutto in JavCash).
-2. L'ordine si crea su CJ **una sola volta** con `payType=1`: CJ lo conferma e
-   restituisce la sua pagina di pagamento (`cjPayUrl`).
-3. Si legge lo stato su CJ: se risulta già pagato (sandbox, oppure pagato a
-   mano sulla pagina CJ) si registra e basta.
-4. Altrimenti si legge il saldo CJ: se copre il costo reale dell'ordine si paga
-   dal saldo; se no l'ordine resta **Pagamento CJ richiesto**. Non è un errore:
-   nessun messaggio al cliente, una notifica allo staff ("CJ richiede $X; saldo
-   $Y, mancano $Z").
-5. Lo sblocchi pagando dalla pagina CJ dell'ordine ("Apri pagamento CJ") o
-   ricaricando il saldo: il controllo ogni 10 minuti (o "Verifica pagamento
-   CJ") vede il pagamento, oppure paga dal saldo appena basta, dal più vecchio,
-   senza mai spendere due volte la stessa ricarica.
-
-Il cliente vede **Ordine ricevuto** finché CJ non è pagato, poi **In
-preparazione**, **Spedito** (con tracking solo quando esiste), **Consegnato**.
-Mai ricariche automatiche. Riepilogo di cassa in admin: ordini da pagare a CJ,
-totale necessario, saldo, differenza.
-
-**Mai due ordini, mai due pagamenti.** Presa in carico con UPDATE
-condizionale. Prima di creare si chiede a CJ il nostro numero `JAV-<id>`: si
-crea solo se CJ risponde "order not found"; timeout o CJ occupato fermano e si
-riprova dopo. Prima di pagare si rilegge lo stato su CJ.
-
-**Errori.** Classificati: temporanei e di accesso si riprovano da soli (attesa
-crescente, massimo 6 tentativi); dati rifiutati e casi non riconosciuti
-chiedono un controllo dello staff (notifica); saldo insufficiente è uno stato,
-non un errore.
-
-**Invio a CJ.** A mano ("Invia a CJ") o automatico dopo il pagamento
-(impostazione). L'ordine viene creato su CJ con numero `JAV-<id>` e pagato dal
-**saldo CJ** dell'azienda. Una sola presa in carico per ordine (UPDATE
-condizionale): clic e invio automatico non creano mai due ordini. Se CJ rifiuta,
-l'errore resta sull'ordine e lo staff riceve una notifica; se l'ordine è
-creato ma il saldo non basta, resta "Su CJ, da pagare" e il tentativo
-successivo paga soltanto. Un invio interrotto a metà si riprende dopo 10 minuti
-cercando prima su CJ il numero `JAV-<id>`. Merce extra-UE verso l'UE: IOSS di
-CJ (`iossType=3`, vedi open-questions #17).
-
-**Sandbox.** Con sandbox accesa gli ordini sono di prova su CJ (nessuna
-spedizione, nessun addebito): il cliente però paga davvero. Lo shop si tiene
-spento finché la prova non è conclusa.
-
-**Stock e magazzino.** Lo stock di ogni variante si legge da
-`getInventoryByPid` (il dettaglio prodotto spesso non lo contiene). Un prodotto
-parte da un solo magazzino: quello dove sono disponibili più varianti, a parità
-il più vicino (Italia, resto d'Europa, USA, Cina).
-
-**Aggiornamenti da CJ.** Ogni 30 minuti stato, tracking e consegna degli
-ordini in viaggio; al passaggio a "Spedito" e "Consegnato" il cliente riceve
-notifica ed email (con link di tracciamento). Ogni notte alle 03:30 costo,
-stock e disponibilità dei prodotti; una variante non più offerta da CJ resta
-nel database (gli ordini la citano) ma non è più vendibile.
-
-**Chiave API.** Salvata solo nel database, mai restituita dalle API (solo le
-ultime 4 cifre), mai nel repository. Cambiarla cancella i token salvati.
-Permessi: catalogo e impostazioni `imported_products.manage`, ordini
-`wallet.manage` (come gli altri negozi).
-
-## Categorie degli shop (Session 73) {#shop-categories}
-
-Ogni shop ha le **sue** categorie: il nostro catalogo (una serie per
-sezione: `internal`, `partner`, `dropshipping`) e i tre Marketplace
-(`aliexpress`, `cj`, `shopify`). "Casa" di CJ e "Casa" di Shopify sono due
-righe diverse, perché i cataloghi sono separati e un prodotto non passa mai
-da uno shop all'altro. I prodotti fatti a mano del vecchio plugin
-(`imported_products`) si categorizzano insieme a quelli AliExpress: il
-cliente li vede nella stessa scheda.
-
-Dominio a sé (`domains/shop_categories`, migrazione 0053), pensato per
-essere rimosso senza toccare niente: **nessuna colonna aggiunta alle cinque
+Dominio a sé (`domains/shop_categories`): **nessuna colonna aggiunta alle
 tabelle dei prodotti**.
 
 - `shop_categories`: nome (unico per shop, senza distinzione fra maiuscole
-  e minuscole), `position` (ordine nella barra del cliente), `active`.
+  e minuscole), `position` (ordine nella barra del cliente), `active`, e
+  solo per lo Shop `producer_id`: il fornitore ereditato dai prodotti della
+  categoria che non ne hanno uno loro (regola in «Fai la Spesa con Jav»).
+  È l'unica chiave esterna del dominio verso un altro (ON DELETE SET NULL);
+  sceglierlo su una categoria di un altro shop è rifiutato.
 - `shop_category_products`: l'appartenenza. `product_id` è un UUID **senza
-  vincolo di chiave esterna**, perché punta a una riga di cinque tabelle
-  diverse: è l'unico punto in cui l'isolamento dei domini si paga, ed è
-  scritto nel docstring del modello.
+  vincolo di chiave esterna**, perché punta a righe di tabelle diverse
+  (prodotti del catalogo, prodotti dello Shop): è scritto nel docstring del
+  modello.
 
 Chi fa cosa: creare, rinominare, riordinare, nascondere ed eliminare vuole
 `products.manage` (eliminare una categoria **non elimina i prodotti**);
 leggere l'elenco basta essere loggati, perché al cliente servono i nomi.
-Ogni lettura di prodotto (catalogo, i tre Marketplace, prodotti a mano)
-porta con sé `category_ids`, caricati con **una query per pagina**, mai una
-per prodotto.
+Ogni lettura di prodotto porta con sé `category_ids`, caricati con **una
+query per pagina**, mai una per prodotto.
 
-Come si assegna un prodotto: spuntando le categorie **nella finestra di
-importazione** (così un catalogo importato in blocco nasce già ordinato),
-nel modulo di modifica del prodotto, oppure in blocco dalla card Categorie
-("Assegna più prodotti a una categoria": si sceglie la categoria, si
-spuntano i prodotti e si aggiungono o si tolgono — utile sui cataloghi già
-importati).
+Come si assegna un prodotto: nel modulo di modifica del prodotto, oppure in
+blocco dalla card Categorie ("Assegna più prodotti a una categoria").
 
-Nello Shop del cliente: i negozi si scelgono con bottoni grandi, sotto
-compaiono le categorie di quel negozio (solo quelle attive e con almeno un
-prodotto in elenco) e una casella di ricerca su nome e descrizione. I due
-filtri si sommano.
+Nello Shop del cliente compaiono le categorie (solo quelle attive e con
+almeno un prodotto in elenco) e una casella di ricerca su nome e
+descrizione. I due filtri si sommano.
 
-## Shop AliExpress: la Dropshipping API (Session 71) {#aliexpress-shop}
-
-Il terzo shop collegato davvero a un fornitore, dopo CJ (Session 60) e
-Shopify (Session 68). Stesso schema dei due precedenti — dominio isolato
-(`aliexpress_dropshipping`: `aliexpress_settings`, `aliexpress_products`,
-`aliexpress_variants`, `aliexpress_orders`), stessa esperienza per il
-cliente, stesse regole comuni dei Marketplace (sconto bonifico, JavCash
-parziale, niente cashback).
-
-**L'app e l'autorizzazione.** L'app si crea su openservice.aliexpress.com,
-categoria *Drop Shipping*; dà **App Key** e **App Secret**, e va autorizzata
-sull'account venditore (il giro OAuth descritto in
-[#marketplace-credentials](#marketplace-credentials)). Il token ha una
-scadenza: `client.py` lo rinnova con il `refresh_token` dieci minuti prima
-e dopo un rifiuto del gateway. Il permesso **DS va concesso all'app a
-parte**: senza, le chiamate al catalogo rispondono "no permission" anche con
-l'app approvata.
-
-**La firma.** Gateway "iop" di Alibaba: parametri ordinati per nome,
-concatenati nome+valore, HMAC-SHA256 con l'App Secret, esadecimale
-maiuscolo. Le chiamate di sistema (`/auth/token/create`, `/auth/token/refresh`)
-vanno su `/rest<path>` e includono il path nella firma; le chiamate DS
-(`aliexpress.ds.*`) vanno su `/sync` con il parametro `method`, senza path
-nella firma e con il token nel parametro `session`.
-
-**Prezzo di vendita.** Come Shopify: `costo × cambio × (1 + ricarico%) +
-ricarico fisso`, arrotondato **sempre per eccesso** a ,90 / ,99 o al
-centesimo; ricarico predefinito 100%, override per prodotto; spedizione
-pagata dal cliente (importo fisso) o inclusa. Costo e cambio restano
-congelati sull'ordine. Le impostazioni hanno in più `ship_to_country` (IT),
-`target_currency` (EUR) e `target_language` (it): sono i parametri con cui
-si interroga il catalogo, quindi decidono i prezzi che AliExpress ci mostra.
-
-**L'ordine al fornitore.** Quando il cliente ha pagato, l'ordine viene
-creato su AliExpress con `aliexpress.ds.order.create` (indirizzo di
-consegna, `sku_attr` della variante, il nostro riferimento `out_order_id`);
-il tracking arriva con `aliexpress.ds.order.tracking.get` e porta l'ordine
-a `SHIPPED` e poi `DELIVERED`, avvisando il cliente. Attenzione: `SENT`
-significa "creato presso il fornitore", **non pagato**: il pagamento ad
-AliExpress resta un passaggio manuale nell'account AliExpress.
-
-**Una divergenza voluta rispetto a Shopify.** A Shopify si poteva chiedere
-"hai già un ordine con il mio tag?", quindi una risposta persa si
-riprovava da sola. La DS API non offre quella domanda: se `ds.order.create`
-fallisce *dopo* che la richiesta è partita, o risponde senza numero
-d'ordine, l'ordine va in `ERROR` **senza alcun riprovo automatico** e lo
-staff riceve un avviso con l'`out_order_id` da cercare su AliExpress.
-Decide una persona: spedire due colli è peggio che aspettare. I fallimenti
-*prima* dell'invio mantengono il riprovo automatico con backoff.
-
-**Da verificare dal vivo** (l'account non era ancora autorizzato quando il
-dominio è stato scritto; ogni punto è marcato nel codice con un commento
-`Da verificare dal vivo:`): l'involucro della richiesta di
-`ds.order.create` e se `out_order_id` renda l'ordine idempotente; i nomi
-dei prezzi SKU in `ds.product.get` (`offer_sale_price` vs `sku_price` —
-sbagliarli alzerebbe tutti i prezzi); i parametri e l'annidamento di
-`ds.text.search`; `ds.freight.query`; la forma della risposta di
-`ds.order.tracking.get`; come si riconosce un ordine annullato dal
-fornitore. Tutte le risposte sono lette in modo difensivo (più forme
-accettate, errori del gateway riportati con le parole del gateway, mai un
-risultato vuoto silenzioso).
-
-## Account freeze (Session 28)
+## Account freeze
 
 `PATCH /users/{id}/freeze` / `/unfreeze`, gated by a new, deliberately
 narrow `users.manage_lifecycle` permission (**SUPER_ADMIN only** -- the
@@ -2723,7 +1677,7 @@ does **not** touch any other data -- contracts, orders, wallet history,
 network position all stay exactly as they were; unfreezing is a full,
 lossless undo. An admin cannot freeze their own account.
 
-### A frozen member disappears from the network (Session 37)
+### A frozen member disappears from the network
 
 Freezing used to have **zero** effect on the network tree: the person kept
 showing up in their upline's "Rete Commerciale" looking completely normal,
@@ -2764,6 +1718,33 @@ for contracts/invoices. Freeze-only ships for now; a real delete/anonymize
 flow is future work, to be designed once the user decides how to reconcile
 those two constraints (most likely: anonymize personal data while
 preserving the underlying ledger rows, not a literal `DELETE`).
+
+## Club: famiglie, quote, gare {#club}
+
+La specifica completa è `club-portal.md`; qui le regole che non si negoziano.
+
+- **Il genitore è l'unico che accede.** I figli sono atleti senza account
+  (`club_athletes.guardian_user_id`); un adulto che si allena è un genitore
+  con un atleta `is_self`. Ogni lettura e scrittura del genitore verifica la
+  famiglia lato server: ciò che non è suo risulta "non trovato".
+- **Il piano lo sceglie l'età al 1° settembre** della stagione, come nelle
+  categorie federali; la segreteria può fissarlo a mano (`plan_locked`).
+- **Le quote si generano da sole** (il 1° del mese per i mesi fatturati del
+  piano, l'iscrizione a inizio stagione o alla creazione dell'atleta) e sono
+  UNIQUE per (atleta, tipo, periodo): un job ripetuto non crea doppioni.
+  L'importo si congela quando la quota è emessa.
+- **La prova di pagamento segna subito le quote come pagate.** Una prova
+  copre una o più quote (un bonifico per due figli). La segreteria può
+  rifiutarla con un motivo: le quote tornano da pagare e il genitore riceve
+  notifica ed email. Può anche segnare pagata a mano una quota (contanti),
+  condonarla o riaprirla.
+- **Certificato agonistico valido alla data della gara** per le gare che lo
+  richiedono, controllato dal server all'iscrizione. Avvisi automatici a 30
+  e 7 giorni dalla scadenza e a certificato scaduto, una volta sola per
+  gradino (`club_reminders_sent`).
+- **Cintura attuale e Jav Ranking si calcolano**: la cintura è la più alta
+  dello storico, il ranking somma punti per piazzamento × coefficiente del
+  livello di gara. Correggere un risultato corregge la classifica.
 
 ## GDPR notes
 

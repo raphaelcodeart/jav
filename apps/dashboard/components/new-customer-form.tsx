@@ -14,8 +14,8 @@ export const CUSTOMER_KIND_LABELS: Record<string, string> = {
 };
 const PRIVATE_LIKE = new Set(["PRIVATE", "SOLE_PROPRIETOR"]);
 
-const inputClass = "w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500";
-const labelClass = "text-[10px] font-semibold text-slate-300 light:text-slate-600 uppercase block";
+const inputClass = "w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500";
+const labelClass = " font-semibold text-slate-600 uppercase block";
 
 /** Registering a new customer before opening their first pratica (Session
  *  67), the same form for a promoter and for the administration: both give
@@ -98,8 +98,8 @@ export function NewCustomerForm({
             onClick={() => setKind(code)}
             className={`px-3 py-2 rounded-xl text-xs font-semibold border transition cursor-pointer ${
               kind === code
-                ? "bg-orange-600 border-orange-600 text-white"
-                : "bg-white/5 light:bg-slate-900/5 border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 hover:bg-white/10"
+                ? "bg-brand-600 border-brand-600 text-white"
+                : " bg-slate-900/5 border-slate-300 text-slate-600 hover:bg-slate-100"
             }`}
           >
             {label}
@@ -152,7 +152,7 @@ export function NewCustomerForm({
             {kind === "PRIVATE" ? (
               <span className="normal-case font-normal text-slate-500">(facoltativa)</span>
             ) : (
-              <span className="normal-case font-semibold text-orange-400">(obbligatoria)</span>
+              <span className="normal-case font-semibold text-brand-600">(obbligatoria)</span>
             )}
           </label>
           <input type="email" required={kind !== "PRIVATE"} value={pec} onChange={(e) => setPec(e.target.value)} className={inputClass} />
@@ -165,7 +165,7 @@ export function NewCustomerForm({
           <select
             value={promoterAgentId}
             onChange={(e) => setPromoterAgentId(e.target.value)}
-            className="w-full rounded-xl glass-input px-3 py-2 text-sm bg-slate-900 light:bg-white focus:border-orange-500"
+            className="w-full rounded-xl glass-input px-3 py-2 text-sm bg-white focus:border-brand-500"
           >
             <option value="">Nessuno: cliente diretto di Jav</option>
             {(agents ?? [])
@@ -188,7 +188,7 @@ export function NewCustomerForm({
         <button
           type="submit"
           disabled={busy}
-          className="flex-1 rounded-xl bg-gradient-to-r from-orange-600 to-amber-500 hover:from-orange-500 hover:to-amber-400 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-orange-500/20 transition cursor-pointer disabled:opacity-50"
+          className="flex-1 rounded-xl bg-gradient-to-r from-brand-600 to-brand-400 hover:from-brand-500 hover:to-brand-400 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-brand-500/20 transition cursor-pointer disabled:opacity-50"
         >
           {busy ? "Registrazione..." : submitLabel}
         </button>
@@ -196,7 +196,7 @@ export function NewCustomerForm({
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-xl bg-white/10 light:bg-slate-900/5 hover:bg-white/20 px-4 py-2.5 text-xs font-semibold text-white light:text-slate-700 transition cursor-pointer"
+            className="rounded-xl bg-slate-900/5 hover:bg-white/20 px-4 py-2.5 text-xs font-semibold text-slate-700 transition cursor-pointer"
           >
             Annulla
           </button>

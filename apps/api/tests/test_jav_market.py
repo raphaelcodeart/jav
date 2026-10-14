@@ -1,4 +1,4 @@
-"""Marketplace 4 — «Fai la Spesa con Jav» (Session 79).
+"""Marketplace 4 — «Fai la Spesa con Jav».
 
 Le regole del cliente sono quelle comuni dei Marketplace, e i test che le
 fissano stanno già nei loro file: qui si verifica ciò che questo negozio ha
@@ -12,6 +12,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from app.core.security import hash_otp_code, hash_password
 from app.domains.auth import service as auth_service
 from app.domains.auth.models import OtpCode
 from app.domains.carts import service as carts_service
@@ -22,7 +23,6 @@ from app.domains.organizations.schemas import OrganizationSettingsUpdate
 from app.domains.rbac.models import Role, UserRole
 from app.domains.users.models import User
 from app.domains.wallets import service as wallet_service
-from app.core.security import hash_otp_code, hash_password
 
 OTP = "424242"
 ADDRESS = {
@@ -252,7 +252,7 @@ async def test_javcash_is_spent_with_a_code_and_never_covers_it_all(db, organiza
     assert order.credit_applied_cents == quote["max_creditable_cents"]
     # I JavCash non abbassano l'IVA: sono un modo di pagare.
     assert order.vat_amount_cents == rules.vat_added_cents(net_cents=order.items_cents, percentage=22)
-    # Session 86: nessuno sconto bonifico, si paga tutto il residuo dopo i JavCash.
+    # Nessuno sconto bonifico, si paga tutto il residuo dopo i JavCash.
     residuo = order.amount_cents - order.credit_applied_cents
     assert order.bank_transfer_discount_cents == 0
     assert market.amount_due_cents(order) == residuo
@@ -318,7 +318,7 @@ async def test_a_sold_out_variant_cannot_be_bought_or_put_in_the_cart(db, organi
         )
 
 
-# --- L'ordine che parte verso l'azienda (Session 80) -----------------------------------------------
+# --- L'ordine che parte verso l'azienda -----------------------------------------------
 
 
 async def _paid_order(db, organization_id, admin, customer, *, lines):

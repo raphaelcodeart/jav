@@ -1,6 +1,6 @@
 """The Italian codice fiscale, checked against the person it belongs to.
 
-Session 89: the pratica's data form asks date and place of birth next to
+The pratica's data form asks date and place of birth next to
 the fiscal code, so that the code can be checked against name, surname,
 birth date and birthplace instead of trusted as typed. The rules (letters
 of surname and name, year/month/day with +40 for women, Belfiore code of

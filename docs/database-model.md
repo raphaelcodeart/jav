@@ -17,7 +17,7 @@ slice). Phase F/G tables (`notifications_*`, `knowledge_*`, `ai_*`) are sketched
 `ai-architecture.md` and will be migrated when those phases start.
 
 > **The schema is not the whole story.** After `alembic upgrade head` there are
-> 63 tables and no rows — and the application cannot start work without four
+> 85 tables (plus `alembic_version`) and no rows — and the application cannot start work without four
 > families of reference data (`permissions`, `roles` + `role_permissions`,
 > `ranks`, one ACTIVE `commission_plan_versions`) plus a first user. None of it
 > is in `database-schema.sql`, which is `--schema-only` by design. What has to
@@ -33,10 +33,10 @@ organizations
 
 users
   id, organization_id, email (unique per org), password_hash,
-  status (ACTIVE/FROZEN -- FROZEN added Session 28, an admin-frozen account
+  status (ACTIVE/FROZEN, an admin-frozen account
     that can never log in until unfrozen, see business-rules.md#account-freeze),
   email_verified_at, created_at,
-  -- account gates, added Session 27 (see business-rules.md#account-gates):
+  -- account gates (see business-rules.md#account-gates):
   privacy_accepted_at nullable (set once at self-registration, NULL for
     accounts that predate this field, never backfilled),
   fiscal_code nullable, residence_street/city/province/postal_code nullable,
@@ -58,24 +58,24 @@ user_roles
 sessions
   id, user_id, refresh_token_hash, user_agent, ip_address,
   created_at, expires_at, revoked_at,
-  replaced_by_session_id -> sessions nullable (Session 85, migration 0066:
+  replaced_by_session_id -> sessions nullable (
     set when revoked by a refresh rotation, null when by a logout -- lets a
     just-rotated token be honoured for 60 s, see security-model.md)
 
-password_reset_tokens (added Session 13 -- same shape/reasoning as sessions:
+password_reset_tokens (same shape/reasoning as sessions:
     the opaque random token is only ever handed to the client in the reset
     link, the DB stores just its sha256 hash. Single-use (used_at) and
     time-limited (expires_at, 60 minutes). A successful reset revokes every
     active session for that user -- see auth/service.py::reset_password())
   id, user_id, token_hash, expires_at, used_at nullable, created_at
 
-email_verification_tokens (added Session 27 -- same opaque-token/hashed-at-rest
+email_verification_tokens (same opaque-token/hashed-at-rest
     shape as password_reset_tokens, 24h expiry, single-use. Sent at
     self-registration only; existing accounts are grandfathered as verified,
     see users.email_verified_at and business-rules.md#account-gates)
   id, user_id, token_hash, expires_at, used_at nullable, created_at
 
-otp_codes (added Session 27 -- short numeric code emailed for a
+otp_codes (short numeric code emailed for a
     self-service action a plain link-click isn't enough proof for; today
     only purpose=PROMOTER_APPLICATION_OTP_PURPOSE ("lavora con noi"),
     10-minute expiry, single-use, `purpose` keeps the table reusable)
@@ -94,32 +94,32 @@ agent_profiles
   id, organization_id, user_id nullable (promoters may predate a user account),
   display_name, promoter_code (unique),
   status (ACTIVE/SUSPENDED/TERMINATED/PENDING_APPROVAL -- the last one added
-    Session 17: both POST /network/agents (admin, org-wide) and POST
+    both POST /network/agents (admin, org-wide) and POST
     /network/agents/recruit (a promoter enrolling their own direct
     collaborator) now only SUGGEST a new agent -- created PENDING_APPROVAL,
     unusable as a contract producer (create_contract() already rejects any
     non-ACTIVE producer, so this needed no extra guard) until approved),
-  approved_by_user_id nullable, approved_at nullable (added Session 17 --
+  approved_by_user_id nullable, approved_at nullable (
     who/when a PENDING_APPROVAL agent was approved via PATCH
     /network/agents/{id}/approve, network.approve-gated),
-  rejection_reason nullable (added Session 17 -- set by PATCH
+  rejection_reason nullable (set by PATCH
     /network/agents/{id}/reject; a rejected agent is TERMINATED with a
     reason kept on the row, never hard-deleted, same append-only-history
     discipline as everywhere else in this project),
-  photo_url nullable (added Session 13 -- profile photo, uploaded via
+  photo_url nullable (profile photo, uploaded via
     POST /network/agents/{id}/photo to the public "jav-media" bucket, see
     §6 in server-migration-guide.md and core/storage.py. Same "name
     prominent, id small below" spirit -- a person recognizes a face faster
     than a promoter code),
-  first_name, last_name nullable (added Session 20 -- display_name is now
+  first_name, last_name nullable (display_name is now
     derived "first last", never edited directly; create_agent()/
     update_agent() take first_name/last_name, not display_name),
-  is_blacklisted boolean default false (added Session 20 -- set via the
+  is_blacklisted boolean default false (set via the
     admin "Blacklist" action; the ONLY case where self-service "lavora con
     noi" re-application falls back to the old manual PENDING_APPROVAL flow
     instead of auto-activating, see business-rules.md),
   collaboration_contract_version, collaboration_accepted_at,
-    collaboration_otp_verified_at, all nullable (added Session 27 -- "lavora
+    collaboration_otp_verified_at, all nullable ("lavora
     con noi" now requires accepting a collaboration agreement + typing back
     an emailed OTP before this row's status ever leaves PENDING_APPROVAL/
     becomes ACTIVE, see business-rules.md#account-gates and
@@ -162,7 +162,7 @@ network_change_requests
   status (PENDING/APPROVED/REJECTED), reviewed_by nullable, reason, created_at
 ```
 
-**Session 13 bug fix worth knowing about**: `network/service.py::get_branch()` (the
+**Bug fix worth knowing about**: `network/service.py::get_branch()` (the
 flat descendant list the promoter tree UI builds itself from) had no `ORDER BY`
 and no parent linkage -- the frontend reconstructed the tree by ASSUMING the
 rows came back in pre-order traversal order, which Postgres never guarantees
@@ -196,8 +196,7 @@ referral_sessions
 customer_attributions
   id, organization_id, customer_id, promoter_code_id, referral_session_id nullable,
   attributed_at
-  -- These four tables existed since Session 1 but had no live write path other
-  -- than the public /r/{code} click-resolver until Session 10 added
+  -- Written by the public /r/{code} click-resolver and by
   -- POST /auth/register: invite-only self-registration, gated on a valid
   -- promoter_codes.code, writes exactly one customer_attributions row per new
   -- customer in the same transaction as the account itself. No schema change
@@ -210,8 +209,7 @@ contract_attributions
 attribution_corrections
   id, organization_id, contract_attribution_id, previous_promoter_id, new_promoter_id,
   requested_by, approved_by nullable, reason, created_at
-  -- Existed since Session 1 but, like customer_attributions above, had no
-  -- live write path until Session 13 added admin-triggered reassignment:
+  -- Written by admin-triggered reassignment:
   -- POST /customers/{id}/reassign-promoter (referral/service.py::
   -- reassign_customer_promoter()). Moves customer_attributions.promoter_code_id
   -- to the new promoter and writes one of these rows as the audit trail of
@@ -220,57 +218,47 @@ attribution_corrections
   -- rejected if there's no existing attribution to correct.
 ```
 
-## 4. Catalog, customers, contracts (economics + authorship extended Session 38)
+## 4. Catalog, customers, contracts
 
 ```
 products
   id, organization_id, code,
-  product_type (ENERGY_CONTRACT/DIGITAL/PHYSICAL/SUBSCRIPTION, default
-    ENERGY_CONTRACT -- added Session 10, see below),
-  energy_type nullable (ELECTRICITY/GAS/DUAL_FUEL -- only meaningful when
-    product_type=ENERGY_CONTRACT; was NOT NULL before Session 10, relaxed
-    because a DIGITAL/PHYSICAL/SUBSCRIPTION product has no energy type),
-  customer_type (PRIVATE/BUSINESS/BOTH -- REDEFINED Session 38. The column
-    existed from the start but nothing ever read it, and its old vocabulary
-    (PMI, ENERGY_INTENSIVE, SOLE_PROPRIETOR, CONDOMINIUM) did not line up
-    with customers.kind (COMPANY, ...), so the two could never be compared.
-    It now holds the binary business answer and IS enforced: a customer is
-    only offered -- and only allowed to activate -- contracts their kind
-    matches. Legacy values still parse and collapse onto BUSINESS; see
-    catalog/pricing.py::normalize_product_customer_type. Migration 0035
-    rewrote every existing row to BOTH, deliberately NOT to its literal old
-    value: nothing filtered on this column before, so BOTH is the only value
-    that leaves the catalog looking identical),
+  product_type (SERVICE/DIGITAL/PHYSICAL/SUBSCRIPTION, default SERVICE --
+    SERVICE is a service sold with a contract, with a term and instalments),
+  customer_type (PRIVATE/BUSINESS/BOTH -- enforced: a customer is only
+    offered -- and only allowed to activate -- contracts their kind matches.
+    Legacy values still parse and collapse onto BUSINESS; see
+    catalog/pricing.py::normalize_product_customer_type),
   status,
-  category (INTERNAL default/DROPSHIPPING/PARTNER -- added Session 23,
+  category (INTERNAL default/DROPSHIPPING/PARTNER,
     orthogonal to product_type; see §11)
 
 product_versions
   id, product_id, version_label, base_price_cents (for a contract: the whole
-    term in unica soluzione, Session 84 -- was the monthly canone), monthly_price_cents
-    nullable (Session 84, migration 0064: the rata of a contract paid in rate,
-    net of VAT; NULL = the rate split base_price_cents), initial_fee_cents,
+    term in unica soluzione), monthly_price_cents nullable (the rata of a
+    contract paid in rate, net of VAT; NULL = the rate split
+    base_price_cents), initial_fee_cents,
   recurring_fee_cents, billing_period, tax_configuration jsonb (carries
-    vat_percentage as of Session 9 -- pre-existing column, previously unused),
-  contract_duration_months nullable (added Session 12 -- contract term length in
-    months, e.g. 12 for a standard yearly energy contract; NULL for a one-off
+    vat_percentage),
+  contract_duration_months nullable (contract term length in
+    months, e.g. 12 for a yearly service; NULL for a one-off
     DIGITAL/PHYSICAL product with no renewal concept. No DB/ORM-level default --
     "12 unless told otherwise" lives only in ProductCreate/ProductVersionCreate,
     so an explicit NULL from the API is never silently coerced to 12. Drives
     contracts.expires_at, see below),
   commission_plan_version_id, required_documents jsonb, terms_version,
   valid_from, valid_to nullable, status,
-  credit_discount_percentage (0-100, default 0 -- added Session 23; see §11),
-  cashback_enabled (bool, default false -- added Session 33; the opt-in "+5%
+  credit_discount_percentage (0-100, default 0; see §11),
+  cashback_enabled (bool, default false; the opt-in "+5%
     al checkout" cashback, DROPSHIPPING/PARTNER orders only; see §11),
-  contract_cashback_percentage (0-100, default 0 -- added Session 38; the
+  contract_cashback_percentage (0-100, default 0; the
     INTERNAL counterpart of cashback_enabled and a deliberately DIFFERENT
     mechanism: share of a paid contract's GROSS (VAT included) credited back
     as JavCash automatically, with NO surcharge. 0 on every product that
     exists today, so nothing changes until an admin opts in. See
     business-rules.md#cashback-modes),
   first_referrer_bonus_enabled (bool, default false) and
-  first_referrer_bonus_cents (default 0) -- added Session 38: a one-off bonus
+  first_referrer_bonus_cents (default 0): a one-off bonus
     for the promoter who ORIGINALLY brought the customer in, additive to the
     recursive commission. Configured here rather than keyed off a price or a
     product id in a controller. INTERNAL only (commissions come from
@@ -280,9 +268,9 @@ product_versions
 customers
   id, organization_id, kind (PRIVATE/SOLE_PROPRIETOR/COMPANY/CONDOMINIUM),
   fiscal_code, vat_number nullable, email, phone,
-  pec nullable (added Session 10 -- Italian certified email, distinct from
+  pec nullable (Italian certified email, distinct from
     the ordinary contact email),
-  photo_url nullable (added Session 13 -- same reasoning as
+  photo_url nullable (same reasoning as
     agent_profiles.photo_url, see §2),
   created_at
 
@@ -295,44 +283,32 @@ companies
 addresses
   id, organization_id, customer_id, kind, street, city, province, postal_code, country
 
-supply_points
-  id, organization_id, customer_id,
-  label nullable (added Session 12 -- human-readable identifier, e.g.
-    "Energia elettrica - Via Roma 12, Milano". POD/PDR codes are correct but
-    meaningless to a person scanning a list; auto-computed from energy_type +
-    address at creation if not given explicitly, always editable afterwards.
-    "Name prominent, id small below" applies to supply points the same way it
-    already applied to customers/products/network agents),
-  energy_type, pod_code nullable, pdr_code nullable,
-  meter_number, supply_address_id, estimated_consumption, actual_consumption,
-  provider_reference
-
 contracts
-  id, organization_id, customer_id, supply_point_id, product_version_id,
+  id, organization_id, customer_id, product_version_id,
   contract_attribution_id, network_snapshot_id, status,
-  notes nullable (added Session 10 -- free-text context set at creation by
+  notes nullable (free-text context set at creation by
     whoever originated the deal, promoter or admin; distinct from
     contract_status_history.notes, which is per-transition, not per-contract),
-  activated_at nullable (added Session 12 -- set, and reset on every renewal, by
+  activated_at nullable (set, and reset on every renewal, by
     transition_contract() whenever the contract enters ACTIVE or RENEWED),
-  expires_at nullable, indexed (added Session 12 -- activated_at +
+  expires_at nullable, indexed (activated_at +
     product_versions.contract_duration_months at that same moment; never
     recomputed retroactively if the product version's duration later changes.
     Powers the admin contract list's expiry column + year filter and the
     promoter's per-contract expiry display),
-  iban nullable (added Session 14 -- direct-debit account for the utility's
-    recurring charge; basic format check only, `^[A-Z]{2}[0-9A-Z]{13,32}$`,
+  iban nullable (the customer's bank account, as given
+    in the pratica; basic format check only, `^[A-Z]{2}[0-9A-Z]{13,32}$`,
     not a full mod-97 checksum. Editable by the customer on their own
     contract or by staff on any contract),
-  email nullable (added Session 33 -- contact address for THIS pratica,
+  email nullable (contact address for THIS pratica,
     deliberately independent of the account's login email),
-  holder_first_name, holder_last_name, pec -- all nullable (added Session 49,
-    migration 0040 / a7d2e94c3b10 -- the intestatario and PEC as typed into
+  holder_first_name, holder_last_name, pec -- all nullable (
+    the intestatario and PEC as typed into
     the activation wizard, pre-filled from the account and freely editable;
     per contract for the same reason as email/iban. Null on older and
     staff-created contracts),
 
-  -- Who built it (added Session 38). Previously only recoverable indirectly,
+  -- Who built it. Previously only recoverable indirectly,
   -- from the actor on the first contract_status_history row.
   updated_at nullable,
   created_by_user_id nullable, created_by_role nullable (CUSTOMER/PROMOTER/
@@ -351,7 +327,7 @@ contracts
     changes who earns FUTURE business, not who is owed the bonus on a
     contract already opened),
 
-  -- Economics, frozen at creation (added Session 38). Snapshot, never a live
+  -- Economics, frozen at creation. Snapshot, never a live
   -- join to the product version: an admin editing a price or a VAT rate
   -- tomorrow must not restate what somebody already agreed to pay. Computed
   -- exclusively server-side by catalog/pricing.py -- no amount here ever
@@ -361,34 +337,24 @@ contracts
   net_amount_cents, vat_rate NUMERIC(5,2) (percentage points, e.g. 22.00 --
     0.00 for a private customer whatever the product's rate is),
   vat_amount_cents, gross_amount_cents, instalments_net_amount_cents,
-  instalments_vat_amount_cents, instalments_gross_amount_cents (Session 84: the
+  instalments_vat_amount_cents, instalments_gross_amount_cents (the
   same contract paid in 3/12 rate -- monthly price x months + VAT; NULL = the
-  rate split the one-go price) (all nullable: every contract created
-    before Session 38 has them NULL and is never back-filled, because
+  rate split the one-go price) (all nullable: a contract created
+    without them keeps them NULL and is never back-filled, because
     recomputing from today's product is exactly the retroactive restatement
     the snapshot exists to prevent),
 
-  -- Payment (added Session 38). No contract had ever been paid through this
-  -- app when these landed (every production row sat at DRAFT/
-  -- DOCUMENTS_PENDING/UNDER_REVIEW), so none of this restates prior
-  -- behaviour -- it is the payment step that did not exist. Stripe is the
-  -- only proof of payment: a success URL never is.
-  payment_plan nullable (FULL = pagamento unico / MONTHLY_12 = dodici rate
-    mensili, una vera subscription Stripe / FINANCING = "Finanziaria
-    Stripe", importo finanziato e rimborsato al finanziatore, non a noi.
-    Nulla scrive ancora questa colonna: lo step di pagamento del contratto
-    non è costruito),
-  payment_discount_cents (Session 64: sconto del pagamento unico, congelato
-    alla scelta -- carta o bonifico scelto dal cliente; 0 per rate, bonifici
-    confermati senza scelta del cliente e contratti precedenti),
-  payment_method nullable (CARD/BANK_TRANSFER),
-  stripe_checkout_session_id nullable UNIQUE, stripe_customer_id nullable,
-  stripe_subscription_id nullable, paid_at nullable,
+  -- Payment. Contracts are paid by bank transfer only; only an
+  -- administrator confirming the money arrived marks anything paid.
+  payment_plan nullable (FULL / INSTALMENTS_3 / MONTHLY_12, chosen by the
+    customer when announcing the transfer; see business-rules.md#contract-payment),
+  payment_method nullable (BANK_TRANSFER -- the only method),
+  paid_at nullable,
   cashback_credited_at nullable (the readable exactly-once guard for the
     JavCash credit, on top of the wallet ledger's own unique idempotency
     key -- same belt-and-braces pattern as orders.cashback_credited_at),
 
-  -- Proof of what was accepted (added Session 38). Stored here rather than
+  -- Proof of what was accepted. Stored here rather than
   -- read back through the product, so an admin replacing a contract PDF
   -- later cannot change what this customer accepted.
   terms_accepted_at, terms_accepted_by_user_id, terms_version,
@@ -402,14 +368,14 @@ contract_status_history
 contract_events
   id, contract_id, event_type, payload jsonb, created_at
 
-documents (added Session 14 -- sensitive contract paperwork; see
+documents (sensitive contract paperwork; see
   security-model.md for the private-storage design this table backs)
   id, organization_id, contract_id,
-  document_type (IDENTITY/FISCAL_CODE/UTILITY_BILL/CHAMBER_OF_COMMERCE/OTHER
+  document_type (IDENTITY/FISCAL_CODE/CHAMBER_OF_COMMERCE/OTHER
     -- CHAMBER_OF_COMMERCE required for COMPANY/CONDOMINIUM and merely
     offered to SOLE_PROPRIETOR; OTHER is the open slot for extra
-    attachments, added Session 45 -- see business-rules.md),
-  description nullable (Session 45 -- what the uploader called an OTHER
+    attachments -- see business-rules.md),
+  description nullable (what the uploader called an OTHER
     attachment; always NULL for the four fixed types, which are named by
     their type),
   original_filename, storage_key (opaque, unique -- the MinIO object key in
@@ -425,7 +391,7 @@ documents (added Session 14 -- sensitive contract paperwork; see
 Contract `status` is constrained (checked in application code + a Postgres CHECK
 constraint) to the state machine in `business-rules.md §Contract state machine`.
 
-contract_commission_plans  (added Session 50, migration 0041 / b3e8f1a6c257)
+contract_commission_plans 
   id, organization_id, contract_id UNIQUE, accepted_by_user_id -> users,
   accepted_at, payment_plan nullable (known at acceptance, null if unpaid),
   total_commission_cents, preview JSONB (verbatim what the administrator was
@@ -433,74 +399,56 @@ contract_commission_plans  (added Session 50, migration 0041 / b3e8f1a6c257)
   -- the accepted commission preview, required before first activation;
   -- see business-rules.md#commission-preview
 
-contract_instalments  (added Session 50, same migration)
+contract_instalments 
   id, organization_id, contract_id, number, instalments_total, due_date,
-  amount_cents, status (SCHEDULED/PAID/FAILED), paid_at, payment_source
-  (STRIPE_CHECKOUT/STRIPE_INVOICE/ADMIN), confirmed_by_user_id -> users,
-  stripe_invoice_id nullable, commission_event_id (the one outbox event
-  that releases this slice), commission_released_at,
-  commission_calculation_id -> commission_calculations, created_at.
-  UNIQUE (contract_id, number), UNIQUE (contract_id, stripe_invoice_id)
-  (Session 52: was UNIQUE stripe_invoice_id -- one monthly invoice of a
-  pratica now pays N contracts).
+  amount_cents, status (SCHEDULED/PAID), paid_at, payment_source (ADMIN --
+  an administrator confirmed the transfer), confirmed_by_user_id -> users,
+  commission_event_id (the one outbox event that releases this slice),
+  commission_released_at, commission_calculation_id ->
+  commission_calculations, created_at. UNIQUE (contract_id, number).
   -- one row per payment owed; each paid row releases 1/N of the commissions
 
-contract_requests  (added Session 52, migration 0042 / c4f9a2b7d318)
+contract_requests 
   id, organization_id, customer_id -> customers, status (DRAFT/SUBMITTED/
   CANCELLED), holder_first_name, holder_last_name, email, pec, iban,
   created_by_user_id -> users, created_by_role, activated_by_promoter_id ->
   agent_profiles, submitted_at, cancelled_at, created_at, updated_at.
-  -- la pratica di attivazione: N supply points -> N independent contracts,
-  -- shared holder/documents/payment; see business-rules.md#contract-request.
-  -- Existing contracts backfilled one pratica each, id = the contract's id.
+  -- la pratica: N independent contracts, shared holder/documents/payment;
+  -- see business-rules.md#contract-request.
 
-contract_requests -- Session 53 additions (migration 0043 / d5a1b3c9e472)
-  street, city, province, postal_code: the address every POD of the pratica
-  starts from, asked once with the holder data. Backfilled from each existing
-  pratica's first point.
+contract_requests -- address
+  street, city, province, postal_code: the holder's address, asked once with
+  the holder data.
 
-supply_points -- Session 53: energy_type is now nullable (a POD created by
-  "quanti POD hai?" is luce or gas only once its package is chosen).
-
-contract_request_checkouts  (added Session 52, same migration)
-  id, organization_id, contract_request_id -> contract_requests,
-  stripe_checkout_session_id UNIQUE, payment_plan, lines JSONB
-  ([{contract_id, gross_cents, instalment_cents}] frozen at creation),
-  total_cents, instalment_cents, created_by_user_id -> users, completed_at,
-  stripe_subscription_id, stripe_customer_id, outcome, created_at.
-  -- one row per Stripe Checkout Session opened for a pratica
-
-contract_requests -- Session 65 additions (payment by bank transfer)
-  bank_transfer_requested_at, bank_transfer_total_cents (frozen, discount
-  included), bank_transfer_confirmed_at, bank_transfer_confirmed_by_user_id
+contract_requests -- additions (payment by bank transfer)
+  bank_transfer_requested_at, bank_transfer_total_cents (frozen: the whole
+  amount, or the first instalment of every contract), bank_transfer_confirmed_at, bank_transfer_confirmed_by_user_id
   -> users, payment_proof_storage_key / _original_filename / _uploaded_at
   (optional receipt, private bucket, presigned URL)
 
-contract_requests -- Session 85 additions (migration 0065 / c7a2d4e91b35)
+contract_requests -- holder kind
   holder_kind nullable (PRIVATE / SOLE_PROPRIETOR / COMPANY / CONDOMINIUM:
   who the pratica's contracts are for, chosen in its data form; NULL = the
   customer's kind -- read via contracts/requests.py::pratica_kind),
   company_name, legal_rep_fiscal_code (business pratica only; the legal
   representative's name is holder_first/last_name)
 
-contracts -- Session 52 additions
-  contract_request_id -> contract_requests NOT NULL (indexed),
-  stripe_subscription_item_id UNIQUE nullable (this contract's line in the
-  pratica's subscription), billing_stopped_at nullable.
-  product_version_id is now nullable, with
+contracts -- additions
+  contract_request_id -> contract_requests NOT NULL (indexed).
+  product_version_id is nullable, with
   CHECK ck_contracts_product_required: product_version_id IS NOT NULL OR
   status IN ('DRAFT','CANCELLED').
 
-documents -- Session 52 additions
+documents -- additions
   contract_request_id -> contract_requests nullable (indexed); contract_id is
   now nullable; CHECK ck_documents_one_owner: exactly one of the two is set.
 
-## 5. Commissions (first-referrer bonus added Session 38)
+## 5. Commissions (first-referrer bonus)
 
 ```
 ranks
   id, organization_id, code, name, level, personal_token_cents,
-  energy_share_percentage, personal_volume_threshold_cents,
+  personal_volume_threshold_cents,
   group_volume_threshold_cents, evaluation_window_months,
   single_branch_cap_percentage, valid_from, valid_to nullable, rule_version
 
@@ -526,7 +474,7 @@ commission_calculation_steps
 commission_movements                                    -- the append-only ledger
   id, organization_id, agent_id, contract_id, origin_event_id, calculation_id,
   movement_type (PERSONAL_TOKEN / ENTREPRENEURIAL_DIFFERENCE /
-    FIRST_REFERRER_BONUS -- the last added Session 38: a one-off bonus to
+    FIRST_REFERRER_BONUS: a one-off bonus to
     the promoter who ORIGINALLY brought the customer in, ADDITIVE to the two
     plan movements, never a replacement, and paid to a different agent than
     the producer whenever somebody else assisted that customer),
@@ -548,7 +496,7 @@ commission_adjustments / commission_offsets / commission_reversals
   approved_by nullable, created_at
 ```
 
-**Automatic monthly rank evaluation (added Session 20)**:
+**Automatic monthly rank evaluation**:
 `commissions/services/rank_evaluation.py` writes `agent_rank_history` (and,
 through it, `network_nodes.current_rank_id`) on its own schedule, distinct
 from every other write path above which only happens as a side effect of a
@@ -562,15 +510,14 @@ is `AUTOMATIC` for the scheduled run and `MANUAL` for an admin-triggered one
 `docs/open-questions.md` for why the thresholds themselves are still
 placeholders.
 
-`product_versions.commission_tokens` (jsonb dict, default `{}`, added
-Session 20) lets one product override the org-wide
+`product_versions.commission_tokens` (jsonb dict, default `{}`) lets one product override the org-wide
 `ranks.personal_token_cents` on a per-rank-code basis (e.g.
 `{"S1": 5000}`) for contracts on that product — `run_calculation.py`/
 `simulate.py` look up the producing agent's rank code in this dict first,
 falling back to the rank's own `personal_token_cents` when the key is
 absent.
 
-## 6. Support tickets (added Session 12)
+## 6. Support tickets
 
 ```
 tickets
@@ -600,21 +547,21 @@ auto-transitions it to `IN_PROGRESS`. New permission codes: `tickets.create`
 `tickets.respond` (see/reply to any ticket, change status -- granted to
 `ADMIN`-tier roles). See `business-rules.md §Support tickets`.
 
-**Deletion (Session 19):** a `RESOLVED` ticket (and its `ticket_messages`, no
+**Deletion:** a `RESOLVED` ticket (and its `ticket_messages`, no
 DB-level `ondelete` cascade exists so both are removed explicitly in the
 same transaction) can be permanently deleted via `tickets.delete`
 (`SUPER_ADMIN`/`ORGANIZATION_ADMIN`/`ADMIN` only -- narrower than
 `tickets.respond`, `BACK_OFFICE_OPERATOR` doesn't get it). See
 `business-rules.md §Support tickets §Search, filter, and deletion`.
 
-## 7. Notifications (added Session 17)
+## 7. Notifications
 
 ```
 notifications
   id, organization_id, recipient_user_id, created_at,
   type (CONTRACT_CREATED / TICKET_CREATED / PROMOTER_APPROVAL_REQUESTED /
     PROMOTER_APPROVED / PROMOTER_REJECTED / COMMISSION_EARNED /
-    RANK_CHANGED / RANK_EVALUATION_COMPLETED -- last two added Session 20,
+    RANK_CHANGED / RANK_EVALUATION_COMPLETED,
     fired by commissions/services/rank_evaluation.py: RANK_CHANGED to the
     individual agent being promoted/demoted, RANK_EVALUATION_COMPLETED as a
     roles-fanout summary to staff once a monthly run finishes),
@@ -654,7 +601,7 @@ lights up the ONE nav entry actually relevant to it (e.g.
 `PROMOTER_APPROVAL_REQUESTED` only lights up "Anagrafiche Promoter", never
 "Tutti i Contratti").
 
-## 8. Documentation / news feed (added Session 20)
+## 8. Documentation / news feed
 
 ```
 documentation_posts
@@ -679,16 +626,15 @@ public `jav-media` bucket (marketing material, not the sensitive-document
 workflow in §4/`documents`), uploaded via
 `core/storage.py::upload_documentation_attachment()`.
 
-## 9. Internal wallet (added Session 21; extended Sessions 23-24, 33, 37-38)
+## 9. Internal wallet
 
-**"JavCash" (Session 33)**: purely a UI label, not a schema/domain change --
+**"JavCash"**: purely a UI label, not a schema/domain change --
 every `wallets`/`wallet_transactions` amount is still `balance_cents`/
 `amount_cents` in the same table, same currency (`EUR` string, unchanged).
 The dashboard (customer- and admin-facing) formats every wallet balance and
 transaction amount with a `JavCash` suffix instead of a euro sign, to keep
-it visually distinct from the *real* money columns on `orders` and
-`invoice_redemptions` (paid via Stripe or bank transfer, always shown in
-actual EUR with the payment method named). See `business-rules.md#internal-wallet`.
+it visually distinct from the *real* money columns on `orders`, contracts
+and club fees (paid by bank transfer, always shown in actual EUR). See `business-rules.md#internal-wallet`.
 
 ```
 wallets
@@ -701,7 +647,7 @@ wallets
     first column that is real financial state rather than an append-only
     ledger total),
   currency (default EUR),
-  can_transfer (Boolean, default FALSE -- added Session 23; peer-to-peer
+  can_transfer (Boolean, default FALSE; peer-to-peer
     sending is denied by default for every wallet and enabled individually
     per promoter by an admin, PATCH /wallets/admin/{user_id}/transfer-
     permission. Deliberately per-wallet, not a role grant.)
@@ -713,27 +659,24 @@ wallet_transactions                                     -- the ledger
     of an ADMIN_CREDIT, or a PURCHASE_DEBIT -- CHECK ensures at least one
     side is set),
   amount_cents, currency,
-  type (ADMIN_CREDIT / TRANSFER / PURCHASE_DEBIT / REVERSAL --
-    PURCHASE_DEBIT added Session 24, the mirror of ADMIN_CREDIT: to_wallet_id
+  type (ADMIN_CREDIT / TRANSFER / PURCHASE_DEBIT / REVERSAL, the mirror of ADMIN_CREDIT: to_wallet_id
     NULL instead of from_wallet_id NULL, money leaves a wallet to pay for an
     order and ceases to exist),
-  source nullable (added Session 23, extended Sessions 33/37/38 --
-    MANUAL_ADMIN / WELCOME_BONUS / INVOICE_REDEMPTION_BASE /
-    INVOICE_REDEMPTION_BONUS / ORDER_CASHBACK_BASE / ORDER_CASHBACK_BONUS /
+  source nullable (
+    MANUAL_ADMIN / WELCOME_BONUS / ORDER_CASHBACK_BASE / ORDER_CASHBACK_BONUS /
     CONTRACT_CASHBACK, a structured tag distinguishing WHY an ADMIN_CREDIT
     row exists without parsing free-text `note`; NULL for
     TRANSFER/PURCHASE_DEBIT/REVERSAL, where `type` alone already says
-    enough. CONTRACT_CASHBACK (Session 38) is deliberately its own value
-    rather than reusing ORDER_CASHBACK_BASE: three genuinely different
-    business rules produce credit here -- the partner-invoice 5%, the order
-    opt-in 5%, and the surcharge-free automatic credit on a paid Jav
-    contract -- and accounting has to be able to tell them apart at
-    a glance. See business-rules.md#cashback-modes),
+    enough. CONTRACT_CASHBACK is deliberately its own value
+    rather than reusing ORDER_CASHBACK_BASE: the order opt-in 5% and the
+    surcharge-free automatic credit on a paid contract are different
+    business rules, and accounting has to be able to tell them apart at a
+    glance. See business-rules.md#cashback-modes),
   reference_contract_id nullable (links a cashback credit to the purchase
     that triggered it -- always NULL for TRANSFER/REVERSAL),
-  reference_invoice_redemption_id nullable (added Session 23, FK
-    invoice_redemptions.id -- see §11),
-  reference_order_id nullable (added Session 24, FK orders.id -- see §12),
+  reference_order_id nullable,
+  reference_jav_market_order_id nullable (FK jav_market_orders.id -- the
+    Shop order a PURCHASE_DEBIT paid, or its REVERSAL refunded),
   reverses_transaction_id nullable (self-FK, set only on a REVERSAL row --
     the original row is never mutated, same discipline as
     CommissionReversal in §5),
@@ -753,7 +696,7 @@ uses an atomic compare-and-swap `UPDATE ... WHERE balance_cents >= :amount`
 and checks the affected row count -- not `SELECT ... FOR UPDATE`, this
 codebase's only other concurrency pattern anywhere being a DB unique
 constraint + catching `IntegrityError` (see `commission_movements
-.idempotency_key`). `idempotency_key` (client-generated, Stripe-style)
+.idempotency_key`). `idempotency_key` (a deterministic or client-generated key)
 guards against a double-submitted request creating two transactions.
 
 **Reversal**: admin-only (`wallet.manage`, same tier as `SUPER_ADMIN`/
@@ -761,7 +704,7 @@ guards against a double-submitted request creating two transactions.
 `REVERSAL` row rather than mutating the original. Reversing a `TRANSFER`
 re-debits the original recipient, which can itself fail with
 `InsufficientBalanceError` if they've since spent the funds -- an accepted,
-documented outcome. Reversing a `PURCHASE_DEBIT` (added Session 24) just
+documented outcome. Reversing a `PURCHASE_DEBIT` just
 credits the buyer back -- there is no recipient wallet to claw back from,
 the mirror-image case `reverse_transaction()` was extended to handle
 correctly. A `REVERSAL` itself can never be reversed.
@@ -769,84 +712,7 @@ correctly. A `REVERSAL` itself can never be reversed.
 No real-money withdrawal or payment-provider integration exists or is
 planned for this domain -- it is a purely internal, virtual balance.
 
-## 10. Partner-invoice cashback: `partners` & `invoice_redemptions` (added Session 23; real payment channel added Session 33)
-
-```
-partners
-  id, organization_id, name (unique per org),
-  logo_url nullable, is_active (default TRUE)
-
-invoice_redemptions
-  id, organization_id,
-  customer_user_id (FK users.id -- the redeemer, customer or promoter),
-  partner_id (FK partners.id),
-  storage_key (unique -- private-bucket object key for the uploaded proof of
-    payment; deliberately NOT a row in `documents`, whose contract_id is
-    NOT NULL by design and has no equivalent here),
-  original_filename, content_type, size_bytes,
-  declared_amount_cents (what the customer typed in at upload),
-  confirmed_amount_cents nullable (what an admin actually verified on the
-    document -- this, not the declared figure, drives the payment/credit),
-  payment_reference_code nullable, unique (short code generated once
-    confirmed_amount_cents is set, e.g. "RIS-8D4384" -- the customer puts it
-    in the bank transfer's causale so an admin can match the incoming wire),
-  payment_method nullable (BANK_TRANSFER / CARD -- added Session 33, set to
-    BANK_TRANSFER the moment verify() opens the payment window, switchable
-    to CARD by the customer while still PAYMENT_PENDING; same shape as
-    orders.payment_method below),
-  stripe_checkout_session_id nullable, unique (added Session 33 -- set once
-    a Stripe Checkout Session is created for payment_due_cents(); the
-    webhook uses this to confirm CREDITED automatically, exactly like
-    orders.stripe_checkout_session_id),
-  payment_proof_storage_key/payment_proof_original_filename/
-    payment_proof_uploaded_at nullable (added Session 33 -- customer-
-    uploaded evidence of the bank-transfer payment, purely advisory, same
-    private-bucket-reuse pattern as `storage_key` above and as
-    `orders.payment_proof_storage_key`),
-  status (SUBMITTED / PAYMENT_PENDING / CREDITED / REJECTED),
-  rejection_reason nullable,
-  verified_by_user_id/verified_at nullable, credited_by_user_id/credited_at
-    nullable (credited_by_user_id stays NULL for a Stripe-confirmed payment
-    -- there is no human actor, see invoice_redemptions/service.py::
-    mark_paid_via_stripe, same convention as orders.paid_by_user_id),
-  review_status nullable (PENDING / APPROVED / REJECTED, CHECK -- added
-    Session 89, migration 0076: the invoice check AFTER a card payment made
-    at upload already credited the wallet; NULL for every redemption an
-    admin verified before payment),
-  reviewed_by_user_id (FK users.id) / reviewed_at / review_note (the
-    rejection reason the customer reads) nullable
-```
-
-**Card at upload (Session 89)**: `payment_method=CARD` at submit skips the
-admin verification -- the row is born `PAYMENT_PENDING` with
-`confirmed_amount_cents` = `declared_amount_cents` and `verified_at` NULL;
-the Stripe webhook credits it and sets `review_status=PENDING`. A rejected
-review never moves money (manual reversal by staff, no refund of the 5%).
-
-Lifecycle: `SUBMITTED` (uploaded) → `PAYMENT_PENDING` (an admin verified the
-real amount and a payment reference code was generated -- one action, not
-two separate states) → `CREDITED` (the CASHBACK_PERCENTAGE% payment
-arrived, confirmed either by an admin for a bank transfer or automatically
-by the Stripe webhook for a card charge -- either way this is the one
-moment two `wallet_transactions` rows get written together,
-`INVOICE_REDEMPTION_BASE` + `INVOICE_REDEMPTION_BONUS`, never a single
-combined row -- see §9 and `invoice_redemptions/service.py::
-_credit_redemption()`). `REJECTED` is reachable from `SUBMITTED` or
-`PAYMENT_PENDING`. No OCR: the customer types the amount, an admin always
-verifies against the document before anything is unlocked -- see
-`docs/cashback-partner-invoices-plan.md`.
-
-**Anti-fraud guard (Session 33)**: `confirm_payment()` (the manual "Conferma
-bonifico ricevuto" admin action) explicitly refuses a redemption whose
-`payment_method` is `CARD` -- only `mark_paid_via_stripe()`, reached
-exclusively from the Stripe webhook once Stripe itself confirms the charge,
-may credit a CARD redemption. Enforced server-side (`InvalidRedemptionStateError`,
-not just a hidden button), the identical rule and reasoning as
-`orders/service.py::confirm_payment` refusing a CARD order -- an admin (or
-anyone who compromised an admin session) must never be able to mint wallet
-credit without Stripe's own confirmation of a real charge.
-
-## 11. Product credit categories & orders (added Sessions 23-24; payment method + self-checkout Session 26; payment proof Session 28ish; product cashback Session 33)
+## 11. Product credit categories & orders
 
 ```
 products (extended)
@@ -863,7 +729,7 @@ product_versions (extended)
     is enforced, including when a product's category is changed back to
     INTERNAL after having a discount configured, which zeroes it on every
     version in one bulk update.)
-  cashback_enabled (Boolean, default false -- added Session 33. Whether the
+  cashback_enabled (Boolean, default false. Whether the
     checkout may offer "riscuoti subito cashback" on THIS version at all.
     Same INTERNAL-forced-false invariant and same single-enforcement-point
     pattern as credit_discount_percentage above --
@@ -874,7 +740,7 @@ orders                                    -- DROPSHIPPING/PARTNER purchases
   customer_user_id (FK users.id -- whose wallet is debited),
   product_version_id (FK product_versions.id),
   created_by_user_id (FK users.id -- an admin, OR the customer themselves
-    for a self-checkout order added Session 26 -- POST /orders/mine forces
+    for a self-checkout order -- POST /orders/mine forces
     this to equal customer_user_id, same rule as wallet transfer's
     from_wallet_id),
   amount_cents (frozen from product_version.base_price_cents at creation --
@@ -885,24 +751,19 @@ orders                                    -- DROPSHIPPING/PARTNER purchases
     only when credit_applied_cents > 0, points at the PURCHASE_DEBIT row so
     cancelling can reverse that exact row rather than minting a fresh,
     less-traceable refund),
-  cashback_requested (Boolean, default false -- added Session 33, "riscuoti
+  cashback_requested (Boolean, default false, "riscuoti
     subito cashback" opted in at checkout; only permitted when the
     product_version has cashback_enabled AND the residual after credit is
     > 0, see orders/service.py::create_order),
-  cashback_surcharge_cents (BigInteger, default 0 -- added Session 33,
+  cashback_surcharge_cents (BigInteger, default 0,
     ORDER_CASHBACK_PERCENTAGE (5%) of the residual owed in new money,
     frozen at order creation same as amount_cents),
-  cashback_credited_at nullable (added Session 33, set once
+  cashback_credited_at nullable (set once
     _credit_order_cashback() has run for this order -- doubles as the
-    idempotency guard against a retried webhook double-crediting),
+    idempotency guard against a repeated confirmation double-crediting),
   status (AWAITING_PAYMENT / PAID / CANCELLED),
-  payment_method (BANK_TRANSFER default / CARD -- added Session 26, only
-    meaningful when there's a residual to pay; irrelevant and unenforced
-    when credit_applied_cents covers 100% of amount_cents),
-  stripe_checkout_session_id nullable, unique (added Session 26 -- set once
-    a Stripe Checkout Session is created for the residual; overwritten, not
-    appended, on a retried checkout attempt, so only the latest attempt is
-    ever honored by the webhook),
+  payment_method (BANK_TRANSFER -- the only method; irrelevant when
+    credit_applied_cents covers 100% of amount_cents),
   payment_proof_storage_key/payment_proof_original_filename/
     payment_proof_uploaded_at nullable -- customer-uploaded evidence of a
     bank-transfer payment already sent, purely advisory (never changes
@@ -911,21 +772,20 @@ orders                                    -- DROPSHIPPING/PARTNER purchases
     (never the `documents` domain, whose contract_id is NOT NULL by
     design).
   note nullable,
-  paid_by_user_id/paid_at nullable (paid_by_user_id stays NULL for a
-    Stripe-confirmed payment -- there is no human actor, see
-    orders/service.py::mark_paid_via_stripe), cancelled_by_user_id/
+  paid_by_user_id/paid_at nullable (the administrator who confirmed the
+    transfer), cancelled_by_user_id/
     cancelled_at/cancellation_reason nullable
 ```
 
-**"Riscuoti subito cashback" (Session 33)**: when the customer opts in at
+**"Riscuoti subito cashback"**: when the customer opts in at
 checkout (only offerable on a `cashback_enabled` product version), the
 residual owed in new money gets a flat `ORDER_CASHBACK_PERCENTAGE` (5%)
-surcharge. Once the order reaches `PAID` -- bank transfer admin-confirmed,
-or the Stripe webhook -- `orders/service.py::_credit_order_cashback()`
+surcharge. Once the order reaches `PAID` -- bank transfer admin-confirmed
+-- `orders/service.py::_credit_order_cashback()`
 credits the customer's wallet with the base amount actually paid PLUS the
 5% bonus, as two separate `wallet_transactions` rows
-(`ORDER_CASHBACK_BASE`/`ORDER_CASHBACK_BONUS`, same "never one combined
-row" discipline as invoice-redemption credit in §10). **Security
+(`ORDER_CASHBACK_BASE`/`ORDER_CASHBACK_BONUS`, never one combined row).
+**Security
 invariant**: the cashback base is always computed from `amount_cents -
 credit_applied_cents` -- the actual new money owed AFTER any wallet-credit
 discount was already applied, never the pre-discount price -- so a
@@ -935,7 +795,7 @@ double guard: the `cashback_credited_at` column on the order, plus
 deterministic (non-client-supplied) idempotency keys
 (`order:{id}:cashback-base|bonus`) on the two `credit_wallet()` calls.
 
-**Spending existing wallet credit now requires an OTP (Session 33)**: at
+**Spending existing wallet credit now requires an OTP**: at
 self-checkout (`POST /orders/mine`), if `credit_applied_cents > 0` the
 request must also carry a fresh `otp_code`, emailed via
 `POST /orders/mine/request-credit-otp` (`WALLET_CREDIT_SPEND_OTP_PURPOSE`,
@@ -945,19 +805,17 @@ a customer's behalf (`POST /orders`, `wallet.manage`-gated) is exempt --
 the OTP would land in the customer's inbox, not the admin's, and the
 action is already permissioned and audited.
 
-Deliberately **not** an extension of `Contract` -- `Contract.supply_point_id`
-is NOT NULL by design (every contract is an energy supply), which has no
-equivalent for e.g. a partner t-shirt; a new, much simpler domain was the
-lower-risk choice, confirmed with the user before building it. If
+Deliberately **not** an extension of `Contract` -- a contract carries a
+term, documents, approval and commissions that a one-off purchase has no
+use for; a separate, much simpler domain was the lower-risk choice. If
 `credit_applied_cents` covers 100% of `amount_cents` at creation, the order
-skips straight to `PAID` -- no bank transfer, no card, no `AWAITING_PAYMENT`
-step, `payment_method` is stored but never acted upon. Cancelling an
+skips straight to `PAID` -- no bank transfer, no `AWAITING_PAYMENT` step. Cancelling an
 `AWAITING_PAYMENT` order reverses the exact `credit_debit_transaction_id`
 row (see §9's `PURCHASE_DEBIT` reversal) before marking itself `CANCELLED`,
 refunding the customer precisely.
 
-**Self-checkout (Session 26)**: `POST /orders/mine`, `GET /orders/mine`,
-`GET /orders/quote/mine`, `POST /orders/mine/{id}/checkout-session` are all
+**Self-checkout**: `POST /orders/mine`, `GET /orders/mine`,
+`GET /orders/quote/mine`, `POST /orders/mine/{id}/payment-proof` are all
 open to any authenticated user -- no permission beyond authentication,
 `customer_user_id` always the caller's own id. `create_order()` validates
 the requested `payment_method` only when a residual exists, and only
@@ -966,32 +824,21 @@ accepts one that's actually configured for the organization (see §12) --
 doesn't even render if unconfigured" a real guarantee rather than just a
 frontend nicety.
 
-## 12. Organization settings (added Session 25; Stripe keys Session 26; admin_notification_email Session 27)
+## 12. Organization settings
 
-No new table -- `organizations.settings` (JSONB, existed since the original
-schema) is now actually read/written through two typed subsets:
-`GET`/`PATCH /organizations/me/settings` (`organization.manage` permission
--- SUPER_ADMIN/ORGANIZATION_ADMIN/ADMIN, same tier as `wallet.manage`) holds
+No new table -- `organizations.settings` (JSONB) is read/written through a
+typed subset: `GET`/`PATCH /organizations/me/settings` (`organization.manage`
+permission -- SUPER_ADMIN/ORGANIZATION_ADMIN/ADMIN) holds
 `bank_iban`/`bank_account_holder`/`bank_transfer_instructions` (the account
-and free-text instructions customers wire bonifico payments to) and
-`admin_notification_email` (Session 27 -- where the "new ticket opened"
-alert email goes, `organizations/service.py::get_admin_notification_email`,
-defaults to `info@example.com` when unset); `GET`/
-`PATCH /organizations/me/payment-settings` (new, stricter
-`organization.manage_payments` permission -- **SUPER_ADMIN only**, per the
-user's explicit request that whoever configures card payments is a smaller
-circle than whoever configures bank transfer) holds
-`stripe_publishable_key`/`stripe_secret_key`/`stripe_webhook_secret`. The
-two secret Stripe fields are never returned in full by the read endpoint --
-only a `*_configured: bool` plus (for the secret key) its last 4 characters,
-same principle as a password never round-tripped in plaintext. Both
-endpoints merge into the existing dict (`{**org.settings, **updates}`, only
-fields actually present in the PATCH), so an unrelated key living in the
-same JSONB blob -- or an omitted secret field -- is never clobbered.
-`.env`'s `COMPANY_BANK_IBAN`/`COMPANY_BANK_HOLDER` remain a bootstrap
-fallback only, read when the DB value is unset; there is no `.env`
-fallback for Stripe keys (payment-processing credentials are DB-only,
-editable without a server restart).
+and free-text instructions customers wire bonifico payments to),
+`admin_notification_email` (where the "new ticket opened" alert email goes,
+`organizations/service.py::get_admin_notification_email`, defaults to
+`admin@example.com` when unset) and `contract_instalment_cashback_mode`. The
+PATCH merges into the existing dict (`{**org.settings, **updates}`, only
+fields actually present), so an unrelated key living in the same JSONB blob
+is never clobbered. `GET /organizations/me/payment-info` exposes **only**
+IBAN, holder and instructions to any signed-in user -- what a customer
+needs to pay, never the rest of the settings.
 
 ## 13. ER diagram (core slice)
 
@@ -1005,7 +852,8 @@ erDiagram
   agent_profiles ||--o{ promoter_codes : owns
   promoter_codes ||--o{ referral_events : generates
   promoter_codes ||--o{ customer_attributions : attributes
-  customers ||--o{ supply_points : has
+  contract_requests ||--o{ contracts : groups
+  customers ||--o{ contract_requests : opens
   customers ||--o{ contracts : signs
   products ||--o{ product_versions : has
   product_versions ||--o{ contracts : "priced by"
@@ -1020,18 +868,27 @@ erDiagram
   contracts ||--o{ tickets : "optionally about"
   users ||--|| wallets : owns
   wallets ||--o{ wallet_transactions : "from/to"
-  partners ||--o{ invoice_redemptions : "redeemed against"
-  users ||--o{ invoice_redemptions : submits
-  invoice_redemptions ||--o{ wallet_transactions : "credits (base+bonus)"
   product_versions ||--o{ orders : "priced by"
   users ||--o{ orders : "buys (customer_user_id)"
   orders ||--o| wallet_transactions : "debits (credit leg)"
+  users ||--o{ club_athletes : "guardian of"
+  club_plans ||--o{ club_athletes : "assigned to"
+  club_athletes ||--o{ club_fees : owes
+  club_payment_proofs ||--o{ club_payment_proof_fees : covers
+  club_fees ||--o{ club_payment_proof_fees : "paid by"
+  club_athletes ||--o{ club_medical_certificates : has
+  club_athletes ||--o{ club_belt_grades : earns
+  club_competitions ||--o{ club_competition_entries : has
+  club_athletes ||--o{ club_competition_entries : enters
+  club_courses ||--o{ club_course_slots : "scheduled in"
+  club_courses ||--o{ club_attendances : records
+  club_athletes ||--o{ jav_market_orders : "ordered for"
 ```
 
 Full ER diagram will grow as Phase F/G tables land; kept mermaid so it renders directly
 wherever this doc is viewed.
 
-## 14. Accounting view (added Session 33)
+## 14. Accounting view
 
 **No new table.** `GET /accounting/mine` (`accounting/service.py::
 list_my_movements`) computes a unified, read-only, newest-first feed of a
@@ -1052,144 +909,19 @@ which remain each domain's own single source of truth:
   as its own `WALLET` row.
 
 This is what the customer-facing "Contabilità" dashboard section renders
-(filters by JavCash/Bonifico/Carta, totals, CSV export) -- see
+(filters by JavCash/Bonifico, totals, CSV export) -- see
 `business-rules.md#internal-wallet`.
 
-Session 54, still no new table: a third real-money source, every `PAID`
+Still no new table: a third real-money source, every `PAID`
 `contract_instalments` row as a `"CONTRACT_PAYMENT"` / `"EUR"` movement
-(`contract_id`, `contract_request_id`, `payment_method` derived from
-`payment_source`); `GET /accounting/mine/summary` (totals, next instalment,
+(`contract_id`, `contract_request_id`, `payment_method` always
+`BANK_TRANSFER`); `GET /accounting/mine/summary` (totals, next instalment,
 commissions from `commission_movements` for a promoter) and
 `GET /accounting/{mine,admin}/detail?ref=` (read-only detail with timeline)
 are computed from the existing tables. See
 `business-rules.md#accounting-detail`.
 
-## 15. Imported products: the "Acquisti Jav" plugin (added Session 34)
-
-Three tables that are **deliberately a parallel catalog**, not an extension
-of `products`/`product_versions`, per an explicit product decision: products
-pulled in from an external dropshipping API (AliExpress today) must never be
-mixed with the ones Jav curates by hand. Treated as a plugin bolted
-onto the existing software rather than a change to it -- nothing in the
-`catalog`/`orders` domains was modified to make room for it.
-
-```
-import_providers
-  id, organization_id, provider_type (ALIEXPRESS), name,
-  base_url nullable, api_key nullable (never returned in full by the API --
-    schemas mask it to the last 4 characters, same discipline as the Stripe
-    secret key in organizations.settings, see §12),
-  enabled, created_by_user_id, created_at
-
-imported_products
-  id, organization_id, provider_id, external_id nullable, external_url
-    nullable, name, description, image_url nullable, price_cents,
-  credit_discount_percentage (0-100 -- how much of the price may be paid in
-    JavCash; this is the whole point of the category),
-  status, created_by_user_id, created_at
-
-  -- There is deliberately NO cashback column of any kind on this table.
-  -- These products exist to let a customer SPEND accumulated JavCash, never
-  -- to earn more: "non ricaricano cashback". Its absence is the enforcement.
-
-imported_product_orders
-  id, organization_id, customer_user_id, imported_product_id,
-  created_by_user_id, amount_cents, credit_applied_cents,
-  credit_debit_transaction_id nullable -> wallet_transactions,
-  status (AWAITING_PAYMENT/PAID/CANCELLED), payment_method
-    (BANK_TRANSFER/CARD), stripe_checkout_session_id nullable,
-  note, payment_proof_storage_key / _original_filename / _uploaded_at,
-  paid_by_user_id / paid_at, cancelled_by_user_id / cancelled_at /
-  cancellation_reason, created_at
-
-  -- Mirrors `orders` minus every cashback field, for the same reason.
-```
-
-**Separate storage, one continuous experience.** The split exists only to keep
-the two product catalogs apart. Everywhere a human looks -- "I miei Ordini",
-the admin orders screen, Contabilità -- the two order tables are merged into
-one chronological list and behave identically: the same order code derivation
-(`id[:8].upper()`), the same statuses, the same payment actions, the same
-emails. Which table backs a given order is an internal routing detail (which
-endpoint an action calls), never surfaced in the UI, and the customer is never
-shown that a product came from AliExpress.
-
-`wallet_transactions.reference_imported_order_id` is the fourth reference
-column on the ledger (see §9), kept separate from `reference_order_id` so each
-stays a real foreign key to its own table -- a single polymorphic
-"order_id + order_type" pair would have given up referential integrity for
-cosmetic tidiness.
-
-
-## 17. Shop Jav Partner: CJ Dropshipping (added Session 60)
-
-A second imported shop, connected for real to CJ Dropshipping's API 2.0. Kept
-apart from `imported_products` (§15) for the same reason that table is apart
-from `products`, and because a real dropshipping order needs what a
-hand-curated one does not: variants, a cost in USD, stock per warehouse, a
-shipping quote, a delivery address, and a life on the supplier's side until
-delivery. Same customer experience as every shop: JavCash with OTP, bank
-transfer or card, "I miei Ordini", Contabilità. Rules:
-`business-rules.md#partner-shop`.
-
-```
-cj_settings                      one row per organization (UNIQUE organization_id)
-  api_key (never returned: only api_key_configured + last 4),
-  access_token TEXT, access_token_expires_at, refresh_token TEXT,
-  refresh_token_expires_at, open_id (CJ account id, webhook signing secret),
-  enabled (shop visible to customers), sandbox (orders sent as isSandbox=1),
-  usd_eur_rate NUMERIC(10,6), markup_percentage, markup_fixed_cents,
-  price_rounding (90/99/NONE), shipping_mode (CUSTOMER_PAYS/INCLUDED),
-  default_credit_percentage, destination_country (IT), auto_forward,
-  last_balance_usd, last_balance_at, updated_at
-
-cj_products                      UNIQUE (organization_id, cj_pid)
-  cj_pid, cj_sku, name (Italian, editable), name_en (CJ original),
-  description (plain text, never HTML), image_url, images JSONB,
-  category_name, origin_country (warehouse orders ship from),
-  shipping_estimate_usd, shipping_days, status (ACTIVE/INACTIVE),
-  credit_discount_percentage, markup_percentage nullable (override),
-  last_synced_at, sync_error, created_by_user_id, created_at, updated_at
-
-cj_variants                      UNIQUE (product_id, cj_vid)
-  product_id, cj_vid, cj_sku, label, image_url, cost_usd, weight_g,
-  price_cents (computed from cost + rules), price_override_cents nullable,
-  inventory, active, available_on_cj, last_synced_at, created_at
-
-cj_orders
-  customer_user_id, cj_product_id, cj_variant_id, created_by_user_id,
-  quantity (> 0), unit_price_cents, shipping_cents, amount_cents,
-  credit_applied_cents (0..amount), credit_debit_transaction_id,
-  status (AWAITING_PAYMENT/PAID/CANCELLED), payment_method (BANK_TRANSFER/CARD),
-  stripe_checkout_session_id UNIQUE, note, payment_proof_*, paid_by/at,
-  cancelled_by/at/reason,
-  recipient_name, recipient_phone, address_line1/2, city, province,
-  postal_code, country_code,
-  logistic_name, origin_country, shipping_days,
-  unit_cost_usd, shipping_cost_usd, usd_eur_rate   -- frozen at checkout: margin
-  fulfillment_status (NOT_SENT/SENDING/SENT/PROCESSING/SHIPPED/DELIVERED/
-    ERROR/CJ_CANCELLED, indexed), sandbox, cj_order_id (indexed),
-  cj_order_status, cj_amount_usd, forwarded_at, forwarded_by_user_id,
-  forward_error, tracking_number, tracking_provider, shipped_at,
-  delivered_at, last_cj_sync_at, created_at,
-  -- Session 63: the payment to CJ, tracked on its own
-  cj_order_code ("SD..."), cj_shipment_order_id, cj_pay_url (CJ's page to pay
-  this order), cj_payment_status (NOT_REQUIRED/PENDING/PAYMENT_REQUIRED/PAID/
-  FAILED, indexed), cj_product_amount_usd, cj_postage_amount_usd,
-  cj_ioss_amount_usd, cj_paid_at, attempt_count, last_attempt_at,
-  next_retry_at (indexed), last_error_kind (TEMPORARY/AUTHENTICATION/
-  VALIDATION/INSUFFICIENT_BALANCE/FATAL)
-```
-
-`wallet_transactions.reference_cj_order_id` (FK `cj_orders.id`) is the fifth
-order-like reference on the ledger, a real foreign key like the others (§15).
-`status` is the customer's payment, `fulfillment_status` the order on CJ and
-the parcel, `cj_payment_status` the payment to CJ: three independent columns
-because they are different facts with different owners (the customer, CJ,
-the company's cash). An order can wait days as PAYMENT_REQUIRED without being
-an error and without looking "in preparation" to the customer.
-
-## 16. "Invita un amico" (added Session 39)
+## 16. "Invita un amico"
 
 Three tables that are **deliberately a parallel structure**, not an extension
 of the commercial network -- see `business-rules.md#friend-referrals` for the
@@ -1198,8 +930,7 @@ rules. One level, no hierarchy, no commissions.
 ```
 friend_referral_codes
   id, organization_id, user_id (UNIQUE), code (UNIQUE, "INV-XXXXXXXX" --
-    codes issued before the Session 39 rename use "SEG-" and keep working,
-    since resolution matches the whole code, never the prefix),
+    resolution matches the whole code, never the prefix),
   status, created_at
 
   -- Separate from promoter_codes on purpose. That table means "this agent
@@ -1243,220 +974,320 @@ puts them under that customer's own promoter. There is exactly one
 tables could be dropped without changing a single euro of commission.
 
 
-## 27. Marketplace 6: «Marketplace VAITTO» (added Session 88)
+## 17. PIN dei JavCash
 
-Migrazione `0069_vaitto_market`, dominio `domains/vaitto_market`: le sei
-tabelle della §25 con prefisso `vaitto_market_`, più il rifornimento dal
-feed di Vaitto. `vaitto_market_settings`: `feed_url` (contiene la chiave API,
-mai restituito), `auto_import`, `markup_percentage`, `last_import_at/
-summary/error`. `vaitto_market_products`: `vaitto_product_id` (UNIQUE per
-organizzazione), `category_name`, `subcategory`, `gender`, `source_url`,
-`markup_percentage` (NULL = quello del negozio), `missing_from_feed`,
-`last_synced_at`. `vaitto_market_variants`: `vaitto_variant_id` (UNIQUE per
-prodotto), `barcode`, `cost_cents` (ingrosso), `compare_at_cents` (listino),
-`available_in_store`, `price_locked`. Migrazione 0070: `credit_percentage`
-sulle impostazioni (la percentuale JavCash del negozio, 0-99) e
-`credit_locked` sul prodotto (percentuale scelta a mano). Migrazione 0071:
-`vaitto_market_variants.suggested_price_cents` (il `retail_price` di Vaitto,
-base del prezzo) e `markup_percentage` con default 0 (ricarico sopra il
-suggerito). Migrazione 0072: `credit_mode` (FIXED | MARGIN, CHECK) e
-`credit_margin_share` (0-100, CHECK) sulle impostazioni. Migrazione 0079: API affiliati SoleilDrop -- su `soleil_market_settings` `api_key`, `webhook_secret` (segreti: si scrivono, non si rileggono), `auto_import` (default true), `eshop_name`, `wallet_balance_cents`, `last_api_check_at`, `last_api_error`, `last_webhook_at`, `last_order_sync_at`; su `soleil_market_orders` `soleil_order_number` (indice), `soleil_status_code`, `soleil_status_label`, `soleil_wallet_charged_cents`, `soleil_synced_at`; nuova tabella `soleil_market_webhook_events` (`delivery_id`, `event`, `soleil_order_number`, `external_ref`; UNIQUE `organization_id, delivery_id` per scartare le riprove). Migrazione 0078: `jav_market_settings.min_order_cents` (default 0) e `free_shipping_threshold_cents` (NULL = mai gratuita). Migrazione 0077: le sei tabelle `soleil_market_*` (Marketplace SOLEIL, «Market 7», clone di Symphonya senza `api_key` né `auto_import`), `cart_items.soleil_market_variant_id`, `wallet_transactions.reference_soleil_market_order_id`, vincoli `carts.shop` e `cart_items.exactly_one_reference` con il nuovo negozio. Migrazione 0076: `review_status` (PENDING | APPROVED | REJECTED, CHECK), `reviewed_by_user_id`, `reviewed_at`, `review_note` su `invoice_redemptions` (controllo della fattura dopo il pagamento con carta). Migrazione 0075:
-le sei tabelle `symphonya_market_*` (Marketplace SYMPHONYA, clone di VAITTO
-con `api_key` al posto di `feed_url`), `cart_items.symphonya_market_variant_id`,
-`wallet_transactions.reference_symphonya_market_order_id`. Migrazione 0074
-(pratiche): `contract_requests.holder_fiscal_code` (CF dell'intestatario
-privato), `holder_birth_date`, `holder_birth_place` («Roma (RM)») e
-`holder_birth_place_code` (codice catastale) di chi firma. Migrazione 0073:
-`prices_include_vat` e `shipping_cost_cents` sulle impostazioni,
-`below_cost` sulle varianti. `vaitto_market_order_items`:
-`supplier_sku`, `barcode`, `supplier_url` congelati. Innesti:
-`cart_items.vaitto_market_variant_id` (arco a sette colonne) e
-`wallet_transactions.reference_vaitto_market_order_id`.
+Tabella `spend_pins` (dominio `auth`): una riga per utente (`user_id`
+UNIQUE), `enabled`, `pin_hash` (stesso hash della password, NULL quando il
+cliente torna all'email), `failed_attempts` e `locked_until` per il blocco
+dopo 5 errori. Nessuna riga = codice via email. Tabella a parte e non
+colonne su `users`: il PIN riguarda il denaro, non l'anagrafica.
 
-## 26. PIN dei JavCash (added Session 87)
+## 18. Lo Shop: «Fai la Spesa con Jav»
 
-Migrazione `0068_spend_pin`, tabella `spend_pins` (dominio `auth`): una riga
-per utente (`user_id` UNIQUE), `enabled`, `pin_hash` (stesso hash della
-password, NULL quando il cliente torna all'email), `failed_attempts` e
-`locked_until` per il blocco dopo 5 errori. Nessuna riga = codice via email.
-Tabella a parte e non colonne su `users`: il PIN riguarda il denaro, non
-l'anagrafica.
+Dominio `domains/jav_market`. Sette tabelle: `jav_market_settings` (una riga
+per organizzazione: acceso, spedizione, `auto_forward`, ordine minimo e
+soglia di spedizione gratuita, `supplier_email_from` e
+`supplier_email_signature` per le email ai fornitori), `jav_market_producers`
+(**l'azienda che produce**, il fornitore, UNIQUE sul nome per
+organizzazione), `jav_market_products` + `jav_market_variants` (il catalogo
+scritto a mano, varianti = taglie, `producer_id` nullable),
+`jav_market_orders` + `jav_market_order_items` (ordini nativamente
+multi-riga, con `producer_name` e `producer_id` congelati sulla riga) e
+`jav_market_supplier_dispatches`.
 
-## 25. Marketplace 5: «Market Kappa» (added Session 87)
+Sulla riga d'ordine (migrazione 0003): `producer_id` nullable → il
+fornitore risolto alla creazione (del prodotto o della sua categoria);
+`supplier_dispatch_id` nullable → l'email con cui la riga è partita, NULL =
+ancora da mandare. È questa colonna, non un flag sull'ordine, a dire cosa
+resta da avvisare.
 
-Migrazione `0067_kappa_market`, dominio `domains/kappa_market`: copia esatta
-delle sei tabelle della §24 con prefisso `kappa_market_` (settings,
-producers, products, variants, orders, order_items), colonne di inoltro
-della 0061 comprese. `kappa_market_producers` contiene i **marchi** (Kappa,
-Robe di Kappa); `kappa_market_variants.sku` è l'**EAN** del capo, una
-variante per taglia × colore.
+**`jav_market_supplier_dispatches`** — un'email **partita** verso un
+fornitore: `organization_id`, `producer_id`, `source` (CHECK `QUEUE` dalla
+coda «Fornitori da avvisare», `ORDER` dal pulsante sull'ordine, `AUTO`
+invio automatico, `LEGACY` invii fatti prima della 0003), `to_email`,
+`subject`, `body_text` (il testo esatto, anche se corretto a mano),
+`sent_at`, `sent_by_user_id` (NULL per l'automatico). Un invio fallito non
+lascia righe. La 0003 riempie `producer_id` delle righe esistenti dal
+prodotto e crea un invio `LEGACY` per (ordine già inoltrato, fornitore).
 
-Stessi due innesti della §24: `cart_items.kappa_market_variant_id` (l'arco
-esclusivo passa a sei colonne, `carts.shop` accetta `kappa_market`) e
-`wallet_transactions.reference_kappa_market_order_id`. Numero d'ordine dalla
-sequenza condivisa `shop_order_number_seq`.
+Sull'ordine: `forwarded_at` / `forwarded_by_user_id` / `forward_error` per
+l'invio alle aziende produttrici; `vat_mode` (`INCLUDED`/`ADDED`) e
+`vat_percentage`/`vat_amount_cents` congelati alla creazione (aliquota in
+`organizations.settings.marketplace_vat_percentage`, default 22);
+`athlete_id` nullable → `club_athletes`, l'atleta per cui è l'ordine.
+**Tutto il denaro resta sulla testata** (importo, spedizione, IVA, JavCash).
 
-## 24. Marketplace 4: «Fai la Spesa con Jav» (added Session 79)
-
-Migrazione `0060_jav_market`, dominio `domains/jav_market`. Sei tabelle:
-`jav_market_settings` (una riga per organizzazione: acceso, spedizione),
-`jav_market_producers` (**l'azienda che produce**, UNIQUE sul nome per
-organizzazione), `jav_market_products` + `jav_market_variants` (il
-catalogo scritto a mano, `producer_id` nullable), `jav_market_orders` +
-`jav_market_order_items` (ordini nativamente multi-riga, con
-`producer_name` congelato sulla riga).
-
-Session 80: `auto_forward` sulle impostazioni e `forwarded_at` /
-`forwarded_by_user_id` / `forward_error` sull'ordine (migrazione 0061),
-per l'invio dell'ordine alle aziende produttrici.
-
-Due innesti: `cart_items.jav_market_variant_id` — l'arco esclusivo passa
-da quattro colonne a cinque — e
-`wallet_transactions.reference_jav_market_order_id`. Il numero d'ordine
-viene dalla sequenza condivisa `shop_order_number_seq`.
-
-## 23. Numero d'ordine dello Shop (added Session 76)
-
-Migrazione `0057_shop_order_number`. `shop_order_number_seq` (START 1000,
+Il numero d'ordine viene dalla sequenza `shop_order_number_seq` (START 1000,
 dichiarata in `domains/marketplaces/models.py` così `create_all` la
-costruisce anche nei test) e `aliexpress_orders.number` BIGINT NOT NULL
-UNIQUE, con `DEFAULT nextval`. Il numero lo assegna il database: una
-sequenza non salta e non duplica nemmeno con due inserimenti simultanei.
-Una sola sequenza per tutti i negozi, perché il cliente li vede insieme.
-Il backfill ha numerato gli ordini esistenti in ordine di creazione.
+costruisce anche nei test; creata a mano nella migrazione iniziale, perché
+autogenerate non crea le sequenze): una sequenza non salta e non duplica
+nemmeno con due inserimenti simultanei.
 
-## 22. Spedizione AliExpress reale, con un minimo (added Session 76)
+`wallet_transactions.reference_jav_market_order_id` collega addebito JavCash
+e rimborso all'ordine.
 
-Migrazione `0056_aliexpress_real_shipping`.
+## 19. Il carrello
 
-`aliexpress_settings.shipping_flat_cents` → **`shipping_minimum_cents`**: un
-rename, così il valore già configurato (5,90) diventa il minimo senza che
-l'amministratore debba ridigitarlo. Non è più quanto si paga ma il minimo
-che si paga: `max(costo reale AliExpress, minimo)`.
-
-Tre colonne nuove, tutte **nullable**:
-- `aliexpress_orders.supplier_shipping_cents` — quanto è costata a noi;
-- `aliexpress_orders.minimum_shipping_cents` — il minimo di quel giorno;
-- `aliexpress_order_items.supplier_shipping_cents` — il freight di quella
-  riga, perché AliExpress lo quota per prodotto.
-
-`shipping_cents` (già esistente) resta quanto ha pagato il cliente, e il
-margine di spedizione è la differenza. NULL sugli ordini precedenti vuol
-dire "non rilevato": erano stati venduti quando il costo reale non lo
-chiedeva nessuno, e uno zero direbbe che spedire era gratis.
-
-## 21. Il carrello dello Shop e gli ordini a più righe (added Session 75)
-
-Migrazione `0055_shop_cart_and_order_items`, dominio `domains/carts`.
+Dominio `domains/carts`.
 
 **`carts`** — `organization_id`, `customer_user_id`, `shop`
-(`aliexpress|cj|shopify|catalog`), con `UNIQUE(customer_user_id, shop)`:
-un carrello aperto per cliente e per negozio. È quel vincolo a rendere
-idempotente l'aggiunta al carrello, senza flag applicativi. Non si cancella
-dopo l'acquisto, si svuota, così l'id resta stabile.
+(`jav_market|catalog`), con `UNIQUE(customer_user_id, shop)`: un carrello
+aperto per cliente e per negozio. È quel vincolo a rendere idempotente
+l'aggiunta al carrello, senza flag applicativi. Non si cancella dopo
+l'acquisto, si svuota, così l'id resta stabile.
 
 **`cart_items`** — `cart_id`, `quantity` (1..99) e un **arco esclusivo** di
-quattro chiavi esterne nullable, una per negozio: `aliexpress_variant_id`,
-`cj_variant_id`, `shopify_variant_id`, `product_version_id`. Il CHECK
-`num_nonnulls(...) = 1` impone che ne sia valorizzata esattamente una.
-Quattro colonne invece di un uuid generico perché così il database
-conserva davvero le chiavi esterne: una variante cancellata si porta via
-in CASCADE le righe di carrello che la citano. Quattro `UNIQUE(cart_id,
-<colonna>)` separati — in PostgreSQL due NULL sono distinti, quindi
-ciascuno vincola solo le righe del proprio negozio.
+due chiavi esterne nullable: `jav_market_variant_id` e `product_version_id`.
+Il CHECK `num_nonnulls(...) = 1` impone che ne sia valorizzata esattamente
+una; due `UNIQUE(cart_id, <colonna>)` separati, perché in PostgreSQL due NULL
+sono distinti. Le chiavi esterne restano vere: una variante cancellata si
+porta via in CASCADE le righe di carrello che la citano.
 
 **Nel carrello non ci sono prezzi**: solo cosa e quanto. Ogni lettura li
 ricalcola dal listino di quel momento (CLAUDE.md §5).
 
-**`aliexpress_order_items`** — le righe di un ordine: `order_id` (CASCADE),
-prodotto, variante, `quantity`, `unit_price_cents`, `unit_cost_amount`, più
-`product_name`, `variant_label` e `credit_discount_percentage` **congelati**
-(un prodotto rinominato o ritirato non deve cambiare cosa dice un ordine
-passato). `aliexpress_order_id` e il tracking stanno **sulla riga** e non
-solo sulla testata: AliExpress, con articoli di venditori diversi, crea più
-ordini e risponde con una lista di numeri.
+## 20. Categorie degli shop
 
-Le colonne di riga sulla testata (`aliexpress_product_id`,
-`aliexpress_variant_id`, `quantity`, `unit_price_cents`) **restano** e
-descrivono la prima riga; il backfill della migrazione ha creato una riga
-per ogni ordine preesistente, così nessun ordine è senza righe. **Tutto il
-denaro resta sulla testata** — importo, spedizione, IVA, sconto bonifico,
-JavCash, sessione Stripe — ed è la ragione per cui pagamenti, webhook,
-Contabilità ed email non sono cambiati.
-
-## 20. IVA dei Marketplace (added Session 74)
-
-Migrazione `0054_marketplace_vat`: `vat_percentage` (INT, default 0) e
-`vat_amount_cents` (BIGINT, default 0) su `imported_product_orders`,
-`cj_orders`, `shopify_orders`, `aliexpress_orders`. Congelati alla
-creazione dell'ordine e ricalcolati quando cambia il metodo di pagamento
-(insieme allo sconto bonifico). Gli ordini precedenti restano a 0: scrivere
-un'IVA su una vendita già chiusa sarebbe inventare un dato fiscale.
-Aliquota in `organizations.settings.marketplace_vat_percentage` (default 22).
-
-## 19. Categorie degli shop (added Session 73)
-
-Migrazione `0053_shop_categories`, dominio `domains/shop_categories`.
+Dominio `domains/shop_categories`.
 
 - `shop_categories`: `organization_id`, `shop` (`internal|partner|
-  dropshipping|aliexpress|cj|shopify`), `name`, `position`, `active`. Indice
-  unico funzionale su `(organization_id, shop, lower(name))`.
+  dropshipping|jav_market`), `name`, `position`, `active`, `producer_id`
+  nullable (FK `jav_market_producers` ON DELETE SET NULL, solo per
+  `shop = jav_market`: il fornitore ereditato dai prodotti senza un
+  fornitore loro). Indice unico funzionale su `(organization_id, shop,
+  lower(name))`.
 - `shop_category_products`: `category_id` (FK ON DELETE CASCADE), `shop`,
-  `product_id` **UUID senza FK** — polimorfico, punta a `products`,
-  `imported_products`, `cj_products`, `shopify_products` o
-  `aliexpress_products` a seconda di `shop`. Unico `(category_id,
+  `product_id` **UUID senza FK** — polimorfico, punta a `products` o
+  `jav_market_products` a seconda di `shop`. Unico `(category_id,
   product_id)`, indice `(organization_id, shop, product_id)`.
-- Nessuna colonna aggiunta alle tabelle dei prodotti: la funzione si toglie
-  cancellando due tabelle.
+- Nessuna colonna aggiunta alle tabelle dei prodotti.
 
-## 18. Marketplace: regole comuni, Shopify e AliExpress (added Sessions 67-71)
+## 21. Club (`domains/club`)
 
-- `organizations.settings` (JSONB): `marketplace_labels` (`{aliexpress, cj,
-  shopify}` → nome nello Shop, default "Marketplace 1/2/3"),
-  `marketplace_bank_transfer_discount_percentage` (default 5). Letti solo da
-  `domains/marketplaces/rules.py`.
-- `imported_product_orders.bank_transfer_discount_cents`, `cj_orders.bank_transfer_discount_cents`,
-  `shopify_orders.bank_transfer_discount_cents` (BIGINT, default 0): sconto bonifico
-  congelato sull'ordine (0 con carta); pagato in euro = `amount_cents - credit_applied_cents - bank_transfer_discount_cents`.
-- CHECK `credit_discount_percentage BETWEEN 0 AND 99` su `imported_products`,
-  `cj_products`, `shopify_products`; `default_credit_percentage BETWEEN 0 AND 99`
-  su `cj_settings`, `shopify_settings` (mai 100% JavCash).
-- **Shopify** (migrazione `0050_shopify_dropshipping`), stesso schema di CJ:
-  - `shopify_settings` (una riga per organizzazione): dominio, `client_id` +
-    `client_secret` dell'app Dev Dashboard (Session 70) con il token a 24 ore
-    in `access_token`/`token_expires_at`, oppure un token fisso `shpat_`
-    (mai restituiti per intero), versione API, `enabled`, cambio, base prezzo
-    (`COST`/`PRICE`), ricarico, arrotondamento, spedizione fissa o inclusa,
-    JavCash di default, invio automatico.
-  - `shopify_products` / `shopify_variants`: prodotto importato (GID Shopify,
-    testi, foto, stato, % JavCash, ricarico proprio) e varianti (GID, SKU,
-    costo e prezzo della fonte, prezzo nostro, override, stock).
-  - `shopify_orders`: come `cj_orders` — importi, JavCash, sconto bonifico, metodo,
-    Stripe, ricevuta bonifico, indirizzo, stato di invio (`fulfillment_status`),
-    `shopify_draft_order_id` / `shopify_order_id` per l'invio idempotente,
-    tracciamento, tentativi ed errori.
-  - `wallet_transactions.reference_shopify_order_id`: il JavCash speso su un
-    ordine Shopify, come `reference_cj_order_id`.
-- **AliExpress** (migrazione `0052_aliexpress_dropshipping`, Session 71),
-  stesso schema di Shopify:
-  - `aliexpress_settings`: App Key + App Secret dell'app Drop Shipping,
-    `access_token`/`refresh_token`/`token_expires_at` dell'autorizzazione
-    (mai restituiti per intero), `account_label`, `ship_to_country`/
-    `target_currency`/`target_language` (i parametri con cui si interroga il
-    catalogo), più le stesse regole di prezzo, spedizione, JavCash e invio
-    automatico. La migrazione **copia** le credenziali già salvate in
-    `import_providers` (Session 71, prima versione), che resta intatto.
-  - `aliexpress_products` / `aliexpress_variants`: prodotto importato
-    (`aliexpress_product_id`, `product_url`, venditore, testi, foto, %
-    JavCash, ricarico proprio) e varianti (`aliexpress_sku_id`, `sku_attr`
-    — indispensabile per ordinare — costo e prezzo della fonte, prezzo
-    nostro, override, stock).
-  - `aliexpress_orders`: come `shopify_orders`, con `aliexpress_order_id`,
-    `aliexpress_order_status` e `out_order_id` (il nostro riferimento
-    mandato al fornitore) al posto dei campi Shopify.
-  - `wallet_transactions.reference_aliexpress_order_id`.
-  - Nota: 0052 nomina i CHECK "nudi", perché Alembic riapplica da sé la
-    convenzione `ck_%(table_name)s_%(constraint_name)s`; in 0050 i nomi
-    espliciti hanno prodotto vincoli con il prefisso doppio
-    (`ck_shopify_orders_ck_shopify_orders_...`), difetto ancora presente
-    nelle tabelle Shopify in produzione.
+Specifica e regole: `club-portal.md`. Tutte le tabelle hanno
+`organization_id`; quelle che portano dati di un club anche `club_id`
+(NOT NULL, indicizzato): piani, atleti, quote, prove, certificati, cinture,
+corsi, presenze, gare, iscrizioni. Le tabelle figlie senza `club_id`
+(`club_course_slots`, `club_course_athletes`, `club_payment_proof_fees`)
+ereditano il club dalla riga a cui appartengono.
+
+```
+clubs                      i club della piattaforma (migrazione 0002)
+  name, slug (UNIQUE per organizzazione, solo [a-z0-9-]: è l'indirizzo
+  /c/<slug> di registrazione delle famiglie), status (ACTIVE/SUSPENDED),
+  settings JSONB (bank_iban, bank_account_holder,
+  bank_transfer_instructions, contact_email: le coordinate delle quote)
+
+users.club_id -> clubs     nullable: il club dell'account (genitore,
+                           segreteria, istruttore); NULL per lo staff della
+                           piattaforma, che entra nei club scegliendoli
+
+club_plans                 piani di iscrizione per fascia d'età
+  name, min_age, max_age nullable, monthly_fee_cents, enrollment_fee_cents,
+  due_day (1-28), billing_months SMALLINT[] (default set-giu), active
+
+club_athletes              i figli (o il genitore stesso, is_self)
+  guardian_user_id -> users, first_name, last_name, birth_date, sex (M/F),
+  fiscal_code, photo_url, is_self, plan_id -> club_plans, plan_locked,
+  status (ACTIVE/SUSPENDED/LEFT), weight_kg, federation_number,
+  federation_expires_on
+
+club_fees                  le quote
+  athlete_id, kind (MONTHLY/ENROLLMENT/COMPETITION), period, amount_cents
+  (congelato), due_date, status (DUE/PAID/WAIVED), ...
+  UNIQUE (athlete_id, kind, period) -- l'idempotenza dei job
+
+club_fees (0004)           + guardian_user_id (quota socio MEMBERSHIP, senza
+                           atleta: UNIQUE parziale club+genitore+anno),
+                           gross_amount_cents, discount_cents, discount_note
+                           (listino e sconti congelati)
+club_athletes (0004)       + social_tier (A/B/C), adapted_judo
+club_competitions (0004)   + kind (COMPETITION/STAGE), transport_needed,
+                           transport_entity_name/_email, transport_departure,
+                           transport_return, transport_companions,
+                           transport_notes, transport_auto_send
+club_transport_requests    la lettera del trasporto, una per evento (UNIQUE
+                           competition_id): to_email, subject, body_text,
+                           status DRAFT/SENT, athletes_count, sent_at, last_error
+wallet_transactions (0004) + reference_club_proof_id: il credito usato per le
+                           quote
+
+club_payment_proofs        la foto/PDF del bonifico (bucket privato);
+                           + credit_cents (0004), file facoltativo se il
+                           credito copre tutto
+  status (ACCEPTED/REJECTED), reviewed_by_user_id, rejection_reason, ...
+club_payment_proof_fees    quali quote copre una prova
+  UNIQUE (proof_id, fee_id)
+
+club_medical_certificates  type (AGONISTIC/NON_AGONISTIC), issued_on,
+                           expires_on, file nel bucket privato
+club_belt_grades           storico cinture, UNIQUE (athlete_id, grade);
+                           la cintura attuale è la più alta, mai una colonna
+
+club_courses, club_course_slots (weekday 0-6, orari), club_course_athletes
+  UNIQUE (course_id, athlete_id)
+club_attendances           UNIQUE (athlete_id, course_id, date)
+
+club_competitions          level (CLUB/REGIONAL/NATIONAL/INTERNATIONAL),
+                           date, scadenza iscrizioni, quota, età min/max,
+                           requires_agonistic_certificate,
+                           status (OPEN/CLOSED/DONE)
+club_competition_entries   UNIQUE (competition_id, athlete_id), category,
+                           status (REGISTERED/WITHDRAWN), placement
+                           (1/2/3/5/7, 0 = partecipazione)
+
+club_reminders_sent        UNIQUE (kind, entity_id, stage) -- un avviso
+                           una volta sola per gradino
+```
+
+Il Jav Ranking, il livello, i punti esperienza e le medaglie di un atleta
+**non hanno tabelle**: si calcolano da risultati, presenze e cinture a ogni
+lettura (`club/competitions.py`, `club/achievements.py`).
+
+## 22. Sito pubblico JudoArteVida (`club/site_models.py`, migrazioni 0006 e 0010)
+
+Ciò che il sito pubblico mostra sta in **tabelle sue**, separate dai dati del
+gestionale: una query del sito non può trascinarsi dietro per sbaglio una
+data di nascita o un codice fiscale. Regole in `docs/club-portal.md`, "Sito
+pubblico".
+
+```
+club_sites                       la pagina pubblica di un club, una per club
+  organization_id, club_id -> clubs UNIQUE, tagline, about (TEXT), city,
+  hero_image_url, logo_url (bucket media pubblico),
+  gallery JSONB [{url, caption}] (max 24), coaches JSONB [{name, role,
+  photo_url}] (scritti a mano, max 12), contact_phone, contact_email,
+  address, map_url, instagram_url, facebook_url, youtube_url, website_url,
+  published (default false), show_prices (default false, migrazione 0008:
+  il club sceglie se JAVBOT del sito può dire i prezzi dei suoi piani),
+  updated_at
+  -- un club è sul portale solo se clubs.status = ACTIVE e published
+
+club_athlete_public_profiles     consenso della famiglia e scelta del club
+  organization_id, club_id, athlete_id -> club_athletes UNIQUE,
+  consent_given_at (NULL = nessun consenso: mai dato o ritirato),
+  consent_by_user_id -> users (chi ha deciso, anche il ritiro),
+  show_photo (consenso a parte per la foto), bio (280),
+  published (la scelta del club; vale solo con il consenso),
+  ijf_profile_url (300; solo www.ijf.org/judoka/<id> o JudoBase
+  competitor/profile/<id>, https), favorite_technique (80),
+  dominant_side (LEFT | RIGHT | NULL) -- migrazione 0010, scritti dalla
+  segreteria per la scheda del judoca
+
+club_athlete_media               foto e video della scheda del judoca (0010)
+  organization_id, club_id -> clubs, athlete_id -> club_athletes,
+  kind (PHOTO | VIDEO), url (la foto, bucket media pubblico), youtube_id
+  (11 caratteri: del video si salva solo l'id, mai un indirizzo),
+  caption (200), published (default false: ogni elemento si pubblica a
+  parte), created_by_user_id -> users, created_at
+  -- CHECK: PHOTO ha url e niente youtube_id, VIDEO il contrario
+  -- UNIQUE (athlete_id, youtube_id): lo stesso video una volta sola
+  -- massimo 24 foto e 12 video per atleta (limite del servizio)
+  -- sul sito solo published, del club attuale dell'atleta, e solo se
+     show_photo è vero; ritirare il consenso li rimette tutti a false
+```
+
+Orari, eventi, risultati, punti, medaglie, posto nel ranking, percorso delle
+cinture e prove in programma del sito **non hanno tabelle**: si leggono da
+corsi, gare, risultati e storico delle cinture del club a ogni richiesta.
+
+## 23. JAVBOT (`domains/javbot`, migrazione 0008)
+
+L'assistente dell'area privata. Legge i dati degli altri domini attraverso
+i loro servizi; qui tiene solo la conversazione e le azioni che aspettano un
+"sì". Regole in `docs/club-portal.md`, "JAVBOT". Il bot del sito pubblico
+non ha tabelle: è senza stato.
+
+```
+javbot_conversations             una conversazione di un utente in un club
+  organization_id, user_id -> users, club_id -> clubs (NULL fuori dai club),
+  state JSONB (la memoria corta del pianificatore: percorso in corso,
+  domanda in sospeso, compito da confermare), created_at, updated_at
+
+javbot_messages                  le battute, nell'ordine
+  conversation_id -> javbot_conversations ON DELETE CASCADE, user_id,
+  club_id, role (user | bot), text, actions JSONB (i bottoni), quick_replies
+  JSONB, intent (l'intenzione riconosciuta, sulle battute dell'utente),
+  created_at
+  -- indice (conversation_id, created_at)
+
+javbot_tasks                     ciò che JAVBOT farà solo dopo un "sì"
+  organization_id, conversation_id -> javbot_conversations ON DELETE CASCADE,
+  user_id, club_id, kind (SHOP_ORDER | CLUB_MESSAGE | MARK_ATTENDANCE),
+  payload JSONB (tutto ciò che serve a eseguirlo: variante, atleta,
+  indirizzo, testo), status (PENDING | DONE | CANCELLED),
+  result_ref UNIQUE (l'id dell'ordine creato), done_at, created_at
+  -- la conferma "prende" il compito con UPDATE ... WHERE status = 'PENDING'
+     nella stessa transazione dell'esecuzione: una seconda conferma non
+     esegue niente. Una proposta vale 30 minuti.
+```
+
+Conservazione: una conversazione ferma da più di 90 giorni si cancella (con
+battute e compiti) la volta successiva che lo stesso utente apre JAVBOT.
+
+## 24. Contabilità del club (`club/models.py`, migrazione 0007)
+
+Solo i fatti che non si ricavano da altro. Incassi, debiti, costo dello
+staff, commissione della piattaforma e risultato **non hanno tabelle**: si
+calcolano da quote, prove, cartellino e ordini a ogni lettura
+(`club/accounting.py`). Regole in `docs/club-portal.md`, "Contabilità".
+
+```
+club_expenses                    una spesa del club
+  organization_id, club_id, spent_on, category (RENT/STAFF/FEDERATION/
+  INSURANCE/EQUIPMENT/TRANSPORT/EVENTS/UTILITIES/MARKETING/ADMIN/OTHER),
+  amount_cents > 0, description, supplier, payment_method (BANK_TRANSFER/
+  CASH/CARD/DIRECT_DEBIT/OTHER), receipt_storage_key / receipt_filename /
+  receipt_content_type (bucket privato documenti), created_by_user_id,
+  recurring_id -> club_recurring_expenses, period (YYYY-MM)
+  -- UNIQUE (recurring_id, period): il job dei costi fissi è idempotente
+  -- CHECK (recurring_id IS NULL) = (period IS NULL); indice (club_id, spent_on)
+
+club_recurring_expenses          un costo fisso mensile
+  organization_id, club_id, category, amount_cents > 0, description,
+  supplier, payment_method, day_of_month (1-28), starts_on, ends_on
+  (NULL = finché non si ferma, >= starts_on), active, created_by_user_id
+
+club_staff_rates                 la tariffa oraria di chi timbra, da una data
+  organization_id, club_id, user_id -> users, hourly_rate_cents >= 0,
+  valid_from, set_by_user_id
+  -- UNIQUE (club_id, user_id, valid_from); vale la più recente <= il giorno
+     del turno
+
+club_platform_fees               la percentuale degli incassi alla piattaforma
+  organization_id, club_id, pct NUMERIC(5,2) 0-100, valid_from (sempre il
+  primo del mese, CHECK), set_by_user_id
+  -- UNIQUE (club_id, valid_from); senza righe vale il 10%; la scrive solo
+     il superadmin (clubs.manage)
+```
+
+## 25. Cursos JAV (`club/kinds.py`, migrazione 0009)
+
+I corsi extrascolastici di JudoArteVida nelle scuole: un'unità per
+organizzazione con i suoi corsi. Regole in `docs/club-portal.md`,
+"Cursos JAV".
+
+```
+clubs (0009)          + kind (CLUB | JAV_COURSES, default CLUB, CHECK)
+                      -- indice UNIQUE parziale uq_clubs_one_jav_courses_unit
+                         (organization_id) WHERE kind = 'JAV_COURSES'
+
+club_courses (0009)   + venue_name, venue_address, venue_city (la scuola),
+                        public_description (testo per il sito),
+                        public_coach_name (nome del treinador sul sito,
+                        scritto a mano), coach_share_pct NUMERIC(5,2) 0-100
+                        (NULL nei club ufficiali, default 50 nei corsi JAV),
+                        published BOOLEAN default false (sezione pubblica)
+
+club_fees (0009)      + course_id -> club_courses, coach_user_id -> users,
+                        coach_share_pct NUMERIC(5,2) 0-100
+                        -- congelati all'emissione della mensilità nei corsi
+                           JAV (corso, treinador responsabile e percentuale
+                           di quel momento); NULL nei club ufficiali e nelle
+                           quote senza corso. Indici su course_id e
+                           coach_user_id.
+```
+
+Nessuna tabella per i guadagni dei treinador o la parte di JAV: si calcolano
+dalle quote pagate (`club/accounting.py`, `club/jav_courses.py`).
+

@@ -79,3 +79,20 @@ def render_email(
   </table>
 </body>
 </html>"""
+
+
+def render_letter(*, subject: str, body_text: str) -> str:
+    """Una lettera scritta (o corretta) da una persona nell'anteprima -- l'ordine
+    al fornitore, la richiesta di trasporto al comune -- impaginata nella stessa
+    veste di ogni altra email. `body_text` è testo semplice, quello che la
+    persona ha visto e modificato: qui si fa l'escape e le righe vuote
+    diventano paragrafi, le righe singole a capo. Niente HTML da chi scrive,
+    quindi niente HTML iniettato."""
+    from html import escape
+
+    paragraphs = [p for p in body_text.replace("\r\n", "\n").split("\n\n") if p.strip()]
+    body_html = "".join(
+        f"<p style=\"margin:0 0 14px 0;\">{'<br>'.join(escape(line) for line in p.split(chr(10)))}</p>"
+        for p in paragraphs
+    )
+    return render_email(preheader=subject, heading=subject, body_html=body_html)

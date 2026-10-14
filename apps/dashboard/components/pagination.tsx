@@ -94,13 +94,13 @@ export function Pagination({
   const buttonBase =
     "min-w-[32px] h-8 px-2 rounded-lg text-xs font-semibold border transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed";
   const inactive =
-    "bg-white/5 light:bg-slate-900/5 border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 hover:bg-white/10";
+    " bg-slate-900/5 border-slate-300 text-slate-600 hover:bg-slate-100";
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-      <p className="text-xs text-slate-400 light:text-slate-500">
-        Mostrati <strong className="text-white light:text-slate-900">{firstShown}-{lastShown}</strong> di{" "}
-        <strong className="text-white light:text-slate-900">{total}</strong> {label}
+      <p className="text-xs text-slate-500">
+        Mostrati <strong className=" text-slate-900">{firstShown}-{lastShown}</strong> di{" "}
+        <strong className=" text-slate-900">{total}</strong> {label}
         {!onlyOnePage && (
           <span className="text-slate-500"> · pagina {page} di {totalPages}</span>
         )}
@@ -128,7 +128,7 @@ export function Pagination({
                   onClick={() => setPage(p)}
                   aria-current={p === page ? "page" : undefined}
                   className={`${buttonBase} ${
-                    p === page ? "bg-orange-600 border-orange-600 text-white" : inactive
+                    p === page ? "bg-brand-600 border-brand-600 text-white" : inactive
                   }`}
                 >
                   {p}
@@ -147,12 +147,12 @@ export function Pagination({
           </div>
         )}
 
-        <label className="flex items-center gap-1.5 text-xs text-slate-400 light:text-slate-500">
+        <label className="flex items-center gap-1.5 text-xs text-slate-500">
           <span className="hidden sm:inline">Per pagina</span>
           <select
             value={pageSize}
             onChange={(e) => setPageSize(Number(e.target.value))}
-            className="rounded-lg glass-input px-2 py-1 text-xs bg-slate-900 light:bg-white focus:border-orange-500 cursor-pointer"
+            className="rounded-lg glass-input px-2 py-1 text-xs bg-white focus:border-brand-500 cursor-pointer"
           >
             {PAGE_SIZE_OPTIONS.map((size) => (
               <option key={size} value={size}>{size}</option>

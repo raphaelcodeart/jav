@@ -9,7 +9,7 @@ export function ProductThumbnail({
   imageUrl,
   alt,
   className = "w-full h-full object-cover",
-  iconClassName = "w-10 h-10 text-orange-400/40",
+  iconClassName = "w-10 h-10 text-brand-600/40",
 }: {
   imageUrl: string | null | undefined;
   alt: string;
@@ -21,7 +21,7 @@ export function ProductThumbnail({
     return <img src={imageUrl} alt={alt} className={className} />;
   }
   return (
-    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-orange-500/10 to-amber-500/10">
+    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-brand-500/10 to-brand-400/10">
       <svg className={iconClassName} fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path
           strokeLinecap="round"

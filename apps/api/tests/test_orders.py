@@ -1,6 +1,5 @@
-"""DROPSHIPPING/PARTNER product purchases with an optional wallet-credit
-discount (Phase 4 of the partner-invoice cashback project). Deliberately not
-a Contract -- see orders/models.py. Covers the credit-cap enforcement, the
+"""Catalog product purchases with an optional wallet-credit discount.
+Deliberately not a Contract -- see orders/models.py. Covers the credit-cap enforcement, the
 straight-to-PAID shortcut when credit covers 100%, cancellation refunding
 the exact debit via a REVERSAL, and INTERNAL products being rejected."""
 
@@ -16,7 +15,7 @@ from app.domains.catalog import service as catalog_service
 from app.domains.catalog.schemas import ProductCreate
 from app.domains.orders import service as orders_service
 from app.domains.organizations import service as organizations_service
-from app.domains.organizations.schemas import OrganizationSettingsUpdate, PaymentSettingsUpdate
+from app.domains.organizations.schemas import OrganizationSettingsUpdate
 from app.domains.rbac.models import Role, UserRole
 from app.domains.users.models import User
 from app.domains.wallets import service as wallet_service
@@ -41,23 +40,12 @@ async def _seed_credit_spend_otp(db, user_id):
 
 
 async def _configure_bank_transfer(db, organization_id):
-    """Bank transfer (and card) are both gated off by default (Session 26) --
+    """Bank transfer is gated off by default (no IBAN configured) --
     tests exercising a residual paid by BANK_TRANSFER (the create_order
     default) need it explicitly configured first, same as a real deployment
     would via the admin settings panel."""
     await organizations_service.update_settings(
         db, organization_id=organization_id, payload=OrganizationSettingsUpdate(bank_iban="IT60X0542811101000000123456")
-    )
-
-
-async def _configure_stripe(db, organization_id):
-    """CARD as a payment_method requires both Stripe keys configured (see
-    orders/service.py::create_order's availability check) -- same pattern as
-    test_card_requires_both_stripe_keys_configured above, factored out for
-    tests that only need it as setup, not as the thing under test."""
-    await organizations_service.update_payment_settings(
-        db, organization_id=organization_id,
-        payload=PaymentSettingsUpdate(stripe_publishable_key="pk_test_abc", stripe_secret_key="sk_test_xyz"),
     )
 
 
@@ -253,9 +241,9 @@ async def test_internal_category_product_is_not_orderable(db, organization_id):
 
 @pytest.mark.asyncio
 async def test_unconfigured_payment_method_is_rejected_and_creates_no_order(db, organization_id):
-    """Session 26: bank transfer and card are both off by default (an admin
-    must configure an IBAN / Stripe keys first) -- this is the server-side
-    half of "the button isn't even clickable if it's not configured"."""
+    """Bank transfer is off by default (an admin must configure an IBAN
+    first) -- this is the server-side half of "the button isn't even
+    clickable if it's not configured"."""
     admin = await _make_user_with_role(db, organization_id, role_code="ADMIN")
     customer = await _make_user_with_role(db, organization_id)
     version = await _make_product_version(db, organization_id, admin.id, price_cents=5000, discount_pct=0)
@@ -266,67 +254,27 @@ async def test_unconfigured_payment_method_is_rejected_and_creates_no_order(db, 
             db, organization_id=organization_id, customer_user_id=customer.id, product_version_id=version.id,
             credit_applied_cents=0, actor_user_id=admin.id, payment_method="BANK_TRANSFER",
         )
-    with pytest.raises(orders_service.PaymentMethodNotAvailableError):
-        await orders_service.create_order(
-            db, organization_id=organization_id, customer_user_id=customer.id, product_version_id=version.id,
-            credit_applied_cents=0, actor_user_id=admin.id, payment_method="CARD",
-        )
 
     orders = await orders_service.list_orders(db, organization_id=organization_id)
     assert all(o.customer_user_id != customer.id for o in orders)
 
 
 @pytest.mark.asyncio
-async def test_card_requires_both_stripe_keys_configured(db, organization_id):
+async def test_card_is_not_a_payment_method(db, organization_id):
+    """Bank transfer is the only way to pay a residual: anything else is
+    refused before an order exists, even with the bank transfer configured."""
+    await _configure_bank_transfer(db, organization_id)
     admin = await _make_user_with_role(db, organization_id, role_code="ADMIN")
     customer = await _make_user_with_role(db, organization_id)
     version = await _make_product_version(db, organization_id, admin.id, price_cents=5000, discount_pct=0)
 
-    # Only the publishable key set -- still not enough, both are required.
-    await organizations_service.update_payment_settings(
-        db, organization_id=organization_id, payload=PaymentSettingsUpdate(stripe_publishable_key="pk_test_abc")
-    )
-    with pytest.raises(orders_service.PaymentMethodNotAvailableError):
+    with pytest.raises(orders_service.InvalidPaymentMethodError):
         await orders_service.create_order(
             db, organization_id=organization_id, customer_user_id=customer.id, product_version_id=version.id,
             credit_applied_cents=0, actor_user_id=admin.id, payment_method="CARD",
         )
-
-    await organizations_service.update_payment_settings(
-        db, organization_id=organization_id, payload=PaymentSettingsUpdate(stripe_secret_key="sk_test_xyz")
-    )
-    order = await orders_service.create_order(
-        db, organization_id=organization_id, customer_user_id=customer.id, product_version_id=version.id,
-        credit_applied_cents=0, actor_user_id=admin.id, payment_method="CARD",
-    )
-    assert order.status == "AWAITING_PAYMENT"
-    assert order.payment_method == "CARD"
-
-
-@pytest.mark.asyncio
-async def test_confirm_payment_refuses_a_card_order(db, organization_id):
-    """"Conferma bonifico ricevuto" (the manual admin action) must never be
-    usable to mark a CARD order paid -- only mark_paid_via_stripe(), reached
-    exclusively from the Stripe webhook, may do that. Enforced server-side
-    (not just hidden in admin-orders-panel.tsx), so an admin calling the API
-    directly still can't shortcut Stripe's own confirmation."""
-    await _configure_stripe(db, organization_id)
-    admin = await _make_user_with_role(db, organization_id, role_code="ADMIN")
-    customer = await _make_user_with_role(db, organization_id)
-    version = await _make_product_version(db, organization_id, admin.id, price_cents=5000, discount_pct=0)
-
-    order = await orders_service.create_order(
-        db, organization_id=organization_id, customer_user_id=customer.id, product_version_id=version.id,
-        credit_applied_cents=0, actor_user_id=admin.id, payment_method="CARD",
-    )
-
-    with pytest.raises(orders_service.InvalidOrderStateError):
-        await orders_service.confirm_payment(
-            db, organization_id=organization_id, order_id=order.id, actor_user_id=admin.id
-        )
-
-    refreshed = await orders_service.get_org_scoped(db, organization_id=organization_id, order_id=order.id)
-    assert refreshed.status == "AWAITING_PAYMENT"
+    orders = await orders_service.list_orders(db, organization_id=organization_id)
+    assert all(o.customer_user_id != customer.id for o in orders)
 
 
 @pytest.mark.asyncio
@@ -346,7 +294,7 @@ async def test_full_credit_ignores_unconfigured_payment_method(db, organization_
 
     order = await orders_service.create_order(
         db, organization_id=organization_id, customer_user_id=customer.id, product_version_id=version.id,
-        credit_applied_cents=3000, actor_user_id=admin.id, payment_method="CARD",  # unconfigured, irrelevant here
+        credit_applied_cents=3000, actor_user_id=admin.id, payment_method="CARD",  # not a valid method, irrelevant here
         require_otp_for_credit_spend=False,
     )
     assert order.status == "PAID"
@@ -423,58 +371,11 @@ async def test_confirm_payment_notifies_staff_and_sends_paid_email(db, organizat
 
 
 @pytest.mark.asyncio
-async def test_mark_paid_via_stripe_notifies_staff_and_sends_paid_email(db, organization_id):
-    """The webhook path (payments/service.py::handle_webhook_event ->
-    mark_paid_via_stripe) must produce the same staff notification and
-    customer "payment completed" email as the bank-transfer path -- no
-    admin action involved, Stripe alone triggers it."""
-    from unittest.mock import AsyncMock, patch
-
-    from app.domains.notifications import service as notifications_service
-
-    await _configure_stripe(db, organization_id)
-    admin = await _make_user_with_role(db, organization_id, role_code="ADMIN")
-    customer = await _make_user_with_role(db, organization_id)
-    version = await _make_product_version(db, organization_id, admin.id, price_cents=6900, discount_pct=0)
-
-    order = await orders_service.create_order(
-        db, organization_id=organization_id, customer_user_id=customer.id, product_version_id=version.id,
-        credit_applied_cents=0, actor_user_id=customer.id, payment_method="CARD",
-    )
-    order = await orders_service.attach_stripe_checkout_session(db, order=order, session_id=f"cs_test_{uuid.uuid4().hex}")
-
-    with patch.object(orders_service, "_send_order_paid_email", new_callable=AsyncMock) as mock_email:
-        paid = await orders_service.mark_paid_via_stripe(
-            db, organization_id=organization_id, stripe_checkout_session_id=order.stripe_checkout_session_id
-        )
-
-    assert paid.status == "PAID"
-    assert paid.paid_by_user_id is None  # no human actor -- Stripe confirmed it
-    mock_email.assert_awaited_once()
-
-    admin_notifications = await notifications_service.list_my_notifications(
-        db, organization_id=organization_id, user_id=admin.id
-    )
-    assert any(n.type == "ORDER_PAID" for n in admin_notifications)
-
-    # A retried webhook delivery for the same (already-PAID) session must
-    # stay a no-op -- no second email, no error.
-    with patch.object(orders_service, "_send_order_paid_email", new_callable=AsyncMock) as mock_email_retry:
-        await orders_service.mark_paid_via_stripe(
-            db, organization_id=organization_id, stripe_checkout_session_id=order.stripe_checkout_session_id
-        )
-    mock_email_retry.assert_not_awaited()
-
-
-@pytest.mark.asyncio
 async def test_product_order_payment_never_touches_the_wallet(db, organization_id):
-    """The wallet is credited ONLY by the invoice-redemption cashback flow
-    (invoice_redemptions/service.py::confirm_payment) -- a normal product
-    purchase, paid in full with no credit applied, must leave the customer's
-    wallet completely untouched all the way through payment confirmation,
-    whether that confirmation comes from an admin (bank transfer) or from
-    Stripe (card)."""
-    await _configure_stripe(db, organization_id)
+    """A normal product purchase, paid in full with no credit applied and no
+    cashback requested, must leave the customer's wallet completely
+    untouched all the way through payment confirmation."""
+    await _configure_bank_transfer(db, organization_id)
     admin = await _make_user_with_role(db, organization_id, role_code="ADMIN")
     customer = await _make_user_with_role(db, organization_id)
     version = await _make_product_version(db, organization_id, admin.id, price_cents=10000, discount_pct=0)
@@ -484,91 +385,15 @@ async def test_product_order_payment_never_touches_the_wallet(db, organization_i
 
     order = await orders_service.create_order(
         db, organization_id=organization_id, customer_user_id=customer.id, product_version_id=version.id,
-        credit_applied_cents=0, actor_user_id=customer.id, payment_method="CARD",
+        credit_applied_cents=0, actor_user_id=customer.id,
     )
-    order = await orders_service.attach_stripe_checkout_session(db, order=order, session_id=f"cs_test_{uuid.uuid4().hex}")
-    paid = await orders_service.mark_paid_via_stripe(
-        db, organization_id=organization_id, stripe_checkout_session_id=order.stripe_checkout_session_id
+    paid = await orders_service.confirm_payment(
+        db, organization_id=organization_id, order_id=order.id, actor_user_id=admin.id
     )
     assert paid.status == "PAID"
 
     wallet_after = await wallet_service.get_wallet_by_user_id(db, organization_id=organization_id, user_id=customer.id)
     assert wallet_after.balance_cents == 0  # a 100 EUR product paid in full credits the wallet exactly 0 EUR
-
-
-@pytest.mark.asyncio
-async def test_change_payment_method_switches_and_clears_stale_stripe_session(db, organization_id):
-    """Switching a CARD order to BANK_TRANSFER must clear
-    stripe_checkout_session_id -- otherwise a late/retried webhook for the
-    abandoned Stripe session could still mark this order paid off a card
-    payment unrelated to the bank transfer the customer switched to."""
-    await _configure_stripe(db, organization_id)
-    await _configure_bank_transfer(db, organization_id)
-    admin = await _make_user_with_role(db, organization_id, role_code="ADMIN")
-    customer = await _make_user_with_role(db, organization_id)
-    version = await _make_product_version(db, organization_id, admin.id, price_cents=5000, discount_pct=0)
-
-    order = await orders_service.create_order(
-        db, organization_id=organization_id, customer_user_id=customer.id, product_version_id=version.id,
-        credit_applied_cents=0, actor_user_id=customer.id, payment_method="CARD",
-    )
-    order = await orders_service.attach_stripe_checkout_session(db, order=order, session_id=f"cs_test_{uuid.uuid4().hex}")
-    assert order.stripe_checkout_session_id is not None
-
-    switched = await orders_service.change_payment_method(
-        db, organization_id=organization_id, order=order, new_payment_method="BANK_TRANSFER"
-    )
-    assert switched.payment_method == "BANK_TRANSFER"
-    assert switched.stripe_checkout_session_id is None
-
-    # And back to CARD -- a fresh checkout-session request would attach a
-    # new session id later; nothing to clear going the other direction.
-    back_to_card = await orders_service.change_payment_method(
-        db, organization_id=organization_id, order=switched, new_payment_method="CARD"
-    )
-    assert back_to_card.payment_method == "CARD"
-
-
-@pytest.mark.asyncio
-async def test_change_payment_method_rejects_once_paid(db, organization_id):
-    admin = await _make_user_with_role(db, organization_id, role_code="ADMIN")
-    customer = await _make_user_with_role(db, organization_id)
-    version = await _make_product_version(db, organization_id, admin.id, price_cents=3000, discount_pct=100)
-
-    wallet = await wallet_service.get_or_create_wallet(db, organization_id=organization_id, user_id=customer.id)
-    await wallet_service.credit_wallet(
-        db, organization_id=organization_id, wallet_id=wallet.id, amount_cents=3000, type_="ADMIN_CREDIT",
-        actor_user_id=admin.id, idempotency_key=str(uuid.uuid4()),
-    )
-    order = await orders_service.create_order(
-        db, organization_id=organization_id, customer_user_id=customer.id, product_version_id=version.id,
-        credit_applied_cents=3000, actor_user_id=customer.id,
-        require_otp_for_credit_spend=False,
-    )
-    assert order.status == "PAID"
-
-    with pytest.raises(orders_service.InvalidOrderStateError):
-        await orders_service.change_payment_method(
-            db, organization_id=organization_id, order=order, new_payment_method="CARD"
-        )
-
-
-@pytest.mark.asyncio
-async def test_change_payment_method_rejects_unavailable_method(db, organization_id):
-    await _configure_bank_transfer(db, organization_id)
-    admin = await _make_user_with_role(db, organization_id, role_code="ADMIN")
-    customer = await _make_user_with_role(db, organization_id)
-    version = await _make_product_version(db, organization_id, admin.id, price_cents=5000, discount_pct=0)
-
-    order = await orders_service.create_order(
-        db, organization_id=organization_id, customer_user_id=customer.id, product_version_id=version.id,
-        credit_applied_cents=0, actor_user_id=customer.id, payment_method="BANK_TRANSFER",
-    )
-    # Stripe is not configured in this test -- switching to CARD must fail.
-    with pytest.raises(orders_service.PaymentMethodNotAvailableError):
-        await orders_service.change_payment_method(
-            db, organization_id=organization_id, order=order, new_payment_method="CARD"
-        )
 
 
 @pytest.mark.asyncio
@@ -601,24 +426,6 @@ async def test_upload_payment_proof_stores_it_and_notifies_staff(db, organizatio
         db, organization_id=organization_id, user_id=other_admin.id
     )
     assert any(n.type == "ORDER_PAYMENT_PROOF_UPLOADED" for n in other_notifications)
-
-
-@pytest.mark.asyncio
-async def test_upload_payment_proof_rejects_a_card_order(db, organization_id):
-    await _configure_stripe(db, organization_id)
-    admin = await _make_user_with_role(db, organization_id, role_code="ADMIN")
-    customer = await _make_user_with_role(db, organization_id)
-    version = await _make_product_version(db, organization_id, admin.id, price_cents=5000, discount_pct=0)
-
-    order = await orders_service.create_order(
-        db, organization_id=organization_id, customer_user_id=customer.id, product_version_id=version.id,
-        credit_applied_cents=0, actor_user_id=customer.id, payment_method="CARD",
-    )
-    with pytest.raises(orders_service.PaymentProofError):
-        await orders_service.upload_payment_proof(
-            db, organization_id=organization_id, order=order, file_bytes=b"%PDF-1.4\nfake",
-            content_type="application/pdf", original_filename="x.pdf", actor_user_id=customer.id,
-        )
 
 
 # ---- Self-checkout OTP gate on spending existing wallet JavCash ----
@@ -785,37 +592,6 @@ async def test_cashback_surcharge_and_credit_on_bank_transfer_confirm(db, organi
 
 
 @pytest.mark.asyncio
-async def test_cashback_credited_via_stripe_webhook_and_not_double_credited_on_retry(db, organization_id):
-    await _configure_stripe(db, organization_id)
-    admin = await _make_user_with_role(db, organization_id, role_code="ADMIN")
-    customer = await _make_user_with_role(db, organization_id)
-    version = await _make_product_version(
-        db, organization_id, admin.id, price_cents=6000, discount_pct=0, cashback_enabled=True
-    )
-
-    order = await orders_service.create_order(
-        db, organization_id=organization_id, customer_user_id=customer.id, product_version_id=version.id,
-        credit_applied_cents=0, actor_user_id=customer.id, payment_method="CARD", cashback_requested=True,
-        require_otp_for_credit_spend=False,
-    )
-    order = await orders_service.attach_stripe_checkout_session(db, order=order, session_id=f"cs_test_{uuid.uuid4().hex}")
-
-    paid = await orders_service.mark_paid_via_stripe(
-        db, organization_id=organization_id, stripe_checkout_session_id=order.stripe_checkout_session_id
-    )
-    assert paid.cashback_credited_at is not None
-    wallet_after = await wallet_service.get_wallet_by_user_id(db, organization_id=organization_id, user_id=customer.id)
-    assert wallet_after.balance_cents == 6300  # 6000 + 5% = 6300
-
-    # Stripe retries webhook delivery -- must stay a no-op, not a second credit.
-    await orders_service.mark_paid_via_stripe(
-        db, organization_id=organization_id, stripe_checkout_session_id=order.stripe_checkout_session_id
-    )
-    wallet_again = await wallet_service.get_wallet_by_user_id(db, organization_id=organization_id, user_id=customer.id)
-    assert wallet_again.balance_cents == 6300
-
-
-@pytest.mark.asyncio
 async def test_cashback_base_is_computed_after_credit_discount_not_before(db, organization_id):
     """Spend 20.00 EUR of existing JavCash on a 100.00 EUR product (80.00
     EUR residual), then request cashback on top: the 5% surcharge and the
@@ -861,7 +637,7 @@ async def test_cashback_enabled_is_forced_false_for_an_internal_product(db, orga
         db, organization_id=organization_id, actor_user_id=admin.id,
         payload=ProductCreate(
             code=f"INT-{uuid.uuid4().hex[:6]}", customer_type="PRIVATE", category="INTERNAL",
-            name="Luce Energia", base_price_cents=5000, cashback_enabled=True,
+            name="Abbonamento mensile", base_price_cents=5000, cashback_enabled=True,
         ),
     )
     _, versions = await catalog_service.get_product_with_versions(db, organization_id=organization_id, product_id=product.id)
@@ -888,8 +664,8 @@ async def test_switching_category_to_internal_clears_cashback_enabled(db, organi
 
 @pytest.mark.asyncio
 async def test_the_audience_of_a_package_can_be_changed_after_creation(db, organization_id):
-    """Session 88: «a chi è rivolto» si cambiava nel pannello ma il servizio
-    lo ignorava, e un privato vedeva anche i pacchetti P.iva."""
+    """«A chi è rivolto» cambiato dal pannello deve arrivare al servizio:
+    altrimenti un privato vedrebbe anche i pacchetti P.iva."""
     from app.domains.catalog.schemas import ProductUpdate
 
     admin = await _make_user_with_role(db, organization_id, role_code="ADMIN")
@@ -897,7 +673,7 @@ async def test_the_audience_of_a_package_can_be_changed_after_creation(db, organ
         db, organization_id=organization_id, actor_user_id=admin.id,
         payload=ProductCreate(
             code=f"INT-{uuid.uuid4().hex[:6]}", customer_type="BOTH", category="INTERNAL",
-            name="Gas P.iva", base_price_cents=30000,
+            name="Abbonamento P.iva", base_price_cents=30000,
         ),
     )
     updated = await catalog_service.update_product(
@@ -915,7 +691,7 @@ async def test_the_audience_of_a_package_can_be_changed_after_creation(db, organ
 
 @pytest.mark.asyncio
 async def test_the_code_of_a_package_can_be_renamed_but_not_onto_another(db, organization_id):
-    """Session 89: «LUCE-COPY-COPY» dopo due duplicazioni si rinomina dal
+    """«ANNUALE-COPY-COPY» dopo due duplicazioni si rinomina dal
     pannello; un codice già usato da un altro prodotto no."""
     from app.domains.catalog.schemas import ProductUpdate
 
@@ -924,17 +700,17 @@ async def test_the_code_of_a_package_can_be_renamed_but_not_onto_another(db, org
     products = [
         await catalog_service.create_product(
             db, organization_id=organization_id, actor_user_id=admin.id,
-            payload=ProductCreate(code=code, category="INTERNAL", name="Luce", base_price_cents=100),
+            payload=ProductCreate(code=code, category="INTERNAL", name="Abbonamento", base_price_cents=100),
         )
-        for code in (f"LUCE-{suffix}", f"LUCE-{suffix}-COPY-COPY")
+        for code in (f"ANNUALE-{suffix}", f"ANNUALE-{suffix}-COPY-COPY")
     ]
     with pytest.raises(catalog_service.ProductCodeTakenError):
         await catalog_service.update_product(
             db, organization_id=organization_id, product_id=products[1].id, actor_user_id=admin.id,
-            payload=ProductUpdate(code=f"luce-{suffix}"),
+            payload=ProductUpdate(code=f"annuale-{suffix}"),
         )
     updated = await catalog_service.update_product(
         db, organization_id=organization_id, product_id=products[1].id, actor_user_id=admin.id,
-        payload=ProductUpdate(code=f"  LUCE-PRIVATI-{suffix} "),
+        payload=ProductUpdate(code=f"  ANNUALE-PRIVATI-{suffix} "),
     )
-    assert updated.code == f"LUCE-PRIVATI-{suffix}"
+    assert updated.code == f"ANNUALE-PRIVATI-{suffix}"

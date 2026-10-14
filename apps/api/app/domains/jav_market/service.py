@@ -1,30 +1,37 @@
-"""Marketplace 4 -- «Fai la Spesa con Jav»: catalogo, checkout, ordini.
+"""Lo Shop -- «Fai la Spesa con Jav»: catalogo, checkout, ordini.
 
-Le regole del cliente sono quelle comuni dei Marketplace
+Le regole del cliente sono quelle comuni dei negozi
 (`marketplaces/rules.py`) e non si ripetono qui: JavCash solo da spendere e
-mai per l'intero prezzo, niente cashback, bonifico scontato, IVA aggiunta
-al prezzo e congelata sull'ordine, carrello con una spedizione sola.
+mai per l'intero prezzo, niente cashback, pagamento con bonifico confermato
+dall'amministratore, IVA aggiunta al prezzo e congelata sull'ordine,
+carrello con una spedizione sola.
 
-Quello che cambia rispetto agli altri tre e' il rifornimento: non c'e' un
-fornitore da interrogare ne' a cui inoltrare l'ordine. Il catalogo lo scrive
-l'amministratore e la merce la spedisce l'organizzazione, quindi niente
-prezzi ricalcolati a ogni sync, niente cambio valuta, niente evasione
-automatica: un ordine pagato aspetta che qualcuno lo spedisca e ne segni il
-tracking.
+Il rifornimento: non c'e' un fornitore da interrogare via API. Il catalogo
+lo scrive l'amministratore, quindi niente prezzi ricalcolati a ogni sync e
+niente cambio valuta. La merce la prepara l'azienda che la produce (il
+fornitore del prodotto, o della sua categoria): l'ordine pagato le arriva
+per email -- uno alla volta, oppure raccolto con gli altri suoi nella coda
+«Fornitori da avvisare» (in fondo a questo file) -- e il tracking lo segna
+l'amministratore quando il fornitore glielo manda.
 """
 
 import html
 import logging
+import re
 import uuid
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import get_settings
 from app.core.db import utcnow
-from app.core.email import send_html_email_best_effort
-from app.core.email_templates import render_email
+from app.core.email import EmailNotConfiguredError, send_html_email, send_html_email_best_effort
+from app.core.email_templates import render_email, render_letter
 from app.domains.audit import service as audit_service
+from app.domains.club.models import ClubAthlete
+from app.domains.customers.models import Company, Customer, CustomerProfile
+from app.domains.customers.service import display_name_for
 from app.domains.jav_market.models import (
     JAV_MARKET_ORDER_PAYMENT_METHODS,
     MAX_QUANTITY,
@@ -36,17 +43,20 @@ from app.domains.jav_market.models import (
     JavMarketProducer,
     JavMarketProduct,
     JavMarketSettings,
+    JavMarketSupplierDispatch,
     JavMarketVariant,
 )
 from app.domains.marketplaces import paging, rules
+from app.domains.network.models import AgentProfile
 from app.domains.notifications import service as notifications_service
 from app.domains.organizations import service as organizations_service
+from app.domains.shop_categories.models import ShopCategory, ShopCategoryProduct
 from app.domains.users.models import User
 from app.domains.wallets import service as wallets_service
 
 logger = logging.getLogger(__name__)
 
-#: Quanti articoli diversi in un ordine. Come sugli altri negozi.
+#: Quanti articoli diversi in un ordine.
 MAX_ORDER_LINES = 20
 
 OrderLine = tuple[uuid.UUID, int]
@@ -69,7 +79,12 @@ class InvalidOtpError(JavMarketError):
     pass
 
 
-ERRORS = (JavMarketValidationError, JavMarketNotFoundError, InvalidOtpError)
+class JavMarketConflictError(JavMarketError):
+    """Quello che lo schermo mostrava non è più vero (un ordine già mandato da
+    qualcun altro, o da un doppio clic): -> 409, e si ricarica la pagina."""
+
+
+ERRORS = (JavMarketValidationError, JavMarketNotFoundError, InvalidOtpError, JavMarketConflictError)
 
 
 # --- Impostazioni ---------------------------------------------------------------------------------
@@ -94,7 +109,12 @@ async def get_settings_row(db: AsyncSession, *, organization_id: uuid.UUID) -> J
 SETTINGS_FIELDS = (
     "enabled", "shipping_mode", "shipping_flat_cents", "shipping_days",
     "ship_to_country", "auto_forward", "min_order_cents", "free_shipping_threshold_cents",
+    "supplier_email_from", "supplier_email_signature",
 )
+
+#: Un controllo di forma e basta: chi decide se l'indirizzo esiste è il
+#: server di posta. Serve a fermare il refuso evidente prima di un invio.
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 async def update_settings(
@@ -102,9 +122,19 @@ async def update_settings(
 ) -> JavMarketSettings:
     if "shipping_mode" in updates and updates["shipping_mode"] not in SHIPPING_MODES:
         raise JavMarketValidationError("Modalità di spedizione non valida.")
+    sender = (updates.get("supplier_email_from") or "").strip()
+    if sender and not EMAIL_RE.match(sender):
+        raise JavMarketValidationError(
+            "L'indirizzo da cui scrivere ai fornitori non sembra un'email valida (es. info@tuodominio.it)."
+        )
     for field in SETTINGS_FIELDS:
         if field in updates and updates[field] is not None:
-            setattr(row, field, updates[field])
+            value = updates[field]
+            # Mittente e firma si possono svuotare: un campo vuoto vuol dire
+            # «usa quello predefinito», non una stringa vuota da salvare.
+            if field in ("supplier_email_from", "supplier_email_signature"):
+                value = value.strip() or None
+            setattr(row, field, value)
     if updates.get("free_shipping_threshold_cents") == 0:
         row.free_shipping_threshold_cents = None
     await audit_service.record(
@@ -127,6 +157,8 @@ def settings_read_dict(row: JavMarketSettings) -> dict:
         "auto_forward": row.auto_forward,
         "min_order_cents": row.min_order_cents or 0,
         "free_shipping_threshold_cents": row.free_shipping_threshold_cents,
+        "supplier_email_from": row.supplier_email_from,
+        "supplier_email_signature": row.supplier_email_signature,
     }
 
 
@@ -239,6 +271,10 @@ async def update_producer(
     for field in ("name", "description", "website_url", "logo_url", "vat_number", "email", "phone", "address", "active"):
         if field in payload and payload[field] is not None:
             setattr(producer, field, payload[field].strip() if isinstance(payload[field], str) else payload[field])
+    # L'email si può anche togliere (un campo svuotato arriva come stringa
+    # vuota): meglio nessuna email che una vuota, che sembrerebbe compilata.
+    if producer.email is not None and not producer.email:
+        producer.email = None
     producer.updated_at = utcnow()
     await db.commit()
     await db.refresh(producer)
@@ -322,6 +358,10 @@ async def update_product(
         rules.check_credit_percentage(int(payload["credit_discount_percentage"]))
     if "status" in payload and payload["status"] not in (None, *PRODUCT_STATUSES):
         raise JavMarketValidationError("Stato del prodotto non valido.")
+    if payload.get("producer_id"):
+        producer = await db.get(JavMarketProducer, payload["producer_id"])
+        if producer is None or producer.organization_id != organization_id:
+            raise JavMarketNotFoundError("Azienda produttrice non trovata.")
     for field in ("name", "description", "image_url", "images", "status",
                   "credit_discount_percentage", "unit_cost_cents", "producer_id"):
         if field in payload and payload[field] is not None:
@@ -329,6 +369,9 @@ async def update_product(
     # La foto si puo' anche togliere: un null esplicito qui vuol dire "senza foto".
     if "image_url" in payload and payload["image_url"] is None:
         product.image_url = None
+    # Anche il fornitore: senza, il prodotto prende quello della sua categoria.
+    if "producer_id" in payload and payload["producer_id"] is None:
+        product.producer_id = None
     product.updated_at = utcnow()
     await db.commit()
     await db.refresh(product)
@@ -373,7 +416,96 @@ async def list_products(db: AsyncSession, *, organization_id: uuid.UUID) -> list
     return list(rows.scalars().all())
 
 
-async def product_read_dict(db: AsyncSession, product: JavMarketProduct, *, admin: bool) -> dict:
+@dataclass(frozen=True)
+class ResolvedSupplier:
+    """Chi prepara la merce di un prodotto, e perché proprio lui."""
+
+    producer: JavMarketProducer | None
+    #: "PRODUCT" = scelto sul prodotto, "CATEGORY" = ereditato dalla
+    #: categoria (`category_name`), None = nessuno.
+    source: str | None = None
+    category_name: str | None = None
+
+
+async def resolve_suppliers(
+    db: AsyncSession, *, organization_id: uuid.UUID, products: Sequence[JavMarketProduct]
+) -> dict[uuid.UUID, ResolvedSupplier]:
+    """Il fornitore di ogni prodotto: **l'unico posto** in cui si decide.
+
+    Quello scritto sul prodotto, se c'è; altrimenti quello della prima sua
+    categoria (in ordine di posizione, poi di nome) che ne ha uno. Il
+    prodotto vince perché è la scelta più precisa: «Integratori» va a
+    un'azienda, ma la barretta che arriva da un'altra si corregge sul
+    prodotto senza toccare la categoria. Una categoria nascosta al cliente
+    conta lo stesso: nasconderla toglie un filtro, non cambia chi fa la merce.
+
+    Due query per tutta la lista, mai una per prodotto: la chiama l'elenco
+    del catalogo in amministrazione."""
+    without = [p.id for p in products if p.producer_id is None]
+    via_category: dict[uuid.UUID, tuple[uuid.UUID, str]] = {}
+    if without:
+        rows = await db.execute(
+            select(ShopCategoryProduct.product_id, ShopCategory.producer_id, ShopCategory.name)
+            .join(ShopCategory, ShopCategory.id == ShopCategoryProduct.category_id)
+            .where(
+                ShopCategoryProduct.organization_id == organization_id,
+                ShopCategoryProduct.shop == SHOP,
+                ShopCategoryProduct.product_id.in_(without),
+                ShopCategory.producer_id.is_not(None),
+            )
+            .order_by(ShopCategory.position, ShopCategory.name)
+        )
+        for product_id, producer_id, category_name in rows.all():
+            via_category.setdefault(product_id, (producer_id, category_name))
+
+    ids = {p.producer_id for p in products if p.producer_id} | {pid for pid, _ in via_category.values()}
+    producers: dict[uuid.UUID, JavMarketProducer] = {}
+    if ids:
+        found = await db.execute(select(JavMarketProducer).where(JavMarketProducer.id.in_(ids)))
+        producers = {p.id: p for p in found.scalars().all()}
+
+    out: dict[uuid.UUID, ResolvedSupplier] = {}
+    for product in products:
+        if product.producer_id:
+            out[product.id] = ResolvedSupplier(producers.get(product.producer_id), "PRODUCT")
+        elif product.id in via_category:
+            producer_id, category_name = via_category[product.id]
+            out[product.id] = ResolvedSupplier(producers.get(producer_id), "CATEGORY", category_name)
+        else:
+            out[product.id] = ResolvedSupplier(None)
+    return out
+
+
+def supplier_brief(producer: JavMarketProducer | None) -> dict | None:
+    """Quanto serve all'amministratore per riconoscere un fornitore in un
+    elenco, e per capire se gli si può scrivere."""
+    if producer is None:
+        return None
+    return {"id": producer.id, "name": producer.name, "email": producer.email, "active": producer.active}
+
+
+async def admin_products_read(db: AsyncSession, *, organization_id: uuid.UUID) -> list[dict]:
+    """L'elenco del catalogo in amministrazione, con fornitore risolto e
+    categorie lette in blocco per tutta la lista."""
+    from app.domains.shop_categories import service as shop_categories_service
+
+    products = await list_products(db, organization_id=organization_id)
+    suppliers = await resolve_suppliers(db, organization_id=organization_id, products=products)
+    categories = await shop_categories_service.category_ids_by_product(
+        db, organization_id=organization_id, shop=SHOP, product_ids=[p.id for p in products],
+    )
+    return [
+        await product_read_dict(
+            db, p, admin=True, supplier=suppliers[p.id], category_ids=categories.get(p.id, [])
+        )
+        for p in products
+    ]
+
+
+async def product_read_dict(
+    db: AsyncSession, product: JavMarketProduct, *, admin: bool,
+    supplier: ResolvedSupplier | None = None, category_ids: list[uuid.UUID] | None = None,
+) -> dict:
     variants = await _variants(db, product.id)
     producer = await db.get(JavMarketProducer, product.producer_id) if product.producer_id else None
     out = {
@@ -395,8 +527,26 @@ async def product_read_dict(db: AsyncSession, product: JavMarketProduct, *, admi
         ],
     }
     if admin:
+        from app.domains.shop_categories import service as shop_categories_service
+
+        if supplier is None:
+            supplier = (
+                await resolve_suppliers(db, organization_id=product.organization_id, products=[product])
+            )[product.id]
         out["unit_cost_cents"] = product.unit_cost_cents
         out["producer_id"] = product.producer_id
+        #: Il fornitore a cui andranno gli ordini, anche quando arriva dalla
+        #: categoria: l'amministratore deve vederlo sul prodotto, non
+        #: dedurlo.
+        out["supplier"] = supplier_brief(supplier.producer)
+        out["supplier_source"] = supplier.source
+        out["supplier_category_name"] = supplier.category_name
+        out["category_ids"] = (
+            category_ids if category_ids is not None
+            else await shop_categories_service.category_ids_for_product(
+                db, organization_id=product.organization_id, shop=SHOP, product_id=product.id
+            )
+        )
     return out
 
 
@@ -404,8 +554,8 @@ async def shop_card(
     db: AsyncSession, *, product: JavMarketProduct, settings: JavMarketSettings,
     bank_transfer_discount_percentage: int, category_ids: list[uuid.UUID] | None = None,
 ) -> dict | None:
-    """La scheda nella griglia del cliente: stessa forma degli altri negozi,
-    cosi' lo Shop la disegna senza sapere da quale negozio venga."""
+    """La scheda nella griglia del cliente: la stessa forma che la vetrina
+    a pagine (`marketplaces/paging.py`) si aspetta da ogni negozio."""
     from app.domains.shop_categories import service as shop_categories_service
 
     variants = [v for v in await _variants(db, product.id) if v.active]
@@ -470,7 +620,7 @@ async def customer_products_page(
     search: str | None = None,
     category_id: uuid.UUID | None = None,
 ) -> dict:
-    """Session 89: la vetrina a pagine («Mostra altri prodotti»), come tutti
+    """La vetrina a pagine («Mostra altri prodotti»), come tutti
     i Marketplace: vedi marketplaces/paging.py."""
     from app.domains.shop_categories import service as shop_categories_service
 
@@ -526,8 +676,7 @@ async def _sellable(
 
 def creditable_cents_per_line(items: list[dict]) -> list[int]:
     """La percentuale di ogni prodotto sul suo valore; la spedizione non
-    entra. Stessa regola degli altri negozi, perché al cliente il JavCash
-    deve comportarsi uguale ovunque."""
+    entra."""
     return [round(i["line_total_cents"] * i["credit_discount_percentage"] / 100) for i in items]
 
 
@@ -578,7 +727,6 @@ def taxable_base_cents(order: JavMarketOrder) -> int:
 async def payment_methods(db: AsyncSession, *, organization_id: uuid.UUID) -> dict:
     return {
         "bank_transfer": await organizations_service.is_bank_transfer_configured(db, organization_id=organization_id),
-        "card": await organizations_service.is_stripe_configured(db, organization_id=organization_id),
     }
 
 
@@ -609,12 +757,15 @@ async def get_quote(
         product, variant = await _sellable(db, organization_id=organization_id, variant_id=line_variant_id)
         if variant.inventory is not None and variant.inventory < line_quantity:
             raise JavMarketValidationError(f"«{product.name}»: disponibili solo {variant.inventory} pezzi.")
-        producer = await db.get(JavMarketProducer, product.producer_id) if product.producer_id else None
+        producer = (
+            await resolve_suppliers(db, organization_id=organization_id, products=[product])
+        )[product.id].producer
         items.append({
             "variant_id": variant.id,
             "product_id": product.id,
             "product_name": product.name,
             "variant_label": variant.label,
+            "producer_id": producer.id if producer else None,
             "producer_name": producer.name if producer else None,
             "image_url": variant.image_url or product.image_url,
             "quantity": line_quantity,
@@ -667,7 +818,6 @@ async def get_quote(
             residual_cents=amount, percentage=discount_percentage
         ),
         "bank_transfer_available": methods["bank_transfer"],
-        "card_available": methods["card"],
         "default_address": {
             "street": user.residence_street if user else None,
             "city": user.residence_city if user else None,
@@ -706,10 +856,16 @@ async def create_order(
     variant_id: uuid.UUID | None = None,
     quantity: int = 1,
     lines: list[OrderLine] | None = None,
+    athlete_id: uuid.UUID | None = None,
 ) -> JavMarketOrder:
     """Crea l'ordine con ogni importo ricalcolato qui, mai preso dal
     browser. Nasce multi-riga: il denaro sta sulla testata, la merce sulle
-    righe."""
+    righe. `athlete_id`, se c'è, deve essere un atleta della famiglia di chi
+    compra."""
+    if athlete_id is not None:
+        athlete = await db.get(ClubAthlete, athlete_id)
+        if athlete is None or athlete.organization_id != organization_id or athlete.guardian_user_id != customer_user_id:
+            raise JavMarketNotFoundError("Atleta non trovato.")
     order_lines = _lines_from(variant_id, quantity, lines)
     quote = await get_quote(
         db, organization_id=organization_id, customer_user_id=customer_user_id, lines=order_lines
@@ -736,8 +892,6 @@ async def create_order(
     methods = await payment_methods(db, organization_id=organization_id)
     if payment_method == "BANK_TRANSFER" and not methods["bank_transfer"]:
         raise JavMarketValidationError("Il pagamento con bonifico non è configurato.")
-    if payment_method == "CARD" and not methods["card"]:
-        raise JavMarketValidationError("Il pagamento con carta non è configurato.")
 
     wallet = None
     if credit_applied_cents > 0:
@@ -750,6 +904,7 @@ async def create_order(
     order = JavMarketOrder(
         organization_id=organization_id,
         customer_user_id=customer_user_id,
+        athlete_id=athlete_id,
         created_by_user_id=actor_user_id,
         items_cents=quote["items_cents"],
         shipping_cents=quote["shipping_cents"],
@@ -784,6 +939,7 @@ async def create_order(
             product_name=item["product_name"][:255],
             variant_label=(item["variant_label"] or None) and item["variant_label"][:255],
             producer_name=(item["producer_name"] or None) and item["producer_name"][:160],
+            producer_id=item["producer_id"],
             credit_discount_percentage=item["credit_discount_percentage"],
         ))
     await freeze_bank_transfer_discount(db, order=order)
@@ -838,8 +994,7 @@ async def get_owned(
 
 
 def delivery_status(order: JavMarketOrder) -> str | None:
-    """L'unico stato di spedizione che il cliente vede, con gli stessi
-    valori degli altri negozi."""
+    """L'unico stato di spedizione che il cliente vede."""
     if order.status != "PAID":
         return None
     if order.delivered_at:
@@ -849,9 +1004,43 @@ def delivery_status(order: JavMarketOrder) -> str | None:
     return "PREPARING" if order.fulfillment_status != "NOT_SENT" else "RECEIVED"
 
 
-async def order_read_dict(db: AsyncSession, order: JavMarketOrder, *, admin: bool) -> dict:
-    from app.domains.imported_products.service import _resolve_display_name
+async def _resolve_display_name(db: AsyncSession, *, organization_id: uuid.UUID, user_id: uuid.UUID) -> str:
+    """Il nome con cui mostrare il cliente: quello da promoter se lo è, poi
+    l'anagrafica cliente, infine l'email."""
+    agent = (
+        await db.execute(
+            select(AgentProfile.display_name).where(
+                AgentProfile.organization_id == organization_id, AgentProfile.user_id == user_id
+            )
+        )
+    ).scalar_one_or_none()
+    if agent:
+        return agent
 
+    customer = (
+        await db.execute(
+            select(Customer).where(Customer.organization_id == organization_id, Customer.user_id == user_id)
+        )
+    ).scalar_one_or_none()
+    if customer is not None:
+        profile = await db.get(CustomerProfile, customer.id)
+        company = await db.get(Company, customer.id)
+        name = display_name_for(customer.kind, profile, company)
+        if name != "—":
+            return name
+
+    user = await db.get(User, user_id)
+    return user.email if user else "—"
+
+
+async def _athlete_name(db: AsyncSession, athlete_id: uuid.UUID | None) -> str | None:
+    if athlete_id is None:
+        return None
+    athlete = await db.get(ClubAthlete, athlete_id)
+    return f"{athlete.first_name} {athlete.last_name}" if athlete else None
+
+
+async def order_read_dict(db: AsyncSession, order: JavMarketOrder, *, admin: bool) -> dict:
     items = await order_items(db, order)
     out = {
         "id": order.id,
@@ -861,6 +1050,8 @@ async def order_read_dict(db: AsyncSession, order: JavMarketOrder, *, admin: boo
         "customer_display_name": await _resolve_display_name(
             db, organization_id=order.organization_id, user_id=order.customer_user_id
         ),
+        "athlete_id": order.athlete_id,
+        "athlete_name": await _athlete_name(db, order.athlete_id),
         "product_name": items_summary(items) if items else "—",
         "product_image_url": None,
         "items": [
@@ -889,7 +1080,6 @@ async def order_read_dict(db: AsyncSession, order: JavMarketOrder, *, admin: boo
         "amount_due_cents": amount_due_cents(order),
         "status": order.status,
         "payment_method": order.payment_method,
-        "stripe_checkout_session_id": order.stripe_checkout_session_id,
         "payment_proof_uploaded_at": order.payment_proof_uploaded_at,
         "note": order.note,
         "paid_at": order.paid_at,
@@ -925,6 +1115,9 @@ async def order_read_dict(db: AsyncSession, order: JavMarketOrder, *, admin: boo
             "producers": [
                 {"name": i.producer_name} for i in items if i.producer_name
             ],
+            #: Le righe non ancora mandate a nessun fornitore: zero vuol dire
+            #: che il pulsante «Invia alle aziende» non ha più niente da fare.
+            "supplier_pending_count": sum(1 for i in items if i.supplier_dispatch_id is None),
             "supplier_cost_cents": costo if noto else None,
             #: Al netto di IVA e sconto: l'IVA non è mai stata nostra.
             "estimated_margin_cents": taxable_base_cents(order) - costo if noto else None,
@@ -932,9 +1125,7 @@ async def order_read_dict(db: AsyncSession, order: JavMarketOrder, *, admin: boo
     return out
 
 
-async def _mark_paid(
-    db: AsyncSession, *, order: JavMarketOrder, by_card: bool, actor_user_id: uuid.UUID | None
-) -> None:
+async def _mark_paid(db: AsyncSession, *, order: JavMarketOrder, actor_user_id: uuid.UUID | None) -> None:
     order.status = "PAID"
     order.paid_by_user_id = actor_user_id
     order.paid_at = utcnow()
@@ -948,10 +1139,10 @@ async def _mark_paid(
     await notifications_service.notify_roles(
         db, organization_id=order.organization_id, roles=notifications_service.STAFF_NOTIFY_ROLES,
         type_="JAV_MARKET_ORDER_PAID", entity_type="jav_market_order", entity_id=order.id,
-        title=f"{'Pagamento Stripe' if by_card else 'Bonifico'} confermato: {name}",
+        title=f"Bonifico confermato: {name}",
         body=f"{amount_due_cents(order) / 100:.2f} EUR -- da preparare e spedire",
     )
-    await _send_payment_receipt_email(db, order=order, items=items, by_card=by_card)
+    await _send_payment_receipt_email(db, order=order, items=items)
 
 
 async def confirm_payment(
@@ -962,72 +1153,64 @@ async def confirm_payment(
         raise JavMarketNotFoundError("Ordine non trovato.")
     if order.status != "AWAITING_PAYMENT":
         raise JavMarketValidationError("Questo ordine non è in attesa di pagamento.")
-    if order.payment_method == "CARD":
-        raise JavMarketValidationError("Un ordine pagato con carta viene confermato automaticamente da Stripe.")
-    await _mark_paid(db, order=order, by_card=False, actor_user_id=actor_user_id)
+    await _mark_paid(db, order=order, actor_user_id=actor_user_id)
     await db.commit()
     await db.refresh(order)
     await after_paid(db, order=order)
     return order
 
 
-async def mark_paid_by_session(
-    db: AsyncSession, *, organization_id: uuid.UUID, stripe_checkout_session_id: str,
-    order_id: str | None = None,
-) -> JavMarketOrder | None:
-    found = await db.execute(
-        select(JavMarketOrder).where(
-            JavMarketOrder.organization_id == organization_id,
-            JavMarketOrder.stripe_checkout_session_id == stripe_checkout_session_id,
-        )
-    )
-    order = found.scalar_one_or_none()
-    if order is None and order_id:
-        try:
-            order = await get_org_scoped(db, organization_id=organization_id, order_id=uuid.UUID(str(order_id)))
-        except ValueError:
-            order = None
-    if order is None or order.status != "AWAITING_PAYMENT":
-        return order
-    await _mark_paid(db, order=order, by_card=True, actor_user_id=None)
-    await db.commit()
-    await db.refresh(order)
-    await after_paid(db, order=order)
-    return order
+PAYMENT_PROOF_PRESIGNED_URL_TTL_SECONDS = 300
 
 
-async def change_payment_method(
-    db: AsyncSession, *, organization_id: uuid.UUID, order: JavMarketOrder, new_payment_method: str
+async def upload_payment_proof(
+    db: AsyncSession, *, order: JavMarketOrder, file_bytes: bytes, content_type: str, original_filename: str,
+    actor_user_id: uuid.UUID,
 ) -> JavMarketOrder:
-    if new_payment_method not in JAV_MARKET_ORDER_PAYMENT_METHODS:
-        raise JavMarketValidationError("Metodo di pagamento non valido.")
+    """Il genitore allega la foto del bonifico a un ordine dello Shop (il
+    judogi, il materiale): è un'informazione in più per chi conferma il
+    bonifico, mai una conferma. Diversamente dalle quote del club, qui la
+    merce parte solo quando la piattaforma ha visto i soldi. Ricaricarla
+    sostituisce la precedente."""
+    from app.core.storage import UploadValidationError
+    from app.core.storage import upload_document as storage_upload_document
+
     if order.status != "AWAITING_PAYMENT":
-        raise JavMarketValidationError("L'ordine non è più in attesa di pagamento.")
-    order.payment_method = new_payment_method
-    await freeze_bank_transfer_discount(db, order=order)
+        raise JavMarketValidationError("Questo ordine non è in attesa di pagamento.")
+    if order.payment_method != "BANK_TRANSFER":
+        raise JavMarketValidationError("La prova di pagamento serve solo per gli ordini pagati con bonifico.")
+    try:
+        order.payment_proof_storage_key = storage_upload_document(
+            file_bytes=file_bytes, content_type=content_type,
+            key_prefix=f"jav-market-payment-proofs/{order.customer_user_id}",
+        )
+    except UploadValidationError as exc:
+        raise JavMarketValidationError("Carica una foto (JPG o PNG) o un PDF, di massimo 15 MB.") from exc
+    order.payment_proof_original_filename = original_filename[:255]
+    order.payment_proof_uploaded_at = utcnow()
+    await audit_service.record(
+        db, organization_id=order.organization_id, actor_user_id=actor_user_id,
+        action="jav_market.payment_proof_uploaded", entity_type="jav_market_order", entity_id=str(order.id),
+    )
+    await notifications_service.notify_roles(
+        db, organization_id=order.organization_id, roles=notifications_service.STAFF_NOTIFY_ROLES,
+        type_="ORDER_PAYMENT_PROOF_UPLOADED", entity_type="jav_market_order", entity_id=order.id,
+        title=f"Prova di bonifico caricata: ordine {order_number(order)}",
+        body=f"{amount_due_cents(order) / 100:.2f} EUR -- controlla e conferma il pagamento",
+        exclude_user_id=actor_user_id,
+    )
     await db.commit()
     await db.refresh(order)
     return order
 
 
-async def prepare_card_payment(db: AsyncSession, *, order: JavMarketOrder) -> int:
-    """Quanto addebitare con Stripe: lo sconto bonifico sparisce, perché non
-    si sta pagando con bonifico."""
-    order.payment_method = "CARD"
-    await freeze_bank_transfer_discount(db, order=order)
-    await db.commit()
-    await db.refresh(order)
-    return amount_due_cents(order)
+def presigned_payment_proof_url(order: JavMarketOrder) -> str:
+    from app.core.storage import generate_presigned_document_url
 
-
-async def attach_stripe_checkout_session(
-    db: AsyncSession, *, order: JavMarketOrder, session_id: str
-) -> JavMarketOrder:
-    order.payment_method = "CARD"
-    order.stripe_checkout_session_id = session_id
-    await db.commit()
-    await db.refresh(order)
-    return order
+    assert order.payment_proof_storage_key is not None  # lo controlla la rotta
+    return generate_presigned_document_url(
+        storage_key=order.payment_proof_storage_key, expires_in_seconds=PAYMENT_PROOF_PRESIGNED_URL_TTL_SECONDS
+    )
 
 
 async def mark_shipped(
@@ -1114,7 +1297,6 @@ async def _send_order_email(db: AsyncSession, *, order: JavMarketOrder) -> None:
     user = await db.get(User, order.customer_user_id)
     if user is None:
         return
-    settings = get_settings()
     code = order_code(order)
     items = await order_items(db, order)
     title = items_summary(items) if items else "il tuo ordine"
@@ -1131,22 +1313,7 @@ async def _send_order_email(db: AsyncSession, *, order: JavMarketOrder) -> None:
     )
     cta_label = cta_url = None
     heading = "Completa il pagamento del tuo ordine"
-    if order.payment_method == "CARD":
-        import stripe
-
-        from app.domains.payments import service as payments_service
-
-        body += f"<p>Da pagare con carta: <strong>{amount_due_cents(order) / 100:.2f} &euro;</strong></p>"
-        try:
-            cta_url = await payments_service.create_checkout_session_for_jav_market_order(
-                db, organization_id=order.organization_id, order=order,
-                success_url=f"{settings.public_app_base_url}/customer?tab=orders",
-                cancel_url=f"{settings.public_app_base_url}/customer?tab=orders",
-            )
-            cta_label = "Paga con carta"
-        except (payments_service.StripeNotConfiguredError, stripe.error.StripeError):
-            logger.exception("Jav Market order %s confirmation email sent without a Stripe link", order.id)
-    else:
+    if order.payment_method == "BANK_TRANSFER":
         bank = await organizations_service.get_settings(db, organization_id=order.organization_id)
         discount = order.bank_transfer_discount_cents or 0
         body += f"<p>Da pagare con bonifico: <strong>{amount_due_cents(order) / 100:.2f} &euro;</strong>"
@@ -1174,7 +1341,7 @@ async def _send_order_email(db: AsyncSession, *, order: JavMarketOrder) -> None:
 
 
 async def _send_payment_receipt_email(
-    db: AsyncSession, *, order: JavMarketOrder, items: list[JavMarketOrderItem], by_card: bool
+    db: AsyncSession, *, order: JavMarketOrder, items: list[JavMarketOrderItem]
 ) -> None:
     """La ricevuta: cosa hai pagato. Ripete l'elenco invece di rimandare
     alla prima email -- una ricevuta che non si basta da sola non serve."""
@@ -1194,7 +1361,7 @@ async def _send_payment_receipt_email(
         body += f"Sconto per pagamento con bonifico: -{order.bank_transfer_discount_cents / 100:.2f} &euro;<br>"
     body += (
         f"<strong>Totale pagato: {amount_due_cents(order) / 100:.2f} &euro;</strong> "
-        f"({'carta' if by_card else 'bonifico'})</p>"
+        "(bonifico)</p>"
     )
     if order.vat_amount_cents:
         body += f"<p><small>IVA {order.vat_percentage}%: {order.vat_amount_cents / 100:.2f} &euro;</small></p>"
@@ -1242,77 +1409,446 @@ async def _notify_customer_shipping(db: AsyncSession, *, order: JavMarketOrder, 
     )
 
 
-# --- L'ordine che parte verso l'azienda (Session 80) -----------------------------------------------
+# --- L'ordine che parte verso l'azienda -----------------------------------------------
+#
+# Ottobre 2026: gli ordini si mandano ai fornitori per riga, non per ordine.
+# Una riga è «da mandare» finché `supplier_dispatch_id` è NULL; la segna solo
+# un'email partita davvero (`JavMarketSupplierDispatch`). Le strade per
+# mandarla sono tre -- la coda «Fornitori da avvisare» (più ordini dello
+# stesso fornitore in un'email sola, con anteprima modificabile), il
+# pulsante sul singolo ordine e l'invio automatico al pagamento -- e tutte
+# segnano le stesse righe: un ordine partito da una strada non riparte
+# dall'altra.
+
+#: Il messaggio di quando lo schermo è rimasto indietro rispetto al database.
+STALE_QUEUE_MESSAGE = (
+    "Nel frattempo qualcosa è cambiato: alcuni di questi ordini sono già stati mandati al fornitore "
+    "(forse da un altro amministratore, o da un doppio clic) oppure non sono più da mandare. "
+    "Aggiorna la pagina e riprova: nessuna email è partita."
+)
 
 
-async def _producers_of(db: AsyncSession, order: JavMarketOrder) -> dict:
-    """Le righe dell'ordine raggruppate per azienda produttrice.
+async def _effective_producer_ids(
+    db: AsyncSession, *, organization_id: uuid.UUID, items: Iterable[JavMarketOrderItem]
+) -> dict[uuid.UUID, uuid.UUID | None]:
+    """Il fornitore di ogni riga ancora da mandare.
 
-    Un ordine può contenere prodotti di aziende diverse: ciascuna deve
-    ricevere **solo le sue righe**, perché è quello che deve preparare e
-    perché il resto non la riguarda. Le righe senza azienda finiscono sotto
-    `None` e le gestisce chi chiama: non c'è nessuno a cui mandarle."""
-    gruppi: dict = {}
-    for item in await order_items(db, order):
-        product = await db.get(JavMarketProduct, item.product_id)
-        producer = (
-            await db.get(JavMarketProducer, product.producer_id)
-            if product is not None and product.producer_id else None
+    Quello congelato sulla riga quando c'è. Se manca -- un ordine fatto
+    prima che il prodotto o la sua categoria avessero un fornitore -- vale
+    quello di oggi: l'avviso «righe senza fornitore» dice all'amministratore
+    di assegnarlo, e deve bastare farlo perché la riga entri nella coda. Lo
+    si congela sulla riga nel momento in cui parte (`_record_dispatch`)."""
+    items = list(items)
+    out: dict[uuid.UUID, uuid.UUID | None] = {i.id: i.producer_id for i in items}
+    missing = {i.product_id for i in items if i.producer_id is None}
+    if missing:
+        rows = await db.execute(select(JavMarketProduct).where(JavMarketProduct.id.in_(missing)))
+        products = list(rows.scalars().all())
+        resolved = await resolve_suppliers(db, organization_id=organization_id, products=products)
+        for item in items:
+            if item.producer_id is None and item.product_id in resolved:
+                producer = resolved[item.product_id].producer
+                out[item.id] = producer.id if producer else None
+    return out
+
+
+def _pending_rows_query(organization_id: uuid.UUID):
+    """Le righe da mandare: ordine pagato, non ancora spedito né consegnato
+    (se la merce è già partita il fornitore non ha più niente da fare), riga
+    mai mandata."""
+    return (
+        select(JavMarketOrderItem, JavMarketOrder)
+        .join(JavMarketOrder, JavMarketOrder.id == JavMarketOrderItem.order_id)
+        .where(
+            JavMarketOrder.organization_id == organization_id,
+            JavMarketOrder.status == "PAID",
+            JavMarketOrder.shipped_at.is_(None),
+            JavMarketOrder.delivered_at.is_(None),
+            JavMarketOrderItem.supplier_dispatch_id.is_(None),
         )
-        chiave = producer.id if producer is not None else None
-        gruppi.setdefault(chiave, {"producer": producer, "items": []})["items"].append(item)
-    return gruppi
+        .order_by(JavMarketOrder.number, JavMarketOrderItem.created_at, JavMarketOrderItem.id)
+    )
 
 
-def _supplier_email_html(order: JavMarketOrder, items: list[JavMarketOrderItem], *, note: str | None) -> str:
-    """Cosa serve all'azienda per preparare e spedire: cosa, quanto, e dove.
+def _line_label(item: JavMarketOrderItem) -> str:
+    """«2 × Judogi Kumite – 170 cm». «Unica» non si scrive: è la variante di
+    chi di varianti non ne ha, e al fornitore non dice niente."""
+    variant = f" – {item.variant_label}" if item.variant_label and item.variant_label != "Unica" else ""
+    return f"{item.quantity} × {item.product_name}{variant}"
+
+
+def supplier_letter(
+    *, producer_name: str, orders: Sequence[tuple[JavMarketOrder, Sequence[JavMarketOrderItem]]],
+    signature: str | None,
+) -> tuple[str, str]:
+    """Oggetto e testo della lettera a un fornitore: uno o più ordini, un
+    blocco ciascuno, perché ogni ordine va a un indirizzo diverso.
+
+    Testo semplice e non HTML: è quello che l'amministratore legge e corregge
+    nell'anteprima, ed è `render_letter` a impaginarlo.
 
     **Nessun prezzo.** Quello che il cliente ha pagato è un fatto nostro, e
     mandarlo al fornitore significherebbe mostrargli il ricarico. Se un
     domani servisse un importo, quello giusto è il costo d'acquisto
     (`unit_cost_cents`), non il prezzo di vendita."""
-    righe = "".join(
-        f"<tr>"
-        f"<td style=\"padding:6px 0\"><strong>{html.escape(i.product_name)}</strong>"
-        + (f"<br><small>{html.escape(i.variant_label)}</small>" if i.variant_label else "")
-        + "</td>"
-        f"<td style=\"padding:6px 0;text-align:right\">× {i.quantity}</td>"
-        f"</tr>"
-        for i in items
+    count = len(orders)
+    pieces = sum(i.quantity for _order, items in orders for i in items)
+    if count == 1:
+        subject = f"Nuovo ordine da preparare: #{order_code(orders[0][0])}"
+        intro = "vi inviamo un nuovo ordine da preparare e spedire direttamente al cliente."
+    else:
+        subject = f"{count} nuovi ordini da preparare"
+        intro = (
+            f"vi inviamo {count} nuovi ordini ({pieces} pezzi in tutto) da preparare e spedire "
+            "direttamente ai clienti: ogni ordine va al suo indirizzo."
+        )
+
+    blocks = []
+    for order, items in orders:
+        lines = [f"ORDINE #{order_code(order)} del {order.created_at.strftime('%d/%m/%Y')}"]
+        lines += [f"- {_line_label(i)}" for i in items]
+        address = ["Consegnare a:", order.recipient_name, order.address_line1]
+        if order.address_line2:
+            address.append(order.address_line2)
+        address.append(f"{order.postal_code} {order.city} ({order.province})")
+        address.append(order.country_code)
+        if order.recipient_phone:
+            address.append(f"Telefono: {order.recipient_phone}")
+        block = "\n".join(lines) + "\n\n" + "\n".join(address)
+        if order.note:
+            block += f"\n\nNote del cliente: {order.note}"
+        blocks.append(block)
+
+    closing = (
+        "Quando la merce parte, rispondete a questa email indicando per ogni ordine il corriere "
+        "e il numero di tracking: lo giriamo noi al cliente."
     )
-    corpo = (
-        f"<p>Ordine <strong>#{order_code(order)}</strong> del "
-        f"{order.created_at.strftime('%d/%m/%Y')}.</p>"
-        f"<table style=\"width:100%;border-collapse:collapse;font-size:14px\">{righe}</table>"
-        "<p style=\"margin-top:16px\"><strong>Consegnare a:</strong><br>"
-        f"{html.escape(order.recipient_name)}<br>"
-        f"{html.escape(order.address_line1)}"
-        + (f"<br>{html.escape(order.address_line2)}" if order.address_line2 else "")
-        + f"<br>{html.escape(order.postal_code)} {html.escape(order.city)} ({html.escape(order.province)})"
-        + f"<br>{html.escape(order.country_code)}"
-        + (f"<br>Telefono: {html.escape(order.recipient_phone)}" if order.recipient_phone else "")
-        + "</p>"
+    body = (
+        f"Buongiorno {producer_name},\n\n{intro}\n\n"
+        + "\n\n".join(blocks)
+        + f"\n\n{closing}\n\n{(signature or '').strip() or 'Grazie,' + chr(10) + 'lo staff di Jav'}"
     )
-    if note:
-        corpo += f"<p><strong>Note dal cliente:</strong> {html.escape(note)}</p>"
-    corpo += (
-        "<p>Quando la spedizione parte, rispondi a questa email con il "
-        "corriere e il numero di tracking: lo giriamo noi al cliente.</p>"
+    return subject, body
+
+
+def _sender(settings: JavMarketSettings) -> dict:
+    """Mittente, risposta e copia nascosta delle email ai fornitori: tutte
+    e tre l'indirizzo scelto nelle impostazioni (info@...). La risposta col
+    tracking torna lì, e la casella tiene la copia di ogni ordine mandato --
+    è anche il modo di rimandarne uno che il fornitore dice di non aver
+    ricevuto. Senza impostazione: il mittente predefinito dell'SMTP."""
+    address = settings.supplier_email_from or None
+    return {"from_address": address, "reply_to": address, "bcc": address}
+
+
+async def _record_dispatch(
+    db: AsyncSession, *, organization_id: uuid.UUID, producer_id: uuid.UUID, source: str,
+    to_email: str, subject: str, body_text: str, items: Sequence[JavMarketOrderItem],
+    actor_user_id: uuid.UUID | None,
+) -> JavMarketSupplierDispatch:
+    """Scrive l'invio e segna le sue righe. Si chiama solo **dopo** che
+    l'email è partita: è questo a rendere un invio fallito innocuo."""
+    dispatch = JavMarketSupplierDispatch(
+        organization_id=organization_id, producer_id=producer_id, source=source,
+        to_email=to_email[:255], subject=subject[:255], body_text=body_text,
+        sent_at=utcnow(), sent_by_user_id=actor_user_id,
     )
-    return corpo
+    db.add(dispatch)
+    await db.flush()
+    for item in items:
+        item.supplier_dispatch_id = dispatch.id
+        # Congelato adesso se non lo era: vedi _effective_producer_ids.
+        item.producer_id = item.producer_id or producer_id
+    return dispatch
+
+
+async def _mark_orders_sent(
+    db: AsyncSession, *, organization_id: uuid.UUID, orders: Iterable[JavMarketOrder],
+    actor_user_id: uuid.UUID | None,
+) -> list[JavMarketOrder]:
+    """Un ordine passa a «mandato» quando tutte le sue righe che hanno un
+    fornitore sono partite: con due fornitori, mandarlo al primo non basta.
+    Uno stato già più avanti (spedito, consegnato) non torna indietro."""
+    done = []
+    for order in orders:
+        items = await order_items(db, order)
+        effective = await _effective_producer_ids(db, organization_id=organization_id, items=items)
+        if not all(i.supplier_dispatch_id is not None for i in items if effective[i.id] is not None):
+            continue
+        if order.fulfillment_status == "NOT_SENT":
+            order.fulfillment_status = "SENT"
+        order.forwarded_at = order.forwarded_at or utcnow()
+        order.forwarded_by_user_id = actor_user_id
+        done.append(order)
+    return done
+
+
+def _queue_order_dict(order: JavMarketOrder, items: Sequence[JavMarketOrderItem]) -> dict:
+    return {
+        "id": order.id,
+        "order_code": order_code(order),
+        "created_at": order.created_at,
+        "paid_at": order.paid_at,
+        "recipient_name": order.recipient_name,
+        "city": order.city,
+        "province": order.province,
+        "items": [
+            {"id": i.id, "product_name": i.product_name, "variant_label": i.variant_label, "quantity": i.quantity}
+            for i in items
+        ],
+    }
+
+
+async def supplier_queue(db: AsyncSession, *, organization_id: uuid.UUID) -> dict:
+    """«Fornitori da avvisare»: le righe pagate e non ancora mandate,
+    raccolte per fornitore e, dentro, per ordine.
+
+    Le righe che non hanno nessun fornitore stanno in una lista a parte:
+    non si possono mandare a nessuno, e l'amministratore deve vederle invece
+    di scoprire tra una settimana che quella merce non l'ha preparata
+    nessuno."""
+    rows = (await db.execute(_pending_rows_query(organization_id))).all()
+    effective = await _effective_producer_ids(
+        db, organization_id=organization_id, items=[item for item, _order in rows]
+    )
+
+    by_producer: dict[uuid.UUID, dict[uuid.UUID, tuple[JavMarketOrder, list[JavMarketOrderItem]]]] = {}
+    unassigned = []
+    for item, order in rows:
+        producer_id = effective[item.id]
+        if producer_id is None:
+            unassigned.append({
+                "item_id": item.id, "order_id": order.id, "order_code": order_code(order),
+                "product_id": item.product_id, "product_name": item.product_name,
+                "variant_label": item.variant_label, "quantity": item.quantity,
+            })
+            continue
+        by_order = by_producer.setdefault(producer_id, {})
+        by_order.setdefault(order.id, (order, []))[1].append(item)
+
+    producers: dict[uuid.UUID, JavMarketProducer] = {}
+    if by_producer:
+        found = await db.execute(select(JavMarketProducer).where(JavMarketProducer.id.in_(by_producer)))
+        producers = {p.id: p for p in found.scalars().all()}
+
+    suppliers = []
+    for producer_id, by_order in by_producer.items():
+        producer = producers[producer_id]
+        orders = list(by_order.values())
+        suppliers.append({
+            "producer": supplier_brief(producer),
+            "order_count": len(orders),
+            "item_count": sum(len(items) for _o, items in orders),
+            "piece_count": sum(i.quantity for _o, items in orders for i in items),
+            "orders": [_queue_order_dict(order, items) for order, items in orders],
+        })
+    suppliers.sort(key=lambda s: s["producer"]["name"].lower())
+    return {"suppliers": suppliers, "unassigned": unassigned}
+
+
+async def _producer(db: AsyncSession, *, organization_id: uuid.UUID, producer_id: uuid.UUID) -> JavMarketProducer:
+    producer = await db.get(JavMarketProducer, producer_id)
+    if producer is None or producer.organization_id != organization_id:
+        raise JavMarketNotFoundError("Fornitore non trovato.")
+    return producer
+
+
+async def supplier_draft(db: AsyncSession, *, organization_id: uuid.UUID, producer_id: uuid.UUID) -> dict:
+    """La lettera pronta da mandare a un fornitore con tutti i suoi ordini
+    in attesa, e gli id delle righe che contiene: l'invio manda **quelle**,
+    non «tutto quello che c'è in coda in quel momento», così un ordine
+    pagato mentre l'amministratore rilegge l'anteprima non parte senza che
+    l'abbia visto."""
+    producer = await _producer(db, organization_id=organization_id, producer_id=producer_id)
+    settings = await get_settings_row(db, organization_id=organization_id)
+    rows = (await db.execute(_pending_rows_query(organization_id))).all()
+    effective = await _effective_producer_ids(
+        db, organization_id=organization_id, items=[item for item, _order in rows]
+    )
+    by_order: dict[uuid.UUID, tuple[JavMarketOrder, list[JavMarketOrderItem]]] = {}
+    for item, order in rows:
+        if effective[item.id] == producer.id:
+            by_order.setdefault(order.id, (order, []))[1].append(item)
+    if not by_order:
+        raise JavMarketConflictError(
+            f"Non ci sono ordini da mandare a «{producer.name}»: forse sono appena partiti. Aggiorna la pagina."
+        )
+    orders = list(by_order.values())
+    subject, body = supplier_letter(
+        producer_name=producer.name, orders=orders, signature=settings.supplier_email_signature
+    )
+    return {
+        "producer_id": producer.id,
+        "producer_name": producer.name,
+        "to_email": producer.email or "",
+        "from_email": settings.supplier_email_from,
+        "subject": subject,
+        "body_text": body,
+        "item_ids": [i.id for _o, items in orders for i in items],
+        "order_codes": [order_code(o) for o, _items in orders],
+    }
+
+
+async def send_supplier_dispatch(
+    db: AsyncSession, *, organization_id: uuid.UUID, producer_id: uuid.UUID, to_email: str,
+    subject: str, body_text: str, item_ids: Sequence[uuid.UUID], actor_user_id: uuid.UUID,
+) -> JavMarketSupplierDispatch:
+    """Manda la lettera (com'è stata corretta nell'anteprima) e segna le
+    righe che contiene.
+
+    Contro il doppio invio: le righe si bloccano (`FOR UPDATE`) e devono
+    essere ancora tutte da mandare e tutte di questo fornitore. Un secondo
+    clic aspetta il primo, poi le trova già segnate e si ferma con un 409
+    prima di spedire. L'email parte con `send_html_email` e non nella
+    versione «best effort»: qui l'email **è** il lavoro, e se non parte
+    l'amministratore deve saperlo e nessuna riga deve risultare mandata."""
+    producer = await _producer(db, organization_id=organization_id, producer_id=producer_id)
+    to_email, subject, body_text = to_email.strip(), subject.strip(), body_text.strip()
+    if not EMAIL_RE.match(to_email):
+        raise JavMarketValidationError("Scrivi un indirizzo email valido per il fornitore.")
+    if not subject:
+        raise JavMarketValidationError("Scrivi l'oggetto dell'email.")
+    if not body_text:
+        raise JavMarketValidationError("Il testo dell'email è vuoto.")
+    wanted = list(dict.fromkeys(item_ids))
+    if not wanted:
+        raise JavMarketValidationError("Nessun ordine da mandare.")
+    # Prima del blocco: get_settings_row può fare commit (prima lettura), e un
+    # commit qui scioglierebbe i FOR UPDATE.
+    settings = await get_settings_row(db, organization_id=organization_id)
+
+    rows = (
+        await db.execute(
+            select(JavMarketOrderItem, JavMarketOrder)
+            .join(JavMarketOrder, JavMarketOrder.id == JavMarketOrderItem.order_id)
+            .where(JavMarketOrderItem.id.in_(wanted), JavMarketOrder.organization_id == organization_id)
+            .with_for_update(of=JavMarketOrderItem)
+        )
+    ).all()
+    effective = await _effective_producer_ids(
+        db, organization_id=organization_id, items=[item for item, _order in rows]
+    )
+    still_pending = len(rows) == len(wanted) and all(
+        order.status == "PAID" and order.shipped_at is None and order.delivered_at is None
+        and item.supplier_dispatch_id is None and effective[item.id] == producer.id
+        for item, order in rows
+    )
+    if not still_pending:
+        await db.rollback()
+        raise JavMarketConflictError(STALE_QUEUE_MESSAGE)
+
+    try:
+        send_html_email(
+            to=to_email, subject=subject, html_body=render_letter(subject=subject, body_text=body_text),
+            text_body=body_text, **_sender(settings),
+        )
+    except EmailNotConfiguredError as exc:
+        await db.rollback()
+        raise JavMarketValidationError(
+            "L'email non è partita: l'invio delle email non è ancora configurato sul server. "
+            "Nessun ordine è stato segnato come mandato. Chiedi a chi gestisce la piattaforma di "
+            "configurare la posta in uscita, oppure copia il testo e mandalo tu dalla tua casella."
+        ) from exc
+    except Exception as exc:
+        logger.exception("Email al fornitore %s non partita", producer.id)
+        await db.rollback()
+        raise JavMarketValidationError(
+            "L'email non è partita: il server di posta non l'ha accettata. Nessun ordine è stato "
+            "segnato come mandato, quindi puoi riprovare tra qualche minuto senza rischiare doppioni. "
+            "Se si ripete, controlla l'indirizzo del fornitore e quello del mittente nelle impostazioni."
+        ) from exc
+
+    items = [item for item, _order in rows]
+    dispatch = await _record_dispatch(
+        db, organization_id=organization_id, producer_id=producer.id, source="QUEUE",
+        to_email=to_email, subject=subject, body_text=body_text, items=items, actor_user_id=actor_user_id,
+    )
+    orders = list({order.id: order for _item, order in rows}.values())
+    await _mark_orders_sent(db, organization_id=organization_id, orders=orders, actor_user_id=actor_user_id)
+    await audit_service.record(
+        db, organization_id=organization_id, actor_user_id=actor_user_id,
+        action="jav_market.supplier_dispatch_sent", entity_type="jav_market_supplier_dispatch",
+        entity_id=str(dispatch.id),
+        new_value={
+            "fornitore": producer.name, "a": to_email, "oggetto": subject,
+            "ordini": [order_code(o) for o in orders], "righe": len(items),
+        },
+    )
+    await db.commit()
+    await db.refresh(dispatch)
+    return dispatch
+
+
+async def list_supplier_dispatches(
+    db: AsyncSession, *, organization_id: uuid.UUID, limit: int = 50
+) -> list[dict]:
+    """Lo storico delle email ai fornitori, le più recenti prima, con il
+    testo esatto che è partito."""
+    rows = (
+        await db.execute(
+            select(JavMarketSupplierDispatch, JavMarketProducer.name, User.email)
+            .join(JavMarketProducer, JavMarketProducer.id == JavMarketSupplierDispatch.producer_id)
+            .outerjoin(User, User.id == JavMarketSupplierDispatch.sent_by_user_id)
+            .where(JavMarketSupplierDispatch.organization_id == organization_id)
+            .order_by(JavMarketSupplierDispatch.sent_at.desc())
+            .limit(limit)
+        )
+    ).all()
+    ids = [d.id for d, _name, _email in rows]
+    counts: dict[uuid.UUID, tuple[int, int]] = {}
+    codes: dict[uuid.UUID, list[str]] = {}
+    if ids:
+        for dispatch_id, item_count, piece_count in (
+            await db.execute(
+                select(
+                    JavMarketOrderItem.supplier_dispatch_id, func.count(), func.sum(JavMarketOrderItem.quantity)
+                )
+                .where(JavMarketOrderItem.supplier_dispatch_id.in_(ids))
+                .group_by(JavMarketOrderItem.supplier_dispatch_id)
+            )
+        ).all():
+            counts[dispatch_id] = (item_count, int(piece_count or 0))
+        for dispatch_id, number in (
+            await db.execute(
+                select(JavMarketOrderItem.supplier_dispatch_id, JavMarketOrder.number)
+                .join(JavMarketOrder, JavMarketOrder.id == JavMarketOrderItem.order_id)
+                .where(JavMarketOrderItem.supplier_dispatch_id.in_(ids))
+                .distinct()
+                .order_by(JavMarketOrder.number)
+            )
+        ).all():
+            codes.setdefault(dispatch_id, []).append(str(number))
+    return [
+        {
+            "id": d.id,
+            "producer_id": d.producer_id,
+            "producer_name": name,
+            "source": d.source,
+            "to_email": d.to_email,
+            "subject": d.subject,
+            "body_text": d.body_text,
+            "sent_at": d.sent_at,
+            "sent_by_email": sent_by,
+            "order_codes": codes.get(d.id, []),
+            "order_count": len(codes.get(d.id, [])),
+            "item_count": counts.get(d.id, (0, 0))[0],
+            "piece_count": counts.get(d.id, (0, 0))[1],
+        }
+        for d, name, sent_by in rows
+    ]
 
 
 async def forward_order(
     db: AsyncSession, *, organization_id: uuid.UUID, order_id: uuid.UUID, actor_user_id: uuid.UUID | None
 ) -> JavMarketOrder:
-    """Manda l'ordine alle aziende che devono preparare la merce.
+    """Manda un solo ordine ai suoi fornitori, senza anteprima: il pulsante
+    sull'ordine e l'invio automatico al pagamento.
 
-    Una email per azienda, con dentro solo le sue righe e l'indirizzo di
-    consegna. Si può rifare: se una email si perde, l'amministratore
-    ripreme il pulsante e riparte, perché qui non si crea niente dall'altra
-    parte -- a differenza di AliExpress, dove un secondo invio sarebbe un
-    secondo acquisto. L'automatismo invece passa di qui una volta sola
-    (vedi after_paid).
+    Una email per fornitore, con dentro solo le sue righe e l'indirizzo di
+    consegna -- la stessa lettera della coda (`supplier_letter`). Manda solo
+    le righe **non ancora mandate**: un ordine già partito dalla coda non
+    riparte da qui, e uno partito da qui sparisce dalla coda. Se un'email
+    si perde, la copia è nella casella del mittente (vedi `_sender`).
 
     Si inoltra solo un ordine **pagato**: mandare a un'azienda una merce da
     preparare prima di aver incassato è il modo più rapido di regalarla.
@@ -1323,59 +1859,67 @@ async def forward_order(
     if order.status != "PAID":
         raise JavMarketValidationError("Si invia all'azienda solo un ordine già pagato dal cliente.")
 
-    gruppi = await _producers_of(db, order)
+    settings = await get_settings_row(db, organization_id=organization_id)
+    items = await order_items(db, order)
+    effective = await _effective_producer_ids(db, organization_id=organization_id, items=items)
+    gruppi: dict[uuid.UUID | None, list[JavMarketOrderItem]] = {}
+    for item in items:
+        if item.supplier_dispatch_id is None:
+            gruppi.setdefault(effective[item.id], []).append(item)
     senza_azienda = gruppi.pop(None, None)
     if not gruppi:
+        if senza_azienda:
+            raise JavMarketValidationError(
+                "Nessun prodotto di questo ordine ha un fornitore: assegnalo al prodotto o alla sua "
+                "categoria dal catalogo e riprova."
+            )
         raise JavMarketValidationError(
-            "Nessun prodotto di questo ordine ha un'azienda produttrice: assegnala dal catalogo e riprova."
+            "Questo ordine è già stato mandato a tutti i suoi fornitori: lo trovi nello storico degli invii."
         )
 
-    mandate, problemi = 0, []
-    for gruppo in gruppi.values():
-        producer = gruppo["producer"]
+    mandate, problemi, aziende = 0, [], []
+    for producer_id, righe in gruppi.items():
+        assert producer_id is not None
+        producer = await _producer(db, organization_id=organization_id, producer_id=producer_id)
+        aziende.append(producer.name)
         if not producer.email:
             problemi.append(f"«{producer.name}» non ha un'email in scheda")
             continue
+        subject, body = supplier_letter(
+            producer_name=producer.name, orders=[(order, righe)], signature=settings.supplier_email_signature
+        )
         inviata = send_html_email_best_effort(
             context=f"Jav Market supplier order (order={order.id}, producer={producer.id})",
-            to=producer.email,
-            subject=f"Nuovo ordine #{order_code(order)} da Jav",
-            html_body=render_email(
-                preheader=f"Ordine #{order_code(order)} da preparare",
-                heading="Un nuovo ordine da preparare",
-                body_html=_supplier_email_html(order, gruppo["items"], note=order.note),
-                cta_label=None, cta_url=None,
-            ),
-            text_body=(
-                f"Ordine #{order_code(order)}: "
-                + ", ".join(f"{i.quantity} × {i.product_name}" for i in gruppo["items"])
-                + f". Consegna a {order.recipient_name}, {order.address_line1}, "
-                f"{order.postal_code} {order.city} ({order.province})."
-            ),
+            to=producer.email, subject=subject,
+            html_body=render_letter(subject=subject, body_text=body), text_body=body,
+            **_sender(settings),
         )
         if inviata:
             mandate += 1
+            await _record_dispatch(
+                db, organization_id=organization_id, producer_id=producer.id,
+                source="ORDER" if actor_user_id else "AUTO", to_email=producer.email, subject=subject,
+                body_text=body, items=righe, actor_user_id=actor_user_id,
+            )
         else:
             problemi.append(f"l'email a «{producer.name}» non è partita")
 
     if senza_azienda:
-        problemi.append(
-            "senza azienda: " + ", ".join(i.product_name for i in senza_azienda["items"])
-        )
+        problemi.append("senza fornitore: " + ", ".join(i.product_name for i in senza_azienda))
 
     order.forward_error = "; ".join(problemi)[:500] or None
     if mandate:
-        order.fulfillment_status = "SENT"
+        # Come prima che esistesse la coda: basta un fornitore avvisato
+        # perché l'ordine sia «in preparazione»; quello che manca resta
+        # scritto in forward_error e nella coda.
+        if order.fulfillment_status == "NOT_SENT":
+            order.fulfillment_status = "SENT"
         order.forwarded_at = order.forwarded_at or utcnow()
         order.forwarded_by_user_id = actor_user_id
     await audit_service.record(
         db, organization_id=organization_id, actor_user_id=actor_user_id,
         action="jav_market.order_forwarded", entity_type="jav_market_order", entity_id=str(order.id),
-        new_value={
-            "aziende": [g["producer"].name for g in gruppi.values()],
-            "email_inviate": mandate,
-            "problemi": problemi,
-        },
+        new_value={"aziende": aziende, "email_inviate": mandate, "problemi": problemi},
     )
     if problemi:
         # Lo staff deve saperlo subito: una riga senza azienda o una email
@@ -1398,7 +1942,7 @@ async def forward_order(
 async def after_paid(db: AsyncSession, *, order: JavMarketOrder) -> None:
     """Un ordine appena pagato parte da solo verso le aziende, se
     l'amministratore ha acceso l'automatismo; altrimenti aspetta il
-    pulsante «Invia alle aziende».
+    pulsante «Invia alle aziende» o la coda «Fornitori da avvisare».
 
     Un invio fallito non deve far fallire il pagamento, che a questo punto
     è già incassato: l'errore resta scritto sull'ordine e lo staff riceve

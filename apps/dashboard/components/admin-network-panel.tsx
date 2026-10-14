@@ -105,11 +105,11 @@ export function AdminNetworkPanel() {
   }
 
   return (
-    <div className="glass-card rounded-2xl p-6 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70">
+    <div className="glass-card rounded-2xl p-6 border-slate-200 bg-white/70">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div>
-          <h3 className="text-lg font-semibold text-white light:text-slate-900">Rete Commerciale</h3>
-          <p className="text-xs text-slate-400 light:text-slate-500">
+          <h3 className="text-lg font-semibold text-slate-900">Rete Commerciale</h3>
+          <p className="text-xs text-slate-500">
             Struttura gerarchica completa dell&apos;organizzazione, fino a {maxDepth} livelli di profondità
           </p>
         </div>
@@ -125,7 +125,7 @@ export function AdminNetworkPanel() {
             placeholder="Cerca promoter o codice..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-xl glass-input pl-10 pr-4 py-2 text-xs focus:border-orange-500"
+            className="w-full rounded-xl glass-input pl-10 pr-4 py-2 text-xs focus:border-brand-500"
           />
           <svg className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -133,7 +133,7 @@ export function AdminNetworkPanel() {
         </div>
         <button
           onClick={() => setExpandAll((v) => !v)}
-          className="px-3 py-2 rounded-xl text-xs font-semibold bg-white/5 light:bg-slate-900/5 hover:bg-white/10 text-slate-300 light:text-slate-600 border border-white/5 light:border-slate-200 transition cursor-pointer shrink-0"
+          className="px-3 py-2 rounded-xl text-xs font-semibold bg-slate-900/5 hover:bg-slate-100 text-slate-600 border border-slate-200 transition cursor-pointer shrink-0"
         >
           {expandAll ? "Comprimi tutto" : "Espandi tutto"}
         </button>

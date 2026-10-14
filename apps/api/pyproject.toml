@@ -21,7 +21,6 @@ dependencies = [
     "orjson>=3.10",
     "python-multipart>=0.0.12",
     "boto3>=1.35",
-    "stripe>=11.1",
     # Il PDF riassuntivo del dossier contratto (contracts/dossier.py).
     # Scelto su weasyprint/wkhtmltopdf perche' e' puro Python: nessuna
     # libreria di sistema da aggiungere all'immagine, nessun browser headless.

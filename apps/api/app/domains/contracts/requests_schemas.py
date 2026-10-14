@@ -30,8 +30,8 @@ class ContractRequestAddress(BaseModel):
 
 
 class ContractRequestHolder(ContractRequestAddress):
-    """Everything asked once, at the start of a pratica: the holder and the
-    supply address. Name and email required; PEC and IBAN optional -- not
+    """Everything asked once, at the start of a pratica: the holder and their
+    address. Name and email required; PEC and IBAN optional -- not
     everyone has a PEC, and an IBAN can be added later."""
 
     holder_first_name: str
@@ -39,7 +39,7 @@ class ContractRequestHolder(ContractRequestAddress):
     email: str
     pec: str | None = None
     iban: str | None = None
-    #: Session 85: "il contratto è per": PRIVATE, or a business kind
+    #: "Il contratto è per": PRIVATE, or a business kind
     #: (COMPANY / SOLE_PROPRIETOR / CONDOMINIUM). Left out = the customer's
     #: kind. For a business, holder_first/last_name are the legal
     #: representative's, and company_name + legal_rep_fiscal_code are
@@ -47,7 +47,7 @@ class ContractRequestHolder(ContractRequestAddress):
     holder_kind: str | None = None
     company_name: str | None = None
     legal_rep_fiscal_code: str | None = None
-    #: Session 89: a private holder's fiscal code, and the birth date and
+    #: A private holder's fiscal code, and the birth date and
     #: place (Belfiore code, from /contract-requests/birthplaces) of the
     #: holder or legal representative. Optional here so a page still open
     #: from before gets a clear message (contracts/requests.py) instead of a
@@ -122,16 +122,12 @@ class ContractRequestCreate(ContractRequestHolder):
     #: Set by a promoter opening a pratica for one of their customers; left
     #: out by a customer opening their own.
     customer_id: uuid.UUID | None = None
-    #: "Quanti POD hai?" (luce). `points_count` is the name this had before
-    #: PDR existed, still accepted from an old page still open in a browser.
-    pod_count: int | None = Field(default=None, ge=0)
-    #: "Quanti PDR hai?" (gas).
-    pdr_count: int = Field(default=0, ge=0)
-    points_count: int = 1
-    #: The contract the customer started from in the catalog, pre-chosen for
-    #: every POD.
+    #: How many contracts the pratica starts with.
+    points_count: int = Field(default=1, ge=1)
+    #: The package the customer started from in the catalog, pre-chosen for
+    #: every contract.
     product_version_id: uuid.UUID | None = None
-    #: Staff only (Session 66): which promoter this pratica is attributed to.
+    #: Staff only: which promoter this pratica is attributed to.
     #: Left out, the customer's own referrer earns, as in self-service.
     producer_agent_id: uuid.UUID | None = None
 
@@ -149,10 +145,7 @@ class BirthplaceRead(BaseModel):
 
 
 class ContractRequestPointsCount(BaseModel):
-    #: POD (luce). `count` is the pre-PDR name, still accepted.
-    pod_count: int | None = Field(default=None, ge=0)
-    pdr_count: int | None = Field(default=None, ge=0)
-    count: int | None = None
+    count: int = Field(ge=1)
 
 
 class ContractRequestNotes(BaseModel):
@@ -168,7 +161,7 @@ class ContractRequestSummaryRead(BaseModel):
     code: str
     customer_id: uuid.UUID
     customer_name: str | None = None
-    #: The pratica's kind (Session 85: its own choice, else the customer's).
+    #: The pratica's kind (its own choice, else the customer's).
     customer_kind: str | None = None
     holder_kind: str | None = None
     #: DRAFT / SUBMITTED / CANCELLED
@@ -177,7 +170,7 @@ class ContractRequestSummaryRead(BaseModel):
     submitted_at: datetime | None = None
     updated_at: datetime | None = None
     created_by_role: str | None = None
-    #: The message left for the administration (Session 83).
+    #: The message left for the administration.
     notes: str | None = None
     activated_by_promoter_id: uuid.UUID | None = None
     activated_by_promoter_name: str | None = None
@@ -194,51 +187,28 @@ class ContractRequestSummaryRead(BaseModel):
     #: cancelled), VAT included where it applies.
     total_gross_cents: int = 0
     payment_plans: list[str] = []
-    instalments_failed: int = 0
-    #: Session 65: the customer announced a bank transfer, not yet confirmed.
+    #: The customer announced a bank transfer, not yet confirmed.
     bank_transfer_pending: bool = False
     bank_transfer_total_cents: int | None = None
     bank_transfer_requested_at: datetime | None = None
     payment_proof_uploaded_at: datetime | None = None
-    #: What was actually paid for the paid points (list price minus discounts).
+    #: What the paid points cost with the plan they were paid with.
     total_paid_cents: int = 0
 
 
 class ContractRequestPointRead(ContractRead):
-    #: 1-based order of the POD in the pratica: "POD 1", "POD 2"...
+    #: 1-based order of the contract in the pratica: "Contratto 1", "Contratto 2"...
     position: int = 0
-    #: "POD" (luce) or "PDR" (gas): what the point is called on screen.
-    point_kind: str = "POD"
-    meter_number: str | None = None
-    street: str | None = None
-    city: str | None = None
-    province: str | None = None
-    postal_code: str | None = None
     product_id: uuid.UUID | None = None
     documents_missing: int = 0
     documents_rejected: int = 0
     instalments_total: int | None = None
     instalments_paid: int = 0
-    instalments_failed: int = 0
-    billing_active: bool = False
-
-
-class ContractRequestCheckoutRead(BaseModel):
-    id: uuid.UUID
-    created_at: datetime
-    payment_plan: str
-    total_cents: int
-    instalment_cents: int
-    contracts: int
-    completed_at: datetime | None = None
-    stripe_checkout_session_id: str
-    stripe_subscription_id: str | None = None
-    outcome: str | None = None
 
 
 class ContractRequestDetailRead(ContractRequestSummaryRead):
     #: Document types the pratica still lacks before it may go on (identity,
-    #: bill, visura / P.IVA for a business). Empty = documents done.
+    #: visura / P.IVA for a business). Empty = documents done.
     documents_blocking: list[str] = []
     #: Who last wrote `notes` and when -- "Promoter Mario Bianchi", "Cliente (...)".
     notes_author: str | None = None
@@ -258,12 +228,10 @@ class ContractRequestDetailRead(ContractRequestSummaryRead):
     holder_birth_date: date | None = None
     holder_birth_place: str | None = None
     holder_birth_place_code: str | None = None
-    #: Session 89: what in the fiscal code does not match the signer's data --
+    #: What in the fiscal code does not match the signer's data --
     #: shown as a warning, it never blocks the pratica.
     fiscal_code_problems: list[str] = []
     points: list[ContractRequestPointRead] = []
-    #: Staff only -- empty for customers and promoters.
-    checkouts: list[ContractRequestCheckoutRead] = []
 
 
 class ContractRequestPaymentLineRead(BaseModel):
@@ -271,7 +239,7 @@ class ContractRequestPaymentLineRead(BaseModel):
     label: str
     #: In one go.
     gross_cents: int
-    #: Session 84: in rate (3 or 12, same total) -- monthly price x 12 + VAT.
+    #: In rate (3 or 12, same total) -- monthly price x 12 + VAT.
     instalments_gross_cents: int = 0
 
 
@@ -286,21 +254,16 @@ class ContractRequestPaymentOptionRead(BaseModel):
     rounding_difference_cents: int
     available: bool
     unavailable_reason: str | None = None
-    #: Session 64: price before the one-go discount, the discount, and the
-    #: JavCash this option earns (lower when discounted: it follows what is paid).
-    list_total_cents: int = 0
-    discount_percentage: int = 0
-    discount_cents: int = 0
+    #: The JavCash this option earns (the rate price earns on the rate price).
     cashback_cents: int = 0
 
 
 class ContractRequestPaymentOptionsRead(BaseModel):
     contract_request_id: uuid.UUID
-    card_available: bool
     #: The contracts this payment would cover: sent, priced, not yet paid.
     lines: list[ContractRequestPaymentLineRead]
     total_gross_cents: int
-    #: Session 85: every amount on this screen is VAT included; True when
+    #: Every amount on this screen is VAT included; True when
     #: there is VAT in it (a business pratica), so the page can say so.
     vat_included: bool = False
     options: list[ContractRequestPaymentOptionRead]
@@ -310,7 +273,7 @@ class ContractRequestPaymentOptionsRead(BaseModel):
     #: PER_INSTALMENT / UPFRONT -- on an instalment plan, whether that
     #: cashback arrives a slice per instalment or all at the first one.
     cashback_mode: str = "PER_INSTALMENT"
-    #: Session 65: paying by bank transfer (single payment, same discount).
+    #: Paying by bank transfer -- the only way to pay a pratica.
     bank_transfer_available: bool = False
     bank_transfer_pending: bool = False
     bank_transfer_total_cents: int | None = None
@@ -322,5 +285,6 @@ class ContractRequestPaymentOptionsRead(BaseModel):
     bank_transfer_reference: str | None = None
 
 
-class ContractRequestCheckoutRequest(BaseModel):
-    payment_plan: str
+class ContractRequestBankTransferRequest(BaseModel):
+    #: FULL / INSTALMENTS_3 / MONTHLY_12 -- see contracts/payment_plans.py.
+    payment_plan: str = "FULL"

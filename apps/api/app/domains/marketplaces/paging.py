@@ -1,8 +1,8 @@
-"""La vetrina del cliente a pagine, uguale per tutti i Marketplace (Session 89).
+"""La vetrina del cliente a pagine, uguale per ogni negozio.
 
-Restituire tutto il catalogo in una risposta non regge: lo Shop Beauty
-(Symphonya, ~31.000 prodotti) pesava 63 MB e mezzo GB di memoria del server
-per ogni apertura, VAITTO 3,4 MB con 2.000 prodotti. Ogni negozio dà quindi
+Restituire tutto il catalogo in una risposta non regge: un catalogo di
+decine di migliaia di prodotti pesa decine di MB e mezzo GB di memoria del
+server per ogni apertura. Ogni negozio dà quindi
 al cliente `limit` schede per volta («Mostra altri prodotti»), con ricerca e
 categoria filtrate qui, nel database, e non nel browser.
 

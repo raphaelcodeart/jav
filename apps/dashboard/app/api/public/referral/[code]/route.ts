@@ -9,15 +9,13 @@ const API_INTERNAL_URL = process.env.API_INTERNAL_URL ?? "http://localhost:8000"
  */
 export async function GET(request: NextRequest, { params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
+  // Optional: without it the API resolves the installation's only club.
   const organizationId = request.nextUrl.searchParams.get("org");
-  if (!organizationId) {
-    return NextResponse.json({ error: "Missing organization" }, { status: 400 });
-  }
+  const query = organizationId ? `?organization_id=${encodeURIComponent(organizationId)}` : "";
 
-  const apiRes = await fetch(
-    `${API_INTERNAL_URL}/api/r/${encodeURIComponent(code)}?organization_id=${encodeURIComponent(organizationId)}`,
-    { cache: "no-store" }
-  );
+  const apiRes = await fetch(`${API_INTERNAL_URL}/api/r/${encodeURIComponent(code)}${query}`, {
+    cache: "no-store",
+  });
 
   const body = await apiRes.text();
   const response = new NextResponse(body, {

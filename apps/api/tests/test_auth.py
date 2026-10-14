@@ -32,8 +32,8 @@ async def test_successful_login_issues_tokens(db, organization_id):
 async def test_login_is_case_insensitive_against_a_legacy_mixed_case_stored_email(db, organization_id):
     """New registrations always store email lowercase (RegisterRequest's
     normalize_email validator), but authenticate()'s lookup must still work
-    for accounts created before that normalization existed -- real accounts
-    on this server have emails stored fully uppercase. Login here on purpose
+    for accounts stored with another casing (e.g. created by staff or
+    imported with an uppercase email). Login here on purpose
     with yet another casing than what's stored, to prove the match doesn't
     depend on the two happening to agree."""
     await _make_user(db, organization_id, "ALICE@EXAMPLE.COM", "correct-horse-battery-staple")
@@ -98,7 +98,7 @@ async def test_refresh_token_rotation_revokes_old_session(db, organization_id):
     assert new_access and new_refresh
     assert new_refresh != refresh_token
 
-    # Session 85: past the grace window the old (now-revoked) refresh token
+    # Past the grace window the old (now-revoked) refresh token
     # must no longer work -- the stolen-token defence of the rotation.
     await _age_rotation(db, refresh_token, seconds=auth_service.ROTATION_GRACE_SECONDS + 5)
     with pytest.raises(auth_service.AuthenticationError):
@@ -126,7 +126,7 @@ async def _age_rotation(db, refresh_token: str, *, seconds: int) -> None:
 async def test_two_refreshes_at_once_both_succeed_but_never_after_a_logout(db, organization_id):
     """A page fires several calls together; with the access token just
     expired each refreshes with the same token. The second must not see
-    "Sessione scaduta" (Session 85). A logged-out session is never revived."""
+    "Sessione scaduta". A logged-out session is never revived."""
     await _make_user(db, organization_id, "erin@example.com", "correct-horse-battery-staple")
     _, refresh_token = await auth_service.authenticate(
         db, organization_id=organization_id, email="erin@example.com",

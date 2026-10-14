@@ -19,22 +19,16 @@ from app.core.db import Base, TimestampMixin, UUIDPKMixin
 ORDER_STATUSES = ["AWAITING_PAYMENT", "PAID", "CANCELLED"]
 
 # How the residual (amount_cents - credit_applied_cents) gets paid --
-# irrelevant when the residual is 0. BANK_TRANSFER: unchanged since Session
-# 24, an admin confirms receipt manually (POST /orders/{id}/confirm-payment).
-# CARD: added Session 26 (Stripe), the order is marked PAID automatically by
-# the Stripe webhook when checkout completes -- no admin action, see
-# payments/router.py and orders/service.py::mark_paid_via_stripe().
-ORDER_PAYMENT_METHODS = ["BANK_TRANSFER", "CARD"]
+# irrelevant when the residual is 0. BANK_TRANSFER is the only method: an
+# admin confirms receipt manually (POST /orders/{id}/confirm-payment).
+ORDER_PAYMENT_METHODS = ["BANK_TRANSFER"]
 
 
 class Order(UUIDPKMixin, TimestampMixin, Base):
-    """A DROPSHIPPING/PARTNER product purchase (Phase 4 of
-    docs/cashback-partner-invoices-plan.md) -- deliberately NOT a Contract:
-    Contract.supply_point_id is NOT NULL by design (every contract is an
-    energy supply), which a t-shirt or any other partner/dropship item has
-    no equivalent of. Self-checkout added Session 26 (POST /orders/mine) --
-    an admin can still create one on a customer's behalf too, both paths
-    share the same service function."""
+    """A one-off purchase of a catalog product -- deliberately NOT a
+    Contract: nothing to review, activate or renew, just pay and receive.
+    Self-checkout via POST /orders/mine -- an admin can still create one on
+    a customer's behalf too, both paths share the same service function."""
 
     __tablename__ = "orders"
     __table_args__ = (
@@ -79,14 +73,6 @@ class Order(UUIDPKMixin, TimestampMixin, Base):
 
     status: Mapped[str] = mapped_column(String(16), default="AWAITING_PAYMENT", index=True)
     payment_method: Mapped[str] = mapped_column(String(16), default="BANK_TRANSFER")
-    # Set only for payment_method=CARD once a Stripe Checkout Session has
-    # been created for the residual -- the webhook looks an order up by this
-    # (via the session's client_reference_id, which is set to this order's
-    # id) to mark it PAID. Unique so a session can never be attached to two
-    # orders. A new session (e.g. the customer abandoned checkout and wants
-    # to retry) overwrites this rather than appending -- only the latest
-    # attempt is ever valid.
-    stripe_checkout_session_id: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
     note: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 
     # Customer-uploaded evidence of a bank transfer already sent (a photo or
@@ -94,9 +80,8 @@ class Order(UUIDPKMixin, TimestampMixin, Base):
     # deciding whether to confirm payment via POST /orders/{id}/confirm-
     # payment; uploading one never changes order.status by itself. Reuses
     # core/storage.py's private documents bucket directly (never the
-    # `documents` domain, whose contract_id is NOT NULL by design), same
-    # "own storage_key column on the row" pattern as
-    # invoice_redemptions/models.py::InvoiceRedemption.storage_key.
+    # `documents` domain, whose contract_id is NOT NULL by design), with
+    # its own storage_key column on the row.
     payment_proof_storage_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     payment_proof_original_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
     payment_proof_uploaded_at: Mapped[datetime | None] = mapped_column(nullable=True)

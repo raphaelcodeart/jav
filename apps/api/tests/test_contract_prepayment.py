@@ -1,14 +1,15 @@
 """Pagare un contratto prima dell'approvazione, e il cashback rata per rata.
 
-Business decisions pinned here (Session 49):
+Business decisions pinned here:
 
 - The catalog price of a Jav product is the MONTHLY canone: a
   "15 € /mese" product on a 12-month contract costs 180 € + IVA.
 - A customer may pay straight after filling in the data, before any document
   is uploaded or approved. Paying does NOT activate anything: commissions
   still fire only once an administrator approves the documents.
-- The JavCash credit is recognised when the money arrives. On an instalment
-  plan it arrives one instalment at a time, and so does the credit.
+- The JavCash credit is recognised when the money arrives -- when an
+  administrator confirms the bank transfer. On an instalment plan it arrives
+  one instalment at a time, and so does the credit.
 """
 
 import uuid
@@ -25,21 +26,19 @@ from app.domains.contracts import payment_plans
 from app.domains.contracts import service as contract_service
 from app.domains.contracts.models import Contract
 from app.domains.contracts.schemas import ContractSelfServiceCreate
-from app.domains.customers.models import Address, Customer, SupplyPoint
+from app.domains.customers.models import Address, Customer
 from app.domains.network import service as network_service
-from app.domains.payments import service as payments_service
-from app.domains.wallets.models import Wallet, WalletTransaction
 from app.domains.users.models import User
-from tests.test_contract_payment_plans import _configure_stripe, _signed
+from app.domains.wallets.models import Wallet, WalletTransaction
 
 NOW = datetime(2026, 1, 1, tzinfo=UTC)
 
 
-# --- Prezzo annuale e prezzo mensile (Session 84) -------------------------------
+# --- Prezzo annuale e prezzo mensile -------------------------------
 
 
 def _circolare(**overrides) -> ProductVersion:
-    """«Energia circolare»: 149 € in unica soluzione, 18,30 € al mese a rate."""
+    """«Abbonamento annuale»: 149 € in unica soluzione, 18,30 € al mese a rate."""
     fields = dict(
         base_price_cents=149_00, monthly_price_cents=18_30, billing_period="MONTHLY",
         contract_duration_months=12, tax_configuration={"vat_percentage": 22.0},
@@ -50,16 +49,16 @@ def _circolare(**overrides) -> ProductVersion:
 
 def test_the_one_go_price_is_the_listed_price_and_the_rate_have_their_own():
     version = _circolare()
-    assert pricing.contract_net_amount_cents(version, product_type="ENERGY_CONTRACT") == 149_00
+    assert pricing.contract_net_amount_cents(version, product_type="SERVICE") == 149_00
     # Not 149 / 12: paying over time costs more.
-    assert pricing.contract_instalments_net_amount_cents(version, product_type="ENERGY_CONTRACT") == 219_60
+    assert pricing.contract_instalments_net_amount_cents(version, product_type="SERVICE") == 219_60
 
 
 def test_a_private_customer_pays_no_vat_either_way():
     version = _circolare()
-    one_go = pricing.compute_contract_price(version=version, customer_kind="PRIVATE", product_type="ENERGY_CONTRACT")
+    one_go = pricing.compute_contract_price(version=version, customer_kind="PRIVATE", product_type="SERVICE")
     rate = pricing.compute_contract_instalments_price(
-        version=version, customer_kind="PRIVATE", product_type="ENERGY_CONTRACT"
+        version=version, customer_kind="PRIVATE", product_type="SERVICE"
     )
     assert one_go.gross_amount_cents == 149_00
     assert rate.gross_amount_cents == 219_60
@@ -68,9 +67,9 @@ def test_a_private_customer_pays_no_vat_either_way():
 def test_a_business_pays_vat_on_both_prices():
     """P.IVA: 249 € + IVA = 303,78 € in one go; 25 € + IVA = 30,50 € a month."""
     version = _circolare(base_price_cents=249_00, monthly_price_cents=25_00)
-    one_go = pricing.compute_contract_price(version=version, customer_kind="COMPANY", product_type="ENERGY_CONTRACT")
+    one_go = pricing.compute_contract_price(version=version, customer_kind="COMPANY", product_type="SERVICE")
     rate = pricing.compute_contract_instalments_price(
-        version=version, customer_kind="COMPANY", product_type="ENERGY_CONTRACT"
+        version=version, customer_kind="COMPANY", product_type="SERVICE"
     )
     assert one_go.gross_amount_cents == 303_78
     assert rate.gross_amount_cents == 366_00
@@ -81,42 +80,23 @@ def test_the_plans_split_the_rate_price_and_one_go_pays_the_listed_price():
     contract = Contract(
         gross_amount_cents=149_00,
         instalments_gross_amount_cents=pricing.compute_contract_instalments_price(
-            version=version, customer_kind="PRIVATE", product_type="ENERGY_CONTRACT"
+            version=version, customer_kind="PRIVATE", product_type="SERVICE"
         ).gross_amount_cents,
     )
-    by_key = {b.plan.key: b for b in payment_plans.available_breakdowns(contract)}
+    by_key = {p.key: payment_plans.contract_breakdown(p, contract) for p in payment_plans.PAYMENT_PLANS}
     assert by_key[payment_plans.PLAN_FULL].total_cents == 149_00
     assert by_key[payment_plans.PLAN_MONTHLY_12].instalment_cents == 18_30
     assert by_key[payment_plans.PLAN_MONTHLY_12].total_cents == 219_60
     assert by_key[payment_plans.PLAN_INSTALMENTS_3].instalment_cents == 73_20
 
 
-def test_the_one_go_discount_never_applies_on_top_of_a_rate_price():
-    """With two prices the one-go advantage is already in them: 32% off the
-    149 € would sell the package at 101 €. A package without a monthly price
-    keeps the discount, as before Session 84."""
-    with_rate = Contract(gross_amount_cents=149_00, instalments_gross_amount_cents=219_60)
-    full = next(
-        b for b in payment_plans.available_breakdowns(with_rate, full_payment_discount_percentage=32)
-        if b.plan.key == payment_plans.PLAN_FULL
-    )
-    assert (full.total_cents, full.discount_cents) == (149_00, 0)
-
-    legacy = Contract(gross_amount_cents=180_00, instalments_gross_amount_cents=None)
-    full = next(
-        b for b in payment_plans.available_breakdowns(legacy, full_payment_discount_percentage=32)
-        if b.plan.key == payment_plans.PLAN_FULL
-    )
-    assert full.total_cents == 122_40
-
-
 def test_without_a_monthly_price_the_rate_split_the_one_go_price():
     version = _circolare(monthly_price_cents=None)
     assert pricing.compute_contract_instalments_price(
-        version=version, customer_kind="PRIVATE", product_type="ENERGY_CONTRACT"
+        version=version, customer_kind="PRIVATE", product_type="SERVICE"
     ) is None
     contract = Contract(gross_amount_cents=180_00, instalments_gross_amount_cents=None)
-    by_key = {b.plan.key: b for b in payment_plans.available_breakdowns(contract)}
+    by_key = {p.key: payment_plans.contract_breakdown(p, contract) for p in payment_plans.PAYMENT_PLANS}
     assert by_key[payment_plans.PLAN_MONTHLY_12].instalment_cents == 15_00
 
 
@@ -131,29 +111,12 @@ def test_a_physical_or_digital_product_has_no_rate_price():
         assert pricing.contract_instalments_net_amount_cents(tshirt, product_type=kind) is None
 
 
-def test_the_subscription_id_is_read_from_both_stripe_api_shapes():
-    import stripe
-
-    old_shape = stripe.StripeObject.construct_from({"id": "in_1", "subscription": "sub_old"}, "k")
-    new_shape = stripe.StripeObject.construct_from(
-        {"id": "in_2", "parent": {"subscription_details": {"subscription": "sub_new"}}}, "k"
-    )
-    one_off = stripe.StripeObject.construct_from({"id": "in_3", "parent": None}, "k")
-    assert payments_service._invoice_subscription_id(old_shape) == "sub_old"
-    assert payments_service._invoice_subscription_id(new_shape) == "sub_new"
-    assert payments_service._invoice_subscription_id(one_off) is None
-
-
 # --- I dati dell'intestatario --------------------------------------------------
 
 
 def _wizard_payload(**overrides) -> dict:
     payload = {
         "product_version_id": str(uuid.uuid4()),
-        "supply_point": {
-            "energy_type": "ELECTRICITY", "pod_code": "IT001E12345678", "street": "Via Roma 1",
-            "city": "Roma", "province": "RM", "postal_code": "00100",
-        },
         "email": "mario@example.com",
         "holder_first_name": "  Mario ",
         "holder_last_name": "Rossi",
@@ -204,19 +167,14 @@ async def _make_contract(db, organization_id, *, cashback_percentage: int = 100)
     )
     db.add(address)
     await db.flush()
-    supply_point = SupplyPoint(
-        organization_id=organization_id, customer_id=customer.id, energy_type="ELECTRICITY",
-        supply_address_id=address.id,
-    )
-    db.add(supply_point)
     product = Product(
         organization_id=organization_id, code=f"P-{uuid.uuid4().hex[:6]}",
-        energy_type="ELECTRICITY", customer_type="BOTH", category="INTERNAL",
+        customer_type="BOTH", category="INTERNAL",
     )
     db.add(product)
     await db.flush()
     version = ProductVersion(
-        product_id=product.id, version_label="1.0", name="Luce Energia Circolare privati",
+        product_id=product.id, version_label="1.0", name="Abbonamento annuale privati",
         base_price_cents=180_00, billing_period="MONTHLY", contract_duration_months=12,
         contract_cashback_percentage=cashback_percentage, valid_from=NOW,
     )
@@ -229,7 +187,7 @@ async def _make_contract(db, organization_id, *, cashback_percentage: int = 100)
 
     contract = await contract_service.create_contract(
         db, organization_id=organization_id, customer_id=customer.id,
-        supply_point_id=supply_point.id, product_version_id=version.id,
+        product_version_id=version.id,
         producer_agent_id=agent.id, actor_user_id=user.id, correlation_id=str(uuid.uuid4()),
     )
     for step in ["SUBMITTED", "DOCUMENTS_PENDING"]:
@@ -240,40 +198,26 @@ async def _make_contract(db, organization_id, *, cashback_percentage: int = 100)
     return contract, user
 
 
-async def _complete_checkout(
-    db, organization_id, contract, *, plan_key: str, subscription: str | None = None, discount_cents: int = 0
-):
-    session_id = f"cs_{uuid.uuid4().hex[:10]}"
-    await contract_service.attach_stripe_checkout_session(
-        db, contract=contract, session_id=session_id, plan_key=plan_key, discount_cents=discount_cents
+async def _confirm_transfer(db, organization_id, contract, user, *, plan_key: str):
+    """The customer chose `plan_key` paying by transfer; the (first) transfer
+    is confirmed as arrived."""
+    contract.payment_plan = plan_key
+    contract.payment_method = "BANK_TRANSFER"
+    await db.commit()
+    await contract_service.record_transfer_payment(
+        db, organization_id=organization_id, contract=contract, confirmed_by_user_id=user.id
     )
-    session = {"id": session_id, "metadata": {"kind": "contract"}}
-    if subscription:
-        session["subscription"] = subscription
-    body, sig = _signed({
-        "id": f"evt_{uuid.uuid4().hex[:10]}",
-        "type": "checkout.session.completed",
-        "data": {"object": session},
-    })
-    if subscription:
-        # Setting cancel_at calls the real Stripe API; the test is not about that.
-        original = payments_service._stop_subscription_after_last_instalment
-
-        async def _noop(**_kwargs):
-            return None
-
-        payments_service._stop_subscription_after_last_instalment = _noop
-        try:
-            await payments_service.handle_webhook_event(
-                db, organization_id=organization_id, payload=body, sig_header=sig
-            )
-        finally:
-            payments_service._stop_subscription_after_last_instalment = original
-    else:
-        await payments_service.handle_webhook_event(
-            db, organization_id=organization_id, payload=body, sig_header=sig
-        )
     await db.refresh(contract)
+
+
+async def _confirm_instalment(db, organization_id, contract, user, number: int):
+    """What POST /contracts/{id}/instalments/{n}/confirm does."""
+    from app.domains.contracts import instalments as instalments_service
+
+    row = await instalments_service.confirm_manually(db, contract=contract, number=number, actor_user_id=user.id)
+    await contract_service.credit_contract_instalment_cashback(
+        db, organization_id=organization_id, contract=contract, instalment_number=row.number
+    )
 
 
 async def _balance(db, user: User) -> int:
@@ -301,10 +245,9 @@ async def test_a_contract_without_documents_can_already_be_paid(db, organization
 
 @pytest.mark.asyncio
 async def test_paying_early_credits_the_cashback_but_activates_nothing(db, organization_id):
-    await _configure_stripe(db, organization_id)
     contract, user = await _make_contract(db, organization_id)
 
-    await _complete_checkout(db, organization_id, contract, plan_key=payment_plans.PLAN_FULL)
+    await _confirm_transfer(db, organization_id, contract, user, plan_key=payment_plans.PLAN_FULL)
 
     assert contract.paid_at is not None
     assert contract.status == "DOCUMENTS_PENDING", "il pagamento non sostituisce l'approvazione dei documenti"
@@ -315,9 +258,8 @@ async def test_paying_early_credits_the_cashback_but_activates_nothing(db, organ
 
 @pytest.mark.asyncio
 async def test_approval_of_a_prepaid_contract_activates_it_and_credits_nothing_twice(db, organization_id):
-    await _configure_stripe(db, organization_id)
     contract, user = await _make_contract(db, organization_id)
-    await _complete_checkout(db, organization_id, contract, plan_key=payment_plans.PLAN_FULL)
+    await _confirm_transfer(db, organization_id, contract, user, plan_key=payment_plans.PLAN_FULL)
 
     contract = await _approve(db, organization_id, contract, user)
 
@@ -338,28 +280,22 @@ async def test_an_unpaid_contract_still_stops_at_payment_pending_on_approval(db,
 
 @pytest.mark.asyncio
 async def test_on_twelve_instalments_the_cashback_arrives_one_instalment_at_a_time(db, organization_id):
-    await _configure_stripe(db, organization_id)
     contract, user = await _make_contract(db, organization_id)
 
-    await _complete_checkout(
-        db, organization_id, contract, plan_key=payment_plans.PLAN_MONTHLY_12, subscription="sub_pre_12"
-    )
+    await _confirm_transfer(db, organization_id, contract, user, plan_key=payment_plans.PLAN_MONTHLY_12)
     assert contract.status == "DOCUMENTS_PENDING"
     assert await _balance(db, user) == 15_00, "solo la prima rata, non l'intero anno"
 
-    # The first invoice's own invoice.paid must not credit the first month again.
-    await contract_service.record_subscription_invoice(
-        db, organization_id=organization_id, subscription_id="sub_pre_12", paid=True,
-        amount_cents=15_00, invoice_id="in_first", billing_reason="subscription_create",
-    )
-    assert await _balance(db, user) == 15_00
+    # The second month, confirmed; a second confirmation of it is refused and
+    # crediting it again pays nothing.
+    from app.domains.contracts import instalments as instalments_service
 
-    # The second month, delivered twice.
-    for _ in range(2):
-        await contract_service.record_subscription_invoice(
-            db, organization_id=organization_id, subscription_id="sub_pre_12", paid=True,
-            amount_cents=15_00, invoice_id="in_month_2", billing_reason="subscription_cycle",
-        )
+    await _confirm_instalment(db, organization_id, contract, user, 2)
+    with pytest.raises(instalments_service.InstalmentError):
+        await _confirm_instalment(db, organization_id, contract, user, 2)
+    await contract_service.credit_contract_instalment_cashback(
+        db, organization_id=organization_id, contract=contract, instalment_number=2
+    )
     assert await _balance(db, user) == 30_00
 
     # Approval afterwards must not add the whole contract on top.
@@ -377,9 +313,8 @@ async def test_on_twelve_instalments_the_cashback_arrives_one_instalment_at_a_ti
 
 @pytest.mark.asyncio
 async def test_rejecting_a_paid_contract_tells_staff(db, organization_id, monkeypatch):
-    await _configure_stripe(db, organization_id)
     contract, user = await _make_contract(db, organization_id)
-    await _complete_checkout(db, organization_id, contract, plan_key=payment_plans.PLAN_FULL)
+    await _confirm_transfer(db, organization_id, contract, user, plan_key=payment_plans.PLAN_FULL)
 
     sent: list[str] = []
     original = contract_service.notifications_service.notify_roles
@@ -397,65 +332,13 @@ async def test_rejecting_a_paid_contract_tells_staff(db, organization_id, monkey
 
 
 @pytest.mark.asyncio
-async def test_single_card_payment_discount_lowers_what_is_charged_and_the_cashback(db, organization_id, monkeypatch):
-    """Session 64: 32% off when paying in one go. The Stripe session asks for
-    the discounted amount, the contract keeps its list price and freezes the
-    discount, the instalment row and the cashback follow what was paid."""
-    import stripe
-
+async def test_a_transfer_pays_the_list_price_and_earns_cashback_on_it(db, organization_id):
+    """No discount for paying by bank transfer: the instalment row and the
+    cashback are the contract's own price."""
     from app.domains.contracts.models import ContractInstalment
 
-    await _configure_stripe(db, organization_id)
     contract, user = await _make_contract(db, organization_id)
-    assert contract.gross_amount_cents == 180_00
-    created = []
-
-    class _Session:
-        id = "cs_discount_1"
-        url = "https://stripe.example/cs_discount_1"
-
-    def _create(**params):
-        created.append(params)
-        return _Session()
-
-    monkeypatch.setattr(stripe.checkout.Session, "create", staticmethod(_create))
-    await payments_service.create_checkout_session_for_contract(
-        db, organization_id=organization_id, contract=contract, plan_key=payment_plans.PLAN_FULL,
-        success_url="https://x/ok", cancel_url="https://x/ko",
-    )
-    assert created[0]["line_items"][0]["price_data"]["unit_amount"] == 122_40
-    await db.refresh(contract)
-    assert contract.payment_discount_cents == 57_60 and contract.gross_amount_cents == 180_00
-
-    body, sig = _signed({
-        "id": f"evt_{uuid.uuid4().hex[:10]}", "type": "checkout.session.completed",
-        "data": {"object": {"id": "cs_discount_1", "metadata": {"kind": "contract"}}},
-    })
-    await payments_service.handle_webhook_event(db, organization_id=organization_id, payload=body, sig_header=sig)
-    await db.refresh(contract)
-    assert contract.paid_at is not None
+    await _confirm_transfer(db, organization_id, contract, user, plan_key=payment_plans.PLAN_FULL)
     rows = list((await db.execute(select(ContractInstalment).where(ContractInstalment.contract_id == contract.id))).scalars())
-    assert [(r.number, r.amount_cents) for r in rows] == [(1, 122_40)]
-    assert await _balance(db, user) == 122_40, "cashback del 100% di quanto pagato"
-
-
-@pytest.mark.asyncio
-async def test_instalments_are_never_discounted(db, organization_id, monkeypatch):
-    import stripe
-
-    await _configure_stripe(db, organization_id)
-    contract, _user = await _make_contract(db, organization_id)
-    created = []
-
-    class _Session:
-        id = "cs_twelve_1"
-        url = "https://stripe.example/cs_twelve_1"
-
-    monkeypatch.setattr(stripe.checkout.Session, "create", staticmethod(lambda **p: created.append(p) or _Session()))
-    await payments_service.create_checkout_session_for_contract(
-        db, organization_id=organization_id, contract=contract, plan_key=payment_plans.PLAN_MONTHLY_12,
-        success_url="https://x/ok", cancel_url="https://x/ko",
-    )
-    assert created[0]["line_items"][0]["price_data"]["unit_amount"] == 15_00  # 180 / 12, no discount
-    await db.refresh(contract)
-    assert contract.payment_discount_cents == 0
+    assert [(r.number, r.amount_cents) for r in rows] == [(1, 180_00)]
+    assert await _balance(db, user) == 180_00, "cashback del 100% di quanto pagato"

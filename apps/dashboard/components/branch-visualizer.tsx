@@ -63,11 +63,11 @@ export function BranchVisualizer({ members }: { members: BranchMemberRead[] }) {
   const maxDepth = members.reduce((max, m) => Math.max(max, m.depth), 0);
 
   return (
-    <div className="glass-card rounded-2xl p-6 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70">
+    <div className="glass-card rounded-2xl p-6 border-slate-200 bg-white/70">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div>
-          <h3 className="text-lg font-semibold text-white light:text-slate-900">Visualizzazione Albero Rete</h3>
-          <p className="text-xs text-slate-400 light:text-slate-500">Struttura gerarchica dei tuoi promoter affiliati</p>
+          <h3 className="text-lg font-semibold text-slate-900">Visualizzazione Albero Rete</h3>
+          <p className="text-xs text-slate-500">Struttura gerarchica dei tuoi promoter affiliati</p>
         </div>
         <span className="px-3 py-1 text-xs font-semibold rounded-full bg-violet-500/10 text-violet-400 border border-violet-500/20 shrink-0">
           {members.length} Agenti Totali

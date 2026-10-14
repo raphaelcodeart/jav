@@ -1,4 +1,4 @@
-"""/contract-requests -- la pratica di attivazione (Session 52).
+"""/contract-requests -- la pratica di attivazione.
 
 Who may do what, enforced here and nowhere else:
 
@@ -31,14 +31,14 @@ from app.domains.contracts.models import ContractRequest
 from app.domains.contracts.requests_schemas import (
     BirthplaceRead,
     ContractRequestAddress,
-    ContractRequestCheckoutRequest,
+    ContractRequestBankTransferRequest,
     ContractRequestCreate,
     ContractRequestDetailRead,
     ContractRequestHolder,
+    ContractRequestNotes,
     ContractRequestPaymentLineRead,
     ContractRequestPaymentOptionRead,
     ContractRequestPaymentOptionsRead,
-    ContractRequestNotes,
     ContractRequestPointsCount,
     ContractRequestProductSet,
     ContractRequestSummaryRead,
@@ -48,7 +48,6 @@ from app.domains.documents import service as documents_service
 from app.domains.documents.schemas import (
     ContractDocumentsRead,
     DocumentRead,
-    RequiredDocumentStatus,
 )
 from app.domains.network.models import AgentProfile
 from app.domains.organizations import service as organizations_service
@@ -97,7 +96,7 @@ class _Access:
 
     @property
     def can_edit(self) -> bool:
-        # Staff too since Session 66: an administrator opens and fills in a
+        # Staff too: an administrator opens and fills in a
         # pratica for a customer exactly like the customer or their promoter
         # would -- everything except paying it.
         return self.is_owner or self.is_promoter or self.is_staff
@@ -124,7 +123,7 @@ async def _load(
 
 
 async def _detail(db: AsyncSession, request: ContractRequest, access: _Access) -> ContractRequestDetailRead:
-    data = await requests_service.detail(db, request=request, include_checkouts=access.is_staff)
+    data = await requests_service.detail(db, request=request)
     return ContractRequestDetailRead(**data)
 
 
@@ -153,7 +152,7 @@ async def search_birthplaces(
     q: str = Query(min_length=2, max_length=80),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[BirthplaceRead]:
-    """Session 89: the «Luogo di nascita» field of the pratica's data form --
+    """The «Luogo di nascita» field of the pratica's data form --
     comuni, suppressed ones too, and foreign states, by name."""
     return [BirthplaceRead(**p) for p in fiscal_code.search_birthplaces(q)]
 
@@ -207,8 +206,8 @@ async def list_requests_for_my_customers(
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[ContractRequestSummaryRead]:
-    """Every pratica of every customer this promoter recruited, newest first
-    (Session 66): one place to follow the POD they opened, instead of one
+    """Every pratica of every customer this promoter recruited, newest first:
+    one place to follow the contracts they opened, instead of one
     customer at a time."""
     from app.domains.network import service as network_service
 
@@ -248,7 +247,7 @@ async def list_requests(
         stmt = stmt.where(ContractRequest.status == status_filter)
     if created_by_role:
         # "Nuovo Contratto" lists the pratiche the administration opened
-        # (Session 67); cancelled drafts are of no use there.
+        #; cancelled drafts are of no use there.
         stmt = stmt.where(ContractRequest.created_by_role == created_by_role, ContractRequest.status != "CANCELLED")
     if customer_id:
         stmt = stmt.where(ContractRequest.customer_id == customer_id)
@@ -294,8 +293,7 @@ async def create_request(
             db, organization_id=current_user.organization_id, customer_id=customer_id,
             holder=_holder(payload), actor_user_id=current_user.user_id, actor_role=role,
             promoter_agent_id=promoter_agent_id,
-            points_count=payload.pod_count if payload.pod_count is not None else payload.points_count,
-            pdr_count=payload.pdr_count,
+            points_count=payload.points_count,
             product_version_id=payload.product_version_id,
         )
     except requests_service.ContractRequestError as exc:
@@ -340,13 +338,11 @@ async def set_points_count(
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ContractRequestDetailRead:
-    """"Quanti POD hai? Quanti PDR hai?" changed while the pratica is a draft."""
+    """"Quanti contratti?" changed while the pratica is a draft."""
     request, access = await _load(db, current_user, request_id, edit=True)
     try:
         await requests_service.set_points_count(
-            db, request=request,
-            pod_count=payload.pod_count if payload.pod_count is not None else payload.count,
-            pdr_count=payload.pdr_count, actor_user_id=current_user.user_id,
+            db, request=request, count=payload.count, actor_user_id=current_user.user_id,
         )
     except requests_service.ContractRequestError as exc:
         raise _bad_request(exc) from exc
@@ -369,26 +365,6 @@ async def set_request_notes(
         )
     except requests_service.ContractRequestError as exc:
         raise _bad_request(exc) from exc
-    return await _detail(db, request, access)
-
-
-@router.patch("/{request_id}/points/{contract_id}/address", response_model=ContractRequestDetailRead)
-async def update_point_address(
-    request_id: uuid.UUID,
-    contract_id: uuid.UUID,
-    payload: ContractRequestAddress,
-    current_user: CurrentUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> ContractRequestDetailRead:
-    request, access = await _load(db, current_user, request_id, edit=True)
-    try:
-        contract = await requests_service.get_point(db, request=request, contract_id=contract_id)
-        await requests_service.update_point_address(
-            db, request=request, contract=contract, address_data=_address(payload), actor_user_id=current_user.user_id
-        )
-    except requests_service.ContractRequestError as exc:
-        raise _bad_request(exc) from exc
-    await db.refresh(request)
     return await _detail(db, request, access)
 
 
@@ -421,7 +397,7 @@ async def set_point_product(
     try:
         contract = await requests_service.get_point(db, request=request, contract_id=contract_id)
         # Staff may also fix the package of a pratica already sent, as long
-        # as that contract is not paid yet (Session 71).
+        # as that contract is not paid yet.
         chooser = (
             requests_service.staff_set_point_product if access.is_staff else requests_service.set_point_product
         )
@@ -487,22 +463,15 @@ async def unlock_request(
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ContractRequestDetailRead:
-    """«Sblocca pratica» (Session 89): staff only. A sent, unpaid pratica
+    """«Sblocca pratica»: staff only. A sent, unpaid pratica
     goes back to draft so its packages can be chosen again."""
-    from app.domains.payments import service as payments_service
-
     request, access = await _load(db, current_user, request_id)
     if not (access.is_staff or await _is_staff(db, current_user)):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo l'amministrazione può sbloccare una pratica.")
     try:
-        request, open_sessions = await requests_service.unlock_request(
-            db, request=request, actor_user_id=current_user.user_id
-        )
+        request = await requests_service.unlock_request(db, request=request, actor_user_id=current_user.user_id)
     except requests_service.ContractRequestError as exc:
         raise _bad_request(exc) from exc
-    await payments_service.expire_checkout_sessions(
-        db, organization_id=request.organization_id, session_ids=open_sessions
-    )
     return await _detail(db, request, access)
 
 
@@ -517,20 +486,12 @@ async def get_payment_options(
 ) -> ContractRequestPaymentOptionsRead:
     """Every figure computed here from the prices frozen on the contracts --
     the browser only ever sends back a plan key."""
-    from app.domains.payments.service import _point_labels
-
     request, _ = await _load(db, current_user, request_id)
     points = await requests_service.list_points(db, request=request)
     payable = requests_service.payable_points(points)
-    labels = await _point_labels(db, payable)
-    discount_percentage = await organizations_service.get_contract_full_payment_discount_percentage(
-        db, organization_id=current_user.organization_id
-    )
+    labels = await requests_service.point_labels(db, payable)
     cashback_total = await requests_service.cashback_total_cents(db, points=payable)
-    full_payment_cashback = await requests_service.cashback_total_cents(
-        db, points=payable, discount_percentage=discount_percentage
-    )
-    # Session 84: the rate cost more than one go, and the cashback follows.
+    # The rate cost more than one go, and the cashback follows.
     instalments_cashback = {
         plan.key: await requests_service.cashback_total_cents(db, points=payable, plan=plan)
         for plan in payment_plans.PAYMENT_PLANS if plan.instalments > 1
@@ -541,9 +502,6 @@ async def get_payment_options(
     bank = await organizations_service.get_settings(db, organization_id=current_user.organization_id)
     return ContractRequestPaymentOptionsRead(
         contract_request_id=request.id,
-        card_available=await organizations_service.is_stripe_configured(
-            db, organization_id=current_user.organization_id
-        ),
         lines=[
             ContractRequestPaymentLineRead(
                 contract_id=c.id, label=labels[c.id], gross_cents=int(c.gross_amount_cents or 0),
@@ -560,13 +518,10 @@ async def get_payment_options(
                 key=o.plan.key, label=o.plan.label, description=o.plan.description, instalments=o.plan.instalments,
                 instalment_cents=o.instalment_cents, total_cents=o.total_cents,
                 rounding_difference_cents=o.rounding_difference_cents, available=o.available,
-                unavailable_reason=o.unavailable_reason, list_total_cents=o.list_total_cents,
-                discount_percentage=o.discount_percentage, discount_cents=o.discount_cents,
-                cashback_cents=instalments_cashback.get(
-                    o.plan.key, full_payment_cashback if o.discount_cents else cashback_total
-                ),
+                unavailable_reason=o.unavailable_reason,
+                cashback_cents=instalments_cashback.get(o.plan.key, cashback_total),
             )
-            for o in requests_service.plan_options(payable, discount_percentage=discount_percentage)
+            for o in requests_service.plan_options(payable)
         ],
         points_paid=sum(1 for c in points if c.paid_at is not None),
         cashback_total_cents=cashback_total,
@@ -585,50 +540,24 @@ async def get_payment_options(
     )
 
 
-@router.post("/{request_id}/checkout-session")
-async def create_checkout_session(
-    request_id: uuid.UUID,
-    payload: ContractRequestCheckoutRequest,
-    success_url: str,
-    cancel_url: str,
-    current_user: CurrentUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> dict:
-    """Opens Stripe Checkout for the whole pratica. Only the customer pays:
-    the card is theirs, and so is the decision to charge it. Never marks
-    anything paid -- only the verified webhook does."""
-    from app.domains.payments import service as payments_service
-
-    request, access = await _load(db, current_user, request_id)
-    if not access.is_owner:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Il pagamento lo effettua il cliente dal proprio account.")
-    if payment_plans.plan_by_key(payload.payment_plan) is None:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Modalità di pagamento non valida.")
-    try:
-        url = await payments_service.create_checkout_session_for_request(
-            db, organization_id=current_user.organization_id, request=request, plan_key=payload.payment_plan,
-            actor_user_id=current_user.user_id, success_url=success_url, cancel_url=cancel_url,
-        )
-    except payments_service.StripeNotConfiguredError as exc:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
-    except payments_service.PaymentsError as exc:
-        raise _bad_request(exc) from exc
-    return {"checkout_url": url}
-
-
 @router.post("/{request_id}/bank-transfer", response_model=ContractRequestDetailRead)
 async def request_bank_transfer(
     request_id: uuid.UUID,
+    payload: ContractRequestBankTransferRequest | None = None,
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ContractRequestDetailRead:
-    """"Paga con bonifico": single payment with the one-go discount, paid
-    when an administrator confirms the transfer arrived."""
+    """"Paga con bonifico", with the plan the customer chose (the whole
+    amount, or the first instalment now). Paid when an administrator
+    confirms the transfer arrived."""
     request, access = await _load(db, current_user, request_id)
     if not access.is_owner:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Il pagamento lo sceglie il cliente dal proprio account.")
     try:
-        request = await requests_service.request_bank_transfer(db, request=request, actor_user_id=current_user.user_id)
+        request = await requests_service.request_bank_transfer(
+            db, request=request, actor_user_id=current_user.user_id,
+            plan_key=payload.payment_plan if payload is not None else payment_plans.PLAN_FULL,
+        )
     except requests_service.BankTransferError as exc:
         raise _bad_request(exc) from exc
     return await _detail(db, request, access)
@@ -678,7 +607,7 @@ async def confirm_bank_transfer(
     db: AsyncSession = Depends(get_db),
 ) -> ContractRequestDetailRead:
     """"Conferma bonifico ricevuto": every contract announced for transfer is
-    paid at the discounted amount frozen when the customer chose it."""
+    paid -- its first instalment, with the plan the customer chose."""
     request, access = await _load(db, current_user, request_id)
     try:
         await requests_service.confirm_bank_transfer(db, request=request, actor_user_id=current_user.user_id)

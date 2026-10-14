@@ -64,21 +64,21 @@ export function NetworkNodeDetailModal({
   const hasViewerCommission = (contracts ?? []).some((c) => c.my_commission_cents !== null);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 light:bg-slate-900/40 backdrop-blur-sm animate-fade-in">
-      <div className="w-full max-w-3xl max-h-[85vh] overflow-y-auto glass-card rounded-2xl p-6 border-white/10 light:border-slate-300 bg-slate-950 light:bg-white animate-scale-up">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+      <div className="w-full max-w-3xl max-h-[85vh] overflow-y-auto glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up">
         <div className="flex items-start justify-between mb-4 gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-full bg-gradient-to-br from-orange-600 to-amber-500 flex items-center justify-center text-white font-bold text-lg shrink-0">
+            <div className="w-11 h-11 rounded-full bg-gradient-to-br from-brand-600 to-brand-400 flex items-center justify-center text-white font-bold text-lg shrink-0">
               {displayName.trim().charAt(0).toUpperCase() || "?"}
             </div>
             <div>
-              <h3 className="text-lg font-bold text-white light:text-slate-900">{displayName}</h3>
+              <h3 className="text-lg font-bold text-slate-900">{displayName}</h3>
               <div className="flex items-center gap-2 mt-0.5">
                 {self?.promoter_code && (
                   <span className="font-mono text-[10px] text-slate-500">{self.promoter_code}</span>
                 )}
                 {self?.rank_code && (
-                  <span className="px-2 py-0.5 text-[10px] font-bold rounded-md border bg-white/5 light:bg-slate-900/5 text-slate-300 light:text-slate-600 border-white/10 light:border-slate-300">
+                  <span className="px-2 py-0.5 font-bold rounded-md border bg-slate-900/5 text-slate-600 border-slate-300">
                     {self.rank_code}
                   </span>
                 )}
@@ -86,7 +86,7 @@ export function NetworkNodeDetailModal({
                   <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md border ${
                     self.status === "ACTIVE"
                       ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                      : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                      : "bg-amber-500/10 text-amber-700 border-amber-500/20"
                   }`}>
                     {self.status}
                   </span>
@@ -96,7 +96,7 @@ export function NetworkNodeDetailModal({
           </div>
           <button
             onClick={onClose}
-            className="p-1 hover:bg-white/5 rounded-lg text-slate-400 light:text-slate-500 hover:text-white transition cursor-pointer shrink-0"
+            className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-900 transition cursor-pointer shrink-0"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
@@ -110,53 +110,53 @@ export function NetworkNodeDetailModal({
 
         {/* Stats grid -- people below, contracts, commission generated within this subtree */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-          <div className="rounded-xl bg-white/5 light:bg-slate-900/5 p-3 text-center">
+          <div className="rounded-xl bg-slate-900/5 p-3 text-center">
             <p className="text-[10px] text-slate-500 uppercase">Persone sotto</p>
-            <p className="text-lg font-bold text-white light:text-slate-900">
+            <p className="text-lg font-bold text-slate-900">
               {summaryLoading ? "…" : totals?.people_total ?? 0}
             </p>
           </div>
-          <div className="rounded-xl bg-white/5 light:bg-slate-900/5 p-3 text-center">
+          <div className="rounded-xl bg-slate-900/5 p-3 text-center">
             <p className="text-[10px] text-slate-500 uppercase">Livelli sotto</p>
-            <p className="text-lg font-bold text-white light:text-slate-900">
+            <p className="text-lg font-bold text-slate-900">
               {summaryLoading ? "…" : totals?.levels_below ?? 0}
             </p>
           </div>
-          <div className="rounded-xl bg-white/5 light:bg-slate-900/5 p-3 text-center">
+          <div className="rounded-xl bg-slate-900/5 p-3 text-center">
             <p className="text-[10px] text-slate-500 uppercase">Contratti totali</p>
-            <p className="text-lg font-bold text-white light:text-slate-900">
+            <p className="text-lg font-bold text-slate-900">
               {summaryLoading ? "…" : totals?.contracts ?? 0}
             </p>
           </div>
-          <div className="rounded-xl bg-white/5 light:bg-slate-900/5 p-3 text-center">
+          <div className="rounded-xl bg-slate-900/5 p-3 text-center">
             <p className="text-[10px] text-slate-500 uppercase">In lavorazione</p>
             <p className="text-lg font-bold text-sky-400">
               {summaryLoading ? "…" : totals?.contracts_in_progress ?? 0}
             </p>
           </div>
-          <div className="rounded-xl bg-white/5 light:bg-slate-900/5 p-3 text-center">
+          <div className="rounded-xl bg-slate-900/5 p-3 text-center">
             <p className="text-[10px] text-slate-500 uppercase">Chiusi</p>
             <p className="text-lg font-bold text-emerald-400">
               {summaryLoading ? "…" : totals?.contracts_closed ?? 0}
             </p>
           </div>
-          <div className="rounded-xl bg-white/5 light:bg-slate-900/5 p-3 text-center">
+          <div className="rounded-xl bg-slate-900/5 p-3 text-center">
             <p className="text-[10px] text-slate-500 uppercase">Rifiutati</p>
             <p className="text-lg font-bold text-rose-400">
               {summaryLoading ? "…" : totals?.contracts_rejected ?? 0}
             </p>
           </div>
-          <div className="rounded-xl bg-white/5 light:bg-slate-900/5 p-3 text-center">
+          <div className="rounded-xl bg-slate-900/5 p-3 text-center">
             <p className="text-[10px] text-slate-500 uppercase">Valore creato</p>
-            <p className="text-lg font-bold text-white light:text-slate-900">
+            <p className="text-lg font-bold text-slate-900">
               {contractsLoading ? "…" : euro(totalValue)}
             </p>
           </div>
-          <div className="rounded-xl bg-orange-500/10 border border-orange-500/20 p-3 text-center">
-            <p className="text-[10px] text-orange-300 uppercase">
+          <div className="rounded-xl bg-brand-500/10 border border-brand-500/20 p-3 text-center">
+            <p className="text-[10px] text-brand-600 uppercase">
               {hasViewerCommission ? "La tua provvigione" : "Provvigioni branch"}
             </p>
-            <p className="text-lg font-bold text-orange-400">
+            <p className="text-lg font-bold text-brand-600">
               {contractsLoading
                 ? "…"
                 : hasViewerCommission
@@ -168,16 +168,16 @@ export function NetworkNodeDetailModal({
 
         {/* Per-contract detail */}
         <div className="flex items-center justify-between mb-2">
-          <h4 className="text-sm font-semibold text-white light:text-slate-900">Contratti in questo ramo</h4>
-          <label className="flex items-center gap-2 text-xs text-slate-400 light:text-slate-500 cursor-pointer">
+          <h4 className="text-sm font-semibold text-slate-900">Contratti in questo ramo</h4>
+          <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer">
             <input type="checkbox" checked={onlyProblems} onChange={(e) => setOnlyProblems(e.target.checked)} className="cursor-pointer" />
             Solo con problemi
           </label>
         </div>
-        <div className="overflow-x-auto rounded-xl border border-white/5 light:border-slate-200">
+        <div className="overflow-x-auto rounded-xl border border-slate-200">
           <table className="w-full border-collapse text-left text-xs">
             <thead>
-              <tr className="border-b border-white/5 light:border-slate-200 text-slate-400 light:text-slate-500 font-semibold bg-white/2 light:bg-slate-900/[0.02]">
+              <tr className="border-b border-slate-200 text-slate-500 font-semibold bg-slate-900/[0.02]">
                 <th className="py-2 px-3">Cliente</th>
                 <th className="py-2 px-3">Prodotto</th>
                 <th className="py-2 px-3">Stato</th>
@@ -185,11 +185,11 @@ export function NetworkNodeDetailModal({
                 <th className="py-2 px-3 text-right">{hasViewerCommission ? "Tua provvigione" : "Provvigione"}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5 light:divide-slate-200">
+            <tbody className="divide-y divide-slate-200">
               {filteredContracts.map((c) => (
-                <tr key={c.contract_id} className="text-slate-300 light:text-slate-600">
+                <tr key={c.contract_id} className=" text-slate-600">
                   <td className="py-2 px-3">
-                    <div className="font-medium text-white light:text-slate-900">{c.customer_name}</div>
+                    <div className="font-medium text-slate-900">{c.customer_name}</div>
                     <div className="text-[10px] text-slate-500">{c.producer_name}</div>
                   </td>
                   <td className="py-2 px-3">{c.product_name}</td>
@@ -199,13 +199,13 @@ export function NetworkNodeDetailModal({
                         ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
                         : c.status === "ACTIVE" || c.status === "RENEWED"
                           ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                          : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                          : "bg-amber-500/10 text-amber-700 border-amber-500/20"
                     }`}>
                       {STATUS_LABELS[c.status] ?? c.status}
                     </span>
                   </td>
-                  <td className="py-2 px-3 text-right text-slate-300 light:text-slate-600">{euro(c.value_cents)}</td>
-                  <td className="py-2 px-3 text-right font-semibold text-orange-400">
+                  <td className="py-2 px-3 text-right text-slate-600">{euro(c.value_cents)}</td>
+                  <td className="py-2 px-3 text-right font-semibold text-brand-600">
                     {hasViewerCommission ? euro(c.my_commission_cents ?? 0) : euro(c.commission_cents)}
                   </td>
                 </tr>

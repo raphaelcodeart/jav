@@ -6,7 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base, TimestampMixin, UUIDPKMixin
 
-# CHIUSURA_ACCOUNT (Session 89): solo da «Richiedi chiusura account» nelle
+# CHIUSURA_ACCOUNT: solo da «Richiedi chiusura account» nelle
 # Impostazioni del cliente (service.request_account_closure), mai dal modulo.
 TICKET_CATEGORIES = {"ASSISTENZA_TECNICA", "FATTURAZIONE", "CONTRATTO", "COMMISSIONI", "ALTRO", "CHIUSURA_ACCOUNT"}
 TICKET_STATUSES = {"OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"}

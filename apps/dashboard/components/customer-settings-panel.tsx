@@ -6,9 +6,9 @@ import { friendlyApiError } from "@/lib/api-error";
 import { useSpendPinStatus } from "@/components/javcash-confirm-code";
 import type { SpendPinStatusRead, TicketRead } from "@/lib/types";
 
-const card = "glass-card rounded-2xl p-6 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70";
-const input = "w-full rounded-xl glass-input px-3 py-2.5 text-sm focus:border-orange-500";
-const label = "block text-[11px] font-semibold text-slate-400 light:text-slate-500 mb-1";
+const card = "glass-card rounded-2xl p-6 border-slate-200 bg-white/70";
+const input = "w-full rounded-xl glass-input px-3 py-2.5 text-sm focus:border-brand-500";
+const label = "block font-semibold text-slate-500 mb-1";
 
 /** Session 87: le Impostazioni del cliente. Per ora una cosa sola: come
  *  confermare l'uso dei JavCash al checkout -- il codice via email di
@@ -19,8 +19,8 @@ export function CustomerSettingsPanel() {
   return (
     <div className="space-y-6 max-w-2xl">
       <div>
-        <h2 className="text-lg font-bold text-white light:text-slate-900">Impostazioni</h2>
-        <p className="text-sm text-slate-400 light:text-slate-500">Le preferenze del tuo account.</p>
+        <h2 className="text-lg font-bold text-slate-900">Impostazioni</h2>
+        <p className="text-sm text-slate-500">Le preferenze del tuo account.</p>
       </div>
       <SpendPinCard />
       <AccountClosureCard />
@@ -97,15 +97,15 @@ function SpendPinCard() {
   return (
     <div className={`${card} space-y-4`}>
       <div>
-        <h3 className="text-sm font-bold text-white light:text-slate-900">Conferma dei pagamenti con JavCash</h3>
-        <p className="text-xs text-slate-400 light:text-slate-500 mt-1 leading-relaxed">
+        <h3 className="text-sm font-bold text-slate-900">Conferma dei pagamenti con JavCash</h3>
+        <p className="text-xs text-slate-500 mt-1 leading-relaxed">
           Quando usi i tuoi JavCash in un acquisto ti chiediamo una conferma. Puoi riceverla ogni volta come
           codice via email, oppure scegliere un PIN di 4 cifre da digitare al momento del pagamento.
         </p>
       </div>
 
       {isLoading ? (
-        <div className="h-24 rounded-xl bg-white/5 light:bg-slate-900/5 animate-pulse" />
+        <div className="h-24 rounded-xl bg-slate-900/5 animate-pulse" />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <MethodOption
@@ -124,7 +124,7 @@ function SpendPinCard() {
       )}
 
       {status?.locked_until && (
-        <p className="text-xs text-amber-400">
+        <p className="text-xs text-amber-700">
           Il PIN è bloccato per troppi tentativi sbagliati fino alle{" "}
           {new Date(status.locked_until).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}: nel
           frattempo ti mandiamo il codice via email.
@@ -135,13 +135,13 @@ function SpendPinCard() {
         <div className="flex flex-wrap gap-2">
           <button
             onClick={() => open("set")}
-            className="px-4 py-2 rounded-xl border border-white/10 light:border-slate-300 text-xs font-semibold text-slate-200 light:text-slate-700 hover:bg-white/5 light:hover:bg-slate-900/5 cursor-pointer"
+            className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-900/5 cursor-pointer"
           >
             Cambia PIN
           </button>
           <button
             onClick={() => open("disable")}
-            className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:bg-white/5 light:hover:bg-slate-900/5 cursor-pointer"
+            className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:bg-slate-900/5 cursor-pointer"
           >
             Torna al codice via email
           </button>
@@ -149,8 +149,8 @@ function SpendPinCard() {
       )}
 
       {mode !== "idle" && (
-        <div className="space-y-3 p-4 rounded-xl border border-white/10 light:border-slate-200">
-          <p className="text-xs font-semibold text-white light:text-slate-900">
+        <div className="space-y-3 p-4 rounded-xl border border-slate-200">
+          <p className="text-xs font-semibold text-slate-900">
             {mode === "disable" ? "Torna al codice via email" : enabled ? "Cambia il PIN" : "Crea il tuo PIN"}
           </p>
           {mode === "set" && (
@@ -205,13 +205,13 @@ function SpendPinCard() {
             <button
               onClick={submit}
               disabled={!canSubmit}
-              className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-40"
+              className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-40"
             >
               {busy ? "Salvo…" : mode === "disable" ? "Usa il codice via email" : enabled ? "Cambia PIN" : "Attiva PIN"}
             </button>
             <button
               onClick={() => open("idle")}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:bg-white/5 light:hover:bg-slate-900/5 cursor-pointer"
+              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:bg-slate-900/5 cursor-pointer"
             >
               Annulla
             </button>
@@ -244,22 +244,22 @@ function MethodOption({
       aria-pressed={active}
       className={`text-left p-4 rounded-xl border transition cursor-pointer ${
         active
-          ? "border-orange-500/60 bg-orange-500/10"
-          : "border-white/10 light:border-slate-200 hover:bg-white/5 light:hover:bg-slate-900/5"
+          ? "border-brand-500/60 bg-brand-500/10"
+          : " border-slate-200 hover:bg-slate-900/5"
       }`}
     >
       <div className="flex items-center gap-2">
         <span
           className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-            active ? "border-orange-500" : "border-slate-500"
+            active ? "border-brand-500" : "border-slate-500"
           }`}
         >
-          {active && <span className="w-2 h-2 rounded-full bg-orange-500" />}
+          {active && <span className="w-2 h-2 rounded-full bg-brand-500" />}
         </span>
-        <span className="text-sm font-semibold text-white light:text-slate-900">{title}</span>
-        {active && <span className="ml-auto text-[10px] font-bold uppercase tracking-wide text-orange-400">In uso</span>}
+        <span className="text-sm font-semibold text-slate-900">{title}</span>
+        {active && <span className="ml-auto text-[10px] font-bold uppercase tracking-wide text-brand-600">In uso</span>}
       </div>
-      <p className="text-[11px] text-slate-400 light:text-slate-500 mt-1.5 pl-6">{text}</p>
+      <p className=" text-slate-500 mt-1.5 pl-6">{text}</p>
     </button>
   );
 }
@@ -306,16 +306,16 @@ function AccountClosureCard() {
 
   return (
     <div className={card}>
-      <h3 className="text-sm font-bold text-white light:text-slate-900">Chiusura dell&apos;account</h3>
+      <h3 className="text-sm font-bold text-slate-900">Chiusura dell&apos;account</h3>
       {isLoading ? null : pending ? (
-        <p className="text-sm text-slate-400 light:text-slate-500 mt-2">
+        <p className="text-sm text-slate-500 mt-2">
           Hai chiesto la chiusura dell&apos;account il{" "}
           {new Date(pending.created_at).toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" })}.
           Il nostro staff la sta gestendo e ti contatterà; puoi seguirla dalla sezione Assistenza.
         </p>
       ) : (
         <>
-          <p className="text-sm text-slate-400 light:text-slate-500 mt-2">
+          <p className="text-sm text-slate-500 mt-2">
             Vuoi chiudere il tuo account Jav? Invia la richiesta: lo staff la prende in carico e ti contatta
             per sistemare eventuali contratti, ordini o JavCash ancora aperti.
           </p>
@@ -351,7 +351,7 @@ function AccountClosureCard() {
                 <button
                   type="button"
                   onClick={() => { setConfirming(false); setError(null); }}
-                  className="px-4 py-2 rounded-xl border border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 text-xs font-semibold transition cursor-pointer"
+                  className="px-4 py-2 rounded-xl border border-slate-300 text-slate-600 text-xs font-semibold transition cursor-pointer"
                 >
                   Annulla
                 </button>

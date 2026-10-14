@@ -1,4 +1,4 @@
-"""'Attiva Contratto' self-service flow (Session 29): a customer activates a
+"""'Attiva Contratto' self-service flow: a customer activates a
 Jav (INTERNAL) product themselves -- POST /contracts/mine creates the
 supply point + contract and immediately submits it, attributed to the
 customer's own referring promoter (same resolution "lavora con noi" uses).
@@ -19,7 +19,6 @@ from app.domains.auth.schemas import RegisterRequest
 from app.domains.catalog.models import Product, ProductVersion
 from app.domains.contracts import service as contracts_service
 from app.domains.customers.models import Customer
-from app.domains.customers.schemas import SupplyPointCreate
 from app.domains.documents import service as documents_service
 from app.domains.network import service as network_service
 from app.domains.rbac.models import Role
@@ -56,28 +55,20 @@ async def _make_attributed_customer(db, organization_id, *, email: str = "selfse
     return await auth_service.register_with_referral(db, organization_id=organization_id, payload=payload)
 
 
-async def _make_internal_product_version(db, organization_id, *, energy_type: str = "ELECTRICITY") -> ProductVersion:
+async def _make_internal_product_version(db, organization_id) -> ProductVersion:
     product = Product(
-        organization_id=organization_id, code=f"LUCE-{uuid.uuid4().hex[:6]}", energy_type=energy_type,
+        organization_id=organization_id, code=f"SRV-{uuid.uuid4().hex[:6]}",
         customer_type="PRIVATE", category="INTERNAL",
     )
     db.add(product)
     await db.flush()
     version = ProductVersion(
-        product_id=product.id, version_label="1.0", name="Luce Self-Service", base_price_cents=2000,
+        product_id=product.id, version_label="1.0", name="Abbonamento Self-Service", base_price_cents=2000,
         contract_duration_months=12, valid_from=NOW,
     )
     db.add(version)
     await db.commit()
     return version
-
-
-def _supply_point_payload(energy_type: str = "ELECTRICITY") -> SupplyPointCreate:
-    return SupplyPointCreate(
-        energy_type=energy_type, pod_code="IT001E00000000" if energy_type != "GAS" else None,
-        pdr_code="00000000000000" if energy_type in ("GAS", "DUAL_FUEL") else None,
-        street="Via Self-Service 1", city="Roma", province="RM", postal_code="00100",
-    )
 
 
 @pytest.mark.asyncio
@@ -87,8 +78,7 @@ async def test_create_contract_self_service_submits_and_attributes_to_referring_
 
     contract = await contracts_service.create_contract_self_service(
         db, organization_id=organization_id, customer_user_id=user.id,
-        product_version_id=version.id, supply_point_payload=_supply_point_payload(),
-        email="contatto@example.demo",
+        product_version_id=version.id, email="contatto@example.demo",
     )
 
     assert contract.status == "DOCUMENTS_PENDING"
@@ -128,8 +118,7 @@ async def test_create_contract_self_service_rejects_non_internal_product(db, org
     with pytest.raises(contracts_service.SelfServiceContractError):
         await contracts_service.create_contract_self_service(
             db, organization_id=organization_id, customer_user_id=user.id,
-            product_version_id=version.id, supply_point_payload=_supply_point_payload(),
-            email="contatto@example.demo",
+            product_version_id=version.id, email="contatto@example.demo",
         )
 
 
@@ -144,8 +133,7 @@ async def test_create_contract_self_service_requires_a_customer_record(db, organ
     with pytest.raises(contracts_service.SelfServiceContractError):
         await contracts_service.create_contract_self_service(
             db, organization_id=organization_id, customer_user_id=user.id,
-            product_version_id=version.id, supply_point_payload=_supply_point_payload(),
-            email="contatto@example.demo",
+            product_version_id=version.id, email="contatto@example.demo",
         )
 
 
@@ -167,8 +155,7 @@ async def test_create_contract_self_service_requires_a_referring_promoter(db, or
     with pytest.raises(contracts_service.SelfServiceContractError):
         await contracts_service.create_contract_self_service(
             db, organization_id=organization_id, customer_user_id=customer_user.id,
-            product_version_id=version.id, supply_point_payload=_supply_point_payload(),
-            email="contatto@example.demo",
+            product_version_id=version.id, email="contatto@example.demo",
         )
 
 
@@ -178,8 +165,7 @@ async def test_transition_approved_cascades_into_payment_pending(db, organizatio
     version = await _make_internal_product_version(db, organization_id)
     contract = await contracts_service.create_contract_self_service(
         db, organization_id=organization_id, customer_user_id=user.id,
-        product_version_id=version.id, supply_point_payload=_supply_point_payload(),
-        email="contatto@example.demo",
+        product_version_id=version.id, email="contatto@example.demo",
     )
     contract = await contracts_service.transition_contract(
         db, organization_id=organization_id, contract=contract, to_status="UNDER_REVIEW",
@@ -200,8 +186,7 @@ async def test_transition_paid_cascades_all_the_way_to_active(db, organization_i
     version = await _make_internal_product_version(db, organization_id)
     contract = await contracts_service.create_contract_self_service(
         db, organization_id=organization_id, customer_user_id=user.id,
-        product_version_id=version.id, supply_point_payload=_supply_point_payload(),
-        email="contatto@example.demo",
+        product_version_id=version.id, email="contatto@example.demo",
     )
     for to_status in ["UNDER_REVIEW", "APPROVED"]:
         contract = await contracts_service.transition_contract(
@@ -226,8 +211,7 @@ async def test_uploading_all_required_documents_auto_advances_to_under_review(db
     version = await _make_internal_product_version(db, organization_id)
     contract = await contracts_service.create_contract_self_service(
         db, organization_id=organization_id, customer_user_id=user.id,
-        product_version_id=version.id, supply_point_payload=_supply_point_payload(),
-        email="contatto@example.demo",
+        product_version_id=version.id, email="contatto@example.demo",
     )
     assert contract.status == "DOCUMENTS_PENDING"
 
@@ -249,8 +233,7 @@ async def test_uploading_some_but_not_all_documents_does_not_advance(db, organiz
     version = await _make_internal_product_version(db, organization_id)
     contract = await contracts_service.create_contract_self_service(
         db, organization_id=organization_id, customer_user_id=user.id,
-        product_version_id=version.id, supply_point_payload=_supply_point_payload(),
-        email="contatto@example.demo",
+        product_version_id=version.id, email="contatto@example.demo",
     )
 
     required_types = documents_service.required_document_types_for("PRIVATE")

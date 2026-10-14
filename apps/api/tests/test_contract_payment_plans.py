@@ -1,19 +1,14 @@
-"""Pagamento del contratto: soluzione unica, 3 rate, 12 rate.
+"""Pagamento del contratto: soluzione unica, 3 rate, 12 rate, con bonifico.
 
-Contracts only -- the Shop's own checkout is a separate, working flow and is
-not touched by any of this.
+Contracts only -- the Shop's own checkout is a separate flow and is not
+touched by any of this.
 
 Two things these pin down. The arithmetic, because an instalment plan that is
-a few euro off is worse than no instalment plan; and the webhook, because
-Stripe promises at-least-once delivery and an instalment plan fires
-`invoice.paid` every month for the same subscription -- so "the same event
-again" must be distinguishable from "the next instalment".
+a few euro off is worse than no instalment plan; and the confirmation,
+because only an administrator confirming the transfer marks anything paid,
+and confirming the same thing twice must pay it once.
 """
 
-import hashlib
-import hmac
-import json
-import time
 import uuid
 from datetime import UTC, datetime
 
@@ -25,14 +20,11 @@ from app.domains.catalog.models import Product, ProductVersion
 from app.domains.contracts import payment_plans
 from app.domains.contracts import service as contract_service
 from app.domains.contracts.models import Contract
-from app.domains.customers.models import Address, Customer, SupplyPoint
+from app.domains.customers.models import Address, Customer
 from app.domains.network import service as network_service
-from app.domains.payments import service as payments_service
-from app.domains.payments.models import StripeWebhookEvent
 from app.domains.users.models import User
 
 NOW = datetime(2026, 1, 1, tzinfo=UTC)
-WEBHOOK_SECRET = "whsec_test_secret"
 
 
 # --- L'aritmetica delle rate -------------------------------------------------
@@ -73,29 +65,26 @@ def test_the_rounding_difference_can_never_be_large():
             assert abs(b.rounding_difference_cents) <= plan.instalments // 2
 
 
-def test_the_single_payment_discount_is_rounded_and_frozen():
+def test_a_single_payment_is_never_discounted():
+    """Paying by bank transfer carries no discount (business decision): one
+    go is the contract's own total."""
     full = payment_plans.plan_by_key(payment_plans.PLAN_FULL)
-    b = payment_plans.breakdown_for(full, 180_00, discount_percentage=32)
-    assert (b.discount_cents, b.total_cents, b.instalment_cents, b.discount_percentage) == (57_60, 122_40, 122_40, 32)
-    assert payment_plans.discount_cents_for(99_99, 32) == 32_00  # 31,9968 half-up
-    # Re-read from the contract: whatever the setting says now.
-    contract = Contract(gross_amount_cents=180_00, payment_discount_cents=57_60)
-    assert payment_plans.contract_breakdown(full, contract).total_cents == 122_40
-    # Instalments never discounted, even if asked.
-    twelve = payment_plans.plan_by_key(payment_plans.PLAN_MONTHLY_12)
-    assert payment_plans.breakdown_for(twelve, 180_00, discount_percentage=32).total_cents == 180_00
-    assert payment_plans.contract_breakdown(twelve, Contract(gross_amount_cents=180_00, payment_discount_cents=57_60)).total_cents == 180_00
+    b = payment_plans.breakdown_for(full, 180_00)
+    assert (b.total_cents, b.instalment_cents) == (180_00, 180_00)
+    assert payment_plans.contract_breakdown(full, Contract(gross_amount_cents=180_00)).total_cents == 180_00
 
 
 def test_an_amount_too_small_to_split_drops_that_option():
-    """Stripe refuses a zero-amount recurring price, and "12 rate da 0,00"
-    would be nonsense before it was an error."""
-    keys = {b.plan.key for b in payment_plans.available_breakdowns(Contract(gross_amount_cents=5))}
-    assert payment_plans.PLAN_FULL in keys
-    assert payment_plans.PLAN_MONTHLY_12 not in keys
+    """"12 rate da 0,00" on a very small contract would be nonsense."""
+    from app.domains.contracts import requests as requests_service
+
+    options = {o.plan.key: o for o in requests_service.plan_options([Contract(gross_amount_cents=5)])}
+    assert options[payment_plans.PLAN_FULL].available
+    assert not options[payment_plans.PLAN_MONTHLY_12].available
 
 
-# --- Il webhook ---------------------------------------------------------------
+# --- La conferma del bonifico ---------------------------------------------------
+
 
 
 async def _make_payable_contract(db, organization_id, *, gross_cents: int = 249_00) -> Contract:
@@ -117,19 +106,14 @@ async def _make_payable_contract(db, organization_id, *, gross_cents: int = 249_
     )
     db.add(address)
     await db.flush()
-    supply_point = SupplyPoint(
-        organization_id=organization_id, customer_id=customer.id, energy_type="ELECTRICITY",
-        supply_address_id=address.id,
-    )
-    db.add(supply_point)
     product = Product(
         organization_id=organization_id, code=f"P-{uuid.uuid4().hex[:6]}",
-        energy_type="ELECTRICITY", customer_type="BOTH", category="INTERNAL",
+        customer_type="BOTH", category="INTERNAL",
     )
     db.add(product)
     await db.flush()
     version = ProductVersion(
-        product_id=product.id, version_label="1.0", name="Energia Circolare",
+        product_id=product.id, version_label="1.0", name="Abbonamento annuale",
         base_price_cents=gross_cents, valid_from=NOW,
     )
     db.add(version)
@@ -141,7 +125,7 @@ async def _make_payable_contract(db, organization_id, *, gross_cents: int = 249_
 
     contract = await contract_service.create_contract(
         db, organization_id=organization_id, customer_id=customer.id,
-        supply_point_id=supply_point.id, product_version_id=version.id,
+        product_version_id=version.id,
         producer_agent_id=agent.id, actor_user_id=user.id, correlation_id=str(uuid.uuid4()),
     )
     for step in ["SUBMITTED", "UNDER_REVIEW", "APPROVED"]:
@@ -151,7 +135,7 @@ async def _make_payable_contract(db, organization_id, *, gross_cents: int = 249_
         )
     # APPROVED auto-cascades to PAYMENT_PENDING -- the point a customer can pay.
     assert contract.status == "PAYMENT_PENDING"
-    # Since Session 50 an approved contract activates on payment only once an
+    # An approved contract activates on payment only once an
     # administrator has accepted the commission preview.
     from app.domains.commissions.services.preview import build_commission_preview
 
@@ -163,55 +147,33 @@ async def _make_payable_contract(db, organization_id, *, gross_cents: int = 249_
     return contract
 
 
-def _signed(payload: dict) -> tuple[bytes, str]:
-    """A genuinely signed webhook body, so the test goes through
-    construct_event() rather than around it -- the shortcut that let a real
-    bug (StripeObject has no .get()) reach production twice."""
-    body = json.dumps(payload).encode()
-    timestamp = int(time.time())
-    signature = hmac.new(
-        WEBHOOK_SECRET.encode(), f"{timestamp}.".encode() + body, hashlib.sha256
-    ).hexdigest()
-    return body, f"t={timestamp},v1={signature}"
+async def _admin(db, organization_id) -> uuid.UUID:
+    user = User(
+        organization_id=organization_id, email=f"admin-{uuid.uuid4().hex[:8]}@example.com",
+        password_hash=hash_password("irrelevant"),
+    )
+    db.add(user)
+    await db.commit()
+    return user.id
 
 
-async def _configure_stripe(db, organization_id) -> None:
-    """Writes the keys straight onto the organization rather than through
-    update_payment_settings() -- that takes a Pydantic payload, and a test
-    only needs the stored shape the readers actually look at."""
-    from app.domains.organizations.models import Organization
-
-    org = await db.get(Organization, organization_id)
-    org.settings = {
-        **(org.settings or {}),
-        "stripe_secret_key": "sk_test_fake",
-        "stripe_publishable_key": "pk_test_fake",
-        "stripe_webhook_secret": WEBHOOK_SECRET,
-    }
+async def _announce(db, contract, plan_key: str) -> None:
+    """What the customer's «Paga con bonifico» writes on each contract."""
+    contract.payment_plan = plan_key
+    contract.payment_method = "BANK_TRANSFER"
     await db.commit()
 
 
 @pytest.mark.asyncio
-async def test_a_paid_checkout_activates_the_contract(db, organization_id):
-    await _configure_stripe(db, organization_id)
+async def test_a_confirmed_transfer_activates_the_contract(db, organization_id):
     contract = await _make_payable_contract(db, organization_id)
-    await contract_service.attach_stripe_checkout_session(
-        db, contract=contract, session_id="cs_test_1", plan_key=payment_plans.PLAN_FULL
+    admin = await _admin(db, organization_id)
+    await _announce(db, contract, payment_plans.PLAN_FULL)
+
+    contract = await contract_service.record_transfer_payment(
+        db, organization_id=organization_id, contract=contract, confirmed_by_user_id=admin
     )
 
-    body, sig = _signed({
-        "id": "evt_test_1",
-        "type": "checkout.session.completed",
-        "data": {"object": {
-            "id": "cs_test_1",
-            "metadata": {"kind": "contract", "contract_id": str(contract.id)},
-        }},
-    })
-    await payments_service.handle_webhook_event(
-        db, organization_id=organization_id, payload=body, sig_header=sig
-    )
-
-    await db.refresh(contract)
     # PAID auto-cascades through ACTIVATION_PENDING into ACTIVE -- the same
     # hop that triggers commissions for every other contract.
     assert contract.status == "ACTIVE"
@@ -219,125 +181,69 @@ async def test_a_paid_checkout_activates_the_contract(db, organization_id):
 
 
 @pytest.mark.asyncio
-async def test_the_same_event_delivered_twice_changes_nothing(db, organization_id):
-    """Stripe promises at-least-once, not exactly-once."""
-    await _configure_stripe(db, organization_id)
-    contract = await _make_payable_contract(db, organization_id)
-    await contract_service.attach_stripe_checkout_session(
-        db, contract=contract, session_id="cs_test_2", plan_key=payment_plans.PLAN_FULL
-    )
-    payload = {
-        "id": "evt_test_2",
-        "type": "checkout.session.completed",
-        "data": {"object": {"id": "cs_test_2", "metadata": {"kind": "contract"}}},
-    }
-    for _ in range(3):
-        body, sig = _signed(payload)
-        await payments_service.handle_webhook_event(
-            db, organization_id=organization_id, payload=body, sig_header=sig
-        )
+async def test_the_same_transfer_confirmed_twice_changes_nothing(db, organization_id):
+    from app.domains.contracts.models import ContractInstalment
 
-    rows = list((await db.execute(
-        select(StripeWebhookEvent).where(StripeWebhookEvent.stripe_event_id == "evt_test_2")
-    )).scalars())
-    assert len(rows) == 1, "l'evento deve essere registrato una sola volta"
-    await db.refresh(contract)
+    contract = await _make_payable_contract(db, organization_id)
+    admin = await _admin(db, organization_id)
+    await _announce(db, contract, payment_plans.PLAN_FULL)
+    for _ in range(2):
+        contract = await contract_service.record_transfer_payment(
+            db, organization_id=organization_id, contract=contract, confirmed_by_user_id=admin
+        )
+    rows = list((await db.execute(select(ContractInstalment).where(ContractInstalment.contract_id == contract.id))).scalars())
+    assert [(r.number, r.status) for r in rows] == [(1, "PAID")]
     assert contract.status == "ACTIVE"
 
 
 @pytest.mark.asyncio
-async def test_the_success_url_is_not_what_marks_a_contract_paid(db, organization_id):
-    """A customer can open the success URL by hand. Only a signed webhook
-    moves a contract to PAID."""
-    await _configure_stripe(db, organization_id)
+async def test_choosing_to_pay_is_not_what_marks_a_contract_paid(db, organization_id):
+    """The customer announcing a transfer is a promise. Only an
+    administrator confirming it moves a contract to PAID."""
     contract = await _make_payable_contract(db, organization_id)
-    await contract_service.attach_stripe_checkout_session(
-        db, contract=contract, session_id="cs_test_3", plan_key=payment_plans.PLAN_MONTHLY_12
-    )
+    await _announce(db, contract, payment_plans.PLAN_MONTHLY_12)
     await db.refresh(contract)
     assert contract.status == "PAYMENT_PENDING"
     assert contract.paid_at is None
 
 
 @pytest.mark.asyncio
-async def test_an_unsigned_or_tampered_payload_is_refused(db, organization_id):
-    await _configure_stripe(db, organization_id)
-    with pytest.raises(payments_service.WebhookVerificationError):
-        await payments_service.handle_webhook_event(
-            db, organization_id=organization_id,
-            payload=b'{"id":"evt_x","type":"checkout.session.completed"}',
-            sig_header="t=1,v1=deadbeef",
-        )
-
-
-@pytest.mark.asyncio
-async def test_a_failed_instalment_warns_everybody_without_suspending_the_contract(db, organization_id):
-    """One declined monthly charge is not grounds for automatically cutting
-    off somebody's energy contract -- but somebody has to find out."""
-    await _configure_stripe(db, organization_id)
-    contract = await _make_payable_contract(db, organization_id)
-    await contract_service.attach_stripe_checkout_session(
-        db, contract=contract, session_id="cs_test_4", plan_key=payment_plans.PLAN_MONTHLY_12
-    )
-    body, sig = _signed({
-        "id": "evt_test_4",
-        "type": "checkout.session.completed",
-        "data": {"object": {"id": "cs_test_4", "metadata": {"kind": "contract"}, "subscription": "sub_test_4"}},
-    })
-    await payments_service.handle_webhook_event(
-        db, organization_id=organization_id, payload=body, sig_header=sig
-    )
-    await db.refresh(contract)
-    assert contract.status == "ACTIVE"
-
-    outcome = await contract_service.record_subscription_invoice(
-        db, organization_id=organization_id, subscription_id="sub_test_4",
-        paid=False, amount_cents=20_75,
-    )
-    assert "NON riscossa" in outcome
-    await db.refresh(contract)
-    assert contract.status == "ACTIVE", "un addebito fallito non sospende il contratto da solo"
-
-
-@pytest.mark.asyncio
-async def test_a_successful_instalment_is_recorded(db, organization_id):
-    await _configure_stripe(db, organization_id)
-    contract = await _make_payable_contract(db, organization_id)
-    contract.stripe_subscription_id = "sub_test_5"
-    await db.commit()
-
-    outcome = await contract_service.record_subscription_invoice(
-        db, organization_id=organization_id, subscription_id="sub_test_5",
-        paid=True, amount_cents=20_75,
-    )
-    assert "incassata" in outcome
-
-
-@pytest.mark.asyncio
-async def test_an_event_for_an_unknown_subscription_is_harmless(db, organization_id):
-    outcome = await contract_service.record_subscription_invoice(
-        db, organization_id=organization_id, subscription_id="sub_nonexistent",
-        paid=True, amount_cents=100,
-    )
-    assert "nessun contratto" in outcome
-
-
-@pytest.mark.asyncio
 async def test_an_approved_contract_paid_in_instalments_keeps_its_plan(db, organization_id):
-    """Regression (Session 65): paying an already approved contract went
+    """Regression: paying an already approved contract went
     through the PAID transition with paid_at still empty, which is how a
-    bank transfer confirmed by staff looks -- the plan was rewritten to
-    FULL / BANK_TRANSFER and a 12-instalment card payment got one row."""
+    transfer confirmed from the contract list looks -- the plan was
+    rewritten to FULL and a 12-instalment plan got one row."""
     from app.domains.contracts.models import ContractInstalment
 
-    await _configure_stripe(db, organization_id)
     contract = await _make_payable_contract(db, organization_id, gross_cents=180_00)
-    await contract_service.attach_stripe_checkout_session(
-        db, contract=contract, session_id="cs_twelve_approved", plan_key=payment_plans.PLAN_MONTHLY_12
+    admin = await _admin(db, organization_id)
+    await _announce(db, contract, payment_plans.PLAN_MONTHLY_12)
+    contract = await contract_service.record_transfer_payment(
+        db, organization_id=organization_id, contract=contract, confirmed_by_user_id=admin
     )
-    contract = await contract_service.record_card_payment(db, organization_id=organization_id, contract=contract)
     assert contract.payment_plan == payment_plans.PLAN_MONTHLY_12
-    assert contract.payment_method == "CARD"
+    assert contract.payment_method == "BANK_TRANSFER"
     rows = list((await db.execute(select(ContractInstalment).where(ContractInstalment.contract_id == contract.id))).scalars())
     assert len(rows) == 12 and rows[0].amount_cents == 15_00 and rows[0].status == "PAID"
+    assert all(r.status == "SCHEDULED" for r in rows[1:]), "le rate successive le conferma l'amministratore"
 
+
+@pytest.mark.asyncio
+async def test_staff_marking_paid_keeps_the_plan_the_customer_announced(db, organization_id):
+    """«Pagato» from the contract list honours the plan announced from the
+    pratica; with none announced it is one payment of the whole amount."""
+    contract = await _make_payable_contract(db, organization_id, gross_cents=180_00)
+    admin = await _admin(db, organization_id)
+    await _announce(db, contract, payment_plans.PLAN_INSTALMENTS_3)
+    contract = await contract_service.transition_contract(
+        db, organization_id=organization_id, contract=contract, to_status="PAID",
+        actor_user_id=admin, reason="bonifico ricevuto", notes=None, correlation_id=str(uuid.uuid4()),
+    )
+    assert contract.payment_plan == payment_plans.PLAN_INSTALMENTS_3
+
+    other = await _make_payable_contract(db, organization_id, gross_cents=180_00)
+    other = await contract_service.transition_contract(
+        db, organization_id=organization_id, contract=other, to_status="PAID",
+        actor_user_id=admin, reason="bonifico ricevuto", notes=None, correlation_id=str(uuid.uuid4()),
+    )
+    assert (other.payment_plan, other.payment_method) == (payment_plans.PLAN_FULL, "BANK_TRANSFER")

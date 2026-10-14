@@ -281,7 +281,7 @@ async def run(
     print()
     print("  Prossimi passi (docs/server-migration-guide.md §12):")
     print("   1. Accedi come amministratore e completa il tuo profilo quando te lo chiede.")
-    print("   2. Impostazioni organizzazione: SMTP, Stripe, IBAN aziendale.")
+    print("   2. Impostazioni organizzazione: SMTP, IBAN aziendale.")
     print("   3. Crea i prodotti reali, poi i primi promoter.")
     print("=" * 72)
     print()

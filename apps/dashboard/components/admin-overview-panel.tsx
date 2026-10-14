@@ -112,14 +112,14 @@ function KpiCard({
   return (
     <Tag
       onClick={onClick}
-      className={`glass-card rounded-2xl p-5 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70 flex items-center gap-4 w-full text-left ${
-        onClick ? "cursor-pointer hover:border-orange-500/40 hover:shadow-lg hover:shadow-orange-500/10 transition-all duration-200" : ""
+      className={`glass-card rounded-2xl p-5 border-slate-200 bg-white/70 flex items-center gap-4 w-full text-left ${
+        onClick ? "cursor-pointer hover:border-brand-500/40 hover:shadow-lg hover:shadow-brand-500/10 transition-all duration-200" : ""
       }`}
     >
       <div className={`p-3 rounded-xl shrink-0 ${accent}`}>{icon}</div>
       <div className="min-w-0">
         <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1 truncate">{label}</p>
-        <p className="text-xl font-bold text-white light:text-slate-900 truncate">{value}</p>
+        <p className="text-xl font-bold text-slate-900 truncate">{value}</p>
       </div>
     </Tag>
   );
@@ -198,16 +198,6 @@ const QUICK_LINKS: {
     icon: (
       <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M16.5 7.5h-9v9h9v-9zM3 6a3 3 0 013-3h12a3 3 0 013 3v12a3 3 0 01-3 3H6a3 3 0 01-3-3V6z" />
-      </svg>
-    ),
-  },
-  {
-    key: "invoice-redemptions",
-    label: "Riscatti Fatture",
-    description: "Da confermare",
-    icon: (
-      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 14l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
       </svg>
     ),
   },
@@ -294,13 +284,13 @@ export function AdminOverviewPanel({ onNavigate }: { onNavigate?: (key: string, 
           <button
             key={link.key}
             onClick={() => onNavigate?.(link.key)}
-            className="group flex flex-col items-start gap-3 p-4 rounded-2xl border border-white/5 light:border-slate-200 bg-gradient-to-br from-slate-900/60 to-slate-900/20 light:from-white light:to-slate-50 hover:border-orange-500/40 hover:shadow-lg hover:shadow-orange-500/10 transition-all duration-200 cursor-pointer text-left"
+            className="group flex flex-col items-start gap-3 p-4 rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 hover:border-brand-500/40 hover:shadow-lg hover:shadow-brand-500/10 transition-all duration-200 cursor-pointer text-left"
           >
-            <span className="p-2.5 rounded-xl bg-orange-500/10 text-orange-400 group-hover:bg-orange-500 group-hover:text-white transition-colors">
+            <span className="p-2.5 rounded-xl bg-brand-500/10 text-brand-600 group-hover:bg-brand-500 group-hover:text-white transition-colors">
               {link.icon}
             </span>
             <span className="min-w-0">
-              <span className="block text-sm font-semibold text-white light:text-slate-900 truncate">
+              <span className="block text-sm font-semibold text-slate-900 truncate">
                 {link.label}
               </span>
               <span className="block text-[11px] text-slate-500 truncate">{link.description}</span>
@@ -317,8 +307,8 @@ export function AdminOverviewPanel({ onNavigate }: { onNavigate?: (key: string, 
             onClick={() => setPeriod(p.key)}
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer border ${
               period === p.key
-                ? "bg-gradient-to-r from-orange-600 to-amber-500 text-white border-transparent shadow-lg shadow-orange-500/20"
-                : "bg-white/5 light:bg-slate-900/5 text-slate-400 light:text-slate-500 border-white/5 light:border-slate-200 hover:bg-white/10"
+                ? "bg-gradient-to-r from-brand-600 to-brand-400 text-white border-transparent shadow-lg shadow-brand-500/20"
+                : " bg-slate-900/5 text-slate-500 border-slate-200 hover:bg-slate-100"
             }`}
           >
             {p.label}
@@ -335,7 +325,7 @@ export function AdminOverviewPanel({ onNavigate }: { onNavigate?: (key: string, 
         <KpiCard
           label="Contratti totali"
           value={summaryLoading ? "…" : String(summary?.contracts.total ?? 0)}
-          accent="bg-orange-500/10 text-orange-400"
+          accent="bg-brand-500/10 text-brand-600"
           onClick={() => onNavigate?.("list", "ALL")}
           icon={
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -357,7 +347,7 @@ export function AdminOverviewPanel({ onNavigate }: { onNavigate?: (key: string, 
         <KpiCard
           label="In attesa di approvazione"
           value={summaryLoading ? "…" : String(summary?.contracts.pending_approval ?? 0)}
-          accent="bg-amber-500/10 text-amber-400"
+          accent="bg-amber-500/10 text-amber-700"
           onClick={() => onNavigate?.("list", "PENDING_APPROVAL")}
           icon={
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -405,7 +395,7 @@ export function AdminOverviewPanel({ onNavigate }: { onNavigate?: (key: string, 
         <KpiCard
           label="Promoter attivi"
           value={summaryLoading ? "…" : String(summary?.active_promoters ?? 0)}
-          accent="bg-orange-500/10 text-orange-400"
+          accent="bg-brand-500/10 text-brand-600"
           onClick={() => onNavigate?.("promoters", "ACTIVE")}
           icon={
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -429,17 +419,17 @@ export function AdminOverviewPanel({ onNavigate }: { onNavigate?: (key: string, 
       {/* Network levels -- whole-company org chart depth/headcount. Unlike the
           promoter "La mia Azienda" view (branch-scoped to one downline), this
           has no root: it's every agent in the organization. */}
-      <div className="glass-card rounded-2xl border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70 p-5">
+      <div className="glass-card rounded-2xl border-slate-200 bg-white/70 p-5">
         <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-          <h4 className="text-sm font-semibold text-white light:text-slate-900">Rete commerciale: livelli e persone</h4>
+          <h4 className="text-sm font-semibold text-slate-900">Rete commerciale: livelli e persone</h4>
           <div className="flex gap-4">
             <div className="text-right">
               <p className="text-[10px] text-slate-500 uppercase tracking-wider">Persone totali</p>
-              <p className="text-lg font-bold text-white light:text-slate-900">{networkLevels?.people_total ?? 0}</p>
+              <p className="text-lg font-bold text-slate-900">{networkLevels?.people_total ?? 0}</p>
             </div>
             <div className="text-right">
               <p className="text-[10px] text-slate-500 uppercase tracking-wider">Livelli totali</p>
-              <p className="text-lg font-bold text-white light:text-slate-900">{networkLevels?.levels_total ?? 0}</p>
+              <p className="text-lg font-bold text-slate-900">{networkLevels?.levels_total ?? 0}</p>
             </div>
           </div>
         </div>
@@ -460,8 +450,8 @@ export function AdminOverviewPanel({ onNavigate }: { onNavigate?: (key: string, 
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="glass-card rounded-2xl p-5 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70">
-          <h4 className="text-sm font-semibold text-white light:text-slate-900 mb-4">Andamento contratti (12 mesi)</h4>
+        <div className="glass-card rounded-2xl p-5 border-slate-200 bg-white/70">
+          <h4 className="text-sm font-semibold text-slate-900 mb-4">Andamento contratti (12 mesi)</h4>
           <ResponsiveContainer width="100%" height={220}>
             <AreaChart data={contractsChartData}>
               <defs>
@@ -483,8 +473,8 @@ export function AdminOverviewPanel({ onNavigate }: { onNavigate?: (key: string, 
           </ResponsiveContainer>
         </div>
 
-        <div className="glass-card rounded-2xl p-5 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70">
-          <h4 className="text-sm font-semibold text-white light:text-slate-900 mb-4">Andamento provvigioni (12 mesi)</h4>
+        <div className="glass-card rounded-2xl p-5 border-slate-200 bg-white/70">
+          <h4 className="text-sm font-semibold text-slate-900 mb-4">Andamento provvigioni (12 mesi)</h4>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={commissionsChartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#64748b" strokeOpacity={0.15} vertical={false} />
@@ -503,8 +493,8 @@ export function AdminOverviewPanel({ onNavigate }: { onNavigate?: (key: string, 
 
       {/* Attention items + recent activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="glass-card rounded-2xl p-5 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70">
-          <h4 className="text-sm font-semibold text-white light:text-slate-900 mb-4">Richiede attenzione</h4>
+        <div className="glass-card rounded-2xl p-5 border-slate-200 bg-white/70">
+          <h4 className="text-sm font-semibold text-slate-900 mb-4">Richiede attenzione</h4>
           <div className="space-y-2">
             {attentionItems === undefined ? (
               <p className="text-xs text-slate-500 py-4 text-center">Caricamento...</p>
@@ -517,12 +507,12 @@ export function AdminOverviewPanel({ onNavigate }: { onNavigate?: (key: string, 
                   className="flex items-center justify-between p-3 rounded-xl bg-amber-500/5 border border-amber-500/15"
                 >
                   <div className="min-w-0">
-                    <p className="text-xs font-mono text-white light:text-slate-900 truncate">{item.contract_id}</p>
-                    <p className="text-[11px] text-amber-400">
+                    <p className="text-xs font-mono text-slate-900 truncate">{item.contract_id}</p>
+                    <p className="text-[11px] text-amber-700">
                       {STATUS_LABELS[item.status] ?? item.status} · {item.days_in_status}g
                     </p>
                   </div>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-amber-500/10 text-amber-400 border-amber-500/20 shrink-0">
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-amber-500/10 text-amber-700 border-amber-500/20 shrink-0">
                     Verifica
                   </span>
                 </div>
@@ -531,8 +521,8 @@ export function AdminOverviewPanel({ onNavigate }: { onNavigate?: (key: string, 
           </div>
         </div>
 
-        <div className="glass-card rounded-2xl p-5 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70">
-          <h4 className="text-sm font-semibold text-white light:text-slate-900 mb-4">Attività recente</h4>
+        <div className="glass-card rounded-2xl p-5 border-slate-200 bg-white/70">
+          <h4 className="text-sm font-semibold text-slate-900 mb-4">Attività recente</h4>
           <div className="space-y-2">
             {recentActivity === undefined ? (
               <p className="text-xs text-slate-500 py-4 text-center">Caricamento...</p>
@@ -540,9 +530,9 @@ export function AdminOverviewPanel({ onNavigate }: { onNavigate?: (key: string, 
               <p className="text-xs text-slate-500 py-4 text-center">Nessuna attività registrata.</p>
             ) : (
               recentActivity.map((item) => (
-                <div key={item.id} className="flex items-center justify-between p-3 rounded-xl bg-white/2 light:bg-slate-900/[0.02] border border-white/5 light:border-slate-200">
+                <div key={item.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-900/[0.02] border border-slate-200">
                   <div className="min-w-0">
-                    <p className="text-xs text-slate-300 light:text-slate-600 truncate">
+                    <p className="text-xs text-slate-600 truncate">
                       {ACTION_LABELS[item.action] ?? item.action}
                     </p>
                     <p className="text-[10px] text-slate-500">{item.entity_type} · {new Date(item.created_at).toLocaleString("it-IT")}</p>

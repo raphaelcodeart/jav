@@ -3,15 +3,27 @@
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { friendlyApiError } from "@/lib/api-error";
+import { useI18n } from "@/lib/i18n/provider";
 import { ProductThumbnail } from "@/components/product-thumbnail";
+import {
+  BulkAssign,
+  CategoryList,
+  ProductCategoriesField,
+  sameCategorySelection,
+  saveProductCategories,
+  useShopCategories,
+} from "@/components/shop-categories-card";
 import type {
   JavMarketAdminProductRead,
   JavMarketOrderRead,
   JavMarketProducerRead,
   JavMarketSettingsRead,
+  JavMarketSupplierDispatchRead,
+  JavMarketSupplierDraft,
+  JavMarketSupplierQueue,
 } from "@/lib/types";
 
-/** Marketplace 4 «Fai la Spesa con Jav» (Session 79): il pannello con cui
+/** «Fai la Spesa con Jav» (Session 79): il pannello con cui
  *  l'amministratore costruisce il negozio.
  *
  *  Tre cose, nell'ordine in cui servono: le impostazioni (acceso, spese di
@@ -20,13 +32,20 @@ import type {
  *  elenco, e chi compila la scheda una volta non la riscrive per ogni
  *  articolo.
  *
- *  Qui non c'è nessun fornitore da collegare: niente OAuth, niente sync,
- *  niente ricarico su un costo. Il prezzo lo scrive chi carica il prodotto
- *  ed è già quello di vendita. */
+ *  Qui non c'è nessun fornitore da collegare via API: niente OAuth, niente
+ *  sync, niente ricarico su un costo. Il prezzo lo scrive chi carica il
+ *  prodotto ed è già quello di vendita.
+ *
+ *  Ottobre 2026: le aziende sono i **fornitori** a cui partono gli ordini.
+ *  Un prodotto ha il suo fornitore oppure eredita quello della categoria
+ *  («Categorie e fornitori»), e «Fornitori da avvisare» raccoglie gli
+ *  ordini pagati di ciascun fornitore in un'email sola, da rileggere e
+ *  correggere prima dell'invio. Chi è il fornitore lo decide il server
+ *  (`resolve_suppliers`): qui si mostra e basta. */
 
 const input =
-  "w-full rounded-lg glass-input px-3 py-2 text-sm focus:border-orange-500";
-const label = "block text-[10px] font-semibold text-slate-400 light:text-slate-500 uppercase tracking-wide mb-1";
+  "w-full rounded-lg glass-input px-3 py-2 text-sm focus:border-brand-500";
+const label = "block font-semibold text-slate-500 uppercase tracking-wide mb-1";
 
 function euro(cents: number): string {
   return (cents / 100).toLocaleString("it-IT", { style: "currency", currency: "EUR" });
@@ -54,10 +73,10 @@ async function send<T>(path: string, method: string, body: unknown): Promise<T> 
 
 function Card({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
-    <div className="glass-card rounded-2xl p-5 border-white/10 light:border-slate-200 space-y-4">
+    <div className="glass-card rounded-2xl p-5 border-slate-200 space-y-4">
       <div>
-        <h3 className="text-sm font-bold text-white light:text-slate-900">{title}</h3>
-        {subtitle && <p className="text-xs text-slate-400 light:text-slate-500 mt-0.5">{subtitle}</p>}
+        <h3 className="text-sm font-bold text-slate-900">{title}</h3>
+        {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
       </div>
       {children}
     </div>
@@ -74,6 +93,7 @@ function Esito({ message }: { message: { ok: boolean; text: string } | null }) {
 // --- Impostazioni ----------------------------------------------------------
 
 function Impostazioni() {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const { data } = useQuery({
     queryKey: ["admin", "jav-market", "settings"],
@@ -189,12 +209,33 @@ function Impostazioni() {
             onChange={(e) => setForm({ ...corrente, shipping_days: e.target.value })}
           />
         </div>
+        <div className="sm:col-span-2">
+          <span className={label}>{t("shopSuppliers.settingsFrom")}</span>
+          <input
+            className={input}
+            type="email"
+            value={corrente.supplier_email_from ?? ""}
+            placeholder="info@judoartevida.com"
+            onChange={(e) => setForm({ ...corrente, supplier_email_from: e.target.value })}
+          />
+          <span className="block text-[10px] text-slate-500 mt-1">{t("shopSuppliers.settingsFromHint")}</span>
+        </div>
+        <div className="sm:col-span-2">
+          <span className={label}>{t("shopSuppliers.settingsSignature")}</span>
+          <textarea
+            className={`${input} min-h-[60px]`}
+            value={corrente.supplier_email_signature ?? ""}
+            placeholder={t("shopSuppliers.settingsSignaturePlaceholder")}
+            onChange={(e) => setForm({ ...corrente, supplier_email_signature: e.target.value })}
+          />
+          <span className="block text-[10px] text-slate-500 mt-1">{t("shopSuppliers.settingsSignatureHint")}</span>
+        </div>
       </div>
       <div className="flex items-center gap-3">
         <button
           onClick={() => salva.mutate(corrente)}
           disabled={salva.isPending}
-          className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-40"
+          className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-40"
         >
           {salva.isPending ? "Salvo…" : "Salva impostazioni"}
         </button>
@@ -204,13 +245,17 @@ function Impostazioni() {
   );
 }
 
-// --- Aziende produttrici ---------------------------------------------------
+// --- Fornitori (le aziende produttrici) -----------------------------------
 
 const PRODUTTORE_VUOTO = {
   name: "", description: "", website_url: "", vat_number: "", email: "", phone: "", address: "",
 };
 
+/** L'anagrafica dei fornitori: le aziende che fanno la merce e a cui
+ *  partono gli ordini. Si chiamavano «aziende produttrici»; il nome è
+ *  cambiato quando gli ordini hanno cominciato a partire per fornitore. */
 function Produttori() {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   // Dietro un pulsante come le categorie: le aziende si compilano una
   // volta e si toccano di rado, mentre i prodotti si caricano ogni giorno.
@@ -240,35 +285,36 @@ function Produttori() {
     onError: (err: unknown) => setMessage({ ok: false, text: (err as Error).message }),
   });
 
+  const elenco = producers ?? [];
   if (!aperto) {
     return (
-      <div className="glass-card rounded-2xl p-4 border-white/10 light:border-slate-200 flex items-center justify-between gap-3 flex-wrap">
+      <div className="glass-card rounded-2xl p-4 border-slate-200 flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h3 className="text-sm font-bold text-white light:text-slate-900">Aziende produttrici</h3>
-          <p className="text-xs text-slate-400 light:text-slate-500 mt-0.5">
-            {(producers ?? []).length === 0
-              ? "Nessuna azienda ancora. Servono per dire al cliente chi fa la merce, e per mandare loro l'ordine."
-              : `${(producers ?? []).length} in elenco: ${(producers ?? []).slice(0, 3).map((p) => p.name).join(", ")}${(producers ?? []).length > 3 ? "…" : ""}`}
+          <h3 className="text-sm font-bold text-slate-900">{t("shopSuppliers.registryTitle")}</h3>
+          <p className="text-xs text-slate-500 mt-0.5">
+            {elenco.length === 0
+              ? t("shopSuppliers.registryEmpty")
+              : t("shopSuppliers.registryCount", {
+                  n: elenco.length,
+                  names: `${elenco.slice(0, 3).map((p) => p.name).join(", ")}${elenco.length > 3 ? "…" : ""}`,
+                })}
           </p>
         </div>
         <button
           onClick={() => setAperto(true)}
-          className="px-4 py-2 rounded-xl border border-orange-500/40 text-xs font-semibold text-orange-400 hover:bg-orange-500/10 transition cursor-pointer shrink-0"
+          className="px-4 py-2 rounded-xl border border-brand-500/40 text-xs font-semibold text-brand-600 hover:bg-brand-500/10 transition cursor-pointer shrink-0"
         >
-          Gestisci aziende
+          {t("shopSuppliers.registryManage")}
         </button>
       </div>
     );
   }
 
   return (
-    <Card
-      title="Aziende produttrici"
-      subtitle="Chi fa la merce. L'email è quella a cui mandiamo l'ordine quando il cliente paga."
-    >
+    <Card title={t("shopSuppliers.registryTitle")} subtitle={t("shopSuppliers.registrySubtitle")}>
       <button
         onClick={() => setAperto(false)}
-        className="text-[11px] font-semibold text-slate-400 light:text-slate-500 hover:text-white light:hover:text-slate-900 cursor-pointer"
+        className=" font-semibold text-slate-500 hover:text-slate-900 cursor-pointer"
       >
         ← Chiudi
       </button>
@@ -314,26 +360,171 @@ function Produttori() {
         <button
           onClick={() => crea.mutate()}
           disabled={crea.isPending || form.name.trim().length === 0}
-          className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-40"
+          className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-40"
         >
-          {crea.isPending ? "Aggiungo…" : "Aggiungi azienda"}
+          {crea.isPending ? "Aggiungo…" : t("shopSuppliers.registryAdd")}
         </button>
         <Esito message={message} />
       </div>
 
-      {(producers ?? []).length > 0 && (
-        <div className="rounded-xl border border-white/10 light:border-slate-200 divide-y divide-white/5 light:divide-slate-200">
-          {(producers ?? []).map((p) => (
-            <div key={p.id} className="px-3 py-2">
-              <p className="text-xs font-semibold text-white light:text-slate-900">{p.name}</p>
-              <p className="text-[11px] text-slate-500 truncate">
-                {p.email ? p.email : <span className="text-amber-400">manca l&apos;email: gli ordini non partiranno</span>}
-                {p.description ? ` · ${p.description}` : ""}
-              </p>
-            </div>
+      {elenco.length > 0 && (
+        <div className="rounded-xl border border-slate-200 divide-y divide-slate-200">
+          {elenco.map((p) => (
+            <FornitoreRiga key={p.id} producer={p} />
           ))}
         </div>
       )}
+    </Card>
+  );
+}
+
+/** Una riga dell'anagrafica, che si apre in modifica sul posto: l'email
+ *  di un fornitore si corregge qui, senza ricrearlo. */
+function FornitoreRiga({ producer: p }: { producer: JavMarketProducerRead }) {
+  const { t } = useI18n();
+  const queryClient = useQueryClient();
+  const [bozza, setBozza] = useState<typeof PRODUTTORE_VUOTO & { active: boolean } | null>(null);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const salva = useMutation({
+    mutationFn: (body: typeof PRODUTTORE_VUOTO & { active: boolean }) =>
+      send<JavMarketProducerRead>(`/jav-market/producers/${p.id}`, "PATCH", body),
+    onSuccess: () => {
+      setBozza(null);
+      setMessage({ ok: true, text: t("shopSuppliers.registrySaved") });
+      queryClient.invalidateQueries({ queryKey: ["admin", "jav-market"] });
+    },
+    onError: (err: unknown) => setMessage({ ok: false, text: (err as Error).message }),
+  });
+
+  if (!bozza) {
+    return (
+      <div className="px-3 py-2 flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold text-slate-900">
+            {p.name}
+            {!p.active && <span className="ml-2 text-[10px] font-bold text-slate-400">{t("shopSuppliers.inactive")}</span>}
+          </p>
+          <p className="text-[11px] text-slate-500 truncate">
+            {p.email ? p.email : <span className="text-amber-700">manca l&apos;email: gli ordini non partiranno</span>}
+            {p.phone ? ` · ${p.phone}` : ""}
+            {p.description ? ` · ${p.description}` : ""}
+          </p>
+          <Esito message={message} />
+        </div>
+        <button
+          onClick={() => {
+            setMessage(null);
+            setBozza({
+              name: p.name, description: p.description, website_url: p.website_url ?? "", vat_number: p.vat_number ?? "",
+              email: p.email ?? "", phone: p.phone ?? "", address: p.address ?? "", active: p.active,
+            });
+          }}
+          className="px-2.5 py-1 rounded-lg font-semibold border border-slate-300 text-slate-600 hover:bg-slate-100 cursor-pointer shrink-0"
+        >
+          {t("shopSuppliers.edit")}
+        </button>
+      </div>
+    );
+  }
+
+  const campo = (key: keyof typeof PRODUTTORE_VUOTO, testo: string, span = "") => (
+    <div className={span}>
+      <span className={label}>{testo}</span>
+      <input className={input} value={bozza[key]} onChange={(e) => setBozza({ ...bozza, [key]: e.target.value })} />
+    </div>
+  );
+  return (
+    <div className="px-3 py-3 space-y-3 bg-slate-900/[0.02]">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {campo("name", "Nome dell'azienda *", "sm:col-span-2")}
+        {campo("vat_number", "Partita IVA")}
+        {campo("email", "Email per gli ordini")}
+        {campo("phone", "Telefono")}
+        {campo("website_url", "Sito")}
+        {campo("address", "Sede", "sm:col-span-3")}
+        <div className="sm:col-span-3">
+          <span className={label}>Descrizione (la legge il cliente)</span>
+          <textarea
+            className={`${input} min-h-[60px]`}
+            value={bozza.description}
+            onChange={(e) => setBozza({ ...bozza, description: e.target.value })}
+          />
+        </div>
+      </div>
+      <label className="flex items-center gap-2 text-xs text-slate-700">
+        <input type="checkbox" checked={bozza.active} onChange={(e) => setBozza({ ...bozza, active: e.target.checked })} />
+        {t("shopSuppliers.registryActive")}
+      </label>
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          onClick={() => salva.mutate(bozza)}
+          disabled={salva.isPending || !bozza.name.trim()}
+          className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-40"
+        >
+          {salva.isPending ? "Salvo…" : "Salva modifiche"}
+        </button>
+        <button onClick={() => setBozza(null)} className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:bg-slate-900/5 cursor-pointer">
+          Annulla
+        </button>
+        <Esito message={message} />
+      </div>
+    </div>
+  );
+}
+
+// --- Categorie e fornitori ---------------------------------------------------
+
+/** Le categorie dello Shop gestite da qui, con il fornitore di ciascuna:
+ *  i prodotti senza un fornitore loro prendono quello della categoria.
+ *  Stessi componenti della gestione categorie degli altri shop
+ *  (shop-categories-card.tsx), più la scelta del fornitore. */
+function CategorieEFornitori() {
+  const { t } = useI18n();
+  const [aperto, setAperto] = useState(false);
+  const { data: categories, error } = useShopCategories("jav_market");
+  const { data: producers } = useQuery({
+    queryKey: ["admin", "jav-market", "producers"],
+    queryFn: () => get<JavMarketProducerRead[]>("/jav-market/producers"),
+  });
+  const elenco = categories ?? [];
+  const collegate = elenco.filter((c) => c.producer_id).length;
+
+  if (!aperto) {
+    return (
+      <div className="glass-card rounded-2xl p-4 border-slate-200 flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h3 className="text-sm font-bold text-slate-900">{t("shopSuppliers.categoriesTitle")}</h3>
+          <p className="text-xs text-slate-500 mt-0.5">
+            {elenco.length === 0
+              ? t("shopSuppliers.categoriesEmpty")
+              : t("shopSuppliers.categoriesSummary", { n: elenco.length, linked: collegate })}
+          </p>
+        </div>
+        <button
+          onClick={() => setAperto(true)}
+          className="px-4 py-2 rounded-xl border border-brand-500/40 text-xs font-semibold text-brand-600 hover:bg-brand-500/10 transition cursor-pointer shrink-0"
+        >
+          {t("shopSuppliers.categoriesManage")}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <Card title={t("shopSuppliers.categoriesTitle")} subtitle={t("shopSuppliers.categoriesSubtitle")}>
+      <button
+        onClick={() => setAperto(false)}
+        className=" font-semibold text-slate-500 hover:text-slate-900 cursor-pointer"
+      >
+        ← Chiudi
+      </button>
+      {error && <p className="text-xs text-rose-400">{(error as Error).message}</p>}
+      <CategoryList
+        shop="jav_market"
+        categories={categories}
+        producers={(producers ?? []).map((p) => ({ id: p.id, name: p.name }))}
+      />
+      <BulkAssign shop="jav_market" categories={categories} />
     </Card>
   );
 }
@@ -370,8 +561,8 @@ function ImmagineProdotto({ value, onChange }: { value: string; onChange: (url: 
 
   return (
     <div className="flex items-start gap-3">
-      <div className="w-16 h-16 rounded-lg overflow-hidden border border-white/10 light:border-slate-200 shrink-0">
-        <ProductThumbnail imageUrl={value || null} alt="Foto prodotto" iconClassName="w-7 h-7 text-orange-400/40" />
+      <div className="w-16 h-16 rounded-lg overflow-hidden border border-slate-200 shrink-0">
+        <ProductThumbnail imageUrl={value || null} alt="Foto prodotto" iconClassName="w-7 h-7 text-brand-600/40" />
       </div>
       <div className="flex-1 min-w-0 space-y-1.5">
         <div className="flex flex-wrap items-center gap-2">
@@ -380,7 +571,7 @@ function ImmagineProdotto({ value, onChange }: { value: string; onChange: (url: 
             type="button"
             onClick={() => inputRef.current?.click()}
             disabled={uploading}
-            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/5 light:bg-slate-900/5 hover:bg-white/10 border border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 cursor-pointer transition disabled:opacity-40"
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 cursor-pointer transition disabled:opacity-40"
           >
             {uploading ? "Caricamento…" : value ? "Cambia foto" : "Allega foto"}
           </button>
@@ -417,11 +608,12 @@ const PRODOTTO_VUOTO = {
 /** Session 87: il catalogo è un elenco da cercare e filtrare, e creare o
  *  modificare un prodotto apre una finestra sopra l'elenco. Prima il form
  *  di creazione stava sempre aperto in cima e quello di modifica compariva
- *  in fondo alla lista: con centinaia di prodotti (Market Kappa ne ha 249)
+ *  in fondo alla lista: con centinaia di prodotti
  *  bisognava scorrere tutto per arrivarci. */
 type Editor = { mode: "create" } | { mode: "edit"; id: string };
 
 function Catalogo() {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const { data: products } = useQuery({
     queryKey: ["admin", "jav-market", "products"],
@@ -446,12 +638,12 @@ function Catalogo() {
 
   const tutti = products ?? [];
   const testo = cerca.trim().toLowerCase();
-  // Si cerca anche nella descrizione e negli sku: nel Market Kappa il codice
+  // Si cerca anche nella descrizione e negli sku: in un catalogo di abiti il codice
   // articolo sta nella descrizione e l'EAN è lo sku di ogni variante.
   const visibili = tutti.filter(
     (p) =>
       (stato === "TUTTI" || p.status === stato) &&
-      (!produttore || p.producer_id === produttore) &&
+      (!produttore || p.supplier?.id === produttore) &&
       (!testo ||
         p.name.toLowerCase().includes(testo) ||
         p.description.toLowerCase().includes(testo) ||
@@ -488,8 +680,8 @@ function Catalogo() {
               onClick={() => setStato(key)}
               className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border cursor-pointer ${
                 stato === key
-                  ? "border-orange-500/50 bg-orange-500/15 text-orange-300 light:text-orange-700"
-                  : "border-white/10 light:border-slate-300 text-slate-400 light:text-slate-600 hover:bg-white/5 light:hover:bg-slate-900/5"
+                  ? "border-brand-500/50 bg-brand-500/15 text-brand-700"
+                  : " border-slate-300 text-slate-600 hover:bg-slate-900/5"
               }`}
             >
               {testoBottone} ({quanti[key]})
@@ -506,7 +698,7 @@ function Catalogo() {
         )}
         <button
           onClick={() => setEditor({ mode: "create" })}
-          className="lg:ml-auto px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-xs font-semibold text-white transition cursor-pointer whitespace-nowrap"
+          className="lg:ml-auto px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer whitespace-nowrap"
         >
           + Nuovo prodotto
         </button>
@@ -522,7 +714,7 @@ function Catalogo() {
           {visibili.length !== tutti.length && (
             <p className="text-[11px] text-slate-500">Ne mostro {visibili.length} su {tutti.length}.</p>
           )}
-          <div className="rounded-xl border border-white/10 light:border-slate-200 divide-y divide-white/5 light:divide-slate-200">
+          <div className="rounded-xl border border-slate-200 divide-y divide-slate-200">
             {visibili.map((p) => (
               <div key={p.id} className="flex items-center gap-3 p-3">
                 <button
@@ -531,9 +723,20 @@ function Catalogo() {
                 >
                   <ProductThumbnail imageUrl={p.image_url} alt={p.name} className="w-11 h-11 rounded-lg object-cover shrink-0" />
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold text-white light:text-slate-900 truncate">{p.name}</p>
+                    <p className="text-xs font-semibold text-slate-900 truncate">{p.name}</p>
                     <p className="text-[11px] text-slate-500 truncate">
-                      {p.producer?.name ? `${p.producer.name} · ` : ""}
+                      {p.supplier ? (
+                        `${
+                          p.supplier_source === "CATEGORY"
+                            ? t("shopSuppliers.inheritedShort", {
+                                name: p.supplier.name,
+                                category: p.supplier_category_name ?? "",
+                              })
+                            : p.supplier.name
+                        } · `
+                      ) : (
+                        <span className="text-amber-700">{t("shopSuppliers.noSupplierShort")} · </span>
+                      )}
                       {p.variants.length} {p.variants.length === 1 ? "variante" : "varianti"} ·{" "}
                       {euro(Math.min(...p.variants.map((v) => v.price_cents)))}
                       {p.variants.length > 1 &&
@@ -545,7 +748,7 @@ function Catalogo() {
                 </button>
                 <button
                   onClick={() => setEditor({ mode: "edit", id: p.id })}
-                  className="px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 hover:bg-white/10 cursor-pointer"
+                  className="px-2.5 py-1 rounded-lg font-semibold border border-slate-300 text-slate-600 hover:bg-slate-100 cursor-pointer"
                 >
                   Modifica
                 </button>
@@ -554,7 +757,7 @@ function Catalogo() {
                   className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border cursor-pointer ${
                     p.status === "ACTIVE"
                       ? "border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
-                      : "border-white/10 light:border-slate-300 text-slate-500 hover:bg-white/5"
+                      : " border-slate-300 text-slate-500 hover:bg-slate-100"
                   }`}
                 >
                   {p.status === "ACTIVE" ? "In vendita" : "Spento"}
@@ -592,14 +795,14 @@ function Catalogo() {
  *  su un prodotto con cento varianti. */
 function Finestra({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/70 light:bg-slate-900/40 backdrop-blur-sm animate-fade-in">
-      <div className="w-full sm:max-w-3xl max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-2xl border border-white/10 light:border-slate-200 bg-slate-950 light:bg-white shadow-2xl animate-scale-up">
-        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-5 py-3 border-b border-white/10 light:border-slate-200 bg-slate-950/95 light:bg-white/95 backdrop-blur">
-          <h3 className="text-sm font-bold text-white light:text-slate-900 truncate">{title}</h3>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+      <div className="w-full sm:max-w-3xl max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-2xl border border-slate-200 bg-white shadow-2xl animate-scale-up">
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-5 py-3 border-b border-slate-200 bg-white/95 backdrop-blur">
+          <h3 className="text-sm font-bold text-slate-900 truncate">{title}</h3>
           <button
             onClick={onClose}
             aria-label="Chiudi"
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white light:hover:text-slate-900 hover:bg-white/10 light:hover:bg-slate-900/5 cursor-pointer"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-900/5 cursor-pointer"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -617,14 +820,16 @@ function NuovoProdotto({ producers, onClose, onCreated }: {
   onClose: () => void;
   onCreated: (p: JavMarketAdminProductRead) => void;
 }) {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const [form, setForm] = useState({ ...PRODOTTO_VUOTO });
   const [variants, setVariants] = useState<VarianteForm[]>([{ label: "Unica", price: "", inventory: "" }]);
+  const [categorie, setCategorie] = useState<string[]>([]);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   const crea = useMutation({
-    mutationFn: () =>
-      send<JavMarketAdminProductRead>("/jav-market/products", "POST", {
+    mutationFn: async () => {
+      const creato = await send<JavMarketAdminProductRead>("/jav-market/products", "POST", {
         name: form.name,
         description: form.description,
         image_url: form.image_url || null,
@@ -638,9 +843,15 @@ function NuovoProdotto({ producers, onClose, onCreated }: {
           price_cents: centsFrom(v.price),
           inventory: v.inventory === "" ? null : Number(v.inventory),
         })),
-      }),
+      });
+      // Le categorie stanno in un altro dominio: si salvano dopo, e solo
+      // se ne è stata scelta qualcuna.
+      if (categorie.length > 0) await saveProductCategories("jav_market", creato.id, categorie);
+      return creato;
+    },
     onSuccess: (p) => {
       queryClient.invalidateQueries({ queryKey: ["admin", "jav-market", "products"] });
+      queryClient.invalidateQueries({ queryKey: ["shop-categories", "jav_market"] });
       onCreated(p);
     },
     onError: (err: unknown) => setMessage({ ok: false, text: (err as Error).message }),
@@ -657,13 +868,16 @@ function NuovoProdotto({ producers, onClose, onCreated }: {
           <input className={input} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </div>
         <div>
-          <span className={label}>Azienda produttrice</span>
+          <span className={label}>{t("shopSuppliers.productSupplierLabel")}</span>
           <select className={input} value={form.producer_id} onChange={(e) => setForm({ ...form, producer_id: e.target.value })}>
-            <option value="">— nessuna —</option>
+            <option value="">{t("shopSuppliers.productSupplierNone")}</option>
             {producers.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
+          <span className="block text-[10px] text-slate-500 mt-1">
+            {form.producer_id ? t("shopSuppliers.productSupplierOwn") : t("shopSuppliers.productSupplierMissing")}
+          </span>
         </div>
         <div>
           <span className={label}>JavCash max (%)</span>
@@ -696,6 +910,9 @@ function NuovoProdotto({ producers, onClose, onCreated }: {
         <div className="sm:col-span-4">
           <span className={label}>Immagine</span>
           <ImmagineProdotto value={form.image_url} onChange={(url) => setForm({ ...form, image_url: url })} />
+        </div>
+        <div className="sm:col-span-4">
+          <ProductCategoriesField shop="jav_market" value={categorie} onChange={setCategorie} />
         </div>
       </div>
 
@@ -735,21 +952,21 @@ function NuovoProdotto({ producers, onClose, onCreated }: {
         ))}
         <button
           onClick={() => setVariants([...variants, { label: "", price: "", inventory: "" }])}
-          className="text-[11px] font-semibold text-orange-400 hover:text-orange-300 cursor-pointer"
+          className="text-[11px] font-semibold text-brand-600 hover:text-brand-600 cursor-pointer"
         >
           + Aggiungi variante
         </button>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-white/10 light:border-slate-200">
+      <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-200">
         <button
           onClick={() => crea.mutate()}
           disabled={crea.isPending || !form.name.trim() || variants.every((v) => !v.price)}
-          className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-40"
+          className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-40"
         >
           {crea.isPending ? "Carico…" : "Carica prodotto"}
         </button>
-        <button onClick={onClose} className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:bg-white/5 light:hover:bg-slate-900/5 cursor-pointer">
+        <button onClick={onClose} className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:bg-slate-900/5 cursor-pointer">
           Annulla
         </button>
         <Esito message={message} />
@@ -763,6 +980,7 @@ function ModificaProdotto({ product, producers, onClose }: {
   producers: JavMarketProducerRead[];
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const invalida = () => queryClient.invalidateQueries({ queryKey: ["admin", "jav-market", "products"] });
   // I campi del prodotto sono una bozza: partono dal prodotto quando la
@@ -775,19 +993,25 @@ function ModificaProdotto({ product, producers, onClose }: {
     producer_id: product.producer_id,
     image_url: product.image_url,
   });
+  const [categorie, setCategorie] = useState<string[]>(product.category_ids ?? []);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [filtroVarianti, setFiltroVarianti] = useState("");
   const [prezzoTutte, setPrezzoTutte] = useState("");
 
   const salva = useMutation({
-    mutationFn: () =>
-      send<JavMarketAdminProductRead>(`/jav-market/products/${product.id}`, "PATCH", {
+    mutationFn: async () => {
+      await send<JavMarketAdminProductRead>(`/jav-market/products/${product.id}`, "PATCH", {
         ...bozza,
         producer_id: bozza.producer_id || null,
         image_url: bozza.image_url || null,
-      }),
+      });
+      if (!sameCategorySelection(categorie, product.category_ids ?? [])) {
+        await saveProductCategories("jav_market", product.id, categorie);
+      }
+    },
     onSuccess: () => {
       invalida();
+      queryClient.invalidateQueries({ queryKey: ["shop-categories", "jav_market"] });
       onClose();
     },
     onError: (err: unknown) => setMessage({ ok: false, text: (err as Error).message }),
@@ -798,7 +1022,7 @@ function ModificaProdotto({ product, producers, onClose }: {
     onSuccess: invalida,
     onError: (err: unknown) => setMessage({ ok: false, text: (err as Error).message }),
   });
-  // Un prezzo per tutte le varianti: nel Market Kappa un capo ha decine di
+  // Un prezzo per tutte le varianti: in un catalogo di abiti un capo ha decine di
   // taglie e colori allo stesso prezzo, e scriverlo cento volte non è un
   // lavoro. A gruppi di dieci per non sommergere il server.
   const applicaATutte = useMutation({
@@ -840,7 +1064,7 @@ function ModificaProdotto({ product, producers, onClose }: {
       <div className="flex flex-wrap items-center gap-2">
         <span
           className={`px-2 py-0.5 rounded-md text-[11px] font-bold ${
-            product.status === "ACTIVE" ? "bg-emerald-500/15 text-emerald-400" : "bg-white/5 light:bg-slate-900/5 text-slate-500"
+            product.status === "ACTIVE" ? "bg-emerald-500/15 text-emerald-400" : " bg-slate-900/5 text-slate-500"
           }`}
         >
           {product.status === "ACTIVE" ? "In vendita" : "Spento: il cliente non lo vede"}
@@ -848,7 +1072,7 @@ function ModificaProdotto({ product, producers, onClose }: {
         <button
           onClick={() => cambiaStato.mutate()}
           disabled={cambiaStato.isPending}
-          className="px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 hover:bg-white/10 cursor-pointer disabled:opacity-40"
+          className="px-2.5 py-1 rounded-lg font-semibold border border-slate-300 text-slate-600 hover:bg-slate-100 cursor-pointer disabled:opacity-40"
         >
           {product.status === "ACTIVE" ? "Spegni" : "Metti in vendita"}
         </button>
@@ -860,17 +1084,27 @@ function ModificaProdotto({ product, producers, onClose }: {
           <input className={input} value={bozza.name} onChange={(e) => setBozza({ ...bozza, name: e.target.value })} />
         </div>
         <div>
-          <span className={label}>Azienda produttrice</span>
+          <span className={label}>{t("shopSuppliers.productSupplierLabel")}</span>
           <select
             className={input}
             value={bozza.producer_id ?? ""}
             onChange={(e) => setBozza({ ...bozza, producer_id: e.target.value || null })}
           >
-            <option value="">— nessuna —</option>
+            <option value="">{t("shopSuppliers.productSupplierNone")}</option>
             {producers.map((pr) => (
               <option key={pr.id} value={pr.id}>{pr.name}</option>
             ))}
           </select>
+          <span className="block text-[10px] text-slate-500 mt-1">
+            {bozza.producer_id
+              ? t("shopSuppliers.productSupplierOwn")
+              : product.supplier_source === "CATEGORY" && product.supplier
+                ? t("shopSuppliers.productSupplierInherited", {
+                    name: product.supplier.name,
+                    category: product.supplier_category_name ?? "",
+                  })
+                : t("shopSuppliers.productSupplierMissing")}
+          </span>
         </div>
         <div className="sm:col-span-2">
           <span className={label}>Descrizione</span>
@@ -894,27 +1128,28 @@ function ModificaProdotto({ product, producers, onClose }: {
         <span className={label}>Immagine principale</span>
         <ImmagineProdotto value={bozza.image_url ?? ""} onChange={(url) => setBozza({ ...bozza, image_url: url || null })} />
       </div>
+      <ProductCategoriesField shop="jav_market" value={categorie} onChange={setCategorie} />
       <div className="flex flex-wrap items-center gap-3">
         <button
           onClick={() => salva.mutate()}
           disabled={salva.isPending || !bozza.name.trim()}
-          className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-40"
+          className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-40"
         >
           {salva.isPending ? "Salvo…" : "Salva modifiche"}
         </button>
-        <button onClick={onClose} className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:bg-white/5 light:hover:bg-slate-900/5 cursor-pointer">
+        <button onClick={onClose} className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:bg-slate-900/5 cursor-pointer">
           Annulla
         </button>
       </div>
 
-      <div className="space-y-2 pt-4 border-t border-white/10 light:border-slate-200">
+      <div className="space-y-2 pt-4 border-t border-slate-200">
         <p className={label}>
           Prezzi e scorte · {product.variants.length} {product.variants.length === 1 ? "variante" : "varianti"} · si
           salvano uscendo dal campo
         </p>
         {product.variants.length > 1 && (
-          <div className="flex flex-wrap items-center gap-2 p-3 rounded-xl bg-white/5 light:bg-slate-900/5">
-            <span className="text-[11px] text-slate-400 light:text-slate-600">Stesso prezzo per tutte le varianti:</span>
+          <div className="flex flex-wrap items-center gap-2 p-3 rounded-xl bg-slate-900/5">
+            <span className=" text-slate-600">Stesso prezzo per tutte le varianti:</span>
             <input
               className={`${input} max-w-[8rem]`}
               inputMode="decimal"
@@ -925,7 +1160,7 @@ function ModificaProdotto({ product, producers, onClose }: {
             <button
               onClick={() => applicaATutte.mutate(centsFrom(prezzoTutte))}
               disabled={!prezzoValido || applicaATutte.isPending}
-              className="px-3 py-2 rounded-lg bg-orange-600 hover:bg-orange-500 text-[11px] font-semibold text-white cursor-pointer disabled:opacity-40"
+              className="px-3 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-[11px] font-semibold text-white cursor-pointer disabled:opacity-40"
             >
               {applicaATutte.isPending ? "Applico…" : `Applica a ${product.variants.length}`}
             </button>
@@ -949,7 +1184,7 @@ function ModificaProdotto({ product, producers, onClose }: {
                   <ProductThumbnail imageUrl={v.image_url} alt="" className="w-8 h-8 rounded-md object-cover shrink-0" />
                 )}
                 <div className="min-w-0">
-                  <p className="text-xs text-slate-300 light:text-slate-700 truncate">{v.label}</p>
+                  <p className="text-xs text-slate-700 truncate">{v.label}</p>
                   {v.sku && <p className="text-[10px] text-slate-500 truncate">{v.sku}</p>}
                 </div>
               </div>
@@ -988,6 +1223,292 @@ function ModificaProdotto({ product, producers, onClose }: {
   );
 }
 
+
+// --- Fornitori da avvisare ---------------------------------------------------
+
+/** Ottobre 2026: gli ordini pagati raccolti per fornitore. Invece di un'email
+ *  per ogni ordine, il fornitore ne riceve una sola con tutti i suoi --
+ *  ognuno con il suo indirizzo di consegna -- che l'amministratore rilegge
+ *  e può correggere prima di premere «Invia». Gli importi non ci sono mai:
+ *  la lettera la scrive il server, e il fornitore non deve vedere i prezzi
+ *  di vendita. */
+function variante(label: string | null): string {
+  return label && label !== "Unica" ? ` – ${label}` : "";
+}
+
+function FornitoriDaAvvisare() {
+  const { t } = useI18n();
+  const { data: queue, error } = useQuery({
+    queryKey: ["admin", "jav-market", "supplier-queue"],
+    queryFn: () => get<JavMarketSupplierQueue>("/jav-market/supplier-queue"),
+  });
+  const [bozzaDi, setBozzaDi] = useState<{ id: string; name: string } | null>(null);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const fornitori = queue?.suppliers ?? [];
+  const senzaFornitore = queue?.unassigned ?? [];
+
+  return (
+    <Card title={t("shopSuppliers.queueTitle")} subtitle={t("shopSuppliers.queueSubtitle")}>
+      {error && <p className="text-xs text-rose-400">{(error as Error).message}</p>}
+      <Esito message={message} />
+      {!queue ? (
+        <p className="text-xs text-slate-500">{t("shopSuppliers.loading")}</p>
+      ) : fornitori.length === 0 ? (
+        <p className="text-xs text-slate-500">{t("shopSuppliers.queueEmpty")}</p>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {fornitori.map((f) => (
+            <div key={f.producer.id} className="rounded-xl border border-slate-200 p-4 space-y-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-slate-900 truncate">{f.producer.name}</p>
+                  <p className="text-[11px] text-slate-500 truncate">
+                    {f.producer.email ?? <span className="text-amber-700">{t("shopSuppliers.noEmail")}</span>}
+                    {!f.producer.active && ` · ${t("shopSuppliers.inactive")}`}
+                  </p>
+                </div>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-amber-500/10 text-amber-700 border-amber-500/20 shrink-0">
+                  {t("shopSuppliers.queueCounts", { orders: f.order_count, pieces: f.piece_count })}
+                </span>
+              </div>
+              <ul className="space-y-1">
+                {f.orders.map((o) => (
+                  <li key={o.id} className="text-[11px] text-slate-600">
+                    <span className="font-semibold text-slate-800">#{o.order_code}</span> · {o.recipient_name}, {o.city}
+                    {" — "}
+                    {o.items.map((i) => `${i.quantity} × ${i.product_name}${variante(i.variant_label)}`).join(", ")}
+                  </li>
+                ))}
+              </ul>
+              <button
+                onClick={() => {
+                  setMessage(null);
+                  setBozzaDi({ id: f.producer.id, name: f.producer.name });
+                }}
+                className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer"
+              >
+                {t("shopSuppliers.prepareEmail")}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {senzaFornitore.length > 0 && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 space-y-1">
+          <p className="text-xs font-semibold text-amber-800">
+            {t("shopSuppliers.unassignedTitle", { n: senzaFornitore.length })}
+          </p>
+          <ul className="space-y-0.5">
+            {senzaFornitore.map((u) => (
+              <li key={u.item_id} className="text-[11px] text-amber-900">
+                #{u.order_code} · {u.quantity} × {u.product_name}
+                {variante(u.variant_label)}
+              </li>
+            ))}
+          </ul>
+          <p className="text-[11px] text-amber-800">{t("shopSuppliers.unassignedHint")}</p>
+        </div>
+      )}
+
+      <StoricoInvii />
+
+      {bozzaDi && (
+        <PreparaEmail
+          producer={bozzaDi}
+          onClose={() => setBozzaDi(null)}
+          onSent={(text) => {
+            setBozzaDi(null);
+            setMessage({ ok: true, text });
+          }}
+        />
+      )}
+    </Card>
+  );
+}
+
+function PreparaEmail({ producer, onClose, onSent }: {
+  producer: { id: string; name: string };
+  onClose: () => void;
+  onSent: (text: string) => void;
+}) {
+  const { t } = useI18n();
+  // Sempre fresca all'apertura (gcTime 0) e mai ricaricata sotto le mani di
+  // chi sta correggendo il testo (niente refetch al ritorno sulla finestra).
+  const { data: draft, error } = useQuery({
+    queryKey: ["admin", "jav-market", "supplier-draft", producer.id],
+    queryFn: () => get<JavMarketSupplierDraft>(`/jav-market/supplier-queue/${producer.id}/draft`),
+    gcTime: 0,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+  });
+
+  return (
+    <Finestra title={t("shopSuppliers.modalTitle", { name: producer.name })} onClose={onClose}>
+      {error ? (
+        <p className="text-xs text-rose-400">{(error as Error).message}</p>
+      ) : !draft ? (
+        <p className="text-xs text-slate-500">{t("shopSuppliers.loading")}</p>
+      ) : (
+        // key: i campi partono dalla bozza, senza un effetto che li sincronizzi.
+        <ModificaEmail key={draft.item_ids.join(",")} draft={draft} onClose={onClose} onSent={onSent} />
+      )}
+    </Finestra>
+  );
+}
+
+function ModificaEmail({ draft, onClose, onSent }: {
+  draft: JavMarketSupplierDraft;
+  onClose: () => void;
+  onSent: (text: string) => void;
+}) {
+  const { t } = useI18n();
+  const queryClient = useQueryClient();
+  const [to, setTo] = useState(draft.to_email);
+  const [subject, setSubject] = useState(draft.subject);
+  const [body, setBody] = useState(draft.body_text);
+  const [errore, setErrore] = useState<string | null>(null);
+
+  const invia = useMutation({
+    mutationFn: () =>
+      send(`/jav-market/supplier-queue/${draft.producer_id}/send`, "POST", {
+        to_email: to.trim(),
+        subject: subject.trim(),
+        body_text: body,
+        item_ids: draft.item_ids,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "jav-market"] });
+      onSent(t("shopSuppliers.sent", { name: draft.producer_name, email: to.trim() }));
+    },
+    onError: (err: unknown) => {
+      setErrore((err as Error).message);
+      // Se nel frattempo gli ordini sono partiti, la coda sotto lo deve dire.
+      queryClient.invalidateQueries({ queryKey: ["admin", "jav-market", "supplier-queue"] });
+    },
+  });
+
+  return (
+    <>
+      <p className="text-[11px] text-slate-500">
+        {t("shopSuppliers.includedOrders", {
+          n: draft.order_codes.length,
+          codes: draft.order_codes.map((c) => `#${c}`).join(", "),
+        })}
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <span className={label}>{t("shopSuppliers.fromLabel")}</span>
+          <p className="text-xs text-slate-700 py-2">{draft.from_email || t("shopSuppliers.fromDefault")}</p>
+        </div>
+        <div>
+          <span className={label}>{t("shopSuppliers.toLabel")}</span>
+          <input className={input} type="email" value={to} onChange={(e) => setTo(e.target.value)} />
+          {!draft.to_email && (
+            <span className="block text-[10px] text-amber-700 mt-1">{t("shopSuppliers.toMissing")}</span>
+          )}
+        </div>
+        <div className="sm:col-span-2">
+          <span className={label}>{t("shopSuppliers.subjectLabel")}</span>
+          <input className={input} value={subject} maxLength={255} onChange={(e) => setSubject(e.target.value)} />
+        </div>
+        <div className="sm:col-span-2">
+          <span className={label}>{t("shopSuppliers.bodyLabel")}</span>
+          <textarea
+            className={`${input} min-h-[320px] leading-relaxed`}
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+          />
+          <span className="block text-[10px] text-slate-500 mt-1">{t("shopSuppliers.bodyHint")}</span>
+        </div>
+      </div>
+      {errore && (
+        <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs">{errore}</div>
+      )}
+      <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-200">
+        <button
+          onClick={() => {
+            setErrore(null);
+            invia.mutate();
+          }}
+          disabled={invia.isPending || !to.trim() || !subject.trim() || !body.trim()}
+          className="px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-40"
+        >
+          {invia.isPending ? t("shopSuppliers.sending") : t("shopSuppliers.send")}
+        </button>
+        <button onClick={onClose} className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:bg-slate-900/5 cursor-pointer">
+          {t("shopSuppliers.cancel")}
+        </button>
+        {body !== draft.body_text && (
+          <button
+            onClick={() => setBody(draft.body_text)}
+            className="text-[11px] font-semibold text-brand-600 cursor-pointer"
+          >
+            {t("shopSuppliers.resetText")}
+          </button>
+        )}
+      </div>
+    </>
+  );
+}
+
+/** Lo storico: a chi è partito cosa e quando, con il testo esatto. */
+function StoricoInvii() {
+  const { t, fmt } = useI18n();
+  const [aperto, setAperto] = useState(false);
+  const [espanso, setEspanso] = useState<string | null>(null);
+  const { data } = useQuery({
+    queryKey: ["admin", "jav-market", "supplier-dispatches"],
+    queryFn: () => get<JavMarketSupplierDispatchRead[]>("/jav-market/supplier-dispatches"),
+    enabled: aperto,
+  });
+
+  return (
+    <div className="pt-3 border-t border-slate-200 space-y-2">
+      <button onClick={() => setAperto(!aperto)} className="text-xs font-semibold text-brand-600 cursor-pointer">
+        {aperto ? t("shopSuppliers.historyHide") : t("shopSuppliers.historyShow")}
+      </button>
+      {aperto &&
+        (!data ? (
+          <p className="text-xs text-slate-500">{t("shopSuppliers.loading")}</p>
+        ) : data.length === 0 ? (
+          <p className="text-xs text-slate-500">{t("shopSuppliers.historyEmpty")}</p>
+        ) : (
+          <div className="rounded-xl border border-slate-200 divide-y divide-slate-200">
+            {data.map((d) => (
+              <div key={d.id} className="px-3 py-2">
+                <button
+                  onClick={() => setEspanso(espanso === d.id ? null : d.id)}
+                  className="w-full text-left cursor-pointer"
+                >
+                  <p className="text-xs text-slate-800">
+                    <span className="font-semibold">{d.producer_name}</span>
+                    {" · "}
+                    {fmt.date(new Date(d.sent_at), {
+                      day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
+                    })}
+                    {d.to_email ? ` · ${d.to_email}` : ""}
+                  </p>
+                  <p className="text-[11px] text-slate-500">
+                    {d.subject} · {t("shopSuppliers.historyCounts", { orders: d.order_count, pieces: d.piece_count })}
+                    {d.order_codes.length > 0 && ` (${d.order_codes.map((c) => `#${c}`).join(", ")})`}
+                    {" · "}
+                    {t.dyn(`shopSuppliers.source.${d.source}`, d.source)}
+                    {d.sent_by_email ? ` · ${d.sent_by_email}` : ""}
+                  </p>
+                </button>
+                {espanso === d.id && d.body_text && (
+                  <pre className="mt-2 whitespace-pre-wrap rounded-lg bg-slate-900/5 p-3 text-[11px] text-slate-700 font-sans">
+                    {d.body_text}
+                  </pre>
+                )}
+              </div>
+            ))}
+          </div>
+        ))}
+    </div>
+  );
+}
 
 // --- Ordini ----------------------------------------------------------------
 
@@ -1032,8 +1553,8 @@ function Ordini() {
             onClick={() => setFiltro(key)}
             className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border cursor-pointer ${
               filtro === key
-                ? "border-orange-500/50 bg-orange-500/15 text-orange-300 light:text-orange-700"
-                : "border-white/10 light:border-slate-300 text-slate-400 light:text-slate-600 hover:bg-white/5 light:hover:bg-slate-900/5"
+                ? "border-brand-500/50 bg-brand-500/15 text-brand-700"
+                : " border-slate-300 text-slate-600 hover:bg-slate-900/5"
             }`}
           >
             {testo} ({conteggio(key)})
@@ -1054,11 +1575,14 @@ function Ordini() {
 }
 
 function OrdineCard({ order: o }: { order: JavMarketOrderRead }) {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [spedizione, setSpedizione] = useState<{ tracking_company: string; tracking_number: string; tracking_url: string } | null>(null);
   const [annulla, setAnnulla] = useState<string | null>(null);
-  const invalida = () => queryClient.invalidateQueries({ queryKey: ["admin", "jav-market", "orders"] });
+  // Tutto il pannello, non solo gli ordini: pagare o mandare un ordine
+  // cambia anche «Fornitori da avvisare».
+  const invalida = () => queryClient.invalidateQueries({ queryKey: ["admin", "jav-market"] });
   const azione = useMutation({
     mutationFn: ({ path, body }: { path: string; body?: unknown; ok: string }) =>
       send<JavMarketOrderRead>(`/jav-market/orders/${o.id}/${path}`, "POST", body ?? {}),
@@ -1074,28 +1598,27 @@ function OrdineCard({ order: o }: { order: JavMarketOrderRead }) {
   const extra = o as JavMarketOrderRead & { tracking_company?: string | null };
 
   return (
-    <div className="rounded-xl border border-white/10 light:border-slate-200 p-4 space-y-3">
+    <div className="rounded-xl border border-slate-200 p-4 space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-sm font-bold text-white light:text-slate-900">
+          <p className="text-sm font-bold text-slate-900">
             #{o.order_code} · {o.customer_display_name}
           </p>
           <p className="text-[11px] text-slate-500">
             {new Date(o.created_at).toLocaleString("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
             {" · "}totale {euro(o.amount_cents)}
             {o.credit_applied_cents > 0 && ` (di cui ${euro(o.credit_applied_cents)} in JavCash)`}
-            {" · "}
-            {o.payment_method === "CARD" ? "carta" : "bonifico"}
+            {" · "}bonifico
           </p>
         </div>
         <span
           className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
             fase === "DA_SPEDIRE"
-              ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+              ? "bg-amber-500/10 text-amber-700 border-amber-500/20"
               : fase === "SPEDITI"
                 ? "bg-sky-500/10 text-sky-400 border-sky-500/20"
                 : fase === "DA_PAGARE"
-                  ? "bg-white/5 text-slate-400 border-white/10"
+                  ? "bg-slate-50 text-slate-400 border-slate-200"
                   : "bg-rose-500/10 text-rose-400 border-rose-500/20"
           }`}
         >
@@ -1110,10 +1633,10 @@ function OrdineCard({ order: o }: { order: JavMarketOrderRead }) {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div className="rounded-lg bg-white/5 light:bg-slate-900/5 p-3 space-y-1">
+        <div className="rounded-lg bg-slate-900/5 p-3 space-y-1">
           <p className={label}>Cosa ha comprato</p>
           {(o.items ?? []).map((i) => (
-            <div key={i.id} className="text-xs text-slate-300 light:text-slate-700">
+            <div key={i.id} className="text-xs text-slate-700">
               <span className="font-semibold">{i.quantity} ×</span> {i.product_name}
               {i.variant_label && i.variant_label !== "Unica" ? ` — ${i.variant_label}` : ""}
               <span className="text-slate-500"> · {euro(i.line_total_cents)}</span>
@@ -1127,9 +1650,9 @@ function OrdineCard({ order: o }: { order: JavMarketOrderRead }) {
             {(o.vat_amount_cents ?? 0) > 0 && ` · IVA ${euro(o.vat_amount_cents ?? 0)}`}
           </p>
         </div>
-        <div className="rounded-lg bg-white/5 light:bg-slate-900/5 p-3 space-y-1">
+        <div className="rounded-lg bg-slate-900/5 p-3 space-y-1">
           <p className={label}>Dove spedire</p>
-          <p className="text-xs text-slate-200 light:text-slate-800 select-all leading-relaxed">
+          <p className="text-xs text-slate-800 select-all leading-relaxed">
             {o.recipient_name}
             <br />
             {o.address_line1}
@@ -1138,7 +1661,7 @@ function OrdineCard({ order: o }: { order: JavMarketOrderRead }) {
             {o.postal_code} {o.city} ({o.province})
           </p>
           {o.recipient_phone && <p className="text-[11px] text-slate-400">Tel. {o.recipient_phone}</p>}
-          {o.note && <p className="text-[11px] text-amber-300 light:text-amber-700">Nota del cliente: {o.note}</p>}
+          {o.note && <p className=" text-amber-700">Nota del cliente: {o.note}</p>}
           {(o.tracking_number || extra.tracking_company) && (
             <p className="text-[11px] text-sky-400">
               {extra.tracking_company ? `${extra.tracking_company} · ` : ""}
@@ -1154,7 +1677,7 @@ function OrdineCard({ order: o }: { order: JavMarketOrderRead }) {
         </div>
       </div>
       {o.status === "PAID" && (o.forwarded_at || o.forward_error) && (
-        <p className={`text-[11px] ${o.forward_error ? "text-amber-400" : "text-slate-400"}`}>
+        <p className={`text-[11px] ${o.forward_error ? "text-amber-700" : "text-slate-400"}`}>
           {o.forwarded_at && `Inviato alle aziende il ${new Date(o.forwarded_at).toLocaleString("it-IT")}. `}
           {o.forward_error && `Da sistemare: ${o.forward_error}`}
         </p>
@@ -1169,22 +1692,21 @@ function OrdineCard({ order: o }: { order: JavMarketOrderRead }) {
             Conferma bonifico ricevuto
           </button>
         )}
-        {o.status === "AWAITING_PAYMENT" && o.payment_method === "CARD" && (
-          <span className="text-[11px] text-slate-500">In attesa della conferma di Stripe.</span>
-        )}
-        {o.status === "PAID" && !o.shipped_at && (
+        {/* Solo se resta qualcosa da mandare: le righe già partite (da qui o
+            da «Fornitori da avvisare») non ripartono. */}
+        {o.status === "PAID" && !o.shipped_at && (o.supplier_pending_count ?? 1) > 0 && (
           <button
             onClick={() => azione.mutate({ path: "forward", ok: "Ordine inviato per email alle aziende." })}
             disabled={azione.isPending}
-            className="px-3 py-1.5 rounded-lg text-[11px] font-semibold border border-white/10 light:border-slate-300 text-slate-200 light:text-slate-700 hover:bg-white/5 cursor-pointer disabled:opacity-40"
+            className="px-3 py-1.5 rounded-lg font-semibold border border-slate-300 text-slate-700 hover:bg-slate-100 cursor-pointer disabled:opacity-40"
           >
-            {o.forwarded_at ? "Reinvia alle aziende" : "Invia alle aziende per email"}
+            {o.forwarded_at ? t("shopSuppliers.forwardRemaining") : "Invia alle aziende per email"}
           </button>
         )}
         {fase === "DA_SPEDIRE" && (
           <button
             onClick={() => setSpedizione(spedizione ? null : { tracking_company: "", tracking_number: "", tracking_url: "" })}
-            className="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-orange-600 hover:bg-orange-500 text-white cursor-pointer"
+            className="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-brand-600 hover:bg-brand-500 text-white cursor-pointer"
           >
             Segna come spedito
           </button>
@@ -1228,7 +1750,7 @@ function OrdineCard({ order: o }: { order: JavMarketOrderRead }) {
           <button
             onClick={() => azione.mutate({ path: "ship", body: spedizione, ok: "Segnato come spedito: il cliente ha ricevuto l'email con il tracking." })}
             disabled={azione.isPending}
-            className="px-3 py-2 rounded-lg text-xs font-semibold bg-orange-600 hover:bg-orange-500 text-white cursor-pointer disabled:opacity-40"
+            className="px-3 py-2 rounded-lg text-xs font-semibold bg-brand-600 hover:bg-brand-500 text-white cursor-pointer disabled:opacity-40"
           >
             {azione.isPending ? "Salvo…" : "Conferma spedizione"}
           </button>
@@ -1259,7 +1781,9 @@ export function AdminJavMarketPanel() {
     <div className="space-y-6">
       <Impostazioni />
       <Produttori />
+      <CategorieEFornitori />
       <Catalogo />
+      <FornitoriDaAvvisare />
       <Ordini />
     </div>
   );

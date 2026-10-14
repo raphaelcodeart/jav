@@ -1,9 +1,12 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MotionConfig } from "motion/react";
 import { useEffect, useState } from "react";
 import { NewVersionBanner } from "@/components/new-version-banner";
-import { ThemeProvider } from "@/lib/theme";
+import { ToastProvider } from "@/components/ui/toast";
+import type { Locale } from "@/lib/i18n/config";
+import { I18nProvider } from "@/lib/i18n/provider";
 
 export function QueryProvider({ children }: { children: React.ReactNode }) {
   const [client] = useState(() => new QueryClient());
@@ -35,12 +38,18 @@ function SessionExpiryGuard() {
   return null;
 }
 
-export function AppProviders({ children }: { children: React.ReactNode }) {
+export function AppProviders({ locale, children }: { locale: Locale; children: React.ReactNode }) {
   return (
-    <ThemeProvider>
-      <SessionExpiryGuard />
-      <NewVersionBanner />
-      <QueryProvider>{children}</QueryProvider>
-    </ThemeProvider>
+    // reducedMotion="user": every motion component in the app honours the
+    // OS "reduce motion" setting without each one having to check it.
+    <I18nProvider initialLocale={locale}>
+      <MotionConfig reducedMotion="user">
+        <SessionExpiryGuard />
+        <NewVersionBanner />
+        <QueryProvider>
+          <ToastProvider>{children}</ToastProvider>
+        </QueryProvider>
+      </MotionConfig>
+    </I18nProvider>
   );
 }

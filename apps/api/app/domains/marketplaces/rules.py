@@ -1,26 +1,21 @@
-"""Rules shared by the three shops of imported products (Session 68):
+"""Rules shared by the shops with a cart -- today the Shop (`jav_market`,
+catalog written by the administrator) -- kept apart from the shop itself so
+a second shop added later inherits them instead of copying them.
 
-- Marketplace 1 -- CJ Dropshipping (`cj_dropshipping`), admin menu "Shop CJ";
-- Marketplace 2 -- Shopify (`shopify_dropshipping`), admin menu "Shop Shopify";
-- Marketplace 3 -- AliExpress (`imported_products`, by hand), "Shop AliExpress".
-(Numbering set by the user in Session 70.)
+Each shop keeps its own tables; what the customer is promised is the same
+everywhere, and lives here:
 
-Each keeps its own tables and its own supplier logic; what the customer is
-promised is the same everywhere, and lives here:
-
-- **No discount for paying by bank transfer** (Session 86, business
-  decision: "non possiamo fare sconto se paghi con bonifico"). Until then a
-  transfer took 5% off; the price is now the same whatever the method, and
-  never a card surcharge either (forbidden in Italy, art. 62 Codice del
-  Consumo). `bank_transfer_discount_cents` columns stay on the orders: they
-  are what older orders were actually charged. See
+- **No discount for paying by bank transfer** (business decision: "non
+  possiamo fare sconto se paghi con bonifico"): bank transfer is the only
+  method and the price is the same for everyone. The
+  `bank_transfer_discount_cents` columns stay on the orders, always 0. See
   docs/business-rules.md#marketplace.
 - **JavCash only partly.** These products never earn cashback, they only
   let the customer spend it, and never for the whole price: a new product
   starts at DEFAULT_CREDIT_PERCENTAGE, the administrator may raise it up to
   MAX_CREDIT_PERCENTAGE.
-- **Il prezzo esposto e' l'imponibile: l'IVA si aggiunge** (Session 78, su
-  decisione dell'utente; fino alla 77 valeva il contrario). In vetrina si
+- **Il prezzo esposto e' l'imponibile: l'IVA si aggiunge** (decisione
+  dell'utente). In vetrina si
   legge «17,90 € + IVA» e al checkout il preventivo porta la riga dell'IVA
   fra gli addendi: 17,90 + 3,94 = 21,84. Gli era stato fatto presente che
   verso un consumatore il Codice del Consumo (artt. 14-15) vuole il prezzo
@@ -37,11 +32,10 @@ promised is the same everywhere, and lives here:
   Gli ordini creati prima di questo cambio hanno l'IVA **contenuta** nel
   totale: `vat_mode` sull'ordine dice quale delle due regole vale, perche'
   le stesse colonne hanno altrimenti significato opposto.
-- **Names in the Shop** are settings, "Marketplace 1/2/3" by default.
+- **Names in the Shop** are settings, with the defaults in DEFAULT_LABELS.
 
 Organization-level settings, in `organizations.settings` (JSONB):
-`marketplace_bank_transfer_discount_percentage`, `marketplace_vat_percentage`,
-`marketplace_labels`.
+`marketplace_vat_percentage`, `marketplace_labels`.
 """
 
 import uuid
@@ -50,47 +44,32 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.organizations.models import Organization
 
-#: Session 86: no discount for a bank transfer, anywhere -- see the docstring.
+#: No discount for a bank transfer, anywhere -- see the docstring.
 #: Kept as a named 0 so every shop still reads it from one place.
 DEFAULT_BANK_TRANSFER_DISCOUNT_PERCENTAGE = 0
 MAX_BANK_TRANSFER_DISCOUNT_PERCENTAGE = 0
-#: The ordinary Italian rate. It is a rate *contained in* the price, never
-#: one added to it -- see the module docstring.
+#: The ordinary Italian rate, added to the price shown -- see the module
+#: docstring.
 DEFAULT_VAT_PERCENTAGE = 22
 #: No Italian rate comes anywhere near this; the ceiling is here so a typo
 #: in the admin form cannot restate every order of the shop.
 MAX_VAT_PERCENTAGE = 30
-#: JavCash usable on a newly imported product, percent of its price.
+#: JavCash usable on a new Shop product, percent of its price.
 DEFAULT_CREDIT_PERCENTAGE = 30
-#: Never 100: an imported product is never bought entirely with JavCash.
+#: Never 100: a Shop product is never bought entirely with JavCash.
 MAX_CREDIT_PERCENTAGE = 99
 
-ALIEXPRESS = "aliexpress"
-CJ = "cj"
-SHOPIFY = "shopify"
-#: Session 79 -- il quarto negozio, con il catalogo scritto a mano.
+#: Lo Shop, con il catalogo scritto a mano dall'amministratore.
 JAV_MARKET = "jav_market"
-#: Session 87 -- il quinto, solo Kappa e Robe di Kappa, clonato dal quarto.
-KAPPA_MARKET = "kappa_market"
-#: Session 88 -- il sesto, moda di lusso da Vaitto, clonato dal quinto.
-VAITTO_MARKET = "vaitto_market"
-#: Session 89 -- profumi e cosmetici da Symphonya, clonato da VAITTO.
-SYMPHONYA_MARKET = "symphonya_market"
-#: Session 90 -- il catalogo affiliato di SoleilDrop, clonato da Symphonya.
-SOLEIL_MARKET = "soleil_market"
-MARKETPLACES = (
-    ALIEXPRESS, CJ, SHOPIFY, JAV_MARKET, KAPPA_MARKET, VAITTO_MARKET, SYMPHONYA_MARKET, SOLEIL_MARKET,
-)
+MARKETPLACES = (JAV_MARKET,)
 DEFAULT_LABELS = {
-    CJ: "Marketplace 1", SHOPIFY: "Marketplace 2", ALIEXPRESS: "Marketplace 3",
-    JAV_MARKET: "Fai la Spesa con Jav", KAPPA_MARKET: "Market Kappa", VAITTO_MARKET: "Marketplace 5",
-    SYMPHONYA_MARKET: "Shop Beauty", SOLEIL_MARKET: "Market 7",
+    JAV_MARKET: "Fai la Spesa con Jav",
 }
 
-#: Session 72: the Shop's own sections -- the ones backed by `catalog.products`,
-#: not by an imported-product shop. Each can be switched off and renamed from
-#: the admin, exactly like the three Marketplace tabs, because an organization
-#: may simply not sell one of them. The keys are the `Product.category` values
+#: The Shop's own sections -- the ones backed by `catalog.products`,
+#: not by a shop with its own tables. Each can be switched off and renamed from
+#: the admin, exactly like the shop tabs, because an organization may simply
+#: not sell one of them. The keys are the `Product.category` values
 #: in lower case; the INTERNAL section is the Jav contracts.
 INTERNAL = "internal"
 PARTNER = "partner"
@@ -108,16 +87,16 @@ class CreditPercentageError(ValueError):
 
 
 def check_credit_percentage(value: int) -> int:
-    """Refuses a JavCash share an imported product may not have."""
+    """Refuses a JavCash share a Shop product may not have."""
     if value < 0 or value > MAX_CREDIT_PERCENTAGE:
         raise CreditPercentageError(
-            f"Sui prodotti dei Marketplace il JavCash può coprire al massimo il {MAX_CREDIT_PERCENTAGE}% del prezzo."
+            f"Sui prodotti dello Shop il JavCash può coprire al massimo il {MAX_CREDIT_PERCENTAGE}% del prezzo."
         )
     return value
 
 
 def bank_transfer_discount_cents(*, residual_cents: int, percentage: int) -> int:
-    """What paying by bank transfer takes off: nothing, since Session 86,
+    """What paying by bank transfer takes off: nothing,
     whatever percentage a caller or an old stored setting passes in."""
     return 0
 
@@ -140,7 +119,7 @@ def vat_included_cents(*, gross_cents: int, percentage: int) -> int:
 
 #: Come l'IVA si rapporta al prezzo su un ordine. Sta sull'ordine perche' la
 #: regola e' cambiata nel tempo e gli ordini passati non si riscrivono:
-#: `INCLUDED` e' quello che valeva fino alla Session 77, `ADDED` e' oggi.
+#: `INCLUDED` e' la regola precedente, `ADDED` quella di oggi.
 VAT_MODES = ("INCLUDED", "ADDED")
 DEFAULT_VAT_MODE = "ADDED"
 
@@ -168,13 +147,13 @@ async def _settings(db: AsyncSession, organization_id: uuid.UUID) -> dict:
 
 
 async def get_bank_transfer_discount_percentage(db: AsyncSession, *, organization_id: uuid.UUID) -> int:
-    """Always 0 since Session 86, whatever `organizations.settings` still
+    """Always 0, whatever `organizations.settings` still
     holds from before: there is no discount for paying by bank transfer."""
     return 0
 
 
 async def get_vat_percentage(db: AsyncSession, *, organization_id: uuid.UUID) -> int:
-    """The rate contained in the Marketplace prices, 22 until an
+    """The VAT rate added to the Shop prices, 22 until an
     administrator says otherwise. Same shape as the discount above: a
     stored value that no longer makes sense falls back to the default
     rather than making every order of the shop unsellable."""
@@ -255,9 +234,6 @@ async def update_config(
                 saved["enabled"] = bool(value["enabled"])
             current_sections[key] = saved
         settings["shop_sections"] = current_sections
-    # Session 86: the bank-transfer discount no longer exists; a value sent
-    # by an old page is dropped, and so is the one stored before.
-    settings.pop("marketplace_bank_transfer_discount_percentage", None)
     if vat_percentage is not None:
         # Clamped here as well as in the router: the rate reaches the orders
         # created from tomorrow on, and nothing else re-reads it.

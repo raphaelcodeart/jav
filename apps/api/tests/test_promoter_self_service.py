@@ -1,8 +1,7 @@
 """Self-service "Lavora con noi" (apply_as_promoter) and the update_agent()
 guard that keeps PENDING_APPROVAL -> ACTIVE exclusively behind approve_agent().
 
-Covers two real bugs found and fixed in Session 20 (see
-docs/implementation-progress.md):
+Covers two bugs this guard closes:
 - a SUSPENDED (but not blacklisted) agent could silently undo an admin's
   suspension just by re-applying through "Lavora con noi";
 - update_agent() (network.manage-gated) let a plain ADMIN activate their own

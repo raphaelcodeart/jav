@@ -15,20 +15,18 @@ class Product(UUIDPKMixin, TimestampMixin, Base):
         UUID(as_uuid=True), ForeignKey("organizations.id"), index=True
     )
     code: Mapped[str] = mapped_column(String(64))
-    # ENERGY_CONTRACT / DIGITAL / PHYSICAL / SUBSCRIPTION -- non-energy products
-    # (e.g. a digital add-on or a physical accessory sold alongside contracts)
-    # leave energy_type null, since it has no meaning for them.
-    product_type: Mapped[str] = mapped_column(String(32), default="ENERGY_CONTRACT")
-    energy_type: Mapped[str | None] = mapped_column(String(16), nullable=True)  # ELECTRICITY / GAS / DUAL_FUEL
+    # SERVICE (sold with a contract: a term, instalments, renewal) / DIGITAL /
+    # PHYSICAL / SUBSCRIPTION -- see catalog/schemas.py::PRODUCT_TYPES.
+    product_type: Mapped[str] = mapped_column(String(32), default="SERVICE")
     # PRIVATE / BUSINESS / BOTH -- who this product may be sold to, and the
     # ONE place that decides it (catalog/pricing.py reads it, both
     # customer-facing contract paths enforce it). Legacy values
-    # (SOLE_PROPRIETOR / PMI / CONDOMINIUM / ENERGY_INTENSIVE) still parse and
+    # (SOLE_PROPRIETOR / PMI / CONDOMINIUM) still parse and
     # collapse onto BUSINESS; see normalize_product_customer_type.
     customer_type: Mapped[str] = mapped_column(String(32))
     status: Mapped[str] = mapped_column(String(32), default="ACTIVE")
-    # INTERNAL (Jav's own supply -- bollette circolari, never
-    # discountable in credits, bank transfer only) / DROPSHIPPING (imported
+    # INTERNAL (Jav's own services -- never discountable in credits, bank
+    # transfer only) / DROPSHIPPING (imported
     # from an external supplier) / PARTNER (added on behalf of a
     # collaborator, e.g. merchandise). Orthogonal to product_type, which
     # describes WHAT the product is, not WHO supplies it or how it may be
@@ -47,11 +45,11 @@ class ProductVersion(UUIDPKMixin, TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(255))
     description: Mapped[str] = mapped_column(String(2000), default="")
     image_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
-    #: For a contract (ENERGY_CONTRACT / SUBSCRIPTION) the price of the WHOLE
-    #: term paid in one go -- "149 € l'anno" -- not a monthly canone (it was
-    #: one until Session 84, see catalog/pricing.py::contract_net_amount_cents).
+    #: For a contract (SERVICE / SUBSCRIPTION) the price of the WHOLE
+    #: term paid in one go -- "149 € l'anno" -- not a monthly canone (see
+    #: catalog/pricing.py::contract_net_amount_cents).
     base_price_cents: Mapped[int] = mapped_column(BigInteger)
-    #: Session 84: the monthly instalment of a contract paid in rate, net of
+    #: The monthly instalment of a contract paid in rate, net of
     #: VAT. Deliberately NOT base_price_cents / 12: paying over time costs
     #: more (149 € in one go, 12 x 18,30 € in rate). Null = no rate price set,
     #: the rate split the one-go price. See pricing.contract_instalments_net_amount_cents.
@@ -59,7 +57,7 @@ class ProductVersion(UUIDPKMixin, TimestampMixin, Base):
     initial_fee_cents: Mapped[int] = mapped_column(BigInteger, default=0)
     recurring_fee_cents: Mapped[int] = mapped_column(BigInteger, default=0)
     billing_period: Mapped[str] = mapped_column(String(16), default="MONTHLY")
-    # Contract term length, e.g. 12 for a standard yearly energy contract. Null
+    # Contract term length, e.g. 12 for a yearly membership. Null
     # for product types with no renewal concept (a one-off DIGITAL/PHYSICAL
     # purchase). Drives Contract.expires_at -- see contracts/service.py.
     # No `default=` here deliberately: SQLAlchemy's Python-side column default
@@ -76,8 +74,8 @@ class ProductVersion(UUIDPKMixin, TimestampMixin, Base):
     # {rank_code: personal_token_cents} -- the personal gettone a producer/ancestor
     # earns for THIS specific product, overriding Rank.personal_token_cents (which
     # stays as the org-wide fallback for a rank not listed here). This is what lets
-    # e.g. "Luce Energia Circolare" pay a different token per rank than "Luce
-    # Standard" -- see commissions/services/run_calculation.py::_build_chain.
+    # e.g. "Abbonamento annuale" pay a different token per rank than
+    # "Abbonamento mensile" -- see commissions/services/run_calculation.py::_build_chain.
     commission_tokens: Mapped[dict] = mapped_column(JSONB, default=dict)
     required_documents: Mapped[dict] = mapped_column(JSONB, default=dict)
     terms_version: Mapped[str] = mapped_column(String(32), default="1.0")

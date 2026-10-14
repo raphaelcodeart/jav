@@ -132,7 +132,7 @@ async def run_calculation_for_contract(
     backstop this function falls back to if two dispatches race (docs/
     paid-contract-commission-audit.md, Problem #3).
 
-    `instalment_number` / `instalments_total` (Session 50): a contract paid
+    `instalment_number` / `instalments_total`: a contract paid
     in N instalments pays each beneficiary 1/N of their commission per paid
     instalment (instalment_share), one calculation per instalment, all
     against the same network snapshot frozen at activation. The defaults

@@ -2,7 +2,7 @@
 
 The rule, stated by the business: on top of the commission the plan already
 pays, a product can carry an extra one-off bonus -- 25 EUR on the "BAR /
-Energia Circolare" contract -- and that bonus goes **exclusively** to the
+Abbonamento annuale" contract -- and that bonus goes **exclusively** to the
 promoter who originally brought the customer into Jav.
 
 That makes two concepts that look identical in the ordinary case and come
@@ -36,7 +36,7 @@ from app.domains.commissions.services.run_calculation import (
 )
 from app.domains.commissions.tasks.dispatch import process_pending_outbox_events
 from app.domains.contracts import service as contract_service
-from app.domains.customers.models import Address, Customer, SupplyPoint
+from app.domains.customers.models import Address, Customer
 from app.domains.network import service as network_service
 from app.domains.referral import service as referral_service
 from app.domains.users.models import User
@@ -67,12 +67,12 @@ async def _make_agent(db, organization_id, *, name: str, parent_agent_id=None, r
 async def _make_product(db, organization_id, *, bonus_enabled: bool, bonus_cents: int = BONUS_CENTS):
     product = Product(
         organization_id=organization_id, code=f"BAR-{uuid.uuid4().hex[:6]}",
-        energy_type="ELECTRICITY", customer_type="BOTH", category="INTERNAL",
+        customer_type="BOTH", category="INTERNAL",
     )
     db.add(product)
     await db.flush()
     version = ProductVersion(
-        product_id=product.id, version_label="1.0", name="BAR Energia Circolare",
+        product_id=product.id, version_label="1.0", name="BAR Abbonamento annuale",
         base_price_cents=249_00, valid_from=NOW,
         # The recursive commission the plan already pays, untouched by the bonus.
         commission_tokens={"S1": 80_00},
@@ -100,11 +100,6 @@ async def _make_customer_referred_by(db, organization_id, referrer_agent_id):
     )
     db.add(address)
     await db.flush()
-    supply_point = SupplyPoint(
-        organization_id=organization_id, customer_id=customer.id, energy_type="ELECTRICITY",
-        supply_address_id=address.id,
-    )
-    db.add(supply_point)
     await db.flush()
 
     code = await referral_service.get_or_create_promoter_code(
@@ -115,9 +110,7 @@ async def _make_customer_referred_by(db, organization_id, referrer_agent_id):
         promoter_code_id=code.id, referral_session_id=None,
     )
     await db.commit()
-    return customer, supply_point
-
-
+    return customer
 async def _activate(db, organization_id, contract, actor_user_id):
     for step in ["SUBMITTED", "UNDER_REVIEW", "APPROVED", "PAID"]:
         contract = await contract_service.transition_contract(
@@ -152,11 +145,10 @@ async def test_bonus_goes_to_the_first_referrer_not_the_promoter_who_filled_it_i
     anna = await _make_agent(db, organization_id, name="Anna", rank_id=rank.id)
     bruno = await _make_agent(db, organization_id, name="Bruno", rank_id=rank.id)
     version = await _make_product(db, organization_id, bonus_enabled=True)
-    customer, supply_point = await _make_customer_referred_by(db, organization_id, anna.id)
+    customer = await _make_customer_referred_by(db, organization_id, anna.id)
 
     contract = await contract_service.create_contract(
-        db, organization_id=organization_id, customer_id=customer.id, supply_point_id=supply_point.id,
-        product_version_id=version.id,
+        db, organization_id=organization_id, customer_id=customer.id, product_version_id=version.id,
         # Bruno is the producer -- he filled it in.
         producer_agent_id=bruno.id,
         actor_user_id=actor_user_id, correlation_id=str(uuid.uuid4()),
@@ -198,11 +190,10 @@ async def test_bonus_is_paid_once_even_if_the_calculation_runs_again(db, organiz
 
     anna = await _make_agent(db, organization_id, name="Anna", rank_id=rank.id)
     version = await _make_product(db, organization_id, bonus_enabled=True)
-    customer, supply_point = await _make_customer_referred_by(db, organization_id, anna.id)
+    customer = await _make_customer_referred_by(db, organization_id, anna.id)
 
     contract = await contract_service.create_contract(
-        db, organization_id=organization_id, customer_id=customer.id, supply_point_id=supply_point.id,
-        product_version_id=version.id, producer_agent_id=anna.id,
+        db, organization_id=organization_id, customer_id=customer.id, product_version_id=version.id, producer_agent_id=anna.id,
         actor_user_id=actor_user_id, correlation_id=str(uuid.uuid4()),
     )
     contract = await _activate(db, organization_id, contract, actor_user_id)
@@ -233,11 +224,10 @@ async def test_no_bonus_when_the_product_does_not_configure_one(db, organization
 
     anna = await _make_agent(db, organization_id, name="Anna", rank_id=rank.id)
     version = await _make_product(db, organization_id, bonus_enabled=False)
-    customer, supply_point = await _make_customer_referred_by(db, organization_id, anna.id)
+    customer = await _make_customer_referred_by(db, organization_id, anna.id)
 
     contract = await contract_service.create_contract(
-        db, organization_id=organization_id, customer_id=customer.id, supply_point_id=supply_point.id,
-        product_version_id=version.id, producer_agent_id=anna.id,
+        db, organization_id=organization_id, customer_id=customer.id, product_version_id=version.id, producer_agent_id=anna.id,
         actor_user_id=actor_user_id, correlation_id=str(uuid.uuid4()),
     )
     await _activate(db, organization_id, contract, actor_user_id)
@@ -266,11 +256,10 @@ async def test_reassigning_the_customer_later_does_not_move_an_already_opened_co
     anna = await _make_agent(db, organization_id, name="Anna", rank_id=rank.id)
     carla = await _make_agent(db, organization_id, name="Carla", rank_id=rank.id)
     version = await _make_product(db, organization_id, bonus_enabled=True)
-    customer, supply_point = await _make_customer_referred_by(db, organization_id, anna.id)
+    customer = await _make_customer_referred_by(db, organization_id, anna.id)
 
     contract = await contract_service.create_contract(
-        db, organization_id=organization_id, customer_id=customer.id, supply_point_id=supply_point.id,
-        product_version_id=version.id, producer_agent_id=anna.id,
+        db, organization_id=organization_id, customer_id=customer.id, product_version_id=version.id, producer_agent_id=anna.id,
         actor_user_id=actor_user_id, correlation_id=str(uuid.uuid4()),
     )
 

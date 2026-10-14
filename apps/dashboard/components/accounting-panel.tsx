@@ -12,7 +12,7 @@ import {
 import { downloadCsv } from "@/lib/csv-export";
 import type { AccountingSummaryRead, FinancialMovementRead } from "@/lib/types";
 
-type Filter = "ALL" | "PAYMENTS" | "CONTRACTS" | "CASHBACK" | "JAVCASH" | "CARD" | "BANK_TRANSFER" | "IN" | "OUT";
+type Filter = "ALL" | "PAYMENTS" | "CONTRACTS" | "CASHBACK" | "JAVCASH" | "BANK_TRANSFER" | "IN" | "OUT";
 
 const FILTERS: { key: Filter; label: string; match: (m: FinancialMovementRead) => boolean }[] = [
   { key: "ALL", label: "Tutti", match: () => true },
@@ -20,7 +20,6 @@ const FILTERS: { key: Filter; label: string; match: (m: FinancialMovementRead) =
   { key: "CONTRACTS", label: "Contratti", match: (m) => Boolean(m.contract_id) },
   { key: "CASHBACK", label: "Cashback", match: (m) => movementCategory(m) === "Cashback" },
   { key: "JAVCASH", label: "JavCash", match: (m) => m.currency === "JAVCASH" },
-  { key: "CARD", label: "Carta", match: (m) => m.payment_method === "CARD" },
   { key: "BANK_TRANSFER", label: "Bonifico", match: (m) => m.payment_method === "BANK_TRANSFER" },
   { key: "IN", label: "Entrate", match: (m) => movementDirection(m) === "in" },
   { key: "OUT", label: "Uscite", match: (m) => movementDirection(m) === "out" },
@@ -28,7 +27,7 @@ const FILTERS: { key: Filter; label: string; match: (m: FinancialMovementRead) =
 
 const CATEGORY_STYLE: Record<string, { tile: string; icon: string }> = {
   Pagamento: { tile: "bg-violet-500/15 text-violet-400", icon: "M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" },
-  Contratto: { tile: "bg-amber-500/15 text-amber-400", icon: "M13 10V3L4 14h7v7l9-11h-7z" },
+  Contratto: { tile: "bg-amber-500/15 text-amber-700", icon: "M13 10V3L4 14h7v7l9-11h-7z" },
   Cashback: { tile: "bg-emerald-500/15 text-emerald-400", icon: "M9 14l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" },
   Ricarica: { tile: "bg-sky-500/15 text-sky-400", icon: "M12 4v16m8-8H4" },
   Trasferimento: { tile: "bg-cyan-500/15 text-cyan-400", icon: "M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" },
@@ -56,16 +55,16 @@ function Kpi({
   big?: boolean;
 }) {
   const accents: Record<string, string> = {
-    orange: "from-orange-500/15 border-orange-500/20",
+    orange: "from-brand-500/15 border-brand-500/20",
     emerald: "from-emerald-500/15 border-emerald-500/20",
     violet: "from-violet-500/15 border-violet-500/20",
     sky: "from-sky-500/15 border-sky-500/20",
-    neutral: "from-white/[0.03] border-white/10 light:border-slate-200",
+    neutral: "from-white/[0.03] border-slate-200",
   };
   return (
-    <div className={`rounded-2xl border bg-gradient-to-br to-transparent p-4 ${accents[accent]} light:bg-white`}>
+    <div className={`rounded-2xl border bg-gradient-to-br to-transparent p-4 ${accents[accent]} bg-white`}>
       <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
-      <div className={`mt-1 font-extrabold tabular-nums text-white light:text-slate-900 ${big ? "text-2xl" : "text-lg"}`}>{value}</div>
+      <div className={`mt-1 font-extrabold tabular-nums text-slate-900 ${big ? "text-2xl" : "text-lg"}`}>{value}</div>
       {hint && <div className="mt-0.5 text-[11px] text-slate-500 leading-snug">{hint}</div>}
     </div>
   );
@@ -77,8 +76,7 @@ function Kpi({
     At the top, totals computed by the server (what was paid, how, JavCash,
     contracts, and commissions for someone who is also a promoter). Below,
     every movement grouped by month, searchable by text, type and dates.
-    Every row opens its detail, and every order / cashback redemption /
-    contract chip opens that thing with all of its movements -- so each euro
+    Every row opens its detail, and every order / contract chip opens that thing with all of its movements -- so each euro
     and each JavCash can be followed back to where it came from. */
 export function AccountingPanel({ onOpenTab }: { onOpenTab?: (tab: string) => void }) {
   const { data: movements, error } = useQuery({
@@ -138,7 +136,7 @@ export function AccountingPanel({ onOpenTab }: { onOpenTab?: (tab: string) => vo
         m.product_name ?? "",
         movementReferenceLink(m, "/customer")?.label ?? "",
         m.currency === "JAVCASH" ? "JavCash" : "EUR",
-        m.payment_method ? (m.payment_method === "CARD" ? "Carta" : "Bonifico") : "",
+        m.payment_method ? "Bonifico" : "",
         movementDirection(m) === "in" ? "Entrata" : "Uscita",
         (Math.abs(m.amount_cents) / 100).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
         m.note ?? "",
@@ -152,15 +150,15 @@ export function AccountingPanel({ onOpenTab }: { onOpenTab?: (tab: string) => vo
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold text-white light:text-slate-900">Contabilità</h2>
-          <p className="text-xs text-slate-400 light:text-slate-500 mt-1">
+          <h2 className="text-2xl font-bold text-slate-900">Contabilità</h2>
+          <p className="text-xs text-slate-500 mt-1">
             Ogni euro pagato e ogni JavCash, con il dettaglio di ciascun movimento.
           </p>
         </div>
         <button
           onClick={exportCsv}
           disabled={filtered.length === 0}
-          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold border border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 hover:bg-white/10 light:hover:bg-slate-900/5 cursor-pointer disabled:opacity-40"
+          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold border border-slate-300 text-slate-600 hover:bg-slate-900/5 cursor-pointer disabled:opacity-40"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -170,7 +168,7 @@ export function AccountingPanel({ onOpenTab }: { onOpenTab?: (tab: string) => vo
       </div>
 
       {!summary ? (
-        <div className="h-40 rounded-2xl bg-white/5 light:bg-slate-900/5 animate-pulse" />
+        <div className="h-40 rounded-2xl bg-slate-900/5 animate-pulse" />
       ) : (
         <div className="space-y-3">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -179,7 +177,7 @@ export function AccountingPanel({ onOpenTab }: { onOpenTab?: (tab: string) => vo
               accent="violet"
               label="Totale speso"
               value={euro(summary.spent_total_cents)}
-              hint={`${summary.payments_count} pagamenti · carta ${euro(summary.spent_card_cents)} · bonifico ${euro(summary.spent_bank_transfer_cents)}`}
+              hint={`${summary.payments_count} pagamenti · bonifico ${euro(summary.spent_bank_transfer_cents)}`}
             />
             <Kpi big label="Speso questo mese" value={euro(summary.spent_this_month_cents)} />
             <Kpi
@@ -195,8 +193,7 @@ export function AccountingPanel({ onOpenTab }: { onOpenTab?: (tab: string) => vo
               value={<JavCashAmount cents={summary.cashback_received_cents} align="left" />}
             />
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            <Kpi accent="sky" label="Pagato con carta" value={euro(summary.spent_card_cents)} hint="Stripe" />
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
             <Kpi accent="sky" label="Pagato con bonifico" value={euro(summary.spent_bank_transfer_cents)} />
             <Kpi
               label="Contratti"
@@ -205,7 +202,7 @@ export function AccountingPanel({ onOpenTab }: { onOpenTab?: (tab: string) => vo
                 <>
                   {summary.contracts_active} attivi · {summary.instalments_paid} rate pagate
                   {summary.next_instalment_due_date && summary.next_instalment_cents != null && (
-                    <span className="block text-amber-400">
+                    <span className="block text-amber-700">
                       Prossima: {euro(summary.next_instalment_cents)} il{" "}
                       {new Date(summary.next_instalment_due_date).toLocaleDateString("it-IT")}
                     </span>
@@ -214,9 +211,9 @@ export function AccountingPanel({ onOpenTab }: { onOpenTab?: (tab: string) => vo
               }
             />
             <Kpi
-              label="Shop e riscatti"
-              value={euro(summary.spent_orders_cents + summary.spent_redemptions_cents)}
-              hint={`ordini ${euro(summary.spent_orders_cents)} · riscatti ${euro(summary.spent_redemptions_cents)}`}
+              label="Shop"
+              value={euro(summary.spent_orders_cents)}
+              hint="ordini"
             />
             <Kpi
               label="JavCash ricevuti"
@@ -237,7 +234,7 @@ export function AccountingPanel({ onOpenTab }: { onOpenTab?: (tab: string) => vo
         </div>
       )}
 
-      <div className="rounded-2xl border border-white/10 light:border-slate-200 bg-slate-950/40 light:bg-white p-3 sm:p-4 space-y-3">
+      <div className="rounded-2xl border border-slate-200 bg-white p-3 sm:p-4 space-y-3">
         <div className="flex flex-col lg:flex-row gap-2">
           <div className="relative flex-1">
             <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -246,8 +243,8 @@ export function AccountingPanel({ onOpenTab }: { onOpenTab?: (tab: string) => vo
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Cerca per descrizione, prodotto, importo, n° ordine / riscatto / contratto…"
-              className="w-full rounded-xl glass-input pl-9 pr-3 py-2.5 text-sm focus:border-orange-500"
+              placeholder="Cerca per descrizione, prodotto, importo, n° ordine / contratto…"
+              className="w-full rounded-xl glass-input pl-9 pr-3 py-2.5 text-sm focus:border-brand-500"
             />
           </div>
           <div className="flex items-center gap-2">
@@ -264,8 +261,8 @@ export function AccountingPanel({ onOpenTab }: { onOpenTab?: (tab: string) => vo
               onClick={() => setFilter(f.key)}
               className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition cursor-pointer ${
                 filter === f.key
-                  ? "bg-orange-600 text-white"
-                  : "bg-white/5 light:bg-slate-900/5 text-slate-400 light:text-slate-600 hover:bg-white/10"
+                  ? "bg-brand-600 text-white"
+                  : " bg-slate-900/5 text-slate-600 hover:bg-slate-100"
               }`}
             >
               {f.label}
@@ -275,25 +272,25 @@ export function AccountingPanel({ onOpenTab }: { onOpenTab?: (tab: string) => vo
           {filtersActive && (
             <button
               onClick={() => { setFilter("ALL"); setSearch(""); setFrom(""); setTo(""); }}
-              className="ml-auto text-[11px] font-semibold text-orange-400 hover:text-orange-300 cursor-pointer"
+              className="ml-auto text-[11px] font-semibold text-brand-600 hover:text-brand-600 cursor-pointer"
             >
               Azzera filtri
             </button>
           )}
         </div>
         {filtersActive && (
-          <p className="text-[11px] text-slate-400 light:text-slate-500">
-            <strong className="text-slate-200 light:text-slate-800">{filtered.length}</strong> movimenti · pagati{" "}
-            <strong className="text-slate-200 light:text-slate-800">{euro(outEur)}</strong> · JavCash ricevuti{" "}
-            <strong className="text-slate-200 light:text-slate-800">{javCash(inJavCash)}</strong>
+          <p className=" text-slate-500">
+            <strong className=" text-slate-800">{filtered.length}</strong> movimenti · pagati{" "}
+            <strong className=" text-slate-800">{euro(outEur)}</strong> · JavCash ricevuti{" "}
+            <strong className=" text-slate-800">{javCash(inJavCash)}</strong>
           </p>
         )}
       </div>
 
       {movements === undefined ? (
-        <div className="h-64 rounded-2xl bg-white/5 light:bg-slate-900/5 animate-pulse" />
+        <div className="h-64 rounded-2xl bg-slate-900/5 animate-pulse" />
       ) : filtered.length === 0 ? (
-        <div className="rounded-2xl border border-white/10 light:border-slate-200 p-10 text-center text-sm text-slate-500">
+        <div className="rounded-2xl border border-slate-200 p-10 text-center text-sm text-slate-500">
           Nessun movimento corrisponde alla ricerca.
         </div>
       ) : (
@@ -303,14 +300,14 @@ export function AccountingPanel({ onOpenTab }: { onOpenTab?: (tab: string) => vo
             return (
               <section key={group.key}>
                 <div className="flex items-baseline justify-between px-1 mb-2">
-                  <h3 className="text-sm font-bold text-white light:text-slate-900">{monthLabel(group.key)}</h3>
+                  <h3 className="text-sm font-bold text-slate-900">{monthLabel(group.key)}</h3>
                   {spent > 0 && (
                     <span className="text-[11px] text-slate-500">
-                      pagati <strong className="text-slate-300 light:text-slate-700">{euro(spent)}</strong>
+                      pagati <strong className=" text-slate-700">{euro(spent)}</strong>
                     </span>
                   )}
                 </div>
-                <div className="rounded-2xl border border-white/10 light:border-slate-200 bg-slate-950/40 light:bg-white divide-y divide-white/5 light:divide-slate-100 overflow-hidden">
+                <div className="rounded-2xl border border-slate-200 bg-white divide-y divide-slate-100 overflow-hidden">
                   {group.rows.map((m) => (
                     <MovementRow key={m.id} m={m} onOpen={setDetailRef} />
                   ))}
@@ -356,10 +353,10 @@ function MovementRow({ m, onOpen }: { m: FinancialMovementRead; onOpen: (ref: st
       tabIndex={0}
       onClick={() => detail && onOpen(detail)}
       onKeyDown={(e) => e.key === "Enter" && detail && onOpen(detail)}
-      className="group flex items-center gap-3 sm:gap-4 px-3 sm:px-4 py-3 hover:bg-white/[0.03] light:hover:bg-slate-50 cursor-pointer transition"
+      className="group flex items-center gap-3 sm:gap-4 px-3 sm:px-4 py-3 hover:bg-slate-50 cursor-pointer transition"
     >
       <div className="hidden sm:block w-12 shrink-0 text-center">
-        <p className="text-[11px] font-extrabold uppercase text-slate-300 light:text-slate-700 leading-tight">{formatDayShort(m.created_at)}</p>
+        <p className=" font-extrabold uppercase text-slate-700 leading-tight">{formatDayShort(m.created_at)}</p>
         <p className="text-[10px] font-semibold text-slate-500 tabular-nums">{formatTime(m.created_at)}</p>
       </div>
       <span className={`flex items-center justify-center w-10 h-10 rounded-xl shrink-0 ${style.tile}`}>
@@ -368,7 +365,7 @@ function MovementRow({ m, onOpen }: { m: FinancialMovementRead; onOpen: (ref: st
         </svg>
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-[15px] font-semibold text-white light:text-slate-900 leading-snug truncate">{movementLabel(m)}</p>
+        <p className=" font-semibold text-slate-900 leading-snug truncate">{movementLabel(m)}</p>
         <p className="text-[11px] text-slate-500 truncate">
           <span className="sm:hidden font-bold text-slate-400">
             {formatDayShort(m.created_at)} {formatTime(m.created_at)} ·{" "}
@@ -381,14 +378,14 @@ function MovementRow({ m, onOpen }: { m: FinancialMovementRead; onOpen: (ref: st
               e.stopPropagation();
               onOpen(entity.ref);
             }}
-            className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-orange-500/10 border border-orange-500/20 text-[10px] font-bold text-orange-400 hover:bg-orange-500/20 cursor-pointer"
+            className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-brand-500/10 border border-brand-500/20 text-[10px] font-bold text-brand-600 hover:bg-brand-500/20 cursor-pointer"
           >
             {entity.label} →
           </button>
         )}
       </div>
       <div className="text-right shrink-0">
-        <div className={`text-base sm:text-lg font-extrabold tabular-nums ${out ? "text-white light:text-slate-900" : "text-emerald-400"}`}>
+        <div className={`text-base sm:text-lg font-extrabold tabular-nums ${out ? " text-slate-900" : "text-emerald-400"}`}>
           {m.currency === "JAVCASH" ? (
             <JavCashAmount cents={Math.abs(m.amount_cents)} sign={out ? "-" : "+"} />
           ) : (
@@ -397,11 +394,11 @@ function MovementRow({ m, onOpen }: { m: FinancialMovementRead; onOpen: (ref: st
         </div>
         {m.currency === "EUR" && (
           <p className="text-[10px] font-semibold text-slate-500">
-            {m.payment_method === "CARD" ? "Carta · Stripe" : m.payment_method === "BANK_TRANSFER" ? "Bonifico" : "Euro"}
+            {m.payment_method === "BANK_TRANSFER" ? "Bonifico" : "Euro"}
           </p>
         )}
       </div>
-      <svg className="hidden sm:block w-4 h-4 text-slate-600 group-hover:text-orange-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <svg className="hidden sm:block w-4 h-4 text-slate-600 group-hover:text-brand-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
       </svg>
     </div>

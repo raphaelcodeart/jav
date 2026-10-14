@@ -40,7 +40,7 @@ export function SectionBanner({
 }) {
   return (
     <div
-      className={`relative rounded-2xl overflow-hidden mb-6 border border-white/5 light:border-slate-200 ${
+      className={`relative rounded-2xl overflow-hidden mb-6 border border-slate-200 ${
         compact ? "min-h-[92px] sm:min-h-[104px]" : "h-32 sm:h-44"
       }`}
     >
@@ -48,8 +48,8 @@ export function SectionBanner({
       <div
         className={`absolute inset-0 ${
           compact
-            ? "bg-gradient-to-r from-slate-950/90 via-slate-950/75 to-slate-950/50 light:from-white/90 light:via-white/75 light:to-white/50"
-            : "bg-gradient-to-r from-slate-950/80 via-slate-950/40 to-transparent light:from-white/70 light:via-white/30"
+            ? "bg-gradient-to-r from-white/90 via-white/75 to-white/50"
+            : "bg-gradient-to-r to-transparent from-white/70 via-white/30"
         }`}
       />
       {children && <div className="relative z-10 h-full flex items-center px-5 py-4 sm:px-6">{children}</div>}

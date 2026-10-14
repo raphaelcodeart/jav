@@ -24,6 +24,9 @@ NOTIFICATION_TYPES = {
     "ORDER_PAID",
     "ORDER_PAYMENT_PROOF_UPLOADED",
     "IMPORTED_ORDER_CREATED",
+    # Un messaggio dal sito pubblico (club/contact.py): alla segreteria del
+    # club, o agli amministratori della piattaforma se è scritto a JAV.
+    "CONTACT_MESSAGE",
 }
 
 

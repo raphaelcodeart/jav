@@ -10,22 +10,15 @@ import { ProductCategoriesField, saveProductCategories, sameCategorySelection, M
 import type { ProductCatalogRead, ProductRead, RankRead, ShopKey } from "@/lib/types";
 import { isRecurringProductType } from "@/lib/product-audience";
 
-const ENERGY_LABELS: Record<string, string> = {
-  ELECTRICITY: "Luce",
-  GAS: "Gas",
-  DUAL_FUEL: "Dual Fuel",
-};
-
 const PRODUCT_TYPE_LABELS: Record<string, string> = {
-  ENERGY_CONTRACT: "Contratto Energia",
+  SERVICE: "Servizio / Iscrizione",
   DIGITAL: "Digitale",
   PHYSICAL: "Fisico",
   SUBSCRIPTION: "Abbonamento",
 };
 
 // Who a product may be sold to. Three values, because the business question
-// is genuinely binary-plus-both -- the old vocabulary (PMI, ENERGY_INTENSIVE,
-// SOLE_PROPRIETOR) never lined up with `customers.kind` (COMPANY, ...), so
+// is genuinely binary-plus-both -- the old vocabulary (PMI, SOLE_PROPRIETOR) never lined up with `customers.kind` (COMPANY, ...), so
 // nothing could compare the two and no product was ever actually filtered.
 // Legacy values still parse server-side and collapse onto BUSINESS; see
 // catalog/pricing.py.
@@ -39,7 +32,6 @@ const LEGACY_CUSTOMER_TYPE_LABELS: Record<string, string> = {
   SOLE_PROPRIETOR: "Solo aziende / P.IVA",
   PMI: "Solo aziende / P.IVA",
   CONDOMINIUM: "Solo aziende / P.IVA",
-  ENERGY_INTENSIVE: "Solo aziende / P.IVA",
 };
 
 function customerTypeLabel(value: string): string {
@@ -173,38 +165,38 @@ function ProductFormFields({
   onChange: (patch: Partial<ProductFormState>) => void;
   ranks: RankRead[];
   /** Whether the "sconto in crediti" field is usable -- INTERNAL products
-      (Jav's own supply) are never discountable in wallet credits, see
+      (Jav's own services) are never discountable in wallet credits, see
       docs/cashback-partner-invoices-plan.md. */
   category: string;
-  /** ENERGY_CONTRACT / SUBSCRIPTION are contracts: one-go price + monthly price. */
+  /** SERVICE / SUBSCRIPTION are contracts: one-go price + monthly price. */
   productType: string;
 }) {
   const isContract = isRecurringProductType(productType);
   return (
     <>
       <div className="space-y-1">
-        <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Nome</label>
+        <label className="text-xs font-semibold text-slate-600 uppercase block">Nome</label>
         <input required value={form.name} onChange={(e) => onChange({ name: e.target.value })}
-          className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500" />
+          className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
       </div>
 
       <div className="space-y-1">
-        <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Descrizione</label>
+        <label className="text-xs font-semibold text-slate-600 uppercase block">Descrizione</label>
         <textarea rows={2} value={form.description} onChange={(e) => onChange({ description: e.target.value })}
           placeholder="Descrizione visibile ai clienti nel marketplace..."
-          className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500 resize-none" />
+          className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500 resize-none" />
       </div>
 
       <div className="space-y-1">
-        <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Foto prodotto (URL immagine)</label>
+        <label className="text-xs font-semibold text-slate-600 uppercase block">Foto prodotto (URL immagine)</label>
         <div className="flex items-center gap-3">
           {form.imageUrl && (
             // eslint-disable-next-line @next/next/no-img-element -- externally-hosted, variable-source image (URL or uploaded)
-            <img src={form.imageUrl} alt="" className="w-12 h-12 rounded-lg object-cover border border-white/10 light:border-slate-200 shrink-0" />
+            <img src={form.imageUrl} alt="" className="w-12 h-12 rounded-lg object-cover border border-slate-200 shrink-0" />
           )}
           <input value={form.imageUrl} onChange={(e) => onChange({ imageUrl: e.target.value })}
             placeholder="https://..."
-            className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500" />
+            className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
         </div>
       </div>
 
@@ -216,22 +208,22 @@ function ProductFormFields({
 
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1">
-          <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">
+          <label className="text-xs font-semibold text-slate-600 uppercase block">
             {isContract ? "Prezzo unica soluzione (EUR)" : "Prezzo base (EUR)"}
           </label>
           <input required inputMode="decimal" value={form.basePriceEuro} onChange={(e) => onChange({ basePriceEuro: e.target.value })}
             placeholder={isContract ? "149.00" : "18.00"}
-            className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500" />
+            className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
           {isContract && (
             <p className="text-[10px] text-slate-500">L&apos;intero contratto pagato in una volta, IVA esclusa.</p>
           )}
         </div>
         {isContract && (
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Prezzo mensile (EUR)</label>
+            <label className="text-xs font-semibold text-slate-600 uppercase block">Prezzo mensile (EUR)</label>
             <input inputMode="decimal" value={form.monthlyPriceEuro} onChange={(e) => onChange({ monthlyPriceEuro: e.target.value })}
               placeholder="18.30"
-              className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500" />
+              className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
             <p className="text-[10px] text-slate-500">
               La rata di chi paga a rate, IVA esclusa: il totale a rate è questo × i mesi del contratto (anche in 3 rate).
               Compilato, lo sconto per il pagamento unico di Impostazioni non si applica più a questo pacchetto.
@@ -240,48 +232,48 @@ function ProductFormFields({
           </div>
         )}
         <div className="space-y-1">
-          <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Aliquota IVA (%)</label>
+          <label className="text-xs font-semibold text-slate-600 uppercase block">Aliquota IVA (%)</label>
           <input inputMode="decimal" value={form.vatPercentage} onChange={(e) => onChange({ vatPercentage: e.target.value })}
             placeholder="10"
-            className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500" />
+            className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1">
-          <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Fee iniziale (EUR)</label>
+          <label className="text-xs font-semibold text-slate-600 uppercase block">Fee iniziale (EUR)</label>
           <input inputMode="decimal" value={form.initialFeeEuro} onChange={(e) => onChange({ initialFeeEuro: e.target.value })}
-            className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500" />
+            className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
         </div>
         <div className="space-y-1">
-          <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Fee ricorrente (EUR)</label>
+          <label className="text-xs font-semibold text-slate-600 uppercase block">Fee ricorrente (EUR)</label>
           <input inputMode="decimal" value={form.recurringFeeEuro} onChange={(e) => onChange({ recurringFeeEuro: e.target.value })}
-            className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500" />
+            className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1">
-          <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Periodicità fatturazione</label>
+          <label className="text-xs font-semibold text-slate-600 uppercase block">Periodicità fatturazione</label>
           <select value={form.billingPeriod} onChange={(e) => onChange({ billingPeriod: e.target.value })}
-            className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-slate-900 light:bg-white focus:border-orange-500">
+            className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-white focus:border-brand-500">
             <option value="MONTHLY">Mensile</option>
             <option value="QUARTERLY">Trimestrale</option>
             <option value="ANNUAL">Annuale</option>
           </select>
         </div>
         <div className="space-y-1">
-          <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Durata contratto (mesi)</label>
+          <label className="text-xs font-semibold text-slate-600 uppercase block">Durata contratto (mesi)</label>
           <input inputMode="numeric" value={form.contractDurationMonths}
             onChange={(e) => onChange({ contractDurationMonths: e.target.value })}
             placeholder="Vuoto = nessun rinnovo"
-            className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500" />
+            className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
           <p className="text-[10px] text-slate-500">Lascia vuoto per prodotti senza rinnovo (digitali, fisici, acquisti una tantum).</p>
         </div>
       </div>
 
       <div className="space-y-1">
-        <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">
+        <label className="text-xs font-semibold text-slate-600 uppercase block">
           Sconto pagabile in crediti (%)
         </label>
         {category === "INTERNAL" ? (
@@ -295,7 +287,7 @@ function ProductFormFields({
               value={form.creditDiscountPercentage}
               onChange={(e) => onChange({ creditDiscountPercentage: e.target.value })}
               placeholder="0"
-              className="w-full max-w-[140px] rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500"
+              className="w-full max-w-[140px] rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500"
             />
             <p className="text-[10px] text-slate-500">
               Quanta parte del prezzo un cliente può pagare con i crediti wallet nel checkout -- il resto resta bonifico.
@@ -305,7 +297,7 @@ function ProductFormFields({
       </div>
 
       <div className="space-y-1">
-        <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">
+        <label className="text-xs font-semibold text-slate-600 uppercase block">
           Cashback al checkout
         </label>
         {category === "INTERNAL" ? (
@@ -314,12 +306,12 @@ function ProductFormFields({
           </p>
         ) : (
           <>
-            <label className="flex items-center gap-2.5 text-xs text-slate-300 light:text-slate-600 cursor-pointer">
+            <label className="flex items-center gap-2.5 text-xs text-slate-600 cursor-pointer">
               <input
                 type="checkbox"
                 checked={form.cashbackEnabled}
                 onChange={(e) => onChange({ cashbackEnabled: e.target.checked })}
-                className="w-4 h-4 rounded border-white/20 accent-orange-500"
+                className="w-4 h-4 rounded border-slate-200 accent-brand-500"
               />
               Abilita &ldquo;riscuoti subito cashback&rdquo; per questo prodotto
             </label>
@@ -335,7 +327,7 @@ function ProductFormFields({
       {category === "INTERNAL" && (
         <>
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">
+            <label className="text-xs font-semibold text-slate-600 uppercase block">
               Cashback automatico sul contratto (%)
             </label>
             <input
@@ -343,27 +335,27 @@ function ProductFormFields({
               value={form.contractCashbackPercentage}
               onChange={(e) => onChange({ contractCashbackPercentage: e.target.value })}
               placeholder="0"
-              className="w-full max-w-[140px] rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500"
+              className="w-full max-w-[140px] rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500"
             />
             <p className="text-[10px] text-slate-500">
               Percentuale dell&apos;importo totale pagato (IVA inclusa) che torna al cliente come JavCash
               quando il contratto risulta pagato. <strong>Automatico e senza il 5% aggiuntivo</strong>: sui
-              servizi Jav e sulla formazione il cliente non paga nulla in più per ottenere il credito,
-              a differenza del riscatto fatture dei partner esterni. <span className="font-mono">0</span> = nessun
+              servizi Jav e sulla formazione il cliente non paga nulla in più per ottenere il credito.
+              <span className="font-mono"> 0</span> = nessun
               cashback.
             </p>
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">
+            <label className="text-xs font-semibold text-slate-600 uppercase block">
               Bonus a chi porta il cliente
             </label>
-            <label className="flex items-center gap-2.5 text-xs text-slate-300 light:text-slate-600 cursor-pointer">
+            <label className="flex items-center gap-2.5 text-xs text-slate-600 cursor-pointer">
               <input
                 type="checkbox"
                 checked={form.firstReferrerBonusEnabled}
                 onChange={(e) => onChange({ firstReferrerBonusEnabled: e.target.checked })}
-                className="w-4 h-4 rounded border-white/20 accent-orange-500"
+                className="w-4 h-4 rounded border-slate-200 accent-brand-500"
               />
               Riconosci un bonus extra al primo promoter che ha portato il cliente
             </label>
@@ -374,7 +366,7 @@ function ProductFormFields({
                   value={form.firstReferrerBonusEuro}
                   onChange={(e) => onChange({ firstReferrerBonusEuro: e.target.value })}
                   placeholder="25.00"
-                  className="w-full max-w-[140px] rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500"
+                  className="w-full max-w-[140px] rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500"
                 />
                 <span className="text-xs text-slate-500">EUR</span>
               </div>
@@ -389,8 +381,8 @@ function ProductFormFields({
         </>
       )}
 
-      <div className="space-y-1 pt-2 border-t border-white/5 light:border-slate-200">
-        <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">
+      <div className="space-y-1 pt-2 border-t border-slate-200">
+        <label className="text-xs font-semibold text-slate-600 uppercase block">
           Gettone provvigionale per grado (EUR)
         </label>
         <p className="text-[10px] text-slate-500 mb-2">
@@ -400,7 +392,7 @@ function ProductFormFields({
         <div className="grid grid-cols-3 gap-2">
           {[...ranks].sort((a, b) => a.level - b.level).map((r) => (
             <div key={r.id} className="space-y-0.5">
-              <label className="text-[10px] text-slate-400 light:text-slate-500 font-mono block">{r.code}</label>
+              <label className=" text-slate-500 font-mono block">{r.code}</label>
               <input
                 inputMode="decimal"
                 value={form.commissionTokens[r.code] ?? ""}
@@ -408,7 +400,7 @@ function ProductFormFields({
                   onChange({ commissionTokens: { ...form.commissionTokens, [r.code]: e.target.value } })
                 }
                 placeholder="0.00"
-                className="w-full rounded-lg glass-input px-2 py-1.5 text-xs focus:border-orange-500"
+                className="w-full rounded-lg glass-input px-2 py-1.5 text-xs focus:border-brand-500"
               />
             </div>
           ))}
@@ -438,8 +430,7 @@ export function AdminProductsPanel() {
   const [showCreate, setShowCreate] = useState(false);
   const [isDuplicating, setIsDuplicating] = useState(false);
   const [code, setCode] = useState("");
-  const [productType, setProductType] = useState("ENERGY_CONTRACT");
-  const [energyType, setEnergyType] = useState("ELECTRICITY");
+  const [productType, setProductType] = useState("SERVICE");
   const [customerType, setCustomerType] = useState("BOTH");
   const [category, setCategory] = useState("INTERNAL");
   const [createForm, setCreateForm] = useState<ProductFormState>(EMPTY_FORM);
@@ -451,7 +442,7 @@ export function AdminProductsPanel() {
   // PATCH below. Until now it could only be set at creation and never
   // corrected -- and nothing read it anyway.
   const [editCustomerType, setEditCustomerType] = useState("BOTH");
-  // Session 89: the internal code is a Product field too (LUCE-COPY-COPY
+  // Session 89: the internal code is a Product field too (JUDO-COPY-COPY
   // after two duplicates), renamed by the same PATCH.
   const [editCode, setEditCode] = useState("");
   const [editForm, setEditForm] = useState<ProductFormState>(EMPTY_FORM);
@@ -475,7 +466,6 @@ export function AdminProductsPanel() {
     const v = product.current_version;
     setCode(`${product.code}-COPY`);
     setProductType(product.product_type);
-    setEnergyType(product.energy_type ?? "ELECTRICITY");
     setCustomerType(product.customer_type);
     setCategory(product.category);
     setCreateForm({
@@ -513,7 +503,6 @@ export function AdminProductsPanel() {
         body: JSON.stringify({
           code,
           product_type: productType,
-          energy_type: productType === "ENERGY_CONTRACT" ? energyType : null,
           customer_type: customerType,
           category,
           name: createForm.name,
@@ -676,12 +665,12 @@ export function AdminProductsPanel() {
   }
 
   const deleteConfirmModal = deletingProduct && (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 light:bg-slate-900/40 backdrop-blur-sm animate-fade-in">
-      <div className="w-full max-w-md glass-card rounded-2xl p-6 border-white/10 light:border-slate-300 bg-slate-950 light:bg-white animate-scale-up">
-        <h3 className="text-lg font-bold text-white light:text-slate-900 mb-2">Elimina prodotto</h3>
-        <p className="text-xs text-slate-400 light:text-slate-500 mb-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+      <div className="w-full max-w-md glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up">
+        <h3 className="text-lg font-bold text-slate-900 mb-2">Elimina prodotto</h3>
+        <p className="text-xs text-slate-500 mb-4">
           Stai per eliminare definitivamente il prodotto{" "}
-          <span className="font-semibold text-slate-300 light:text-slate-700">
+          <span className="font-semibold text-slate-700">
             &quot;{deletingProduct.current_version?.name ?? deletingProduct.code}&quot;
           </span>{" "}
           e tutte le sue versioni. L&apos;operazione non può essere annullata. Se il prodotto ha contratti
@@ -691,7 +680,7 @@ export function AdminProductsPanel() {
         <div className="flex justify-end gap-3">
           <button
             onClick={() => { setDeletingProduct(null); setDeleteError(null); }}
-            className="px-4 py-2 rounded-xl bg-white/5 light:bg-slate-900/5 hover:bg-white/10 text-xs font-semibold text-slate-300 light:text-slate-600 border border-white/5 light:border-slate-200 transition cursor-pointer"
+            className="px-4 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 text-xs font-semibold text-slate-600 border border-slate-200 transition cursor-pointer"
           >
             Annulla
           </button>
@@ -710,14 +699,13 @@ export function AdminProductsPanel() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-400 light:text-slate-500">
-          Cataloghi luce, gas, dual fuel ed Energia Circolare venduti in marketplace.
+        <p className="text-sm text-slate-500">
+          Iscrizioni, abbonamenti, corsi e servizi del club in vendita.
         </p>
         <button
           onClick={() => {
             setCode("");
-            setProductType("ENERGY_CONTRACT");
-            setEnergyType("ELECTRICITY");
+            setProductType("SERVICE");
             setCustomerType("PRIVATE");
             setCategory("INTERNAL");
             setCreateForm(EMPTY_FORM);
@@ -725,7 +713,7 @@ export function AdminProductsPanel() {
             setIsDuplicating(false);
             setShowCreate(true);
           }}
-          className="px-4 py-2 rounded-xl text-xs font-semibold bg-orange-600 hover:bg-orange-500 text-white shadow-lg shadow-orange-500/20 transition cursor-pointer shrink-0"
+          className="px-4 py-2 rounded-xl text-xs font-semibold bg-brand-600 hover:bg-brand-500 text-white shadow-lg shadow-brand-500/20 transition cursor-pointer shrink-0"
         >
           + Nuovo Prodotto
         </button>
@@ -739,12 +727,12 @@ export function AdminProductsPanel() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <ManageCategoriesButton shops={shopsForCategories} />
         {retiredCount > 0 && (
-          <label className="flex items-center gap-2 text-xs text-slate-400 light:text-slate-500 cursor-pointer">
+          <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer">
             <input
               type="checkbox"
               checked={showRetired}
               onChange={(e) => setShowRetired(e.target.checked)}
-              className="w-4 h-4 rounded border-white/20 accent-orange-500"
+              className="w-4 h-4 rounded border-slate-200 accent-brand-500"
             />
             Mostra ritirati ({retiredCount})
           </label>
@@ -758,17 +746,17 @@ export function AdminProductsPanel() {
           <p className="text-sm text-slate-500 col-span-full text-center py-8">Nessun prodotto nel catalogo.</p>
         ) : (
           listedProducts.map((p) => (
-            <div key={p.id} className="glass-card rounded-2xl overflow-hidden border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70">
+            <div key={p.id} className="glass-card rounded-2xl overflow-hidden border-slate-200 bg-white/70">
               <div className="h-32 overflow-hidden relative">
                 <ProductThumbnail
                   imageUrl={p.current_version?.image_url}
                   alt={p.current_version?.name ?? p.code}
-                  iconClassName="w-10 h-10 text-orange-400/40"
+                  iconClassName="w-10 h-10 text-brand-600/40"
                 />
                 <div className="absolute top-2 right-2 flex items-center gap-1.5">
                   <button
                     onClick={() => openDuplicate(p)}
-                    className="p-1.5 rounded-lg bg-slate-950/70 hover:bg-slate-950/90 text-white transition cursor-pointer"
+                    className="p-1.5 rounded-lg bg-slate-950/70 hover:bg-slate-950/90 text-slate-900 transition cursor-pointer"
                     title="Duplica prodotto"
                     disabled={!p.current_version}
                   >
@@ -778,7 +766,7 @@ export function AdminProductsPanel() {
                   </button>
                   <button
                     onClick={() => openEdit(p)}
-                    className="p-1.5 rounded-lg bg-slate-950/70 hover:bg-slate-950/90 text-white transition cursor-pointer"
+                    className="p-1.5 rounded-lg bg-slate-950/70 hover:bg-slate-950/90 text-slate-900 transition cursor-pointer"
                     title="Modifica prodotto"
                     disabled={!p.current_version}
                   >
@@ -799,30 +787,28 @@ export function AdminProductsPanel() {
               </div>
               <div className="p-5">
                 <div className="flex items-center justify-between mb-3">
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-amber-500/10 text-amber-400 border-amber-500/20">
-                    {p.product_type === "ENERGY_CONTRACT"
-                      ? (p.energy_type ? ENERGY_LABELS[p.energy_type] ?? p.energy_type : "Energia")
-                      : PRODUCT_TYPE_LABELS[p.product_type] ?? p.product_type}
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-amber-500/10 text-amber-700 border-amber-500/20">
+                    {PRODUCT_TYPE_LABELS[p.product_type] ?? p.product_type}
                   </span>
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                     p.status === "ACTIVE"
                       ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                      : "bg-slate-500/10 light:bg-slate-200/50 text-slate-400 light:text-slate-500 border-slate-500/20 light:border-slate-300"
+                      : " bg-slate-200/50 text-slate-500 border-slate-300"
                   }`}>
                     {p.status === "RETIRED" ? "Ritirato" : p.status}
                   </span>
                 </div>
-                <h4 className="text-sm font-semibold text-white light:text-slate-900 mb-0.5">
+                <h4 className="text-sm font-semibold text-slate-900 mb-0.5">
                   {p.current_version?.name ?? p.code}
                 </h4>
                 <p className="font-mono text-[10px] text-slate-500 mb-2">{p.code}</p>
                 {p.current_version?.description && (
-                  <p className="text-xs text-slate-400 light:text-slate-500 mb-3 line-clamp-2">
+                  <p className="text-xs text-slate-500 mb-3 line-clamp-2">
                     {p.current_version.description}
                   </p>
                 )}
                 <div className="flex items-center gap-1.5 mb-2 flex-wrap">
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-white/5 light:bg-slate-900/5 border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600">
+                  <span className="px-2 py-0.5 rounded-full font-bold border bg-slate-900/5 border-slate-300 text-slate-600">
                     {CATEGORY_LABELS[p.category] ?? p.category}
                   </span>
                   {p.category !== "INTERNAL" && p.current_version && p.current_version.credit_discount_percentage > 0 && (
@@ -831,18 +817,18 @@ export function AdminProductsPanel() {
                     </span>
                   )}
                   {p.category !== "INTERNAL" && p.current_version?.cashback_enabled && (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-orange-500/10 text-orange-400 border-orange-500/20">
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-brand-500/10 text-brand-600 border-brand-500/20">
                       Cashback attivo
                     </span>
                   )}
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-400 light:text-slate-500">
+                  <span className="text-xs text-slate-500">
                     Target: {customerTypeLabel(p.customer_type)}
                   </span>
                   {p.current_version && (
                     <span className="text-right">
-                      <span className="block text-sm font-bold text-orange-400">
+                      <span className="block text-sm font-bold text-brand-600">
                         {euro(p.current_version.base_price_cents)}
                       </span>
                       {p.current_version.monthly_price_cents != null && (
@@ -861,14 +847,14 @@ export function AdminProductsPanel() {
       </div>
 
       {showCreate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 light:bg-slate-900/40 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-lg glass-card rounded-2xl p-6 border-white/10 light:border-slate-300 bg-slate-950 light:bg-white animate-scale-up max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-lg glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-white light:text-slate-900">
+              <h3 className="text-lg font-bold text-slate-900">
                 {isDuplicating ? "Duplica Prodotto" : "Nuovo Prodotto"}
               </h3>
               <button onClick={() => { setShowCreate(false); setIsDuplicating(false); }}
-                className="p-1 hover:bg-white/5 rounded-lg text-slate-400 light:text-slate-500 hover:text-white transition cursor-pointer">
+                className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-900 transition cursor-pointer">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -876,55 +862,44 @@ export function AdminProductsPanel() {
             </div>
 
             {isDuplicating && (
-              <p className="text-xs text-slate-400 light:text-slate-500 -mt-2 mb-4">
+              <p className="text-xs text-slate-500 -mt-2 mb-4">
                 Tutti i campi sono precompilati dal prodotto originale, incluso il gettone per grado. Cambia almeno il codice prima di salvare.
               </p>
             )}
 
             <form onSubmit={handleCreate} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Codice</label>
-                <input required value={code} onChange={(e) => setCode(e.target.value)} placeholder="Es: LUCE-PMI-01"
-                  className="w-full rounded-xl glass-input px-3 py-2 text-sm font-mono focus:border-orange-500" />
+                <label className="text-xs font-semibold text-slate-600 uppercase block">Codice</label>
+                <input required value={code} onChange={(e) => setCode(e.target.value)} placeholder="Es: JUDO-BAMBINI-01"
+                  className="w-full rounded-xl glass-input px-3 py-2 text-sm font-mono focus:border-brand-500" />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Tipo Prodotto</label>
+                  <label className="text-xs font-semibold text-slate-600 uppercase block">Tipo Prodotto</label>
                   <select value={productType} onChange={(e) => setProductType(e.target.value)}
-                    className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-slate-900 light:bg-white focus:border-orange-500">
+                    className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-white focus:border-brand-500">
                     {Object.entries(PRODUCT_TYPE_LABELS).map(([code2, label]) => (
                       <option key={code2} value={code2}>{label}</option>
                     ))}
                   </select>
                 </div>
-                {productType === "ENERGY_CONTRACT" && (
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Tipo Energia</label>
-                    <select value={energyType} onChange={(e) => setEnergyType(e.target.value)}
-                      className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-slate-900 light:bg-white focus:border-orange-500">
-                      {Object.entries(ENERGY_LABELS).map(([code2, label]) => (
-                        <option key={code2} value={code2}>{label}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Cliente Target</label>
+                  <label className="text-xs font-semibold text-slate-600 uppercase block">Cliente Target</label>
                   <select value={customerType} onChange={(e) => setCustomerType(e.target.value)}
-                    className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-slate-900 light:bg-white focus:border-orange-500">
+                    className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-white focus:border-brand-500">
                     {Object.entries(CUSTOMER_TYPE_LABELS).map(([code2, label]) => (
                       <option key={code2} value={code2}>{label}</option>
                     ))}
                   </select>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Categoria</label>
+                  <label className="text-xs font-semibold text-slate-600 uppercase block">Categoria</label>
                   <select value={category} onChange={(e) => setCategory(e.target.value)}
-                    className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-slate-900 light:bg-white focus:border-orange-500">
+                    className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-white focus:border-brand-500">
                     {Object.entries(CATEGORY_LABELS).map(([code2, label]) => (
                       <option key={code2} value={code2}>{label}</option>
                     ))}
@@ -940,11 +915,11 @@ export function AdminProductsPanel() {
 
               <div className="flex justify-end gap-3 mt-4">
                 <button type="button" onClick={() => { setShowCreate(false); setIsDuplicating(false); }}
-                  className="px-4 py-2 rounded-xl bg-white/5 light:bg-slate-900/5 hover:bg-white/10 text-xs font-semibold text-slate-300 light:text-slate-600 border border-white/5 light:border-slate-200 transition cursor-pointer">
+                  className="px-4 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 text-xs font-semibold text-slate-600 border border-slate-200 transition cursor-pointer">
                   Annulla
                 </button>
                 <button type="submit" disabled={createLoading}
-                  className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50">
+                  className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50">
                   {createLoading ? "Creazione..." : isDuplicating ? "Crea Copia" : "Crea Prodotto"}
                 </button>
               </div>
@@ -954,12 +929,12 @@ export function AdminProductsPanel() {
       )}
 
       {editingProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 light:bg-slate-900/40 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-lg glass-card rounded-2xl p-6 border-white/10 light:border-slate-300 bg-slate-950 light:bg-white animate-scale-up max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-lg glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-white light:text-slate-900">Modifica Prodotto</h3>
+              <h3 className="text-lg font-bold text-slate-900">Modifica Prodotto</h3>
               <button onClick={() => setEditingProduct(null)}
-                className="p-1 hover:bg-white/5 rounded-lg text-slate-400 light:text-slate-500 hover:text-white transition cursor-pointer">
+                className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-900 transition cursor-pointer">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -968,8 +943,8 @@ export function AdminProductsPanel() {
             <p className="font-mono text-[10px] text-slate-500 mb-4">{editingProduct.code}</p>
 
             {editingProduct.current_version && (
-              <div className="mb-5 pb-5 border-b border-white/5 light:border-slate-200">
-                <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block mb-2">Carica foto</label>
+              <div className="mb-5 pb-5 border-b border-slate-200">
+                <label className="text-xs font-semibold text-slate-600 uppercase block mb-2">Carica foto</label>
                 <PhotoUpload
                   currentUrl={editForm.imageUrl || null}
                   uploadPath={`products/versions/${editingProduct.current_version.id}/photo`}
@@ -985,27 +960,27 @@ export function AdminProductsPanel() {
 
             <form onSubmit={handleEditSave} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Codice</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">Codice</label>
                 <input
                   required
                   maxLength={64}
                   value={editCode}
                   onChange={(e) => setEditCode(e.target.value)}
-                  placeholder="Es: LUCE-PRIVATI-12"
-                  className="w-full rounded-xl glass-input px-3 py-2 text-sm font-mono focus:border-orange-500"
+                  placeholder="Es: JUDO-ADULTI-12"
+                  className="w-full rounded-xl glass-input px-3 py-2 text-sm font-mono focus:border-brand-500"
                 />
                 <p className="text-[10px] text-slate-500">
                   Codice interno del prodotto: il cliente non lo vede. Deve essere diverso da quello degli altri prodotti.
                 </p>
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">
+                <label className="text-xs font-semibold text-slate-600 uppercase block">
                   Cliente Target
                 </label>
                 <select
                   value={editCustomerType}
                   onChange={(e) => setEditCustomerType(e.target.value)}
-                  className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-slate-900 light:bg-white focus:border-orange-500"
+                  className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-white focus:border-brand-500"
                 >
                   {Object.entries(CUSTOMER_TYPE_LABELS).map(([code2, label]) => (
                     <option key={code2} value={code2}>{label}</option>
@@ -1017,7 +992,7 @@ export function AdminProductsPanel() {
                 </p>
               </div>
 
-              <ProductFormFields form={editForm} onChange={(patch) => setEditForm((f) => ({ ...f, ...patch }))} ranks={ranks} category={editingProduct?.category ?? "INTERNAL"} productType={editingProduct?.product_type ?? "ENERGY_CONTRACT"} />
+              <ProductFormFields form={editForm} onChange={(patch) => setEditForm((f) => ({ ...f, ...patch }))} ranks={ranks} category={editingProduct?.category ?? "INTERNAL"} productType={editingProduct?.product_type ?? "SERVICE"} />
 
               {editError && (
                 <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs">{editError}</div>
@@ -1025,11 +1000,11 @@ export function AdminProductsPanel() {
 
               <div className="flex justify-end gap-3 mt-4">
                 <button type="button" onClick={() => setEditingProduct(null)}
-                  className="px-4 py-2 rounded-xl bg-white/5 light:bg-slate-900/5 hover:bg-white/10 text-xs font-semibold text-slate-300 light:text-slate-600 border border-white/5 light:border-slate-200 transition cursor-pointer">
+                  className="px-4 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 text-xs font-semibold text-slate-600 border border-slate-200 transition cursor-pointer">
                   Annulla
                 </button>
                 <button type="submit" disabled={editLoading}
-                  className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50">
+                  className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50">
                   {editLoading ? "Salvataggio..." : "Salva Modifiche"}
                 </button>
               </div>

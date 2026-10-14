@@ -1,12 +1,11 @@
 """Le rate di un contratto, e le provvigioni che ciascuna libera.
 
-Business rule (Session 50), stated by the business:
+Business rule, stated by the business:
 
 - a contract paid in one go pays its commissions once;
 - a contract paid in 3 or 12 instalments pays them 3 or 12 times, one slice
   per instalment, each slice released only when that instalment has really
-  been paid -- confirmed by Stripe, or, when Stripe could not collect it, by
-  an administrator by hand;
+  been paid -- i.e. when an administrator confirms its bank transfer;
 - nothing is released before the contract is ACTIVE, i.e. before an
   administrator has approved the documents and accepted the commission
   preview. Instalments paid before that are released together at activation.
@@ -18,7 +17,7 @@ the gettoni run from 40 to 160 EUR on a 180 EUR contract.
 Every release is one ContractInstalmentPaid outbox event, emitted at most
 once per row (commission_event_id is claimed with a conditional UPDATE), so
 the commission engine's own idempotency is backed by a row that cannot be
-released twice however many webhooks and clicks arrive.
+released twice however many confirmations arrive.
 """
 
 import calendar
@@ -35,8 +34,6 @@ from app.domains.outbox import service as outbox_service
 
 INSTALMENT_PAID_EVENT = "ContractInstalmentPaid"
 
-SOURCE_STRIPE_CHECKOUT = "STRIPE_CHECKOUT"
-SOURCE_STRIPE_INVOICE = "STRIPE_INVOICE"
 SOURCE_ADMIN = "ADMIN"
 
 #: Statuses in which a paid instalment releases its commissions straight away.
@@ -100,20 +97,12 @@ async def ensure_schedule(db: AsyncSession, *, contract: Contract) -> list[Contr
     return rows
 
 
-async def _find_row(
-    db: AsyncSession, *, contract: Contract, number: int | None, invoice_id: str | None
-) -> ContractInstalment | None:
+async def _find_row(db: AsyncSession, *, contract: Contract, number: int | None) -> ContractInstalment | None:
     rows = await ensure_schedule(db, contract=contract)
-    if invoice_id:
-        for row in rows:
-            if row.stripe_invoice_id == invoice_id:
-                return row
     if number is not None:
         return next((r for r in rows if r.number == number), None)
-    # A new invoice: the earliest instalment not yet paid and not already
-    # tied to a different Stripe invoice (a FAILED one keeps its own id, so a
-    # later retry of that same invoice finds it above).
-    return next((r for r in rows if r.status != "PAID" and r.stripe_invoice_id is None), None)
+    # No number: the earliest instalment not yet paid.
+    return next((r for r in rows if r.status != "PAID"), None)
 
 
 async def record_payment(
@@ -122,35 +111,21 @@ async def record_payment(
     contract: Contract,
     source: str,
     number: int | None = None,
-    invoice_id: str | None = None,
     actor_user_id: uuid.UUID | None = None,
 ) -> ContractInstalment | None:
     """Marks one instalment paid and, if the contract is already active,
     releases its commissions. Returns None when there was nothing to do (the
-    same payment reported twice, or no instalment left). Does not commit."""
-    row = await _find_row(db, contract=contract, number=number, invoice_id=invoice_id)
+    same payment confirmed twice, or no instalment left). Does not commit."""
+    row = await _find_row(db, contract=contract, number=number)
     if row is None or row.status == "PAID":
         return None
     row.status = "PAID"
     row.paid_at = utcnow()
     row.payment_source = source
     row.confirmed_by_user_id = actor_user_id
-    if invoice_id and row.stripe_invoice_id is None:
-        row.stripe_invoice_id = invoice_id
     await db.flush()
     if contract.status in RELEASING_CONTRACT_STATUSES:
         await release(db, contract=contract, row=row)
-    return row
-
-
-async def record_failure(db: AsyncSession, *, contract: Contract, invoice_id: str | None) -> ContractInstalment | None:
-    row = await _find_row(db, contract=contract, number=None, invoice_id=invoice_id)
-    if row is None or row.status == "PAID":
-        return None
-    row.status = "FAILED"
-    if invoice_id and row.stripe_invoice_id is None:
-        row.stripe_invoice_id = invoice_id
-    await db.flush()
     return row
 
 
@@ -192,8 +167,8 @@ async def release_paid_instalments(db: AsyncSession, *, contract: Contract) -> i
 async def confirm_manually(
     db: AsyncSession, *, contract: Contract, number: int, actor_user_id: uuid.UUID
 ) -> ContractInstalment:
-    """An administrator confirming an instalment Stripe did not collect (a
-    bank transfer, a card fixed by phone...). Commits."""
+    """An administrator confirming that the transfer for one instalment
+    arrived -- every instalment after the first is paid this way. Commits."""
     rows = await list_instalments(db, contract_id=contract.id)
     if not rows:
         raise InstalmentError("Questo contratto non ha ancora un piano di rate: nessun pagamento registrato.")

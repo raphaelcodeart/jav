@@ -25,7 +25,7 @@ from app.domains.auth import service as auth_service
 from app.domains.auth.schemas import RegisterRequest
 from app.domains.catalog.models import Product, ProductVersion
 from app.domains.contracts import service as contract_service
-from app.domains.customers.models import Address, Customer, SupplyPoint
+from app.domains.customers.models import Address, Customer
 from app.domains.friend_referrals import service as friend_referrals_service
 from app.domains.friend_referrals.models import FriendReferral
 from app.domains.network import service as network_service
@@ -95,12 +95,12 @@ async def _agent_behind_attribution(db, organization_id, customer_id) -> uuid.UU
 async def _activate_a_contract_for(db, organization_id, customer: Customer, producer_agent_id):
     product = Product(
         organization_id=organization_id, code=f"P-{uuid.uuid4().hex[:6]}",
-        energy_type="ELECTRICITY", customer_type="BOTH", category="INTERNAL",
+        customer_type="BOTH", category="INTERNAL",
     )
     db.add(product)
     await db.flush()
     version = ProductVersion(
-        product_id=product.id, version_label="1.0", name="Luce", base_price_cents=15_00, valid_from=NOW
+        product_id=product.id, version_label="1.0", name="Abbonamento", base_price_cents=15_00, valid_from=NOW
     )
     db.add(version)
     address = Address(
@@ -109,16 +109,10 @@ async def _activate_a_contract_for(db, organization_id, customer: Customer, prod
     )
     db.add(address)
     await db.flush()
-    supply_point = SupplyPoint(
-        organization_id=organization_id, customer_id=customer.id, energy_type="ELECTRICITY",
-        supply_address_id=address.id,
-    )
-    db.add(supply_point)
     await db.commit()
 
     contract = await contract_service.create_contract(
-        db, organization_id=organization_id, customer_id=customer.id, supply_point_id=supply_point.id,
-        product_version_id=version.id, producer_agent_id=producer_agent_id,
+        db, organization_id=organization_id, customer_id=customer.id, product_version_id=version.id, producer_agent_id=producer_agent_id,
         actor_user_id=customer.user_id, correlation_id=str(uuid.uuid4()),
     )
     for step in ["SUBMITTED", "UNDER_REVIEW", "APPROVED", "PAID"]:

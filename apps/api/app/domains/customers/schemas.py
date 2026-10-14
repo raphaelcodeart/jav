@@ -29,9 +29,9 @@ class CustomerRead(BaseModel):
     email_verified: bool | None = None
     privacy_accepted: bool | None = None
     # None when there's no login (user_id is None); "ACTIVE"/"FROZEN"
-    # otherwise -- see users/service.py::freeze_user (Session 28).
+    # otherwise -- see users/service.py::freeze_user.
     user_status: str | None = None
-    #: Session 88: codice fiscale e residenza compilati (il terzo controllo).
+    #: Codice fiscale e residenza compilati (il terzo controllo).
     profile_complete: bool | None = None
 
 
@@ -102,44 +102,14 @@ class AddressRead(BaseModel):
     country: str
 
 
-class SupplyPointRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    label: str | None
-    energy_type: str | None
-    pod_code: str | None
-    pdr_code: str | None
-    meter_number: str | None
-    supply_address_id: uuid.UUID
-
-
-class SupplyPointCreate(BaseModel):
-    label: str | None = None  # auto-computed from energy_type + address if omitted
-    energy_type: str  # ELECTRICITY / GAS
-    pod_code: str | None = None
-    pdr_code: str | None = None
-    meter_number: str | None = None
-    street: str
-    city: str
-    province: str
-    postal_code: str
-    country: str = "IT"
-
-
-class SupplyPointUpdate(BaseModel):
-    label: str | None = None
-
-
 class CustomerDetailRead(CustomerRead):
     addresses: list[AddressRead] = []
-    supply_points: list[SupplyPointRead] = []
     current_promoter_agent_id: uuid.UUID | None = None
     current_promoter_name: str | None = None
 
 
 class StaffCustomerCreate(CustomerCreate):
-    """The administration's "Nuovo cliente" (Session 67): anagrafica and
+    """The administration's "Nuovo cliente": anagrafica and
     login together, under the promoter chosen here (none = direct customer
     of the company)."""
 

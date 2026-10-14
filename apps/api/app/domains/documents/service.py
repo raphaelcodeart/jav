@@ -17,13 +17,13 @@ from app.domains.documents.models import (
     Document,
 )
 
-# Every contract needs these three regardless of customer type -- a company
+# Every contract needs these two regardless of customer type -- a company
 # additionally needs its chamber-of-commerce registration. Kept as a plain
 # constant (not read from ProductVersion.required_documents) for this first
 # version -- that JSONB column exists for a future per-product override but
 # nothing populates it yet, so a hardcoded sane default is more honest than
 # pretending it's configurable today.
-BASE_REQUIRED_DOCUMENT_TYPES = ["IDENTITY", "FISCAL_CODE", "UTILITY_BILL"]
+BASE_REQUIRED_DOCUMENT_TYPES = ["IDENTITY", "FISCAL_CODE"]
 # Every partita IVA must prove it: a company or a ditta with its visura
 # camerale, a libero professionista -- who is not in the Registro Imprese
 # and has no visura -- with the certificato di attribuzione della partita
@@ -33,14 +33,14 @@ BASE_REQUIRED_DOCUMENT_TYPES = ["IDENTITY", "FISCAL_CODE", "UTILITY_BILL"]
 COMPANY_LIKE_KINDS = {"COMPANY", "CONDOMINIUM", "SOLE_PROPRIETOR"}
 CHAMBER_OF_COMMERCE_OPTIONAL_KINDS: set[str] = set()
 
-#: Pages one document may have: front and back of an ID, a bill of 4 or of
-#: 20 pages. Beyond this it is a different document, not a longer one.
+#: Pages one document may have: front and back of an ID, a visura of 4 or
+#: of 20 pages. Beyond this it is a different document, not a longer one.
 MAX_PAGES_PER_DOCUMENT = 20
 
-#: What a pratica cannot go past the documents step without (Session 82):
-#: the holder's identity, a bill, and for a partita IVA the visura / P.IVA
+#: What a pratica cannot go past the documents step without:
+#: the holder's identity, and for a partita IVA the visura / P.IVA
 #: certificate. At least one page each.
-PRATICA_BLOCKING_TYPES = ("IDENTITY", "UTILITY_BILL", "CHAMBER_OF_COMMERCE")
+PRATICA_BLOCKING_TYPES = ("IDENTITY", "CHAMBER_OF_COMMERCE")
 
 
 class DocumentValidationError(Exception):
@@ -66,19 +66,15 @@ def document_slots_for(customer_kind: str) -> list[DocumentSlot]:
     return slots
 
 
-#: Slots that describe the holder, not the supply point: the same for every
-#: point of a pratica, so a pratica collects them once (Session 52).
+#: Slots that describe the holder, not one contract: the same for every
+#: contract of a pratica, so a pratica collects them once.
 REQUEST_LEVEL_DOCUMENT_TYPES = frozenset({"IDENTITY", "FISCAL_CODE", "CHAMBER_OF_COMMERCE"})
 
 
 def request_document_slots_for(customer_kind: str) -> list[DocumentSlot]:
-    """What a pratica asks for once, for all its points: the holder's slots,
-    plus an optional bill -- for the customer whose single bill lists every
-    point. Each contract still has its own bill slot; a bill on the pratica
-    simply fills it for every contract that has none of its own."""
-    slots = [slot for slot in document_slots_for(customer_kind) if slot.document_type in REQUEST_LEVEL_DOCUMENT_TYPES]
-    slots.append(DocumentSlot(document_type="UTILITY_BILL", required=False))
-    return slots
+    """What a pratica asks for once, for all its contracts: the holder's
+    slots."""
+    return [slot for slot in document_slots_for(customer_kind) if slot.document_type in REQUEST_LEVEL_DOCUMENT_TYPES]
 
 
 def required_document_types_for(customer_kind: str) -> list[str]:
@@ -196,7 +192,7 @@ async def maybe_advance_to_under_review(
     (any status -- staff still reviews/approves/rejects each one, this just
     signals "the customer is done, ready for a human to look"), the contract
     advances itself from SUBMITTED/DOCUMENTS_PENDING to UNDER_REVIEW. Part of
-    the Session 29 self-service contract flow -- see
+    the self-service contract flow -- see
     business-rules.md#contract-self-service. A staff-created contract that
     happens to have its documents uploaded via this same endpoint gets the
     exact same courtesy advance; there's nothing self-service-specific about
@@ -263,9 +259,9 @@ def _latest_by_type(docs: list[Document]) -> dict[str, Document]:
 
 
 def _pages_by_type(docs: list[Document]) -> dict[str, list[Document]]:
-    """Every page of each document, oldest first (Session 82): a slot is no
+    """Every page of each document, oldest first: a slot is no
     longer one file that the next upload replaces, but the pages of one
-    document -- an ID front and back, a 20-page bill."""
+    document -- an ID front and back, a 20-page visura."""
     pages: dict[str, list[Document]] = {}
     for doc in sorted(docs, key=lambda d: d.created_at):
         pages.setdefault(doc.document_type, []).append(doc)
@@ -281,11 +277,10 @@ async def get_contract_documents_status(
     A rejected page does not disappear: the customer adds a good one, and
     both stay visible so the reviewer sees what happened.
 
-    A document uploaded on the contract's pratica fills the same slot here
-    (Session 52): identity and fiscal code are uploaded once for ten points,
-    and each of the ten contracts sees them. When both exist, the contract's
-    own wins -- it is the more specific one (this point's bill over the
-    pratica's shared bill)."""
+    A document uploaded on the contract's pratica fills the same slot here:
+    identity and fiscal code are uploaded once for ten
+    contracts, and each of the ten sees them. When both exist, the
+    contract's own wins -- it is the more specific one."""
     own = _pages_by_type(
         await list_documents_for_contract(db, organization_id=organization_id, contract_id=contract.id)
     )
@@ -310,8 +305,9 @@ async def get_request_documents_status(
     db: AsyncSession, *, organization_id: uuid.UUID, request: ContractRequest, customer_kind: str
 ) -> list[dict]:
     """Same shape as get_contract_documents_status, for the slots a pratica
-    collects once (request_document_slots_for). The bill is required here
-    (Session 82): a pratica does not go past its documents without one."""
+    collects once (request_document_slots_for). The PRATICA_BLOCKING_TYPES
+    are required here: a pratica does not go past its
+    documents without them."""
     shared = _pages_by_type(
         await list_documents_for_request(db, organization_id=organization_id, contract_request_id=request.id)
     )
@@ -331,9 +327,8 @@ async def pratica_blocking_missing(
     db: AsyncSession, *, request: ContractRequest, customer_kind: str
 ) -> list[str]:
     """The document types a pratica still lacks before it may go on: the
-    holder's identity, a bill, and -- for a partita IVA -- the visura /
-    P.IVA certificate, at least one page each. A bill counts whether it was
-    uploaded once for the whole pratica or on every point separately."""
+    holder's identity and -- for a partita IVA -- the visura / P.IVA
+    certificate, at least one page each."""
     from app.domains.documents.schemas import DOCUMENT_TYPE_LABELS
 
     shared = _pages_by_type(
@@ -342,33 +337,7 @@ async def pratica_blocking_missing(
     wanted = {slot.document_type for slot in request_document_slots_for(customer_kind) if slot.required}
     missing = []
     for document_type in PRATICA_BLOCKING_TYPES:
-        if document_type == "UTILITY_BILL":
-            if shared.get("UTILITY_BILL"):
-                continue
-            points = list(
-                (
-                    await db.execute(
-                        select(Contract).where(
-                            Contract.contract_request_id == request.id,
-                            ~((Contract.status == "CANCELLED") & (Contract.activated_at.is_(None))),
-                        )
-                    )
-                ).scalars()
-            )
-            with_own_bill = set(
-                (
-                    await db.execute(
-                        select(Document.contract_id).where(
-                            Document.contract_id.in_([p.id for p in points]),
-                            Document.document_type == "UTILITY_BILL",
-                        )
-                    )
-                ).scalars()
-            )
-            if points and all(p.id in with_own_bill for p in points):
-                continue
-            missing.append(DOCUMENT_TYPE_LABELS["UTILITY_BILL"])
-        elif document_type in wanted and not shared.get(document_type):
+        if document_type in wanted and not shared.get(document_type):
             missing.append(DOCUMENT_TYPE_LABELS[document_type])
     return missing
 

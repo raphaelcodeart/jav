@@ -2,7 +2,7 @@
 monotonically by design so the entrepreneurial-difference test cases are meaningful.
 
 personal_volume_threshold_cents / group_volume_threshold_cents are placeholder
-promotion-progress figures added alongside migration 0010 -- see
+promotion-progress figures -- see
 docs/business-rules.md#rank-promotion-progress-placeholder. Not confirmed Jav
 policy; both are cumulative ("lifetime") totals, not evaluated over any
 rolling window."""

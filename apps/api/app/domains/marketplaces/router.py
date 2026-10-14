@@ -1,4 +1,4 @@
-"""/marketplaces -- the rules shared by the imported-product shops (Session 68)."""
+"""/marketplaces -- the rules shared by the shops with a cart (see rules.py)."""
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
@@ -23,10 +23,10 @@ class ShopSectionUpdate(BaseModel):
 
 class MarketplaceConfigRead(BaseModel):
     labels: dict[str, str]
-    #: Session 72: the Shop's own sections (internal / partner / dropshipping).
+    #: The Shop's own sections (internal / partner / dropshipping).
     sections: dict[str, ShopSectionRead]
     bank_transfer_discount_percentage: int
-    #: Session 74: the VAT contained in the prices shown, never added to them.
+    #: The VAT rate added to the prices shown (see rules.py).
     vat_percentage: int
     default_credit_percentage: int
     max_credit_percentage: int
@@ -35,7 +35,7 @@ class MarketplaceConfigRead(BaseModel):
 class MarketplaceConfigUpdate(BaseModel):
     labels: dict[str, str] | None = None
     sections: dict[str, ShopSectionUpdate] | None = None
-    #: Session 86: ignored -- there is no bank-transfer discount any more.
+    #: Ignored -- there is no bank-transfer discount any more.
     #: Still accepted so a page open from before does not fail on it.
     bank_transfer_discount_percentage: int | None = None
     vat_percentage: int | None = Field(default=None, ge=0, le=rules.MAX_VAT_PERCENTAGE)

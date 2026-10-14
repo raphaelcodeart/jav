@@ -194,7 +194,7 @@ async def reassign_customer_promoter(
     who moved a customer from which promoter to which, requested by whom,
     and why.
 
-    **Dual-role people move in the network tree too (Session 37).** A person
+    **Dual-role people move in the network tree too.** A person
     can hold both CUSTOMER and PROMOTER roles (see business-rules.md
     #customer-promoter-dual-role). Reassigning such a person used to move
     only this attribution, leaving them hanging under their OLD promoter in

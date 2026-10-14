@@ -47,9 +47,9 @@ async function fetchRankProgress(agentId: string): Promise<RankProgressRead> {
 function ProgressBar({ current, target }: { current: number; target: number }) {
   const pct = target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 100;
   return (
-    <div className="h-2 rounded-full bg-white/10 light:bg-slate-200 overflow-hidden">
+    <div className="h-2 rounded-full bg-slate-200 overflow-hidden">
       <div
-        className={`h-full rounded-full transition-all duration-500 ${pct >= 100 ? "bg-emerald-500" : "bg-gradient-to-r from-amber-500 to-orange-600"}`}
+        className={`h-full rounded-full transition-all duration-500 ${pct >= 100 ? "bg-emerald-500" : "bg-gradient-to-r from-accent-400 to-brand-600"}`}
         style={{ width: `${pct}%` }}
       />
     </div>
@@ -127,43 +127,43 @@ export function PromoterAziendaPanel({ agentId }: { agentId: string }) {
       {/* KPI cards -- top-level totals across the whole downline, promoter can
           only ever see below themselves (branch-scoped by the API). */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="glass-card rounded-2xl p-5 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70">
+        <div className="glass-card rounded-2xl p-5 border-slate-200 bg-white/70">
           <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Persone in rete</p>
-          <p className="text-xl font-bold text-white light:text-slate-900">{summaryLoading ? "…" : totals?.people_total ?? 0}</p>
+          <p className="text-xl font-bold text-slate-900">{summaryLoading ? "…" : totals?.people_total ?? 0}</p>
           <p className="text-[10px] text-slate-500 mt-1">{directCount} diretti</p>
         </div>
-        <div className="glass-card rounded-2xl p-5 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70">
+        <div className="glass-card rounded-2xl p-5 border-slate-200 bg-white/70">
           <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Livelli sotto di te</p>
-          <p className="text-xl font-bold text-white light:text-slate-900">{summaryLoading ? "…" : totals?.levels_below ?? 0}</p>
+          <p className="text-xl font-bold text-slate-900">{summaryLoading ? "…" : totals?.levels_below ?? 0}</p>
         </div>
-        <div className="glass-card rounded-2xl p-5 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70">
+        <div className="glass-card rounded-2xl p-5 border-slate-200 bg-white/70">
           <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Contratti chiusi</p>
           <p className="text-xl font-bold text-emerald-400">{summaryLoading ? "…" : totals?.contracts_closed ?? 0}</p>
         </div>
-        <div className="glass-card rounded-2xl p-5 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70">
+        <div className="glass-card rounded-2xl p-5 border-slate-200 bg-white/70">
           <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Provvigioni totali</p>
-          <p className="text-xl font-bold text-orange-400">{summaryLoading ? "…" : euro(totals?.commission_cents ?? 0)}</p>
+          <p className="text-xl font-bold text-brand-600">{summaryLoading ? "…" : euro(totals?.commission_cents ?? 0)}</p>
         </div>
-        <div className="glass-card rounded-2xl p-5 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70">
+        <div className="glass-card rounded-2xl p-5 border-slate-200 bg-white/70">
           <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Rifiutati</p>
           <p className="text-xl font-bold text-rose-400">{summaryLoading ? "…" : totals?.contracts_rejected ?? 0}</p>
         </div>
-        <div className="glass-card rounded-2xl p-5 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70">
+        <div className="glass-card rounded-2xl p-5 border-slate-200 bg-white/70">
           <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">In attesa (pending)</p>
-          <p className="text-xl font-bold text-amber-400">{summaryLoading ? "…" : totals?.contracts_pending ?? 0}</p>
+          <p className="text-xl font-bold text-amber-700">{summaryLoading ? "…" : totals?.contracts_pending ?? 0}</p>
         </div>
-        <div className="glass-card rounded-2xl p-5 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70">
+        <div className="glass-card rounded-2xl p-5 border-slate-200 bg-white/70">
           <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">In lavorazione</p>
           <p className="text-xl font-bold text-sky-400">{summaryLoading ? "…" : totals?.contracts_in_progress ?? 0}</p>
         </div>
-        <div className="glass-card rounded-2xl p-5 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70">
+        <div className="glass-card rounded-2xl p-5 border-slate-200 bg-white/70">
           <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Contratti totali</p>
-          <p className="text-xl font-bold text-white light:text-slate-900">{summaryLoading ? "…" : totals?.contracts ?? 0}</p>
+          <p className="text-xl font-bold text-slate-900">{summaryLoading ? "…" : totals?.contracts ?? 0}</p>
         </div>
       </div>
 
       {totalProblems > 0 && (
-        <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-sm">
+        <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 text-sm">
           <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
@@ -174,7 +174,7 @@ export function PromoterAziendaPanel({ agentId }: { agentId: string }) {
       {/* Rank promotion progress -- placeholder thresholds, see
           docs/business-rules.md#rank-promotion-progress-placeholder */}
       {rankProgress && (
-        <div className="glass-card rounded-2xl p-5 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70">
+        <div className="glass-card rounded-2xl p-5 border-slate-200 bg-white/70">
           {rankProgress.is_max_rank ? (
             <div className="flex items-center gap-3">
               <div className="p-2 bg-emerald-500/10 rounded-xl border border-emerald-500/20 text-emerald-400 shrink-0">
@@ -182,22 +182,22 @@ export function PromoterAziendaPanel({ agentId }: { agentId: string }) {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <p className="text-sm text-slate-300 light:text-slate-600">
-                Hai raggiunto la qualifica massima (<span className="font-bold text-orange-400">{rankProgress.current_rank_name}</span>).
+              <p className="text-sm text-slate-600">
+                Hai raggiunto la qualifica massima (<span className="font-bold text-brand-600">{rankProgress.current_rank_name}</span>).
               </p>
             </div>
           ) : rankProgress.next_rank_code ? (
             <>
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold text-white light:text-slate-900">
-                  Verso la qualifica <span className="text-orange-400">{rankProgress.next_rank_code}</span> — {rankProgress.next_rank_name}
+                <h3 className="text-sm font-semibold text-slate-900">
+                  Verso la qualifica <span className="text-brand-600">{rankProgress.next_rank_code}</span> — {rankProgress.next_rank_name}
                 </h3>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
                   <div className="flex items-center justify-between text-xs mb-1.5">
-                    <span className="text-slate-400 light:text-slate-500">Volume personale</span>
-                    <span className="font-semibold text-slate-300 light:text-slate-600">
+                    <span className=" text-slate-500">Volume personale</span>
+                    <span className="font-semibold text-slate-600">
                       {euro(rankProgress.personal_volume_cents)} / {euro(rankProgress.personal_volume_threshold_cents)}
                     </span>
                   </div>
@@ -205,8 +205,8 @@ export function PromoterAziendaPanel({ agentId }: { agentId: string }) {
                 </div>
                 <div>
                   <div className="flex items-center justify-between text-xs mb-1.5">
-                    <span className="text-slate-400 light:text-slate-500">Volume di gruppo (tutta la tua rete)</span>
-                    <span className="font-semibold text-slate-300 light:text-slate-600">
+                    <span className=" text-slate-500">Volume di gruppo (tutta la tua rete)</span>
+                    <span className="font-semibold text-slate-600">
                       {euro(rankProgress.group_volume_cents)} / {euro(rankProgress.group_volume_threshold_cents)}
                     </span>
                   </div>
@@ -222,9 +222,9 @@ export function PromoterAziendaPanel({ agentId }: { agentId: string }) {
       )}
 
       {/* Per-level breakdown + chart + drill-down */}
-      <div className="glass-card rounded-2xl border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70 overflow-hidden">
+      <div className="glass-card rounded-2xl border-slate-200 bg-white/70 overflow-hidden">
         <div className="p-5 pb-0 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-white light:text-slate-900">Riepilogo per livello</h3>
+          <h3 className="text-sm font-semibold text-slate-900">Riepilogo per livello</h3>
           <p className="text-[11px] text-slate-500">Clicca un livello per il dettaglio</p>
         </div>
         {chartData.length > 0 && (
@@ -244,26 +244,26 @@ export function PromoterAziendaPanel({ agentId }: { agentId: string }) {
         <div className="overflow-x-auto p-5">
           <table className="w-full border-collapse text-left text-sm">
             <thead>
-              <tr className="border-b border-white/5 light:border-slate-200 text-slate-400 light:text-slate-500 font-semibold">
+              <tr className="border-b border-slate-200 text-slate-500 font-semibold">
                 <th className="py-2 pr-4">Livello</th>
                 <th className="py-2 pr-4">Persone</th>
                 <th className="py-2 pr-4">Contratti</th>
                 <th className="py-2 pr-4 text-right">Provvigioni</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5 light:divide-slate-200">
+            <tbody className="divide-y divide-slate-200">
               {perLevel.filter((row) => row.depth > 0).map((row) => (
                 <tr
                   key={row.depth}
                   onClick={() => setSelectedLevel(selectedLevel === row.depth ? null : row.depth)}
-                  className={`text-slate-300 light:text-slate-600 cursor-pointer transition ${
-                    selectedLevel === row.depth ? "bg-orange-500/10" : "hover:bg-white/5"
+                  className={` text-slate-600 cursor-pointer transition ${
+                    selectedLevel === row.depth ? "bg-brand-500/10" : "hover:bg-slate-100"
                   }`}
                 >
-                  <td className="py-2 pr-4 font-medium text-white light:text-slate-900">Livello {row.depth}</td>
+                  <td className="py-2 pr-4 font-medium text-slate-900">Livello {row.depth}</td>
                   <td className="py-2 pr-4">{row.agentCount}</td>
                   <td className="py-2 pr-4">{row.contracts}</td>
-                  <td className="py-2 pr-4 text-right font-semibold text-orange-400">{euro(row.commission)}</td>
+                  <td className="py-2 pr-4 text-right font-semibold text-brand-600">{euro(row.commission)}</td>
                 </tr>
               ))}
               {perLevel.filter((row) => row.depth > 0).length === 0 && !summaryLoading && (
@@ -275,15 +275,15 @@ export function PromoterAziendaPanel({ agentId }: { agentId: string }) {
       </div>
 
       {/* Per-agent breakdown, filtered to the selected level's drill-down when set */}
-      <div className="glass-card rounded-2xl border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70 overflow-hidden">
+      <div className="glass-card rounded-2xl border-slate-200 bg-white/70 overflow-hidden">
         <div className="p-5 pb-0 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-white light:text-slate-900">
+          <h3 className="text-sm font-semibold text-slate-900">
             {selectedLevel === null ? "Contratti per persona" : `Livello ${selectedLevel} -- dettaglio`}
           </h3>
           {selectedLevel !== null && (
             <button
               onClick={() => setSelectedLevel(null)}
-              className="text-xs text-orange-400 hover:text-orange-300 transition cursor-pointer"
+              className="text-xs text-brand-600 hover:text-brand-600 transition cursor-pointer"
             >
               Torna alla vista generale
             </button>
@@ -291,19 +291,19 @@ export function PromoterAziendaPanel({ agentId }: { agentId: string }) {
         </div>
         {levelDetail && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-5 pt-4">
-            <div className="rounded-xl bg-white/5 light:bg-slate-900/5 p-3 text-center">
+            <div className="rounded-xl bg-slate-900/5 p-3 text-center">
               <p className="text-[10px] text-slate-500 uppercase">Persone</p>
-              <p className="text-lg font-bold text-white light:text-slate-900">{levelDetail.agents.length}</p>
+              <p className="text-lg font-bold text-slate-900">{levelDetail.agents.length}</p>
             </div>
-            <div className="rounded-xl bg-white/5 light:bg-slate-900/5 p-3 text-center">
+            <div className="rounded-xl bg-slate-900/5 p-3 text-center">
               <p className="text-[10px] text-slate-500 uppercase">Chiusi</p>
               <p className="text-lg font-bold text-emerald-400">{levelDetail.closed}</p>
             </div>
-            <div className="rounded-xl bg-white/5 light:bg-slate-900/5 p-3 text-center">
+            <div className="rounded-xl bg-slate-900/5 p-3 text-center">
               <p className="text-[10px] text-slate-500 uppercase">In lavorazione</p>
               <p className="text-lg font-bold text-sky-400">{levelDetail.inProgress}</p>
             </div>
-            <div className="rounded-xl bg-white/5 light:bg-slate-900/5 p-3 text-center">
+            <div className="rounded-xl bg-slate-900/5 p-3 text-center">
               <p className="text-[10px] text-slate-500 uppercase">Problemi</p>
               <p className="text-lg font-bold text-rose-400">{levelDetail.problem}</p>
             </div>
@@ -312,7 +312,7 @@ export function PromoterAziendaPanel({ agentId }: { agentId: string }) {
         <div className="overflow-x-auto p-5">
           <table className="w-full border-collapse text-left text-sm">
             <thead>
-              <tr className="border-b border-white/5 light:border-slate-200 text-slate-400 light:text-slate-500 font-semibold">
+              <tr className="border-b border-slate-200 text-slate-500 font-semibold">
                 <th className="py-2 pr-4">Nome</th>
                 <th className="py-2 pr-4">Livello</th>
                 <th className="py-2 pr-4">Totali</th>
@@ -322,14 +322,14 @@ export function PromoterAziendaPanel({ agentId }: { agentId: string }) {
                 <th className="py-2 pr-4 text-right">Provvigioni</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5 light:divide-slate-200">
+            <tbody className="divide-y divide-slate-200">
               {agentsForTable.map((a) => (
-                <tr key={a.agent_id} className="text-slate-300 light:text-slate-600">
-                  <td className="py-2 pr-4 font-medium text-white light:text-slate-900">{a.display_name}</td>
+                <tr key={a.agent_id} className=" text-slate-600">
+                  <td className="py-2 pr-4 font-medium text-slate-900">{a.display_name}</td>
                   <td className="py-2 pr-4">{a.depth === 0 ? "Tu" : a.depth}</td>
                   <td className="py-2 pr-4">{a.contracts_total}</td>
                   <td className="py-2 pr-4 text-emerald-400">{a.contracts_processed}</td>
-                  <td className="py-2 pr-4 text-amber-400">{a.contracts_in_progress}</td>
+                  <td className="py-2 pr-4 text-amber-700">{a.contracts_in_progress}</td>
                   <td className="py-2 pr-4">
                     {a.contracts_problem > 0 ? (
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-rose-500/10 text-rose-400 border-rose-500/20">
@@ -339,7 +339,7 @@ export function PromoterAziendaPanel({ agentId }: { agentId: string }) {
                       "—"
                     )}
                   </td>
-                  <td className="py-2 pr-4 text-right font-semibold text-orange-400">{euro(a.commission_cents)}</td>
+                  <td className="py-2 pr-4 text-right font-semibold text-brand-600">{euro(a.commission_cents)}</td>
                 </tr>
               ))}
             </tbody>
@@ -348,10 +348,10 @@ export function PromoterAziendaPanel({ agentId }: { agentId: string }) {
       </div>
 
       {/* Contract-level detail with contact action */}
-      <div className="glass-card rounded-2xl border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70 overflow-hidden">
+      <div className="glass-card rounded-2xl border-slate-200 bg-white/70 overflow-hidden">
         <div className="p-5 pb-0 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-white light:text-slate-900">Contratti della rete</h3>
-          <label className="flex items-center gap-2 text-xs text-slate-400 light:text-slate-500 cursor-pointer">
+          <h3 className="text-sm font-semibold text-slate-900">Contratti della rete</h3>
+          <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer">
             <input type="checkbox" checked={onlyProblems} onChange={(e) => setOnlyProblems(e.target.checked)} className="cursor-pointer" />
             Solo con problemi
           </label>
@@ -359,7 +359,7 @@ export function PromoterAziendaPanel({ agentId }: { agentId: string }) {
         <div className="overflow-x-auto p-5">
           <table className="w-full border-collapse text-left text-sm">
             <thead>
-              <tr className="border-b border-white/5 light:border-slate-200 text-slate-400 light:text-slate-500 font-semibold">
+              <tr className="border-b border-slate-200 text-slate-500 font-semibold">
                 <th className="py-2 pr-4">Cliente</th>
                 <th className="py-2 pr-4">Prodotto</th>
                 <th className="py-2 pr-4">Venditore</th>
@@ -368,19 +368,16 @@ export function PromoterAziendaPanel({ agentId }: { agentId: string }) {
                 <th className="py-2 pr-4 text-right">Azioni</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5 light:divide-slate-200">
+            <tbody className="divide-y divide-slate-200">
               {filteredContracts.map((c) => (
                 <Fragment key={c.contract_id}>
-                  <tr className="text-slate-300 light:text-slate-600">
+                  <tr className=" text-slate-600">
                     <td className="py-2 pr-4">
-                      <div className="font-medium text-white light:text-slate-900">{c.customer_name}</div>
+                      <div className="font-medium text-slate-900">{c.customer_name}</div>
                       <div className="font-mono text-[10px] text-slate-500">{c.customer_id}</div>
                     </td>
                     <td className="py-2 pr-4">
                       <div>{c.product_name}</div>
-                      {c.supply_point_label && (
-                        <div className="text-[11px] text-slate-500">{c.supply_point_label}</div>
-                      )}
                     </td>
                     <td className="py-2 pr-4">{c.producer_name}</td>
                     <td className="py-2 pr-4">
@@ -389,17 +386,17 @@ export function PromoterAziendaPanel({ agentId }: { agentId: string }) {
                           ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
                           : c.status === "ACTIVE" || c.status === "RENEWED"
                             ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                            : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                            : "bg-amber-500/10 text-amber-700 border-amber-500/20"
                       }`}>
                         {STATUS_LABELS[c.status] ?? c.status}
                       </span>
                     </td>
-                    <td className="py-2 pr-4 text-right font-semibold text-orange-400">{euro(c.commission_cents)}</td>
+                    <td className="py-2 pr-4 text-right font-semibold text-brand-600">{euro(c.commission_cents)}</td>
                     <td className="py-2 pr-4 text-right">
                       {c.customer_email && (
                         <a
-                          href={`mailto:${c.customer_email}${c.is_problem ? `?subject=${encodeURIComponent("La tua fornitura Jav")}&body=${encodeURIComponent(c.admin_note ? `Ciao, per completare la tua fornitura serve: ${c.admin_note}` : "Ciao, ho notato che il tuo contratto è in attesa di documenti. Posso aiutarti a completarli?")}` : ""}`}
-                          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-orange-600/10 hover:bg-orange-600/20 border border-orange-500/20 text-orange-400 text-xs font-semibold transition cursor-pointer"
+                          href={`mailto:${c.customer_email}${c.is_problem ? `?subject=${encodeURIComponent("La tua iscrizione Jav")}&body=${encodeURIComponent(c.admin_note ? `Ciao, per completare la tua iscrizione serve: ${c.admin_note}` : "Ciao, ho notato che il tuo contratto è in attesa di documenti. Posso aiutarti a completarli?")}` : ""}`}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-brand-600/10 hover:bg-brand-600/20 border border-brand-500/20 text-brand-600 text-xs font-semibold transition cursor-pointer"
                         >
                           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />

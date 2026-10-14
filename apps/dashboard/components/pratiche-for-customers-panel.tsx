@@ -32,14 +32,14 @@ function toWizardCustomer(c: CustomerRead): WizardCustomer {
   return { id: c.id, kind: c.kind, email: c.email, firstName: c.first_name, lastName: c.last_name, pec: c.pec, fiscalCode: c.fiscal_code };
 }
 
-const FLOW = ["Cliente", "Dati, POD e PDR", "Documenti", "Contratto per ogni punto", "Il cliente paga"];
+const FLOW = ["Cliente", "Dati e contratti", "Documenti", "Offerta per ogni contratto", "Il cliente paga"];
 
 /** Activating contracts for somebody else (Sessions 66-67): the promoter's
  *  "Miei Clienti" and the administration's "Nuovo Contratto" are the same
  *  screen. Two ways in -- a brand-new customer, registered here with their
  *  own login, or one already registered -- and from there the very wizard
- *  the customer uses on themselves (holder, "quanti POD hai?", documents, a
- *  contract per POD), minus the payment: when the pratica is sent the
+ *  the customer uses on themselves (holder, how many contracts, documents,
+ *  an offer per contract), minus the payment: when the pratica is sent the
  *  customer gets an email and pays from their own area.
  *
  *  An administrator also says which promoter the pratica is attributed to,
@@ -81,10 +81,10 @@ export function PraticheForCustomersPanel({
   return (
     <div className="space-y-6">
       {/* The two ways in, always in sight. */}
-      <div className="glass-card rounded-2xl p-5 sm:p-6 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70 space-y-5">
+      <div className="glass-card rounded-2xl p-5 sm:p-6 border-slate-200 bg-white/70 space-y-5">
         <div>
-          <h3 className="text-lg font-bold text-white light:text-slate-900">Attiva contratti per un cliente</h3>
-          <p className="text-xs text-slate-400 light:text-slate-500 mt-1 max-w-3xl">
+          <h3 className="text-lg font-bold text-slate-900">Attiva contratti per un cliente</h3>
+          <p className="text-xs text-slate-500 mt-1 max-w-3xl">
             Gli stessi passaggi che fa il cliente quando attiva da solo, senza il pagamento: quando invii la pratica il
             cliente riceve un&apos;email e paga dalla sua area.
             {mode === "promoter"
@@ -98,10 +98,10 @@ export function PraticheForCustomersPanel({
                   className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-semibold border ${
                     i === FLOW.length - 1
                       ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                      : "bg-white/5 light:bg-slate-900/5 text-slate-300 light:text-slate-600 border-white/10 light:border-slate-200"
+                      : " bg-slate-900/5 text-slate-600 border-slate-200"
                   }`}
                 >
-                  <span className="w-4 h-4 rounded-full bg-orange-600 text-white text-[9px] font-bold flex items-center justify-center">
+                  <span className="w-4 h-4 rounded-full bg-brand-600 text-white text-[9px] font-bold flex items-center justify-center">
                     {i + 1}
                   </span>
                   {label}
@@ -130,8 +130,8 @@ export function PraticheForCustomersPanel({
         </div>
 
         {action === "new" && (
-          <div className="p-4 sm:p-5 rounded-2xl border border-orange-500/25 bg-orange-500/5">
-            <p className="text-sm font-bold text-white light:text-slate-900 mb-3">1 · Dati del nuovo cliente</p>
+          <div className="p-4 sm:p-5 rounded-2xl border border-brand-500/25 bg-brand-500/5">
+            <p className="text-sm font-bold text-slate-900 mb-3">1 · Dati del nuovo cliente</p>
             <NewCustomerForm
               mode={mode}
               agents={agents}
@@ -145,8 +145,8 @@ export function PraticheForCustomersPanel({
         )}
 
         {action === "existing" && (
-          <div className="p-4 sm:p-5 rounded-2xl border border-orange-500/25 bg-orange-500/5 space-y-3">
-            <p className="text-sm font-bold text-white light:text-slate-900">1 · Per quale cliente?</p>
+          <div className="p-4 sm:p-5 rounded-2xl border border-brand-500/25 bg-brand-500/5 space-y-3">
+            <p className="text-sm font-bold text-slate-900">1 · Per quale cliente?</p>
             {mode === "admin" && <ProducerSelect agents={agents} value={producerAgentId} onChange={setProducerAgentId} />}
             <CustomerPicker
               mode={mode}
@@ -173,8 +173,8 @@ export function PraticheForCustomersPanel({
                 onClick={() => setListTab(key)}
                 className={`px-4 py-2 rounded-xl text-xs font-semibold border transition cursor-pointer ${
                   listTab === key
-                    ? "bg-orange-600 border-orange-600 text-white"
-                    : "bg-white/5 light:bg-slate-900/5 border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 hover:bg-white/10"
+                    ? "bg-brand-600 border-brand-600 text-white"
+                    : " bg-slate-900/5 border-slate-300 text-slate-600 hover:bg-slate-100"
                 }`}
               >
                 {label}
@@ -203,7 +203,7 @@ export function PraticheForCustomersPanel({
       ) : (
         <div className="space-y-3">
           <div>
-            <h3 className="text-sm font-bold text-white light:text-slate-900">Pratiche aperte dall&apos;amministrazione</h3>
+            <h3 className="text-sm font-bold text-slate-900">Pratiche aperte dall&apos;amministrazione</h3>
             <p className="text-xs text-slate-500 mt-0.5">
               Riprendi le bozze da qui. Verifiche, approvazioni e bonifici da confermare di tutte le pratiche sono in{" "}
               <strong>Pratiche</strong>.
@@ -253,13 +253,13 @@ function ActionCard({
       onClick={onClick}
       className={`group flex items-start gap-3 p-4 rounded-2xl border text-left transition cursor-pointer ${
         active
-          ? "border-orange-500 bg-orange-500/10 shadow-lg shadow-orange-500/10"
-          : "border-white/10 light:border-slate-200 bg-white/5 light:bg-white hover:border-orange-500/50"
+          ? "border-brand-500 bg-brand-500/10 shadow-lg shadow-brand-500/10"
+          : " border-slate-200 bg-white hover:border-brand-500/50"
       }`}
     >
       <span
         className={`p-2.5 rounded-xl shrink-0 transition-colors ${
-          active ? "bg-orange-500 text-white" : "bg-orange-500/10 text-orange-400 group-hover:bg-orange-500 group-hover:text-white"
+          active ? "bg-brand-500 text-white" : "bg-brand-500/10 text-brand-600 group-hover:bg-brand-500 group-hover:text-white"
         }`}
       >
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -267,8 +267,8 @@ function ActionCard({
         </svg>
       </span>
       <span className="min-w-0">
-        <span className="block text-sm font-bold text-white light:text-slate-900">{title}</span>
-        <span className="block text-xs text-slate-400 light:text-slate-500 mt-0.5">{text}</span>
+        <span className="block text-sm font-bold text-slate-900">{title}</span>
+        <span className="block text-xs text-slate-500 mt-0.5">{text}</span>
       </span>
     </button>
   );
@@ -291,7 +291,7 @@ function ProducerSelect({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full max-w-md rounded-lg glass-input px-3 py-2 text-sm bg-slate-900 light:bg-white focus:border-orange-500"
+        className="w-full max-w-md rounded-lg glass-input px-3 py-2 text-sm bg-white focus:border-brand-500"
       >
         <option value="">Il promoter del cliente (predefinito)</option>
         {(agents ?? [])
@@ -354,10 +354,10 @@ function CustomerPicker({
   if (needsLogin) {
     return (
       <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 space-y-3">
-        <p className="text-sm font-semibold text-amber-300 light:text-amber-700">
+        <p className="text-sm font-semibold text-amber-700">
           {needsLogin.display_name} non ha ancora un accesso alla sua area
         </p>
-        <p className="text-xs text-slate-300 light:text-slate-600">
+        <p className="text-xs text-slate-600">
           Senza accesso non potrebbe pagare la pratica.
           {mode === "admin" ? (
             <>
@@ -374,14 +374,14 @@ function CustomerPicker({
             <button
               onClick={() => createLoginAndContinue(needsLogin)}
               disabled={busy}
-              className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-xs font-bold text-white cursor-pointer disabled:opacity-50"
+              className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-bold text-white cursor-pointer disabled:opacity-50"
             >
               {busy ? "Creazione..." : "Crea l'accesso e continua"}
             </button>
           )}
           <button
             onClick={() => onPick(needsLogin)}
-            className="px-4 py-2 rounded-xl bg-white/10 light:bg-slate-900/5 text-xs font-semibold text-slate-200 light:text-slate-700 cursor-pointer"
+            className="px-4 py-2 rounded-xl bg-slate-900/5 text-xs font-semibold text-slate-700 cursor-pointer"
           >
             Continua comunque
           </button>
@@ -400,10 +400,10 @@ function CustomerPicker({
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         placeholder="Cerca per nome, email, telefono, codice fiscale, partita IVA..."
-        className="w-full rounded-lg glass-input px-3 py-2 text-sm focus:border-orange-500"
+        className="w-full rounded-lg glass-input px-3 py-2 text-sm focus:border-brand-500"
       />
       {error && <p className="text-xs text-rose-400">{error.message}</p>}
-      <div className="max-h-72 overflow-y-auto rounded-xl border border-white/10 light:border-slate-200 divide-y divide-white/5 light:divide-slate-200">
+      <div className="max-h-72 overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-200">
         {matches.length === 0 ? (
           <p className="px-4 py-6 text-center text-xs text-slate-500">
             {customers === undefined ? "Caricamento..." : "Nessun cliente trovato. È nuovo? Usa “Nuovo cliente”."}
@@ -413,18 +413,18 @@ function CustomerPicker({
             <button
               key={c.id}
               onClick={() => (c.user_id ? onPick(c) : setNeedsLogin(c))}
-              className="w-full flex items-center justify-between gap-3 px-4 py-2.5 text-left hover:bg-white/5 light:hover:bg-slate-900/5 cursor-pointer"
+              className="w-full flex items-center justify-between gap-3 px-4 py-2.5 text-left hover:bg-slate-900/5 cursor-pointer"
             >
               <span className="min-w-0">
-                <span className="block text-sm font-semibold text-white light:text-slate-900 truncate">{c.display_name}</span>
+                <span className="block text-sm font-semibold text-slate-900 truncate">{c.display_name}</span>
                 <span className="block text-[11px] text-slate-500 truncate">
                   {CUSTOMER_KIND_LABELS[c.kind] ?? c.kind}
                   {c.email ? ` · ${c.email}` : ""}
                   {c.fiscal_code ? ` · ${c.fiscal_code}` : ""}
-                  {!c.user_id && <span className="text-amber-400"> · senza accesso</span>}
+                  {!c.user_id && <span className="text-amber-700"> · senza accesso</span>}
                 </span>
               </span>
-              <span className="text-[11px] font-semibold text-orange-400 shrink-0">Attiva contratti →</span>
+              <span className="text-[11px] font-semibold text-brand-600 shrink-0">Attiva contratti →</span>
             </button>
           ))
         )}
@@ -466,10 +466,10 @@ function MyCustomersList({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Cerca tra i tuoi clienti..."
-          className="w-full max-w-md rounded-lg glass-input px-3 py-2 text-sm focus:border-orange-500"
+          className="w-full max-w-md rounded-lg glass-input px-3 py-2 text-sm focus:border-brand-500"
         />
       )}
-      <div className="glass-card rounded-2xl border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70 divide-y divide-white/5 light:divide-slate-200 overflow-hidden">
+      <div className="glass-card rounded-2xl border-slate-200 bg-white/70 divide-y divide-slate-200 overflow-hidden">
         {customers === undefined ? (
           <p className="text-center py-8 text-slate-500 text-sm">Caricamento...</p>
         ) : filtered.length === 0 ? (
@@ -482,13 +482,13 @@ function MyCustomersList({
               <div className="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-white light:text-slate-900">{c.display_name}</span>
+                    <span className="font-semibold text-slate-900">{c.display_name}</span>
                     {c.email_verified ? (
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
                         Account attivo
                       </span>
                     ) : (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-amber-500/10 text-amber-400 border-amber-500/20">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-amber-500/10 text-amber-700 border-amber-500/20">
                         In attesa di primo accesso
                       </span>
                     )}
@@ -501,13 +501,13 @@ function MyCustomersList({
                 <div className="flex items-center gap-2 shrink-0">
                   <button
                     onClick={() => onToggle(c.id)}
-                    className="px-3 py-2 rounded-xl bg-white/5 light:bg-slate-900/5 hover:bg-white/10 border border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 text-xs font-semibold transition cursor-pointer"
+                    className="px-3 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 text-xs font-semibold transition cursor-pointer"
                   >
                     {expandedCustomerId === c.id ? "Nascondi pratiche" : "Pratiche"}
                   </button>
                   <button
                     onClick={() => onActivate(c)}
-                    className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold shadow-lg shadow-orange-500/20 transition cursor-pointer"
+                    className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold shadow-lg shadow-brand-500/20 transition cursor-pointer"
                   >
                     + Attiva contratti
                   </button>

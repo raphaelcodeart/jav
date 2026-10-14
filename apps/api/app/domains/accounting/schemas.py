@@ -6,44 +6,34 @@ from pydantic import BaseModel
 
 class FinancialMovementRead(BaseModel):
     """One row in "Contabilità" -- a unified, read-only view merging a
-    user's own wallet_transactions (JavCash) and their own paid orders'/
-    credited invoice redemptions' real-money payments (EUR, Stripe or
-    bonifico), computed on the fly by accounting/service.py::
-    list_my_movements (one customer) or list_all_movements (admin, every
-    customer, optionally filtered). Deliberately NOT a new table: every
-    underlying source (WalletTransaction, Order, ImportedProductOrder,
-    InvoiceRedemption) is already the single source of truth for its own
-    domain, this just presents them together for bookkeeping."""
+    user's own wallet_transactions (JavCash) and their own paid orders' and
+    contract instalments' real-money payments (EUR, by bank transfer),
+    computed on the fly by accounting/service.py::list_my_movements (one
+    customer) or list_all_movements (admin, every customer, optionally
+    filtered). Deliberately NOT a new table: every underlying source
+    (WalletTransaction, Order, ContractInstalment) is already the single
+    source of truth for its own domain, this just presents them together
+    for bookkeeping."""
 
     id: str
-    kind: str  # "WALLET" | "ORDER_PAYMENT" | "REDEMPTION_PAYMENT" | "CONTRACT_PAYMENT"
+    kind: str  # "WALLET" | "ORDER_PAYMENT" | "CONTRACT_PAYMENT"
     # Raw WalletTransaction.type/source (both null for a real-money row) --
     # labels are a frontend concern, same as wallet-panel.tsx's own
     # TYPE_LABELS/SOURCE_LABELS maps already do for the wallet-only view.
     type: str | None = None
     source: str | None = None
-    # Raw Order/InvoiceRedemption.payment_method (null for a WALLET row).
+    # Raw payment method, always "BANK_TRANSFER" (null for a WALLET row).
     payment_method: str | None = None
     # Signed for a WALLET row (negative = money left this wallet); always
-    # positive for an ORDER_PAYMENT/REDEMPTION_PAYMENT row (a payment is
+    # positive for an ORDER_PAYMENT/CONTRACT_PAYMENT row (a payment is
     # never negative).
     amount_cents: int
     currency: str  # "JAVCASH" | "EUR"
-    # "What this movement is about" -- product name for an order-linked row,
-    # partner name for an invoice-redemption-linked row (both the JavCash
-    # credit rows AND, since Session 35, the REDEMPTION_PAYMENT row itself).
+    # "What this movement is about" -- product name of the order or
+    # contract the row is linked to.
     product_name: str | None = None
-    # Deliberately unified: an order placed for a manually-catalogued
-    # product (orders.id) and one placed for an imported-catalog product
-    # (imported_product_orders.id) are two different tables internally (see
-    # imported_products/models.py -- kept apart only to isolate the product
-    # CATALOG import mechanism), but from here on out -- order management,
-    # accounting, "I miei Ordini" -- they are presented identically. Both
-    # populate this same field; the frontend never needs to know or care
-    # which table actually backs a given order id.
     order_id: uuid.UUID | None = None
-    invoice_redemption_id: uuid.UUID | None = None
-    #: A contract instalment paid (CONTRACT_PAYMENT, Session 54) or the
+    #: A contract instalment paid (CONTRACT_PAYMENT) or the
     #: JavCash cashback a contract earned (WALLET).
     contract_id: uuid.UUID | None = None
     contract_request_id: uuid.UUID | None = None
@@ -58,17 +48,15 @@ class FinancialMovementRead(BaseModel):
 
 
 class AccountingSummaryRead(BaseModel):
-    """The totals at the top of "Contabilità" (Session 54), computed on the
+    """The totals at the top of "Contabilità", computed on the
     server from the same movements the list shows -- never added up again in
     the browser, so the cards and the list cannot disagree."""
 
-    #: Real money paid, card + bank transfer, and its split.
+    #: Real money paid (always by bank transfer) and its split.
     spent_total_cents: int = 0
-    spent_card_cents: int = 0
     spent_bank_transfer_cents: int = 0
     spent_this_month_cents: int = 0
     spent_orders_cents: int = 0
-    spent_redemptions_cents: int = 0
     spent_contracts_cents: int = 0
     payments_count: int = 0
     #: JavCash.
@@ -115,12 +103,12 @@ class DetailInstalment(BaseModel):
 
 class AccountingDetailRead(BaseModel):
     """Everything about one movement or one thing a movement refers to
-    (an order, a cashback redemption, a contract), in one shape the detail
+    (an order, a contract), in one shape the detail
     popup draws the same way whatever it is: facts, a timeline with exact
     times and who did what, and -- for a contract -- its instalments."""
 
     ref: str
-    kind: str  # WALLET / ORDER / REDEMPTION / CONTRACT
+    kind: str  # WALLET / ORDER / CONTRACT
     title: str
     subtitle: str | None = None
     status: str | None = None
@@ -134,10 +122,9 @@ class AccountingDetailRead(BaseModel):
     instalments: list[DetailInstalment] = []
     #: Refs of the things this one is tied to ("order:<id>", "contract:<id>").
     related_refs: list[str] = []
-    #: Which dashboard tab manages it: orders / cashback / contracts / wallet.
+    #: Which dashboard tab manages it: orders / contracts / wallet.
     tab: str | None = None
-    #: Order id / redemption id / contract id this detail is about, so the
-    #: popup can list every movement of the same thing.
+    #: Order id / contract id this detail is about, so the popup can list
+    #: every movement of the same thing.
     order_id: uuid.UUID | None = None
-    invoice_redemption_id: uuid.UUID | None = None
     contract_id: uuid.UUID | None = None

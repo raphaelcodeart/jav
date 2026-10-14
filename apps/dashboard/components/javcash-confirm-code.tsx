@@ -21,7 +21,7 @@ export function useSpendPinStatus() {
 }
 
 const linkButton =
-  "text-[11px] font-semibold text-orange-400 hover:text-orange-300 cursor-pointer disabled:opacity-50";
+  "text-[11px] font-semibold text-brand-600 hover:text-brand-600 cursor-pointer disabled:opacity-50";
 
 /** La conferma dei JavCash dentro un checkout, uguale in tutti i negozi.
  *
@@ -96,7 +96,7 @@ export function JavCashConfirmCode({
             onChange={(e) => onCodeChange(e.target.value.replace(/\D/g, "").slice(0, 4))}
             placeholder="Il tuo PIN"
             aria-label="PIN dei JavCash"
-            className="w-full max-w-[140px] rounded-lg glass-input px-3 py-2 text-sm font-mono tracking-[0.4em] focus:border-orange-500"
+            className="w-full max-w-[140px] rounded-lg glass-input px-3 py-2 text-sm font-mono tracking-[0.4em] focus:border-brand-500"
           />
           <button type="button" onClick={() => request(true)} disabled={requesting} className={linkButton}>
             {requesting ? "Invio in corso…" : "Non ricordi il PIN? Ricevi un codice via email"}
@@ -110,7 +110,7 @@ export function JavCashConfirmCode({
   return (
     <div className="space-y-1.5">
       {status?.locked_until && (
-        <p className="text-[11px] text-amber-400">
+        <p className="text-[11px] text-amber-700">
           Il tuo PIN è bloccato per troppi tentativi sbagliati: per questo acquisto usa il codice via email.
         </p>
       )}
@@ -119,7 +119,7 @@ export function JavCashConfirmCode({
           type="button"
           onClick={() => request(false)}
           disabled={requesting}
-          className="px-4 py-2 rounded-lg bg-orange-600/15 hover:bg-orange-600/25 border border-orange-500/30 text-xs font-semibold text-orange-400 transition cursor-pointer disabled:opacity-50"
+          className="px-4 py-2 rounded-lg bg-brand-600/15 hover:bg-brand-600/25 border border-brand-500/30 text-xs font-semibold text-brand-600 transition cursor-pointer disabled:opacity-50"
         >
           {requesting ? "Invio in corso…" : "Conferma con il codice via email"}
         </button>
@@ -140,7 +140,7 @@ export function JavCashConfirmCode({
               value={code}
               onChange={(e) => onCodeChange(e.target.value)}
               placeholder="Codice ricevuto via email"
-              className="w-full max-w-[200px] rounded-lg glass-input px-3 py-2 text-sm font-mono tracking-wider focus:border-orange-500"
+              className="w-full max-w-[200px] rounded-lg glass-input px-3 py-2 text-sm font-mono tracking-wider focus:border-brand-500"
             />
             <button type="button" onClick={() => request(true)} disabled={requesting} className={linkButton}>
               Rinvia

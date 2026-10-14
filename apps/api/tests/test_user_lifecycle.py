@@ -1,4 +1,4 @@
-"""Admin "congela utente" (freeze/unfreeze), added Session 28 -- blocks login
+"""Admin "congela utente" (freeze/unfreeze) -- blocks login
 immediately (both for a not-yet-logged-in attempt and an already-open
 session, via revoke_all_sessions) without touching any of the account's
 other data. "Elimina utente" (hard delete/anonymize) was explicitly deferred

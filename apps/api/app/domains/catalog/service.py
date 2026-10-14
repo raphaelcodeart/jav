@@ -116,7 +116,7 @@ async def get_product_with_versions(
 
 
 def _monthly_price(product_type: str | None, value: int | None) -> int | None:
-    """Session 84: only a contract is paid in rate, so only a contract keeps a
+    """Only a contract is paid in rate, so only a contract keeps a
     monthly price; 0 means "none" as much as null does."""
     if (product_type or "").upper() not in pricing.RECURRING_PRODUCT_TYPES or not value:
         return None
@@ -133,7 +133,6 @@ async def create_product(
         organization_id=organization_id,
         code=payload.code,
         product_type=payload.product_type,
-        energy_type=payload.energy_type,
         customer_type=payload.customer_type,
         category=payload.category,
         status="ACTIVE",
@@ -374,15 +373,13 @@ async def update_product(
         product.code = payload.code
     if payload.status is not None:
         product.status = payload.status
-    # Session 88: lo schema lo accettava ma qui non si salvava, e «solo
+    # Lo schema lo accettava ma qui non si salvava, e «solo
     # privati» / «solo aziende» dal pannello Prodotti andava perso in
     # silenzio: un privato vedeva anche i pacchetti P.iva.
     if payload.customer_type is not None:
         product.customer_type = payload.customer_type
     if payload.product_type is not None:
         product.product_type = payload.product_type
-    if payload.energy_type is not None:
-        product.energy_type = payload.energy_type
     if payload.category is not None:
         product.category = payload.category
         if payload.category == "INTERNAL":

@@ -5,12 +5,11 @@ al fornitore, al commercialista, a un legale. Finora l'unico modo era
 aprire i documenti uno per uno dai link a scadenza e risalvarli a mano, e
 ricopiare i dati del cliente da tre schermate diverse.
 
-Due sbocchi, stesso contenuto: uno zip scaricato dal browser
-(`router.py::download_contract_dossier`) o una cartella su Google Drive
-(`integrations/google_drive.py`). Il contenuto lo costruisce solo questo
-modulo, così le due strade non possono divergere.
+Esce come uno zip scaricato dal browser
+(`router.py::download_contract_dossier`); il contenuto lo costruisce solo
+questo modulo.
 
-Nome della cartella/archivio: `<nome cliente>-<id contratto>`, deciso dal
+Nome dell'archivio: `<nome cliente>-<id contratto>`, deciso dal
 committente. Il nome cliente è quello visualizzato ovunque nel gestionale
 (`customers/service.py::display_name_for`), l'id è l'UUID intero -- mezzo
 UUID sarebbe più corto e non sarebbe più un identificatore.
@@ -36,7 +35,7 @@ from app.core.storage import download_document
 from app.domains.catalog.models import Product, ProductVersion
 from app.domains.contracts import payment_plans
 from app.domains.contracts.models import Contract, ContractAttribution, ContractRequest
-from app.domains.customers.models import Address, Company, Customer, CustomerProfile, SupplyPoint
+from app.domains.customers.models import Address, Company, Customer, CustomerProfile
 from app.domains.customers.service import display_name_for
 from app.domains.documents import service as documents_service
 from app.domains.documents.models import Document
@@ -52,7 +51,6 @@ CUSTOMER_KIND_LABELS = {
     "COMPANY": "Azienda",
     "CONDOMINIUM": "Condominio",
 }
-ENERGY_TYPE_LABELS = {"ELECTRICITY": "Luce", "GAS": "Gas", "DUAL_FUEL": "Luce e Gas"}
 CONTRACT_STATUS_LABELS = {
     "DRAFT": "Bozza", "SUBMITTED": "Inviata", "DOCUMENTS_PENDING": "Documenti mancanti",
     "UNDER_REVIEW": "In revisione", "APPROVED": "Approvata",
@@ -67,7 +65,7 @@ PAYMENT_PLAN_LABELS = {
     "FULL": "Soluzione unica", "INSTALMENTS_3": "3 rate mensili", "MONTHLY_12": "12 rate mensili",
 }
 
-#: Caratteri che Windows, macOS o Drive rifiutano (o interpretano) in un nome
+#: Caratteri che Windows o macOS rifiutano (o interpretano) in un nome
 #: di file. Gli spazi restano: un dossier si chiama come si chiama il cliente.
 _ILLEGAL_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 #: Windows tratta questi come nomi di dispositivo, qualunque estensione abbiano.
@@ -80,7 +78,7 @@ MAX_NAME_COMPONENT = 80
 
 
 def sanitize_filename_component(value: str, *, fallback: str = "documento") -> str:
-    """Un pezzo di nome di file sicuro su Windows, macOS, Linux e Drive.
+    """Un pezzo di nome di file sicuro su Windows, macOS e Linux.
 
     Gli accenti restano (sono legali ovunque e il nome deve restare quello
     del cliente); spariscono i caratteri che romperebbero un percorso, i
@@ -107,8 +105,7 @@ class DossierFile:
 class Dossier:
     contract_id: uuid.UUID
     customer_name: str
-    #: "<nome cliente>-<id contratto>": nome dello zip (senza estensione) e
-    #: della cartella su Drive. Gli stessi byte in entrambi i posti.
+    #: "<nome cliente>-<id contratto>": nome dello zip, senza estensione.
     folder_name: str
     files: list[DossierFile]
 
@@ -164,8 +161,6 @@ class _ContractContext:
     customer: Customer | None
     customer_name: str
     company: Company | None
-    supply_point: SupplyPoint | None
-    supply_address: Address | None
     billing_address: Address | None
     product_name: str | None
     product_code: str | None
@@ -174,7 +169,7 @@ class _ContractContext:
     organization_name: str
     documents: list[Document]
     #: The pratica the contract was signed in: fiscal code and birth data of
-    #: whoever signed (Session 89).
+    #: whoever signed.
     pratica: ContractRequest | None = None
 
 
@@ -193,8 +188,6 @@ async def _load_context(
     company = await db.get(Company, customer.id) if customer else None
     customer_name = display_name_for(customer.kind, profile, company) if customer else "Cliente"
 
-    supply_point = await db.get(SupplyPoint, contract.supply_point_id)
-    supply_address = await db.get(Address, supply_point.supply_address_id) if supply_point else None
     billing_address = None
     if customer is not None:
         billing_address = (
@@ -222,9 +215,9 @@ async def _load_context(
     organization = await db.get(Organization, organization_id)
 
     # Prima i documenti della pratica (identità, codice fiscale, visura: gli
-    # stessi per tutti i punti), poi quelli di questo contratto. Il fascicolo
-    # di un contratto deve bastare da solo, anche se quei file sono stati
-    # caricati una volta sola per dieci punti.
+    # stessi per tutti i contratti), poi quelli di questo contratto. Il
+    # fascicolo di un contratto deve bastare da solo, anche se quei file sono
+    # stati caricati una volta sola per dieci contratti.
     shared = await documents_service.list_documents_for_request(
         db, organization_id=organization_id, contract_request_id=contract.contract_request_id
     )
@@ -240,8 +233,6 @@ async def _load_context(
         customer=customer,
         customer_name=customer_name,
         company=company,
-        supply_point=supply_point,
-        supply_address=supply_address,
         billing_address=billing_address,
         product_name=product_name,
         product_code=product_code,
@@ -260,7 +251,7 @@ async def _load_context(
 
 def _signer_rows(pratica: ContractRequest | None) -> list[tuple[str, str]]:
     """Fiscal code and birth of whoever signed -- the private holder or the
-    legal representative -- as given in the pratica (Session 89)."""
+    legal representative -- as given in the pratica."""
     if pratica is None:
         return []
     rows: list[tuple[str, str]] = []
@@ -374,20 +365,9 @@ def render_summary_pdf(ctx: _ContractContext, *, generated_at: datetime) -> byte
     ]
     story.append(_facts_table(customer_rows, styles))
 
-    story.append(Paragraph("Punto di fornitura", styles["section"]))
-    sp = ctx.supply_point
-    story.append(_facts_table([
-        ("Denominazione", _escape(_or_dash(sp.label if sp else None))),
-        ("Tipo di fornitura", ENERGY_TYPE_LABELS.get(sp.energy_type, sp.energy_type) if sp else "—"),
-        ("Codice POD", _escape(_or_dash(sp.pod_code if sp else None))),
-        ("Codice PDR", _escape(_or_dash(sp.pdr_code if sp else None))),
-        ("Matricola contatore", _escape(_or_dash(sp.meter_number if sp else None))),
-        ("Indirizzo di fornitura", _escape(_fmt_address(ctx.supply_address))),
-    ], styles))
-
     story.append(Paragraph("Importi e pagamento", styles["section"]))
     vat_rate = f"{float(c.vat_rate):.0f}%" if c.vat_rate is not None else "—"
-    # Session 84: paid in rate, the contract costs the rate price.
+    # Paid in rate, the contract costs the rate price.
     net, vat, gross = payment_plans.chosen_amounts(c)
     story.append(_facts_table([
         ("Imponibile", _fmt_cents(net)),
@@ -397,7 +377,6 @@ def render_summary_pdf(ctx: _ContractContext, *, generated_at: datetime) -> byte
         ("Metodo", _escape(_or_dash(c.payment_method))),
         ("Pagato il", _fmt_datetime(c.paid_at)),
         ("IBAN per l'addebito", _escape(_or_dash(c.iban))),
-        ("Riferimento Stripe", _escape(_or_dash(c.stripe_subscription_id or c.stripe_checkout_session_id))),
     ], styles))
 
     story.append(Paragraph("Rete commerciale", styles["section"]))

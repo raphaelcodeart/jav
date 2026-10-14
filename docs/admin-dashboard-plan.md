@@ -278,9 +278,8 @@ ai documenti, ma il codice applicativo che lo usa non esiste ancora.
    sono creati solo da back-office/admin). Serve definire: verifica email,
    password policy, cosa succede se il cookie referral è scaduto (rifiuto
    della registrazione o registrazione senza attribuzione?).
-3. **Pagamenti reali**: questa fase implementa solo `MockPaymentProvider` —
-   l'integrazione con un vero PSP (Stripe/Nexi) resta esplicitamente fuori
-   scope finché non richiesta, come da `docs/architecture.md`.
+3. **Pagamenti**: solo bonifico (confermato dall'amministratore) e credito
+   JavCash. Nessun pagamento con carta: un PSP non è previsto.
 4. **Import massivo**: la richiesta lo cita come "struttura predisposta" — in
    questo piano è un placeholder architetturale (endpoint che valida e
    restituisce anteprima/errori), non un'implementazione completa, salvo

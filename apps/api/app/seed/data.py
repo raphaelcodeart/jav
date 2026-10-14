@@ -14,7 +14,7 @@ from app.domains.catalog.models import Product, ProductVersion
 from app.domains.commissions.models import CommissionPlanVersion, Rank
 from app.domains.commissions.tasks.dispatch import process_pending_outbox_events
 from app.domains.contracts import service as contract_service
-from app.domains.customers.models import Address, Customer, CustomerProfile, SupplyPoint
+from app.domains.customers.models import Customer, CustomerProfile
 from app.domains.network import service as network_service
 from app.domains.organizations.models import Organization
 from app.domains.rbac.models import (
@@ -32,13 +32,12 @@ from app.seed.ranks import RANK_SEED, RULE_VERSION
 
 FIXED_NOW = datetime(2026, 7, 25, tzinfo=UTC)
 
-# Placeholder per-rank gettone (personal token) ladder for the two commercial
-# formulas the client actually sells -- "Standard" and "Energia Circolare" --
-# see docs/business-rules.md#commission-per-product-tokens. Only S1/S2/TL1/MD5
-# come from the client's own worked example (40/45/50/80 EUR for Standard,
-# exactly double -- 80/90/100/160 EUR -- for Energia Circolare); every other
-# rank is linearly interpolated between those anchors and MUST be reviewed/
-# adjusted by the client via the product edit screen before this goes live.
+# Placeholder per-rank gettone (personal token) ladder for the two demo
+# formulas -- "Standard" and "Premium" -- see
+# docs/business-rules.md#commission-per-product-tokens. S1/S2/TL1/MD5 are the
+# anchors (40/45/50/80 EUR for Standard, exactly double -- 80/90/100/160 EUR --
+# for Premium); every other rank is linearly interpolated between them and
+# MUST be reviewed/adjusted via the product edit screen before going live.
 STANDARD_TOKENS_CENTS = {
     "S1": 4000, "S2": 4500, "S3": 4750,
     "TL1": 5000, "TL2": 5375, "TL3": 5750, "TL4": 6125,
@@ -223,41 +222,41 @@ async def run() -> None:
         b8 = await new_agent("S1", b7, "S1-B08")
         b9 = await new_agent("S1", b7, "S1-B09")
 
-        # --- Catalog: exactly the 4 packages the network actually sells --
-        # Luce/Gas, each in "Standard" or "Energia Circolare" formula. The
-        # formula is what carries the different gettone ladder (commission_
-        # tokens), not a separate field -- see catalog/models.py::ProductVersion.
-        luce_std_product = Product(organization_id=org_id, code="LUCE-STD", energy_type="ELECTRICITY", customer_type="PRIVATE")
-        luce_circ_product = Product(organization_id=org_id, code="LUCE-CIRCOLARE", energy_type="ELECTRICITY", customer_type="PRIVATE")
-        gas_std_product = Product(organization_id=org_id, code="GAS-STD", energy_type="GAS", customer_type="PRIVATE")
-        gas_circ_product = Product(organization_id=org_id, code="GAS-CIRCOLARE", energy_type="GAS", customer_type="PRIVATE")
-        db.add_all([luce_std_product, luce_circ_product, gas_std_product, gas_circ_product])
+        # --- Catalog: 4 demo packages, each in a "Standard" or "Premium"
+        # formula. The formula is what carries the different gettone ladder
+        # (commission_tokens), not a separate field -- see
+        # catalog/models.py::ProductVersion.
+        monthly_product = Product(organization_id=org_id, code="MENSILE", customer_type="PRIVATE")
+        monthly_premium_product = Product(organization_id=org_id, code="MENSILE-PREMIUM", customer_type="PRIVATE")
+        yearly_product = Product(organization_id=org_id, code="ANNUALE", customer_type="PRIVATE")
+        yearly_premium_product = Product(organization_id=org_id, code="ANNUALE-PREMIUM", customer_type="PRIVATE")
+        db.add_all([monthly_product, monthly_premium_product, yearly_product, yearly_premium_product])
         await db.flush()
 
-        luce_std_version = ProductVersion(
-            product_id=luce_std_product.id, version_label="1.0", name="Luce Standard",
+        monthly_version = ProductVersion(
+            product_id=monthly_product.id, version_label="1.0", name="Abbonamento mensile",
             base_price_cents=1800, recurring_fee_cents=300, commission_plan_version_id=plan_version.id,
             commission_tokens=STANDARD_TOKENS_CENTS, valid_from=FIXED_NOW,
         )
-        luce_circ_version = ProductVersion(
-            product_id=luce_circ_product.id, version_label="1.0", name="Luce Energia Circolare",
+        monthly_premium_version = ProductVersion(
+            product_id=monthly_premium_product.id, version_label="1.0", name="Abbonamento mensile Premium",
             base_price_cents=2200, recurring_fee_cents=400, commission_plan_version_id=plan_version.id,
             commission_tokens=CIRCULAR_TOKENS_CENTS, valid_from=FIXED_NOW,
         )
-        gas_std_version = ProductVersion(
-            product_id=gas_std_product.id, version_label="1.0", name="Gas Standard",
+        yearly_version = ProductVersion(
+            product_id=yearly_product.id, version_label="1.0", name="Abbonamento annuale",
             base_price_cents=2000, recurring_fee_cents=300, commission_plan_version_id=plan_version.id,
             commission_tokens=STANDARD_TOKENS_CENTS, valid_from=FIXED_NOW,
         )
-        gas_circ_version = ProductVersion(
-            product_id=gas_circ_product.id, version_label="1.0", name="Gas Energia Circolare",
+        yearly_premium_version = ProductVersion(
+            product_id=yearly_premium_product.id, version_label="1.0", name="Abbonamento annuale Premium",
             base_price_cents=2400, recurring_fee_cents=400, commission_plan_version_id=plan_version.id,
             commission_tokens=CIRCULAR_TOKENS_CENTS, valid_from=FIXED_NOW,
         )
-        db.add_all([luce_std_version, luce_circ_version, gas_std_version, gas_circ_version])
+        db.add_all([monthly_version, monthly_premium_version, yearly_version, yearly_premium_version])
         await db.commit()
 
-        # --- Customers, supply points, contracts ---
+        # --- Customers and contracts ---
         async def new_customer(
             kind: str, first: str, last: str, email: str, login_email: str | None = None
         ) -> uuid.UUID:
@@ -289,33 +288,12 @@ async def run() -> None:
         cust2 = await new_customer("SOLE_PROPRIETOR", "Laura", "Ferri", "laura.ferri@example.demo")
         cust3 = await new_customer("COMPANY", "Officine", "Bianchi Srl", "info@officinebianchi.demo")
 
-        async def new_supply_point(customer_id: uuid.UUID, energy_type: str) -> uuid.UUID:
-            address = Address(
-                organization_id=org_id, customer_id=customer_id, kind="SUPPLY",
-                street="Via Roma 1", city="Milano", province="MI", postal_code="20100",
-            )
-            db.add(address)
-            await db.flush()
-            sp = SupplyPoint(
-                organization_id=org_id, customer_id=customer_id, energy_type=energy_type,
-                pod_code="IT001E00000001" if energy_type == "ELECTRICITY" else None,
-                pdr_code="00000000000001" if energy_type == "GAS" else None,
-                supply_address_id=address.id,
-            )
-            db.add(sp)
-            await db.commit()
-            return sp.id
-
-        sp1 = await new_supply_point(cust1, "ELECTRICITY")
-        sp2 = await new_supply_point(cust2, "GAS")
-        sp3 = await new_supply_point(cust3, "ELECTRICITY")
-
         async def create_and_advance(
-            customer_id: uuid.UUID, supply_point_id: uuid.UUID, product_version_id: uuid.UUID,
+            customer_id: uuid.UUID, product_version_id: uuid.UUID,
             producer_agent_id: uuid.UUID, target_status: str,
         ):
             contract = await contract_service.create_contract(
-                db, organization_id=org_id, customer_id=customer_id, supply_point_id=supply_point_id,
+                db, organization_id=org_id, customer_id=customer_id,
                 product_version_id=product_version_id, producer_agent_id=producer_agent_id,
                 actor_user_id=back_office.id, correlation_id=str(uuid.uuid4()),
             )
@@ -335,6 +313,13 @@ async def run() -> None:
                 full_path = full_path + ["CANCELLED"]
 
             for step in full_path:
+                # Some transitions carry on by themselves (APPROVED ->
+                # PAYMENT_PENDING, PAID -> ... -> ACTIVE): skip the steps
+                # already reached.
+                if contract.status == target_status:
+                    break
+                if contract.status in full_path and full_path.index(contract.status) >= full_path.index(step):
+                    continue
                 contract = await contract_service.transition_contract(
                     db, organization_id=org_id, contract=contract, to_status=step,
                     actor_user_id=admin.id, reason="demo data", notes=None, correlation_id=str(uuid.uuid4()),
@@ -343,11 +328,11 @@ async def run() -> None:
                     break
             return contract
 
-        await create_and_advance(cust1, sp1, luce_std_version.id, a5_producer, "ACTIVE")
-        await create_and_advance(cust2, sp2, gas_std_version.id, b3_producer, "ACTIVE")
-        await create_and_advance(cust3, sp3, luce_circ_version.id, a9, "DRAFT")
-        await create_and_advance(cust1, sp1, gas_std_version.id, b8, "REJECTED")
-        await create_and_advance(cust2, sp2, luce_std_version.id, b9, "CANCELLED")
+        await create_and_advance(cust1, monthly_version.id, a5_producer, "ACTIVE")
+        await create_and_advance(cust2, yearly_version.id, b3_producer, "ACTIVE")
+        await create_and_advance(cust3, monthly_premium_version.id, a9, "DRAFT")
+        await create_and_advance(cust1, yearly_version.id, b8, "REJECTED")
+        await create_and_advance(cust2, monthly_version.id, b9, "CANCELLED")
 
         processed = await process_pending_outbox_events(db)
         print(f"Seed complete. Processed {processed} outbox event(s) -> commissions generated.")

@@ -1,908 +1,380 @@
-# Guida Utente — Piattaforma Jav
+# Guida Utente — Jav
 
-Questa guida spiega come usare la piattaforma **oggi**, nello stato attuale dello
-sviluppo (vedi `docs/implementation-progress.md` per il dettaglio tecnico
-sessione per sessione di cosa è completo e cosa arriverà nelle prossime fasi).
-Non promette funzionalità non ancora costruite.
+Jav è il portale del club: le famiglie gestiscono iscrizioni, quote, prove di
+pagamento, certificati e gare dei propri figli; la segreteria tiene in ordine
+il club; gli istruttori segnano presenze e cinture. Questa guida descrive cosa
+si può fare **oggi** (il dettaglio tecnico è in `docs/implementation-progress.md`
+e `docs/club-portal.md`).
+
+> L'interfaccia è in fase di ridisegno: nomi dei pulsanti e posizione delle
+> sezioni possono cambiare leggermente, le funzioni descritte qui no.
 
 ## 1. Come accedere
 
-Apri il browser su:
-```
-https://<tuodominio>/login
-```
-
-Nella pagina di login servono **tre informazioni**: Organization ID (te lo
-comunica chi amministra il sistema), Email, Password.
-
-Se inserisci credenziali sbagliate, il messaggio è sempre lo stesso ("email o
-password non validi") sia che l'email non esista sia che la password sia
-sbagliata — è una scelta di sicurezza intenzionale (evita che un malintenzionato
-scopra quali email sono registrate). Dopo **5 tentativi falliti** l'account
-viene bloccato temporaneamente (15 minuti).
-
-Dopo il login resti connesso per un massimo di **15 minuti** di sessione (il
-rinnovo automatico non è ancora attivo). Da qui in poi, quando la sessione
-scade, vieni riportato automaticamente al login invece di vedere un errore —
-prima non era così, era un bug reale corretto.
-
-Puoi passare tra **modalità giorno e notte** dall'icona in alto a destra —
-giorno è la modalità di partenza per chiunque apra il sito per la prima volta.
-
-**Password dimenticata?** Link "Password dimenticata?" sotto il campo password
-nel login → inserisci Organization ID ed email → ricevi un link per scegliere
-una nuova password (valido 60 minuti, utilizzabile una sola volta). Se non
-arriva un'email, chiedi a chi amministra il sistema: finché non è configurato
-un server SMTP, il link viene generato comunque ma non recapitato via email —
-va recuperato manualmente lato server.
-
-## 2. Registrazione: solo su invito
-
-**Non esiste un modulo di registrazione pubblico aperto a chiunque.** Ogni
-nuovo cliente entra nel sistema tramite il **link personale di un promoter**
-(`https://tuodominio/r/CODICE-PROMOTER?org=...`) — è un circuito chiuso per
-design: nessun cliente può esistere senza un promoter che lo ha invitato.
-
-Chi clicca un link di invito vede una pagina con: nome del promoter che lo ha
-invitato, l'eventuale offerta consigliata (mostrata per nome, non come codice
-tecnico — se il promoter ha condiviso un prodotto specifico), e un modulo con:
-tipologia (privato/azienda), nome e cognome (o ragione sociale), telefono,
-email, password (richiesta due volte per conferma, per evitare refusi). Alla
-conferma, l'account
-viene creato **già collegato al promoter che lo ha invitato** — questo
-collegamento (in `customer_attributions`) è permanente e non richiede nessuna
-azione successiva.
-
-Non è ancora implementato in questa fase (pianificato come sviluppo successivo,
-richiede un servizio di invio email che il progetto non ha ancora):
-conferma email con PIN via email, primo accesso che obbliga a completare il
-profilo, memoria della promozione specifica scelta tra login successivi,
-attivazione di più promozioni contemporaneamente con scelta della sede.
-La versione attuale è più semplice ma **reale e funzionante**: email+password
-in un unico passaggio, attribuzione al promoter garantita e verificata.
-
-## 3. Le tre aree della piattaforma
-
-In base al tuo ruolo, dopo il login vieni indirizzato a una di queste aree.
-Ogni ruolo vede **solo i propri dati** — non è una limitazione dell'interfaccia,
-è imposta anche lato server, quindi non è aggirabile modificando l'URL a mano.
-
-### 3.1 Area Cliente (`/customer`)
-
-La prima cosa che un cliente vede è lo **Shop** — il catalogo dei prodotti
-pubblicati dall'amministrazione (offerte luce, gas, dual fuel, ma anche
-eventuali prodotti digitali/fisici/abbonamenti), con foto, descrizione,
-prezzo e IVA. Le altre sezioni: **I miei Contratti** (stato tradotto in
-italiano, prodotto acquistato mostrato per nome non per codice tecnico, punto
-di fornitura mostrato con un nome comprensibile — es. "Energia elettrica - Via
-Roma 12, Milano" — non solo il codice POD/PDR, e data di scadenza/rinnovo ben
-in evidenza, colorata in ambra quando manca meno di 30 giorni). Ogni contratto
-mostra anche il proprio **IBAN per l'addebito** (modificabile in linea).
-
-> **Lato amministratore**, aprendo un contratto compare la sezione
-> **Fascicolo Completo** con due pulsanti. **Scarica tutto (ZIP)** produce un
-> archivio chiamato *nome cliente-id contratto* con dentro tutti i documenti
-> allegati e un **PDF riassuntivo** di contratto e cliente (anagrafica,
-> punto di fornitura con POD/PDR, importi con IVA, modalità di pagamento,
-> IBAN, promoter, ed elenco degli allegati con il loro stato di verifica) —
-> è quello che si manda al fornitore o al commercialista. **Invia su Drive**
-> mette le stesse identiche cose in una cartella con lo stesso nome su
-> Google Drive; premerlo due volte non crea una seconda cartella, aggiorna
-> quella che c'è. Il secondo pulsante funziona dopo aver collegato un
-> account Google una volta sola, da *Impostazioni → Google Drive*.
-
-**Attivare contratti: la pratica (Sessions 52–53).** In **I miei Contratti** il
-pulsante **"Attiva nuovo contratto"** apre una *pratica di attivazione* a
-schermo intero, in quattro passaggi. **1. Dati**: tutto una volta sola —
-nome, cognome, email, PEC (facoltativa), IBAN, indirizzo di fornitura — e la
-domanda **"Quanti POD hai?"**: scrivi il numero o usa **+** e **−**. **2.
-Documenti d'identità**: identità, codice fiscale, visura per le aziende, una
-volta sola per tutti i POD (se hai un'unica bolletta con tutti i punti,
-caricala qui). **3. Contratti**: trovi **già tutti i POD creati** ("POD 1",
-"POD 2"…) e per ognuno scegli il contratto da attivare (pulsante
-**"Anteprima"** per leggerlo), oppure "Stesso contratto per tutti i POD". Il
-codice POD non serve. Se un POD è a un altro indirizzo, "Indirizzo diverso?"
-sotto quel POD; puoi anche allegare la sua bolletta o una foto del contatore.
-**4. Riepilogo**: controlli contratti e totale, premi **"Invia la pratica"** e
-scegli come pagare: **un solo pagamento** per tutti i contratti — unica
-soluzione, oppure 3 o 12 rate con **un solo addebito mensile** sulla carta.
-Ogni POD resta **un contratto a sé**, verificato e attivato per conto suo.
-Tutto viene salvato mentre compili: una pratica lasciata a metà resta in
-elenco come **Bozza** con **"Riprendi"**. Nella lista ogni pratica mostra cosa
-manca ("Da pagare", "Mancano documenti per 2 POD", "7/10 attivi") e, aperta,
-l'elenco dei suoi POD con stato, contratto, rate, IBAN e documenti. Il
-catalogo resta sotto, in **"Scopri i pacchetti"** (Session 55): ogni pacchetto
-ha il pulsante **Dettagli** per leggerlo; da lì "Attiva nuovo contratto" apre
-la stessa pratica, con quel contratto già scelto per tutti i POD. Se la
-pratica te l'ha preparata il tuo promoter, la trovi con la dicitura
-**"Preparata dal tuo promoter …"**, ricevi una notifica e un'email, e devi solo
-controllarla e pagare. Per ogni documento puoi **caricare un file** o premere
-**Foto** per fotografarlo con il telefono. **Visualizza** apre il documento in un
-riquadro sopra la pagina (foto ingrandibile, PDF leggibile, pulsante Scarica),
-senza aprire nuove schede.
-
-**Come funzionava prima (Session 49), ancora valido per i contratti già
-aperti.** L'attivazione di un singolo contratto si faceva in tre passaggi a schermo intero.
-**1. Dati**: intestatario (nome e cognome, già compilati dal tuo account ma
-modificabili), email, **PEC** (facoltativa), **IBAN per l'addebito** — che
-potrai comunque cambiare dopo da "I miei Contratti" — e il punto di
-fornitura. In cima scegli **Il contratto è per: Privato / Azienda**: per
-un'azienda compaiono la ragione sociale e il codice fiscale del legale
-rappresentante (nome e cognome sono i suoi), e la PEC è obbligatoria. Ogni pacchetto mostra due prezzi: **unica soluzione** e **12 rate
-da ... al mese** (ad esempio *149,00 € unica soluzione · 12 rate da 18,30 €*;
-per aziende e partite IVA l'IVA è già inclusa nelle cifre). Pagare a rate costa
-di più che pagare subito, e 3 rate dividono lo stesso totale delle 12.
-**2. Documenti**: caricali subito, oppure premi **"Vai avanti al pagamento"**
-e caricali più tardi. **3. Pagamento**: soluzione unica, 3 rate o 12 rate
-mensili addebitate in automatico sulla carta, oppure **bonifico** (in un'unica
-soluzione). **Pagando tutto subito hai lo sconto del 32%** (IVA calcolata sul
-prezzo scontato), con carta o con bonifico: lo vedi con l'etichetta verde
-"-32%" e il prezzo pieno barrato; con le rate il prezzo resta pieno. Se scegli
-il bonifico trovi importo, IBAN, intestatario e causale da copiare, e puoi
-caricare la ricevuta: i contratti risultano pagati appena l'amministrazione
-riceve il bonifico. In **I miei Contratti** ogni pratica ha il pulsante
-**Riepilogo**: tutto quello che hai compilato e il costo di ogni POD (prezzo,
-IVA, totale, sconto, pagamento). **Puoi pagare subito, anche se
-i documenti mancano o non sono ancora stati approvati.** Appena il pagamento
-va a buon fine ricevi il **cashback JavCash dell'intero importo** sul wallet
-— con le rate, a ogni rata pagata. Il contratto però diventa **Attivo** (e
-partono le provvigioni della rete) solo quando l'amministrazione approva i
-documenti: nell'elenco contratti dell'amministratore un contratto pagato in
-anticipo ha il badge verde **Pagato**, e approvarlo lo attiva subito.
-
-Finché un contratto è in corso di attivazione, la scheda non mostra più
-l'elenco dei documenti in mezzo a tutto il resto: mostra **un solo riquadro**
-che dice cosa manca davvero ("Mancano 2 documenti", "Documenti in verifica",
-"Scegli come pagare") e un pulsante che apre il contratto **a schermo intero**
-— stessa schermata larga dell'attivazione, non più una finestrella. Lì dentro
-trovi, uno sotto l'altro, i **documenti richiesti** (carta d'identità, codice
-fiscale, bolletta luce/gas, e per aziende/condomini anche la visura camerale;
-per le partite IVA la visura è proposta ma **facoltativa**, perché un
-professionista non ne ha una) e il **pagamento**. Per ciascun documento vedi
-se manca, è in attesa di verifica o è già approvato, e lo carichi o sostituisci
-da lì. In fondo c'è **"Aggiungi un altro documento"**: ti chiede prima *cosa*
-stai allegando (es. "Carta d'identità retro", "Delega firmata", "Contratto di
-locazione") e poi ti fa scegliere il file — così puoi allegare tutto quello che
-serve anche se non rientra nelle caselle previste. Quello che carichi resta
-salvato: puoi chiudere e riprendere quando vuoi. **Supporto & Assistenza** — qui puoi
-aprire un ticket vero (non solo un modulo che scompare): resta visibile nella
-tua area finché non viene risolto, e vedi le risposte dell'amministrazione
-direttamente nella conversazione.
-
-Lo Shop mostra separatamente le **offerte luce/gas Jav** (voce di menu
-dedicata "Contratti Jav" -- attivazione contratto, come sopra) dai
-**prodotti Dropshipping/Partner** (gadget e prodotti di terzi): questi ultimi
-si acquistano **direttamente dal cliente**, senza passare dall'amministrazione
--- carrello con sconto opzionale in JavCash (se il prodotto lo prevede),
-possibilità di richiedere "cashback subito" (paghi un 5% in più e lo riavrai
-accreditato a pagamento confermato), e pagamento del residuo con bonifico o
-carta (Stripe). Il risultato si vede nella nuova voce **I miei Ordini**: stato
-(in attesa/pagato/annullato), filtri, dettaglio, prova di pagamento
-caricabile per un ordine a bonifico, possibilità di cambiare metodo di
-pagamento o pagare subito con carta un ordine già creato a bonifico.
-
-**Fai la spesa con Jav** (Session 68) — lo Shop del cliente. Oltre a
-"Prodotti Partner" e "Offerte Jav" ci sono fino a tre **Marketplace**
-(Marketplace 1, 2 e 3: compaiono solo quando hanno prodotti). Regole uguali
-per tutti e tre: il prezzo grande è quello con **bonifico istantaneo**;
-pagando con **carta di credito** il prezzo aumenta del 5% (è scritto sulla
-card, nel prodotto e al pagamento, con il totale di ciascuna scelta). Si può
-usare il JavCash solo per una parte del prezzo (la percentuale è sulla card,
-mai il 100%), e questi prodotti non danno cashback.
-
-**Disponibilità dei prodotti AliExpress** (Session 87) — i prodotti si
-aggiornano da AliExpress ogni 3 ore, e di nuovo quando il cliente apre la
-scheda e quando conferma l'ordine. Se nel frattempo un articolo non c'è più,
-la scheda lo dice subito («non più disponibile presso il fornitore») e
-l'acquisto si ferma prima del pagamento. Un prodotto che AliExpress non
-spedisce in Italia non compare proprio nello Shop. Se l'aggiornamento automatico smette
-di funzionare, lo staff riceve una notifica.
-
-**Marketplace VAITTO** (Session 88) — moda di lusso (Dolce & Gabbana,
-Herno, Dsquared2…) dal catalogo di Vaitto; il cliente lo vede come
-**«Top Brand»** (il nome si cambia nelle impostazioni dei Marketplace). In amministrazione, voce
-**Marketplace VAITTO**: «Catalogo da Vaitto» (indirizzo del feed, ricarico,
-«Aggiorna ora dal feed», «Carica un CSV Vaitto», esito dell'ultimo import);
-il catalogo si aggiorna da solo ogni 3 ore e i prodotti nuovi arrivano
-**spenti**. Il cliente paga il **prezzo del marchio, IVA inclusa** (con
-«Sell at brand RRP» scelto sul conto Vaitto; altrimenti il prezzo suggerito
-da Vaitto più IVA); il
-campo «Ricarico sopra il prezzo suggerito» è a 0 e serve solo se si vuole
-guadagnare di più. Su ogni variante l'amministratore vede «costo per noi» e
-«suggerito». «Accendi e spegni in blocco» accende una marca o una categoria
-intera. Il prezzo è il costo Vaitto più il ricarico; si può cambiare per
-prodotto o scrivere a mano per variante («torna al ricarico» per annullare).
-Sotto il ricarico c'è **«JavCash pagabile»**: «Uguale per tutti» (una
-percentuale) oppure «Dal nostro guadagno» (una quota del guadagno su ogni
-prodotto, di norma il 50%). Il guadagno è **prezzo al pubblico senza IVA −
-prezzo a noi**: un prodotto a 450 € IVA inclusa che ci costa 129,38 € →
-450 ÷ 1,22 = 368,85 − 129,38 = 239,47 di guadagno, la metà è il 26% del
-prezzo in JavCash. Si ricalcola a ogni import e vale per tutti i prodotti
-Vaitto. Con «Dal
-nostro guadagno» la casella «Uguale per tutti» non si usa. Nell'elenco dei
-prodotti e in cima alla scheda «Modifica» l'amministratore vede per ogni
-prodotto **prezzo a noi, prezzo al pubblico, guadagno e JavCash pagabile**
-(e su ogni taglia/colore «a noi · al pubblico · guadagno»); il cliente vede
-solo il prezzo al pubblico; nella «Modifica» di un prodotto si può mettere una percentuale
-diversa solo per quello («Usa quella del negozio» la riporta indietro).
-Un ordine pagato si inserisce a mano su vaitto.com: in «Ordini» ci sono SKU,
-EAN, link all'articolo e indirizzo da copiare. Al cliente la scheda mostra
-anche il prezzo di listino barrato.
-
-**Shop Symphonya** (Session 89) — profumi e cosmetici (oltre 31.000
-prodotti) dal grossista Symphonya; il cliente lo vede come **«Shop
-Beauty»**. Funziona come il Marketplace VAITTO: in amministrazione, voce
-**Shop Symphonya**, con lo stesso pannello (catalogo aggiornato ogni 3 ore
-o con «Aggiorna ora», accendi e spegni in blocco per marca o categoria,
-prezzi, JavCash con la **stessa formula**: prezzo senza IVA − prezzo a
-noi, la metà in JavCash). Il cliente paga il prezzo consigliato al
-pubblico, IVA inclusa, più **10 € di spedizione a ordine**. Nello Shop vede
-i prodotti **48 alla volta**: il pulsante «Mostra altri prodotti» carica i
-successivi, e ricerca e categorie cercano in tutto il catalogo. Gli ordini
-pagati si inseriscono a mano su symphonya.eu (Symphonya vende all'ingrosso:
-minimo 99 €, bonifico anticipato, la merce arriva a noi).
-
-**Shop SoleilDrop** (Session 90) — il catalogo affiliato di SoleilDrop;
-il cliente lo vede come **«Fai la Spesa con Jav 2»** (prima «Market 7»).
-Stesso pannello e stesse regole di Shop Symphonya. Dal 13/10/2026 è
-collegato all'**API di SoleilDrop**: incolla la chiave **`sdk_…`** (dalla
-tua area SoleilDrop) in *Amministrazione → Shop SoleilDrop* e salva; il
-catalogo si aggiorna da solo ogni 3 ore (o subito con **«Importa»**).
-Per gli avvisi di stato e spedizione registra nell'area SoleilDrop
-l'indirizzo webhook mostrato nel pannello e incolla qui il **segreto** che
-ti danno. Gli ordini pagati partono verso SoleilDrop da soli solo con
-**«Invio automatico»** acceso, e vengono pagati dal tuo credito
-SoleilDrop: se non basta restano in attesa e partono alla ricarica.
-Senza chiave resta il vecchio modo: **Il Mio Catalogo → Esporta → Excel
-generico (.xlsx)**, «Tutte quelle in elenco», e **«Carica l'Excel
-SoleilDrop»**. I prodotti nuovi arrivano spenti.
-
-**Market Kappa** (Session 87) — il Marketplace dedicato ai capi **Kappa** e
-**Robe di Kappa**. Funziona come «Fai la Spesa con Jav» ma è un negozio a
-sé, con il suo carrello: nella scheda di ogni prodotto il cliente vede il
-marchio e sceglie **taglia e colore**. In amministrazione ha la sua voce di
-menu **Market Kappa**: impostazioni (acceso/spento, spedizione), **Gestisci
-marchi**, prodotti e ordini. Un prodotto nascosto non compare al cliente;
-il negozio compare nello Shop solo quando è acceso e ha almeno un prodotto
-attivo. Nella **Modifica** di un prodotto, oltre a «Spegni», c'è **«Elimina
-prodotto»** (Session 89): chiede conferma e lo cancella per sempre con tutte
-le sue varianti. Non torna, perché il catalogo Kappa non si reimporta da
-solo. Un prodotto **già ordinato** invece non si può eliminare (gli ordini lo
-citano): il pannello lo dice, e si spegne.
-
-**Pratica finita → link per il cliente (promoter)** — quando il promoter
-invia una pratica compare il riquadro **«Manda questo link al tuo
-cliente»**: «Copia link» o «Invia su WhatsApp». Il cliente apre il link, fa
-il login con la sua email e password e si trova subito sul pagamento di
-quella pratica. Il riquadro ricompare anche riaprendo una pratica già
-inviata.
-
-**Anagrafica clienti → «Sblocca» (solo superadmin)** — sotto il nome di
-ogni cliente ci sono tre spie: «Email», «Privacy» e «Profilo» (codice
-fiscale e residenza). Se una è rossa il cliente non riesce a entrare. Il
-superadmin preme **«Sblocca»**: la finestra dice cosa manca, segna email e
-privacy come fatte e chiede codice fiscale e indirizzo se mancano (proposti
-da quello che il cliente ha già dato nelle pratiche). Da quel momento il
-cliente entra. La privacy risulta accettata dal superadmin per conto del
-cliente e resta nel registro: va fatto solo se il cliente ha dato il
-consenso in un altro modo.
-
-**Impostazioni → Conferma dei pagamenti con JavCash** (Session 87) — il
-cliente apre **Impostazioni** dal menu a sinistra o dal menu del suo avatar
-in alto a destra e sceglie come confermare l'uso dei JavCash al checkout:
-**Codice via email** (come sempre) oppure **PIN personale** di 4 cifre.
-Scegliendo il PIN lo si crea subito (due volte, più la password
-dell'account); da lì in poi ogni checkout chiede il PIN e non manda email.
-Se il PIN non viene in mente, «Non ricordi il PIN? Ricevi un codice via
-email» vale per quell'acquisto. Dopo 5 PIN sbagliati il PIN si blocca per
-15 minuti e si usa l'email. «Cambia PIN» e «Torna al codice via email»
-chiedono di nuovo la password.
-
-**Impostazioni → Chiusura dell'account** (Session 89) — **«Richiedi chiusura
-account»**, con un motivo facoltativo, non cancella niente da sola: apre un
-ticket di **Assistenza** di tipo «Chiusura account» con nome ed email del
-cliente, lo staff riceve la notifica nell'app e l'email all'indirizzo delle
-notifiche (info@example.com di base), il cliente riceve un'email di
-conferma. Finché la richiesta è aperta il riquadro mostra «Hai chiesto la
-chiusura il …» e non se ne può mandare un'altra. La chiusura vera la fa lo
-staff, dopo aver sistemato contratti, ordini e JavCash ancora aperti.
-
-**Ordini di «Fai la Spesa con Jav», «Market Kappa» e «Marketplace VAITTO»
-(amministratore)** — compaiono nell'elenco unico **Ordini** insieme a quelli
-degli altri negozi (conferma bonifico e annullamento anche da lì) e, con
-tutti i dettagli, nella sezione **Ordini** della pagina di ciascun negozio:
-filtri «Da spedire», «In attesa di pagamento», «Spediti», «Annullati»; per
-ogni ordine cosa ha comprato il cliente (con taglia/colore o formato),
-quanto ha pagato e come, l'indirizzo e il telefono per la spedizione, la sua
-nota. Azioni: «Conferma bonifico ricevuto», «Invia alle aziende per email»
-(pasta) o «Invia ai marchi per email» (Kappa), «Segna come spedito» con
-corriere e tracking (il cliente riceve l'email), «Segna come consegnato»,
-«Annulla ordine». Per Vaitto l'ordine si inserisce a mano su vaitto.com: SKU,
-EAN e link all'articolo sono sulla riga.
-
-**Catalogo di «Fai la Spesa con Jav» e «Market Kappa» (amministratore)** —
-l'elenco dei prodotti si cerca per nome, codice articolo o EAN e si filtra
-per stato (Tutti / In vendita / Spenti) e per marchio o azienda. «+ Nuovo
-prodotto» apre il modulo di creazione in una finestra; «Modifica» (o un clic
-sul prodotto) apre la sua scheda sopra l'elenco: nome, marchio, descrizione,
-JavCash, foto, accendi/spegni, e i prezzi e le scorte di ogni variante (si
-salvano uscendo dal campo). Con **«Stesso prezzo per tutte le varianti»** si
-scrive un prezzo una volta sola per tutte le taglie e i colori.
-
-**Marketplace 1** (e allo stesso modo il 2) — prodotti con varianti e consegna a domicilio (sulla card vedi i
-giorni di consegna e "+ spedizione"). Apri un prodotto per vedere le foto,
-scegliere la variante (colore, misura...) e la quantità, e i tempi di
-consegna. Con **Acquista** inserisci l'indirizzo (già compilato con quello del
-tuo profilo: controllalo e aggiungi un telefono per il corriere), vedi il costo
-della spedizione calcolato al momento, puoi usare i tuoi JavCash (con il
-codice via email) e paghi il resto con bonifico o carta. In **I miei Ordini**
-l'ordine mostra "Ordine ricevuto", poi "In preparazione", poi "Spedito" con il
-pulsante **Traccia pacco**, poi "Consegnato"; ricevi una notifica e un'email a ogni passaggio.
-
-**Il carrello** (per ora sul Marketplace AliExpress) — l'icona del
-**carrello** sta nella barra in alto, accanto alla campanella: la vedi da
-qualunque scheda dell'area cliente, con il numero di articoli e il totale
-(sul telefono solo il numero, per questione di spazio). Puoi aprirlo mentre
-guardi "I miei Ordini" o la Contabilità, senza tornare nello Shop. Dentro una scheda prodotto trovi due pulsanti: **Acquista subito**, che
-è il percorso di sempre per un articolo solo, e **Aggiungi al carrello**, per
-metterne insieme più d'uno e pagarli una volta sola.
-
-Il carrello è uno, diviso in **sezioni per negozio**: da ogni sezione cambi le
-quantità, togli un articolo o la svuoti, e paghi con **Vai al checkout**. Le
-sezioni si pagano separatamente perché ogni negozio ha la sua spedizione e il
-suo ordine — il carrello te lo dice prima, non dopo. Nel checkout l'indirizzo
-si inserisce una volta per tutti gli articoli di quell'ordine, la **spedizione
-si paga una volta sola** (non una per articolo) e il codice via email per i
-JavCash si chiede **una volta sola**, non per ogni articolo.
-
-Il carrello resta com'era anche se chiudi il browser o cambi dispositivo: è
-salvato sul tuo profilo, non sul telefono. I prezzi però **non** si bloccano
-mettendo qualcosa nel carrello: valgono quelli del momento in cui paghi, ed è
-il totale che vedi prima di confermare. Se nel frattempo un articolo non è più
-disponibile, il carrello si apre lo stesso e te lo segnala in rosso: basta
-toglierlo per poter procedere con il resto.
-
-**Le email che ricevi per un ordine** (Session 75) — sono tre, con mestieri
-diversi. **Conferma d'ordine**, subito: cosa hai ordinato e come pagarlo
-(IBAN e causale per il bonifico, oppure il link per la carta). **Ricevuta di
-pagamento**, quando il pagamento è confermato: l'elenco degli articoli, la
-spedizione, i JavCash usati, il totale pagato
-e l'IVA contenuta nel prezzo — è la prova che hai pagato. **Spedito** e poi
-**Consegnato**, con il numero per seguire il pacco. Se l'ordine ha più
-articoli, tutte le email li elencano tutti.
-
-**Documentazione** — feed di sola lettura con annunci e materiale pubblicati
-dall'amministrazione (testo, e opzionalmente un'immagine, un PDF o un link
-video), specifici per i clienti o condivisi anche con i promoter.
-
-**Lavora con noi** — un cliente può candidarsi a diventare promoter
-direttamente dalla propria area (anche dalla scheda "Prodotti", con una
-card dedicata). L'attivazione è **immediata**: appena inviata la richiesta,
-il cliente diventa promoter attivo (qualifica iniziale S1), agganciato a chi
-lo ha originariamente invitato — non è più necessaria un'approvazione
-dell'amministrazione, salvo il caso in cui l'account sia stato messo in
-"blacklist" da un amministratore (in quel caso serve una nuova approvazione
-manuale). Chi ha sia il ruolo Cliente sia quello Promoter vede in cima
-all'intestazione (e nel menu account) un selettore **"Area Cliente / Area
-Promoter"** per passare dall'una all'altra senza fare logout.
-
-**Wallet** — un portafoglio interno, personale e sempre disponibile, pensato
-come un "finto wallet crypto": ha un saldo, un indirizzo univoco (stile
-`0x...`, da copiare con un click) e uno storico di tutte le transazioni. Il
-saldo e ogni transazione sono mostrati in **"JavCash"**, non in euro --
-un'etichetta scelta apposta per non confonderlo mai con un pagamento reale
-(quelli, con carta o bonifico, si vedono sempre in euro veri, sia
-nell'ordine sia in Contabilità, vedi sotto). L'amministrazione può
-accreditare JavCash su questo wallet dopo un acquisto (o anche solo come
-ricarica). Da qui puoi anche **inviare JavCash a un altro wallet**
-conoscendo il suo indirizzo — funziona come un vero wallet crypto: basta
-l'indirizzo del destinatario, nessuna relazione richiesta (funzione
-disattivata di default, va abilitata singolarmente dall'amministrazione).
-Ogni movimento (ricevuto o inviato) resta nello storico con data, importo e
-controparte. Il saldo è puramente interno: non è collegato a conti bancari
-reali e non si può prelevare.
-
-**Riscatta Cashback** — hai già pagato una bolletta/fattura a uno dei
-fornitori partner di Jav (o a Jav stessa)? Carica la foto o
-il PDF e l'importo della fattura, poi scegli come pagare il 5%:
-- **Carta, subito**: paghi il 5% dell'importo che hai scritto e, appena il
-  pagamento è confermato, ricevi il 100% + un ulteriore 5% di bonus in
-  JavCash (fattura da 100 € → paghi 5 €, ricevi 105 JavCash). Lo staff
-  controlla la fattura dopo: nella richiesta leggi «fattura in controllo» e
-  poi l'esito.
-- **Bonifico**: prima un amministratore verifica il documento e conferma
-  l'importo reale, poi fai il bonifico del 5% con il codice causale
-  mostrato; i JavCash arrivano quando l'amministrazione conferma il
-  bonifico.
-
-**Contabilità** (rinnovata in Session 54) — la tua rendicontazione personale.
-In alto i **totali**: totale speso (carta + bonifico) e speso nel mese, saldo
-JavCash, cashback ricevuto, pagato con carta e con bonifico, quanto hai
-pagato per i contratti con le rate già pagate e la **prossima rata**, Shop e
-riscatti, JavCash ricevuti e spesi e — se sei anche promoter — le
-**provvigioni maturate** (da incassare e pagate). Sotto, tutti i movimenti
-**raggruppati per mese**: data e ora in piccolo, titolo del movimento in
-grande, descrizione in piccolo, importo ben in evidenza. Puoi **cercare**
-(descrizione, prodotto, importo, numero di ordine/riscatto/contratto),
-**filtrare** (Pagamenti, Contratti, Cashback, JavCash, Carta, Bonifico,
-Entrate, Uscite) e scegliere un **periodo** (dal… al…); con i filtri attivi
-vedi subito quanto hai pagato e quanti JavCash hai ricevuto in quella
-selezione. **Clicca un movimento** per aprirne il dettaglio: importi, metodo,
-riferimenti Stripe o causale del bonifico e una **cronologia con data e ora al
-secondo** di ogni passaggio (creato, ricevuta caricata, pagamento confermato da
-Stripe o dall'amministrazione, cashback accreditato). Il bottone **"Riscatto
-#…" / "Ordine #…" / "Contratto #…"** sulla riga apre quella pratica con tutti i
-suoi movimenti collegati, ognuno a sua volta apribile; per un contratto vedi
-anche tutte le rate con la data di incasso. Resta il pulsante **Esporta CSV**.
-
-### 3.2 Area Promoter (`/promoter`)
-
-**Attiva Contratti** (Session 66) — il posto da cui attivi i contratti per i
-tuoi clienti: scegli il cliente e compili la stessa pratica che compilerebbe
-lui (dati dell'intestatario, quanti POD, documenti d'identità, l'offerta per
-ogni POD). Il pagamento no: quando invii la pratica, il cliente riceve un'email
-"i tuoi contratti sono pronti da pagare" e paga dalla sua area. Sotto trovi
-tutte le pratiche dei tuoi clienti, con lo stato di ogni POD, i documenti che
-mancano e il riepilogo.
-
-Pensata per far gestire al promoter la propria rete **come una vera azienda**:
-
-- **La mia Azienda** (schermata di apertura) — statistiche generali in alto:
-  persone totali nella tua rete, livelli sotto di te (puoi vedere solo il tuo
-  ramo, mai il resto dell'organizzazione), contratti chiusi, rifiutati, in
-  attesa (pending) e in lavorazione, provvigioni totali. Sotto, un grafico a
-  barre per livello (persone e contratti) e una tabella riepilogativa —
-  **clicca un livello per il dettaglio**: persone di quel livello, chiusi, in
-  lavorazione, problemi. Più giù: una tabella per persona (contratti
-  totali/processati/in lavorazione/con problemi, provvigioni), e l'elenco di
-  **tutti i contratti della tua rete** con cliente, prodotto, punto di
-  fornitura, venditore, stato e provvigione generata — con un pulsante
-  **Contatta** (apre l'email al cliente) per i contratti con problemi, e se
-  l'amministrazione ha lasciato una nota (es. "manca il documento di identità")
-  la vedi direttamente sotto il contratto interessato.
-- **Rete Commerciale** — l'albero visivo della tua rete, colorato per livello
-  (fino a 12), con nomi reali (non solo codici), qualifiche. Naviga livello per
-  livello: si apre subito il tuo primo livello (i tuoi diretti), poi clicchi
-  su una persona per aprire il livello sotto di lei, e così via — non un unico
-  elenco con tutto espanso insieme. **Clicca il nome (o l'icona accanto) di
-  qualsiasi persona nell'albero** per aprire un popup di dettaglio: quante
-  persone ha sotto di sé, quanti contratti e in che stato, il valore
-  complessivo generato in quel ramo e — per ogni contratto — **la provvigione
-  che HAI guadagnato tu specificamente da quel contratto** (diversa dalla
-  provvigione totale pagata a tutta la filiera, perché nel piano multilivello
-  ogni persona nella catena prende una quota diversa).
-- **Miei Clienti → Attiva nuovo contratto** (Sessions 52–55) — apre per il tuo
-  cliente la stessa pratica di attivazione che vede lui: dati e "quanti POD
-  hai?", documenti d'identità (file o **foto** col telefono), contratto per ogni
-  POD, invio. Funziona per un cliente già registrato e per uno nuovo: **"+ Nuovo
-  Cliente" → "Registra e apri la pratica"** apre la pratica subito dopo la
-  registrazione. La pratica risulta **compilata da te**, ma è del cliente: lui
-  riceve notifica ed email e **il pagamento lo fa lui** dal suo account ("I
-  miei Contratti" → "Paga"). Il pulsante
-  **Pratiche** accanto a ogni cliente mostra tutte le sue pratiche — anche
-  quelle che ha compilato da solo — con cosa manca a ciascuna; una bozza si
-  riprende da lì. Ogni punto è un contratto a sé anche per le tue provvigioni.
-- **Prodotti da Condividere** — lo stesso catalogo che vede il cliente, con un
-  pulsante **Condividi** su ogni prodotto: un link diretto a quel prodotto con
-  il tuo codice promoter già incorporato, pronto da inviare a un cliente.
-  C'è anche un pulsante **Condividi il tuo link** in alto (link generico,
-  senza prodotto specifico).
-  - **Dal telefono si apre direttamente il menu di condivisione del
-    dispositivo** (WhatsApp, Telegram, SMS, email, e qualsiasi altra app tu
-    abbia installata): non devi più copiare il link, uscire dall'app e
-    incollarlo. Da computer, dove quel menu non esiste, il link viene copiato
-    negli appunti come prima — il pulsante ti dice quale delle due cose è
-    successa ("Link condiviso!" oppure "Link copiato!").
-- **Invita un amico** — la tua lista personale di invitati, separata dalla
-  rete commerciale (vedi sotto, vale identica anche per i clienti).
-- **Movimenti Provvigioni** — storico dei gettoni personali e delle differenze
-  imprenditoriali maturate.
-- **Simulatore Provvigioni** — anteprima di quanto genererebbe un contratto
-  ipotetico, senza toccare i dati reali.
-- **Supporto** — apri un ticket verso l'amministrazione (es. per un chiarimento
-  su una provvigione o un problema con un cliente) e segui la conversazione
-  nella tua area finché non è risolto.
-- **Documentazione** — lo stesso feed di annunci/materiale che vede il
-  cliente, quando l'amministrazione lo pubblica anche (o solo) per i
-  promoter.
-- **Wallet** — lo stesso portafoglio interno (saldo e storico mostrati in
-  "JavCash", non euro) descritto per l'area Cliente: saldo, indirizzo
-  personale, invio/ricezione verso qualsiasi altro wallet della piattaforma,
-  storico transazioni. È lo stesso wallet indipendentemente dal ruolo con
-  cui accedi (se hai sia login Cliente sia Promoter, il saldo è unico e
-  condiviso tra le due aree).
-
-Se hai anche un account Cliente collegato allo stesso login, in cima
-all'intestazione trovi lo stesso selettore **"Area Cliente / Area Promoter"**
-descritto nella sezione precedente.
-
-**Qualifica**: la tua qualifica (S1, S2, ... TL1, ... MD1, ...) non è solo
-una progressione — viene **ricalcolata ogni mese** confrontando il tuo
-fatturato personale e di gruppo del mese appena chiuso con le soglie della
-scala qualifiche: puoi tanto salire quanto **retrocedere** se un mese va a
-vuoto dopo un mese forte. Ricevi una notifica in-app quando succede.
-
-### 3.3 Area Amministratore (`/admin`)
-
-Per ruoli di staff (Admin, Back Office, Accounting, Sales Manager, Super Admin
-— permessi leggermente diversi tra loro, vedi `docs/security-model.md`).
-
-- **Panoramica** — pulsanti grandi verso le sezioni principali, KPI (contratti
-  per stato, provvigioni maturate/pagate, promoter e clienti attivi), la rete
-  commerciale **di tutta l'azienda** (persone totali, livelli totali, grafico
-  per livello — a differenza della vista del promoter, qui non c'è alcuna
-  restrizione di ramo), grafici di andamento a 12 mesi, elenco "Richiede
-  attenzione" (contratti fermi in revisione da troppo tempo, o **pagati ma non
-  ancora attivati** — quindi con provvigioni non ancora generate), attività
-  recente.
-- **Pratiche** (Session 52) — le pratiche di attivazione: filtri rapidi *Da
-  verificare*, *Documenti mancanti*, *Non pagate*, *Rate non riscosse*, *In
-  compilazione*. Aprendo una pratica vedi intestatario, documenti comuni
-  (validi per tutti i punti), tentativi di pagamento con carta, e ogni punto
-  come contratto a sé con i pulsanti **Documenti**, **Provvigioni**,
-  **Recensisci** e — se paga a rate — **Interrompi addebiti** (toglie solo quel
-  contratto dall'addebito mensile, gli altri continuano). **"Approva i N
-  contratti in revisione"** mostra l'anteprima provvigioni di ciascuno e li
-  approva tutti in un colpo, ognuno con la sua anteprima salvata.
-- **Nuovo Contratto** (Session 66) — la via consigliata è **Pratica di
-  attivazione**: scegli il cliente (con ricerca), eventualmente il promoter a cui
-  attribuirla, e compili gli stessi passaggi che fa il cliente (dati, quanti POD,
-  documenti, offerta per ogni POD). Quando invii la pratica, il cliente riceve
-  un'email e paga dalla sua area. Il vecchio modulo per un singolo contratto
-  resta sotto **Modulo avanzato**.
-- **Pratiche → Bonifici da confermare** (Session 65) — le pratiche per cui il
-  cliente ha scelto il bonifico. Nel dettaglio trovi importo (già scontato),
-  contratti, eventuale ricevuta caricata dal cliente e **Conferma bonifico
-  ricevuto**: da quel momento i contratti risultano pagati, con cashback e
-  attivazione come per un pagamento con carta.
-- **Impostazioni → Sconto per il pagamento in un'unica soluzione** (Session 64)
-  — la percentuale di sconto per chi paga il contratto tutto subito con carta
-  (predefinita 32%, 0 per toglierla). Vale per i pagamenti successivi; le rate
-  restano a prezzo pieno; il cashback segue quanto il cliente paga.
-- **Impostazioni → Cashback dei contratti pagati a rate** (Session 59) — per i
-  contratti in 3 o 12 rate scegli se il cliente riceve il cashback **una parte a
-  ogni rata pagata** (predefinito) oppure **tutto subito, alla prima rata**, in
-  un'unica ricarica JavCash. La scelta vale per ogni contratto da quando paga
-  la prima rata: cambiarla dopo non accredita mai due volte lo stesso
-  contratto. Il pagamento in unica soluzione riceve sempre tutto subito.
-- **Tutti i Contratti** — elenco con nome cliente (non solo l'ID), prodotto e
-  punto di fornitura con nome comprensibile, colonna **Origine** (vedi sotto),
-  colonna **Importo** con netto / IVA / totale, colonna scadenza/rinnovo colorata
-  per urgenza, filtro per anno (storico separato per anno, utile perché ogni
-  anno ci saranno contratti da rinnovare), filtri per stato, azione di
-  transizione di stato con motivazione obbligatoria. Il pulsante **Recensisci**
-  apre anche i **documenti del contratto** (carta d'identità, codice fiscale,
-  bolletta, visura camerale per aziende/condomini): da qui puoi caricare un
-  documento per conto del cliente (es. se te lo ha inviato via email) e,
-  quando il cliente ha caricato il suo, **approvarlo o respingerlo** con una
-  nota — la nota compare automaticamente al promoter nella sua vista di rete,
-  cosi sa cosa manca e può contattare il cliente.
-  - La colonna **Origine** risponde a colpo d'occhio alla domanda "chi ha
-    fatto questo contratto?": *Compilato dal promoter — Nome Cognome* quando
-    un promoter lo ha completato **al posto** del cliente, *Sottoscritto dal
-    cliente* quando è stato il cliente da solo, *Creato da amministrazione*
-    quando lo ha inserito lo staff. Sotto, quando diverso, compare anche
-    *Segnalato da …*, cioè il promoter che aveva portato quel cliente in
-    Jav la prima volta — può essere una persona diversa da chi ha
-    compilato il contratto, ed è quella che riceve l'eventuale bonus primo
-    segnalatore.
-  - La colonna **Importo** mostra il totale del contratto così com'era **nel
-    momento in cui è stato firmato**: se domani modifichi il prezzo o l'IVA
-    del prodotto, i contratti già esistenti non cambiano. I contratti creati
-    prima dell'introduzione di questa colonna mostrano "—": il sistema
-    volutamente non inventa un prezzo a posteriori.
-- **Nuovo Contratto** — form completo: scegli se cliente nuovo o esistente; per
-  un cliente nuovo raccoglie tipologia (privato/azienda), codice fiscale o
-  partita IVA, nome e cognome (o ragione sociale), email, cellulare, PEC
-  (opzionale) e i dati del punto di fornitura; poi scegli l'offerta, l'IBAN per
-  l'addebito (opzionale, puoi aggiungerlo dopo) e il promoter/venditore che ha
-  portato la vendita, con una nota libera opzionale (utile per
-  l'amministrazione — chi lo ha invitato, con quale promozione, preferenze di
-  contatto).
-- **Anagrafiche Clienti** — foto profilo (o icona generica se non caricata) in
-  ogni riga; icona **Mostra** apre un popup con tutti i dati (indirizzi, punti
-  di fornitura, dati fiscali) e in più un **riepilogo contratti**: prodotto,
-  stato colorato (verde se attivo/rinnovato, rosso se respinto/cessato,
-  ambra se in lavorazione), scadenza — clicca una riga per il dettaglio
-  (date esatte, note, id). Lo stesso popup mostra anche il **Wallet** del
-  cliente (saldo e indirizzo, se ha già un login) con un mini-modulo
-  **"Ricarica"** per accreditare cashback direttamente da qui, subito dopo
-  un acquisto o come riconoscimento manuale. L'icona **Modifica** apre una schermata completa:
-  carica/cambia la foto profilo, modifica i dati anagrafici, e in fondo
-  **Riassegna Promoter** (cambia a quale promoter il cliente è attribuito,
-  con motivazione obbligatoria — tracciato come le altre modifiche). Non c'è
-  ancora un'azione di eliminazione — un cliente non può essere cancellato
-  senza rischiare di orfanizzare i suoi contratti, quindi non è stato aggiunto
-  un pulsante che non farebbe nulla di sicuro.
-- **Anagrafiche Promoter** — foto profilo (o icona generica) per ogni agente;
-  tabella con qualifica e sponsor, e ora anche un'icona **Modifica**: nome
-  (nome e cognome separati), foto, qualifica e stato (attivo/sospeso/cessato)
-  sono modificabili (il codice promoter no, è incorporato nei link di invito
-  già condivisi). Pulsante **"+ Promoter Radice"** per creare un promoter
-  senza sponsor (l'inizio di un ramo di rete indipendente) — l'unico modo per
-  farlo, dato che la registrazione normale richiede sempre un link di
-  invito di qualcun altro. Su un promoter attivo: **Disattiva** (lo sospende,
-  può ricandidarsi liberamente) e **Blacklist** (come Disattiva, ma una sua
-  eventuale ricandidatura futura tornerà ad aver bisogno di
-  approvazione manuale, invece di riattivarsi da sola). Su un promoter
-  disattivato/in blacklist: **Riattiva** / **Rimuovi blacklist**. Pulsante
-  **"Valuta gradi ora"** avvia manualmente la stessa valutazione mensile
-  automatica delle qualifiche (promuove/retrocede ogni promoter attivo in
-  base al fatturato del mese) che gira comunque in automatico il giorno 1 di
-  ogni mese — utile per rieseguirla o vederne subito l'effetto.
-- **Prodotti & Marketplace** — catalogo con foto, prezzo, IVA; pulsante
-  **Modifica** su ogni prodotto. Un pacchetto contratto ha due prezzi, IVA
-  esclusa: **Prezzo unica soluzione** (tutto il contratto pagato subito, es.
-  149) e **Prezzo mensile** (la rata di chi paga a rate, es. 18,30: 12 rate da
-  18,30, oppure 3 rate che dividono lo stesso totale). Con il prezzo mensile
-  compilato lo sconto per il pagamento unico di Impostazioni non si applica a
-  quel pacchetto; lasciato vuoto, le rate dividono il prezzo in unica soluzione
-  come prima. Il tipo di prodotto non è più solo "contratto
-  energia": puoi scegliere anche Digitale, Fisico o Abbonamento. La foto si
-  può sia incollare come link sia **caricare direttamente un file** dalla
-  schermata di modifica, con anteprima di quella già presente. La schermata
-  di modifica permette anche di impostare un **gettone provvigionale diverso
-  per grado specifico di questo prodotto** (in alternativa al valore standard
-  uguale per tutti i prodotti). Pulsanti **Duplica** (crea un nuovo prodotto
-  precompilato da uno esistente, inclusi eventuali gettoni personalizzati) ed
-  **Elimina** (con conferma; rifiutato se il prodotto ha già contratti
-  collegati). Per un prodotto Dropshipping/Partner puoi anche impostare uno
-  **sconto pagabile in JavCash** (percentuale del prezzo) e/o abilitare
-  **"cashback subito"**: se attivo, il cliente potrà scegliere in fase di
-  acquisto di pagare un 5% in più per farselo riaccreditare in JavCash a
-  pagamento confermato. Nessuna delle due opzioni è mai disponibile sui
-  prodotti Jav (categoria Interno).
-- **Ordini** — la coda di tutti gli ordini Shop (prodotti Dropshipping/
-  Partner, creati dal cliente stesso o da un amministratore per suo conto):
-  filtro per stato/metodo di pagamento, dettaglio con id prodotto, JavCash
-  applicati, eventuale sovrapprezzo cashback, prova di pagamento caricata
-  dal cliente (se bonifico). **Conferma bonifico ricevuto** segna l'ordine
-  pagato e, se il prodotto lo prevede, accredita automaticamente il
-  cashback; un ordine pagato con carta si conferma da solo non appena
-  Stripe conferma l'addebito (il bottone manuale è disabilitato in quel
-  caso, per non poter mai accreditare cashback senza un pagamento reale
-  confermato da Stripe). **Nuovo Ordine** crea un ordine per conto di un
-  cliente.
-- **Shop CJ / Shop Shopify / Shop AliExpress** — le tre voci del menu, una
-  sotto l'altra, dei tre Marketplace (per i clienti CJ = "Marketplace 1",
-  Shopify = "Marketplace 2", AliExpress = "Marketplace 3"). In cima a ciascuna la card **Regole dei
-  Marketplace**: il nome di ogni Marketplace nello Shop del cliente e
-  (Session 86) **nessuno sconto con bonifico**: bonifico e carta costano uguale, in tutti i Marketplace e nei contratti. Ogni prodotto nuovo
-  entra con il **30%** pagabile in JavCash; lo puoi alzare da Modifica fino al
-  99%, mai al 100%.
-- **Shop AliExpress** — il negozio collegato all'API Dropshipping di
-  AliExpress (Session 71), con le stesse quattro schede del Shop Shopify.
-  **Impostazioni**: App Key e App Secret dell'app creata su
-  openservice.aliexpress.com (categoria Drop Shipping), **Collega
-  AliExpress** per autorizzare l'account e **Verifica connessione**, che
-  mostra alcune categorie lette davvero dal fornitore; poi paese, valuta e
-  lingua di interrogazione, ricarico, arrotondamento, spedizione e JavCash
-  di default. **Catalogo AliExpress**: cerchi per parola chiave, apri un
-  prodotto per vederne le varianti con il prezzo a cui lo venderesti, e lo
-  importi con nome e descrizione in italiano. **Prodotti in vendita**:
-  modifichi prezzi, JavCash e stato, o risincronizzi da AliExpress.
-  **Ordini**: invio al fornitore (automatico o a mano), stato e tracking.
-  **Prodotti inseriti a mano**: la vecchia lista senza API, ancora
-  utilizzabile per prodotti di altri fornitori. Due cose da sapere: il
-  pagamento dell'ordine ad AliExpress resta un passaggio manuale nel tuo
-  account AliExpress, e se l'invio di un ordine fallisce a metà non viene
-  mai ritentato da solo — ricevi un avviso con il riferimento da cercare,
-  per non far partire due pacchi.
-- **Shop CJ** (prima "Shop Jav Partner") — il negozio collegato a CJ Dropshipping.
-  **Impostazioni**: incolla la chiave API (la trovi su cjdropshipping.com → My
-  CJ → Authorization → API), premi **Verifica connessione e saldo**, poi
-  scegli cambio USD/EUR, ricarico, arrotondamento, chi paga la spedizione e i
-  JavCash usabili (l'esempio "un prodotto da $10 sarà in vendita a..." si
-  aggiorna mentre scrivi). **Modalità test (sandbox)**: gli ordini inviati a CJ
-  sono finti; spegnila solo quando vuoi spedire davvero. **Invia a CJ in
-  automatico**: l'ordine parte appena il cliente ha pagato. **Shop visibile ai
-  clienti**: i prodotti importati compaiono ai clienti come "Marketplace 1"
-  (senza indicare da dove arrivano). Se lo accendi con la sandbox ancora
-  attiva compare un avviso: i clienti pagherebbero ordini che CJ non spedisce. **Catalogo CJ**: cerca (in
-  inglese), filtra per categoria e prezzo, vedi già il prezzo a cui lo
-  venderesti; aprendo un prodotto vedi varianti, stock, da dove parte e la
-  spedizione più economica verso l'Italia; traduci nome e descrizione, scegli
-  le varianti, controlla il **Ricarico %** (già al 100%: paghi 10, vendi a
-  circa 20; i prezzi si aggiornano mentre scrivi) e **Importa**. Il ricarico
-  si cambia dopo da **Modifica** sul prodotto, o per tutti in Impostazioni. **Prodotti in vendita**: modifica testi e foto
-  principale, ricarico solo per quel prodotto, prezzo fisso di una variante,
-  varianti attive, **Aggiorna da CJ** (costo e stock; lo fa anche da solo ogni
-  notte), **Nascondi**. **Ordini**: in alto il **riepilogo di cassa** (ordini da pagare a
-  CJ, totale necessario, saldo CJ, quanto manca). Non serve avere saldo in
-  anticipo: quando un cliente paga, l'ordine viene creato su CJ da solo e, se il
-  saldo CJ basta, pagato da solo. Se non basta compare il badge arancione
-  **Pagamento CJ richiesto** (e ti arriva una notifica): premi **Apri pagamento
-  CJ** e paga quell'ordine con carta o PayPal sul sito CJ, poi **Verifica
-  pagamento CJ** (lo fa comunque da solo ogni 10 minuti); in alternativa ricarica
-  il saldo CJ e gli ordini in attesa si pagano da soli, dal più vecchio. Il
-  cliente intanto vede "Ordine ricevuto", poi "In preparazione" quando CJ è
-  pagato. Filtri: Da pagare su CJ, Problemi, Cliente non ha pagato, In
-  preparazione / in viaggio, Consegnati. Ogni ordine mostra pagamento cliente,
-  stato su CJ e pagamento CJ separati, costo CJ, margine, tentativi ed eventuale
-  errore. Il bonifico di un cliente si conferma come sempre da
-  **Ordini**.
-- **Riscatti Fatture** — la coda delle richieste "Riscatta Cashback" dei
-  clienti: **Verifica importo** (apri il documento caricato, conferma
-  l'importo reale -- da questo momento il cliente sa quanto pagare e può
-  farlo con carta o bonifico), **Conferma bonifico ricevuto** (solo se il
-  cliente ha scelto bonifico; se ha scelto carta l'accredito è automatico
-  alla conferma di Stripe), **Rifiuta** con motivo. Il filtro **«Fattura da
-  controllare»** raccoglie i riscatti pagati con carta all'invio, già
-  accreditati senza verifica: **Fattura OK** chiude il controllo, **Fattura
-  non accettata** (con motivo, che il cliente riceve) segna il problema ma
-  **non toglie** i JavCash e non rimborsa il 5%: lo storno, se serve, si fa
-  a mano dal wallet.
-- **Documentazione** — crea/modifica/archivia annunci e materiale (testo, più
-  opzionalmente un'immagine, un PDF o un link video) da pubblicare per i
-  clienti, i promoter, o entrambi — visibili nella rispettiva scheda
-  "Documentazione" delle due aree.
-- **Rete Commerciale** — a differenza della vista del promoter (limitata al
-  proprio ramo), qui vedi **l'intera organizzazione**: tutti i rami, con
-  ricerca ed espandi/comprimi. Naviga livello per livello come nella vista
-  promoter — "Espandi tutto" o una ricerca forzano l'apertura di tutti i
-  livelli in una volta. Come nella vista promoter, **clicca il nome di
-  qualsiasi persona** per il popup di dettaglio (persone sotto, contratti,
-  valore, provvigioni) — qui però, essendo un ruolo di staff e non un
-  promoter con una propria filiera, la provvigione mostrata è quella totale
-  del ramo, non "la tua", perché lo staff non è un beneficiario del piano
-  provvigionale.
-- **Ticket di Supporto** — tutti i ticket aperti da clienti e promoter, con
-  filtro per chi li ha aperti e per stato; rispondi e la risposta appare
-  subito nell'area del cliente/promoter. Una risposta su un ticket "Aperto" lo
-  sposta automaticamente in "In lavorazione"; solo l'amministrazione può
-  segnarlo come "Risolto" o "Chiuso".
-- **Wallet** — visione d'insieme di tutti i portafogli della piattaforma
-  (saldo e ogni transazione mostrati in "JavCash", non euro): saldo e
-  indirizzo di ogni cliente/promoter (con ricerca per nome, email o
-  indirizzo), più il registro globale di tutte le transazioni (ricariche,
-  trasferimenti tra utenti, storni, debiti d'acquisto ordini, cashback),
-  filtrabile per tipo ed esportabile in CSV. Da qui puoi anche **stornare**
-  una transazione fatta per errore (un clic su "Storna" con motivazione):
-  non cancella la transazione originale, ne registra una di correzione
-  collegata, così lo storico resta sempre tracciabile. La ricarica manuale
-  di un singolo cliente ("Ricarica") è riservata al **Super Admin**
-  (permesso `wallet.credit`, più stretto del resto della superficie
-  wallet); si fa più comodamente dal suo popup in "Anagrafiche Clienti"
-  (vedi sopra) oppure da questa sezione, che resta la vista d'insieme su
-  tutta l'organizzazione.
-  - **Se una ricarica dà errore, NON ripeterla alla cieca: ricarica la
-    pagina e controlla il saldo prima.** In generale il sistema è ora
-    protetto — riprovare la stessa ricarica non accredita due volte, perché
-    la richiesta porta con sé una chiave che il server riconosce come "è la
-    stessa operazione di prima". Fino a settembre 2026 però esisteva un
-    difetto per cui un problema del server di posta faceva comparire un
-    errore su una ricarica **già andata a buon fine**, e il secondo clic
-    accreditava davvero una seconda volta; è corretto, ma l'abitudine di
-    verificare il saldo prima di ripetere un'operazione sui soldi resta
-    quella giusta.
-- **Contabilità** — tutti i movimenti di tutti i clienti (JavCash, ordini,
-  riscatti e, da Session 54, le rate dei contratti), filtrabili per cliente.
-  Ogni riga e ogni riferimento "Ordine / Riscatto / Contratto #…" apre lo stesso
-  dettaglio che vede il cliente, con la cronologia completa di chi ha fatto
-  cosa e quando.
-
-## 4. Cosa succede "dietro le quinte" quando un contratto si attiva
-
-- **Anteprima provvigioni** (Session 50): quando l'amministratore approva un
-  contratto (o lo porta comunque verso l'attivazione), la finestra
-  *Recensisci* mostra prima **chi riceve cosa**: il promoter del cliente e
-  gli sponsor sopra di lui, ciascuno con grado, tipo di provvigione e
-  importo; se il cliente paga a rate, quanto parte a ogni rata e fino a
-  quando; se non ha ancora pagato, come verrebbero divise nelle tre
-  modalità. Il pulsante di conferma si sblocca solo spuntando *"Ho
-  controllato l'anteprima"*. L'anteprima accettata resta salvata: la riapri
-  dal pulsante **Provvigioni** del contratto, insieme alla tabella delle
-  rate (pagata / non riuscita / in attesa, e quando sono partite le relative
-  provvigioni). Se Stripe non riesce a incassare una rata e il cliente paga
-  in altro modo, lì c'è **"Conferma rata ricevuta"**.
-- **Rate**: pagamento unico → le provvigioni partono una volta sola, intere.
-  3 o 12 rate → ogni promoter riceve la sua provvigione divisa in 3 o 12
-  quote, una per ogni rata effettivamente incassata (la somma delle quote è
-  esattamente la provvigione intera).
-- Creare o inviare un contratto **non genera mai** una provvigione.
-- La provvigione viene calcolata **una sola volta**, quando un contratto passa
-  allo stato **Attivo** — cioè quando ci sono **sia** il pagamento **sia**
-  l'approvazione dei documenti, in qualunque ordine arrivino — non quando viene solo pagato (quello è uno stato
-  intermedio, "Pagata", distinto da "Attiva"; se un contratto resta fermo lì
-  troppo a lungo, l'amministrazione lo vede nell'elenco "Richiede attenzione").
-- Il calcolo cristallizza la catena degli sponsor così com'era in quel momento
-  — spostamenti successivi nella rete non cambiano mai calcoli già fatti.
-- Ogni movimento di provvigione riporta una spiegazione testuale.
-- **IVA**: un contratto intestato a un **privato non ha IVA**; uno intestato a
-  un'**azienda / partita IVA** è prezzo + IVA. Lo decide la tipologia del
-  cliente, non il prodotto — il prodotto stabilisce solo *quale* aliquota
-  applicare quando l'IVA c'è. Il conteggio viene congelato sul contratto alla
-  creazione.
-- **Quali contratti vede un cliente**: ogni prodotto di tipo contratto ha un
-  "Cliente Target" (*Solo privati* / *Solo aziende* / *Entrambi*, impostabile
-  dall'amministrazione in Prodotti). Un cliente vede a catalogo solo i
-  contratti compatibili con la propria tipologia — e il sistema li rifiuta
-  comunque anche se qualcuno provasse ad aggirare la schermata.
-- **Cashback sul contratto** (se attivato dall'amministrazione sul prodotto):
-  quando il contratto risulta pagato, al cliente viene accreditata
-  automaticamente una percentuale del totale pagato come JavCash sul wallet.
-  **Non c'è nessun 5% aggiuntivo da pagare**: quella regola riguarda solo il
-  riscatto delle fatture dei partner esterni e gli acquisti nello Shop, non i
-  servizi Jav. Di default è disattivato su tutti i prodotti.
-- **Bonus primo segnalatore** (se attivato dall'amministrazione sul prodotto):
-  un importo extra riconosciuto **una sola volta per contratto** al promoter
-  che aveva portato quel cliente in Jav, **in aggiunta** alla
-  provvigione normale e mai al posto suo. Non va a tutta la rete, e non va al
-  promoter che si limita a compilare il contratto se è una persona diversa.
-- Se il venditore indicato in un contratto non esiste o non è attivo, il
-  sistema **rifiuta la creazione del contratto** con un errore chiaro — prima
-  poteva capitare che il contratto si attivasse comunque senza pagare
-  nessuno, senza nessun avviso; è stato corretto (vedi
-  `docs/paid-contract-commission-audit.md`).
-
-### "Invita un amico" (tutti: clienti e promoter)
-
-Ogni persona con un accesso — cliente o promoter — ha nella propria area una
-sezione **Invita un amico** con:
-
-- **il proprio link personale**, da condividere (dal telefono si apre
-  direttamente WhatsApp, Telegram, SMS…);
-- **la lista di chi si è iscritto con quel link**, con tre stati: *Iscritto*
-  (registrato, nessun contratto), *Contratto in corso*, *Attivo* (contratto
-  realmente in forza);
-- **il conteggio verso il premio**: ogni **5 amici invitati con un contratto
-  attivo** si può richiedere una **gift card da 25 euro**. Il premio si
-  ripete: vale a 5, a 10, a 15 e così via, non solo per i primi 5.
-
-Due cose importanti da capire:
-
-1. **Questa lista non è la rete commerciale e non paga provvigioni.** È una
-   lista piatta, a un livello solo. Dove finisce in rete la persona che si
-   iscrive non lo decide questa lista:
-   - se chi invita **è un promoter**, l'iscritto entra nel suo albero, come
-     sempre;
-   - se chi invita **è un cliente semplice**, l'iscritto entra sotto **il
-     promoter di quel cliente**.
-   In entrambi i casi l'iscritto compare comunque nella lista di chi lo ha
-   invitato.
-2. **La gift card non arriva in automatico.** Cliccando "Richiedi" parte una
-   richiesta all'amministrazione, che consegna il premio e lo segna; la nota
-   scritta dall'amministrazione compare nella tua lista richieste. Questo
-   permette di scegliere di volta in volta cosa dare.
-
-Dal lato amministrazione, le richieste si gestiscono in **Omaggi Inviti**.
-
-## 5. Domande frequenti
-
-**"Ho dimenticato l'Organization ID."**
-Non è recuperabile dalla pagina di login — contatta chi amministra il sistema.
-
-**"Vedo 'Nessun profilo agente collegato a questo account' nell'area Promoter."**
-Il tuo account utente esiste ma non è ancora collegato a un profilo agente
-nella rete commerciale — serve intervento di un amministratore.
-
-**"Il mio contratto non appare nell'area Cliente."**
-L'area Cliente mostra solo i contratti collegati al tuo profilo cliente. Se il
-profilo non è ancora collegato al tuo login, contatta l'assistenza.
-
-**"Dopo 15 minuti devo rifare il login ogni volta, è normale?"**
-Sì, per ora — il rinnovo automatico della sessione (silent refresh) non è
-ancora stato implementato nel frontend. Non crasha più però: ti riporta
-automaticamente al login.
-
-**"Posso registrarmi da solo senza un link di invito?"**
-No, per design. Il sistema è un circuito chiuso: ogni cliente deve arrivare
-tramite il link di un promoter.
-
-**"Posso usare il sito da smartphone?"**
-Le pagine sono responsive (si adattano allo schermo) ma non è stato fatto un
-test approfondito su dispositivi mobili in questa fase.
-
-## 6. Per chi amministra il sistema (non utenti finali)
-
-Operazioni non ancora disponibili da interfaccia (richiedono l'API diretta,
-documentazione interattiva su `/backend/docs`, o intervento diretto sul
-database): creazione utenti staff, cambio ruoli, liquidazioni/pagamenti
-provvigioni, audit log visualizzabile, report esportabili in CSV, gestione
-qualifiche/piano carriera dall'interfaccia, applicazione della regola del 33%
-sul tetto di produzione per ramo (esiste come funzione pura testata ma non è
-collegata al motore live — richiede prima una decisione di business su cosa
-conta come "produzione qualificante", vedi `docs/open-questions.md` #6).
-
-Vedi `docs/server-migration-guide.md`, `docs/architecture.md` e
-`docs/admin-dashboard-plan.md` per i dettagli tecnici e la roadmap.
+Apri il browser (dal telefono va benissimo) sull'indirizzo del club, per
+esempio `https://jav.ecodo.ai/login`.
+
+**Lingua.** In alto a destra c'è una bandierina: tocca e scegli **portoghese**,
+**inglese** o **italiano**. Si parte in portoghese; la scelta resta salvata sul
+dispositivo (anche dopo l'uscita). Per ora sono tradotti l'accesso e l'area
+famiglie; il resto e i messaggi che arrivano dal server sono ancora in
+italiano.
+
+Servono **Organization ID** (te lo comunica la segreteria), **email** e
+**password**.
+
+- Se sbagli, il messaggio è sempre lo stesso ("email o password non validi"),
+  sia che l'email non esista sia che la password sia sbagliata: è una scelta
+  di sicurezza. Dopo **5 tentativi falliti** l'account si blocca per 15 minuti.
+- **Password dimenticata?** Link sotto il campo password → Organization ID ed
+  email → arriva un link per sceglierne una nuova, valido 60 minuti e
+  utilizzabile una volta sola. Il link arriva sempre alla casella dell'account.
+- Al primo accesso ti viene chiesto di completare il profilo (dati anagrafici,
+  privacy): è normale, serve una volta sola.
+
+**Registrazione.** Non esiste un modulo aperto a chiunque: si entra con il
+**link del proprio club** (per esempio `https://jav.ecodo.ai/c/judo-clube-de-lagos`,
+lo dà la segreteria) o con il link di invito di chi ti ha presentato. Chi si
+registra dal link del club entra in quel club. L'account creato è quello del
+**genitore** (o dell'atleta adulto): i figli si aggiungono dopo,
+dall'interno. Arriva un'email per confermare l'indirizzo.
+
+## 2. Per i genitori (e gli atleti adulti)
+
+**Solo il genitore accede.** I figli non hanno un account: sono *atleti*
+gestiti da te. Se ti alleni anche tu, aggiungi te stesso come atleta
+("me stesso").
+
+### 2.1 La pagina della famiglia
+
+È la prima cosa che vedi. Per ogni figlio c'è una **card** con foto, cintura,
+piano, prossima quota da pagare, stato del certificato medico, prossima gara,
+punti nel Jav Ranking, livello e medaglie conquistate. Sotto, il **riepilogo
+della famiglia**: quanto c'è da pagare, cosa è scaduto, quanto hai pagato in
+questa stagione e le ultime prove caricate.
+
+### 2.2 Aggiungere un figlio
+
+Nome, cognome, data di nascita, sesso: basta. **Il piano lo sceglie il
+sistema dall'età** (calcolata al 1° settembre, come nelle categorie
+federali). Appena aggiunto compaiono la quota d'iscrizione della stagione e
+la quota del mese.
+
+Nei **corsi JAV nelle scuole** si sceglie anche il corso (la scuola): se
+sei arrivato da «Inscrever» sul sito è già scelto. Lì non c'è iscrizione,
+solo la mensilità, e non ci sono cinture, gare e ranking: chi vuole
+continuare può chiedere alla segreteria di passare a un club.
+
+### 2.3 Pagare: carica la prova
+
+Premi **Carica un pagamento**: per prima cosa scegli **che cosa** hai pagato.
+
+**Quote del club** (mensilità, iscrizione, gare):
+
+1. Fai il bonifico all'IBAN del club (lo trovi nella schermata di pagamento,
+   con le istruzioni per la causale).
+2. Scegli le quote che quel bonifico paga — anche di più figli insieme — e
+   scatta una foto della ricevuta (o carica il PDF).
+3. Fatto: **le quote risultano subito pagate.**
+
+**Sconti e credito.** Sulla mensilità puoi avere lo sconto dell'escalão
+(A/B/C, o judo adattato: lo imposta la segreteria quando vede il documento) e
+lo sconto famiglia se hai più figli iscritti: la quota mostra il prezzo di
+listino e gli sconti. Se hai credito nel wallet (per esempio dagli inviti),
+spunta **Usa il credito**: confermi con il PIN o il codice via email, e se il
+credito copre tutto non serve la ricevuta.
+
+**Iscrizione annuale.** Vale dal 1° gennaio al 31 dicembre; se entri a metà
+anno paghi solo i mesi che restano. Per un atleta minorenne anche il genitore
+diventa socio (una quota per famiglia).
+
+**Invita un amico.** Nella pagina della famiglia c'è il tuo link: quando una
+famiglia che hai invitato paga una mensilità, ricevi credito nel wallet.
+
+**Ordine dello Shop** (judogi, materiale): scegli l'ordine in attesa di
+bonifico, fai il bonifico alle coordinate dello Shop che vedi lì e allega la
+ricevuta. L'ordine parte quando il pagamento è confermato.
+
+La segreteria può controllare le prove. Se una non va bene, ricevi una
+notifica e un'email con il motivo, e le quote tornano da pagare.
+
+Le quote mensili si creano da sole il 1° del mese, solo per i mesi previsti
+dal piano (di solito settembre–giugno). Se una quota scade, ti arriva un
+promemoria.
+
+### 2.4 Certificato medico
+
+Dalla scheda dell'atleta: tipo (agonistico o non agonistico), date di
+rilascio e scadenza, foto o PDF. Ti avvisiamo **30 e 7 giorni prima** della
+scadenza e quando è scaduto. Senza certificato agonistico valido alla data
+della gara non ci si può iscrivere alle gare che lo richiedono.
+
+### 2.5 Gare
+
+**Iscrivi a una gara**: vedi le gare aperte e, per ogni figlio, se può
+iscriversi (e perché no, se non può: età, certificato, iscrizioni chiuse).
+Se la gara ha una quota, compare tra le quote da pagare e si paga come le
+altre, con la prova. Puoi ritirare l'iscrizione fino alla scadenza.
+
+### 2.6 Jav Ranking, cinture, medaglie
+
+- **Jav Ranking**: la classifica del club per stagione, sesso e fascia
+  d'età. I punti arrivano dai piazzamenti in gara (1° 100, 2° 70, 3° 50,
+  5° 30, 7° 20, partecipazione 10) moltiplicati per il livello della gara
+  (club ×1, regionale ×2, nazionale ×3, internazionale ×4).
+- **Cinture**: lo storico dei passaggi di grado di ogni figlio; le assegna
+  l'istruttore.
+- **Livello e medaglie**: crescono con presenze, cinture e gare (prima gara,
+  primo podio, 50 e 100 presenze, …).
+
+### 2.7 Corsi
+
+L'elenco dei corsi con giorni e orari; puoi iscrivere o togliere un figlio da
+un corso.
+
+### 2.8 Materiale (judogi, cinture, attrezzatura)
+
+**Ordina materiale** apre lo Shop del club: scegli prodotto e taglia, indica
+per quale figlio è, e paghi con bonifico (con l'eventuale credito JavCash).
+Lo stato dell'ordine lo vedi in "I miei Ordini".
+
+### 2.9 Il resto
+
+- **JavCash**: il credito interno (bonus di benvenuto, cashback). Si spende
+  nello Shop, mai per l'intero prezzo; per usarlo serve un codice via email
+  o il tuo PIN.
+- **Contabilità**: tutti i tuoi movimenti, in euro e in JavCash, con il
+  dettaglio di ciascuno.
+- **Assistenza**: apri una richiesta alla segreteria e segui la risposta.
+- **Invita un amico**: il tuo link personale e chi si è iscritto con quello;
+  ogni 5 amici con un contratto attivo puoi richiedere un omaggio, che
+  consegna la segreteria.
+
+## 3. Per la segreteria
+
+Ogni club ha la sua segreteria (ruolo **Segreteria**), che vede **solo il
+proprio club**: entrando, l'area si apre direttamente sul club. Le sezioni:
+
+- **Atleti**: elenco con filtri (stato, piano, ricerca), scheda con famiglia,
+  quote, certificati, cinture, gare. Si può fissare a mano il piano di un
+  atleta (non cambierà più da solo con l'età), cambiarne lo stato (attivo,
+  sospeso, uscito), registrare il tesseramento federale.
+- **Piani**: le fasce d'età con quota mensile, iscrizione annuale, giorno di
+  scadenza e mesi fatturati. Un piano in uso non si cancella.
+- **Quote**: elenco con filtri. Su una quota: **segna pagata** (contanti),
+  **condona**, **riapri**. Si possono anche generare a mano le quote di un
+  mese (lo fa comunque il sistema il 1° del mese).
+- **Prove caricate**: le prove dei genitori, già accettate. Se una non va,
+  **rifiutala** con un motivo: le quote tornano da pagare e il genitore viene
+  avvisato.
+- **Certificati**: chi è in scadenza o scaduto.
+- **Gare & risultati**: crea la gara (data, luogo, livello, scadenza,
+  quota, età, certificato agonistico richiesto), segui gli iscritti, chiudi o
+  riapri le iscrizioni, inserisci i piazzamenti a gara finita: il ranking si
+  aggiorna da solo.
+- **Corsi & presenze**: corsi, orari, istruttori, iscritti.
+- **Gare e stage, trasporto**: un evento può essere una gara o uno stage
+  (che non dà punti). Spunta "Chiedere il trasporto" e indica ente, email,
+  partenza e accompagnatori: quando le iscrizioni si chiudono la lettera al
+  comune si scrive da sola e ti arriva una notifica; dal pulsante 🚌
+  **Richiesta trasporto** la rileggi, la correggi e la mandi con un clic.
+- **Prezzi e sconti** (in Impostazioni): percentuali degli escalão, sconto
+  famiglia, credito per invito, quota socio del genitore, che cosa comprende
+  l'iscrizione. Sulla scheda dell'atleta: escalão e judo adattato.
+- **Ordini Shop**: gli ordini di judogi e materiale fatti dalle famiglie del
+  club, con lo stato (in attesa di pagamento, pagato, spedito). Solo
+  consultazione: lo Shop è della piattaforma, che conferma i bonifici e
+  spedisce.
+- **Impostazioni**: IBAN, intestatario e istruzioni per il bonifico delle
+  quote (li vedono i genitori quando pagano), l'email di contatto del club,
+  il **link di registrazione** da dare alle famiglie (con il pulsante per
+  copiarlo), e lo **staff**: si aggiungono istruttori o altre persone di
+  segreteria, che ricevono l'email per scegliersi la password.
+
+**Persone**: atleti, genitori, segreteria, treinador e monitor in un elenco,
+ognuno con il suo simbolo (🥋 atleta, 👪 genitore, 🗂️ segreteria, 🧑‍🏫 treinador,
+🤝 treinador adjunto, 🎽 monitor, 🎗️ monitor adjunto). Tocca un nome: debiti,
+pagamenti, risultati, investimenti e la funzione. **Taxa de falta**: chi ha
+fatto poche lezioni nel mese, con un clic metà mensilità o niente. **Ore
+dello staff** e **Registro presenze**: il cartellino e chi è venuto. **Sito
+del club**: testi, foto, contatti, judoka pubblicati (solo con il consenso
+della famiglia), pulsante Pubblica.
+
+**La pagina pubblica di un judoka.** Ogni judoka sul sito ha la sua pagina,
+come le schede della Federazione Internazionale: foto, cintura e passaggi,
+risultati, prossime gare, posto nel ranking, medaglie, foto e video. Quasi
+tutto arriva da solo dal gestionale; tu aggiungi il resto. Apri l'atleta
+(**Atleti** → tocca il nome, oppure **Sito del club** → *Judoka sul sito* →
+**Pagina pubblica**) e nella sezione **Pagina pubblica**:
+
+1. **Profilo IJF**: se il judoka ha una scheda sul sito della Federazione
+   Internazionale, aprila su ijf.org (o su JudoBase) e incolla l'indirizzo
+   (per esempio `https://www.ijf.org/judoka/12345`). Altri indirizzi non sono
+   accettati. Sul sito compare il bottone «Ver perfil IJF».
+2. **Due righe**, **tecnica preferita** (es. *Seoi-nage*) e **guardia**
+   (destra o sinistra), poi **Salva i testi**. Le due righe sono le stesse
+   che il genitore scrive dal suo portale: le vedete e correggete entrambi.
+3. **Foto**: **Aggiungi foto** (JPG, PNG o WebP fino a 5 MB, al massimo 24).
+   Ogni foto arriva *non pubblicata*: guardala e tocca **Pubblica** quando va
+   bene; **Togli dal sito** la nasconde, **Togli** la cancella.
+4. **Video**: solo YouTube. Su YouTube tocca *Condividi*, copia il link,
+   incollalo e tocca **Aggiungi video** (al massimo 12); poi **Pubblica**.
+
+In alto vedi se la pagina è già visibile, con il link **Vedi la pagina
+pubblica**. Se non lo è, la riga dice perché: la famiglia non ha ancora dato
+il consenso, oppure devi ancora accendere l'atleta in *Judoka sul sito*.
+Puoi preparare la pagina prima: nessuno la vede finché manca il consenso.
+**Foto e video compaiono solo se la famiglia ha permesso la foto**; se la
+famiglia ritira il consenso, tornano tutti non pubblicati. Nei **Cursos
+JAV** la sezione non c'è: gli atleti dei corsi non compaiono mai sul sito.
+
+### 3.1 Per il superadmin: i club
+
+Nell'area amministrazione la sezione **Club** elenca tutti i club, con atleti
+attivi, staff e stato. Da qui:
+
+- **Nuovo club**: nome, indirizzo per le famiglie (proposto dal nome),
+  email della segreteria, IBAN e intestatario delle quote. La segreteria
+  riceve l'email per scegliersi la password. Se l'invio delle email non è
+  configurato, compare il link di primo accesso: copialo e mandalo tu (vale
+  7 giorni).
+- **Entra**: apri la gestione del club come la vede la sua segreteria; una
+  fascia in alto ricorda in che club sei e riporta all'elenco.
+- **Aggiungi staff**, **Sospendi / Riattiva**: un club sospeso non è più
+  accessibile alle sue famiglie e alla sua segreteria, i dati restano.
+
+Restano tue anche le funzioni generali della piattaforma: utenti e ruoli,
+Shop e ordini, JavCash, contratti, rete promoter e provvigioni, assistenza,
+contabilità.
+
+#### I corsi JAV nelle scuole
+
+I corsi di judo che JudoArteVida tiene nelle scuole non sono un club: hanno
+un'entrata loro nella console, **Cursos JAV** 🏫, accanto a «Tutti i club».
+
+- La prima volta premi **«Crea l'unità Cursos JAV»**: nasce con un piano da
+  25 € al mese, senza iscrizione (lo cambi da «Piani e prezzi»). Gli sconti
+  partono spenti; la commissione della piattaforma è sempre 0%.
+- **«Gestisci i corsi»** apre l'elenco dei corsi, ognuno con il suo
+  cruscotto del mese: iscritti, presenze, incassato, parte del treinador,
+  parte di JAV, ancora da incassare, debiti. Il mese si sceglie in alto.
+- **Nuovo corso / Modifica**: nome, scuola, indirizzo, città, età, il
+  treinador responsabile e la sua percentuale (default 50%), il nome con cui
+  il treinador compare sul sito (solo se è d'accordo), il testo per le
+  famiglie, «Mostra sul sito», gli orari della settimana. Una percentuale
+  nuova vale per le quote emesse da quel momento.
+- **Iscritti** mostra chi frequenta il corso e permette di iscrivere o
+  togliere un atleta; **Quote** le mensilità del corso. Le «Quote senza
+  corso» sono di atleti aggiunti senza scegliere un corso: iscrivili e le
+  quote ancora da pagare passano al corso.
+- Il link da dare alle scuole e alle famiglie è quello dell'unità
+  («Copia il link d'iscrizione»); dal sito, «Inscrever» su un corso porta
+  allo stesso link con il corso già scelto.
+- Nella **Panoramica** della piattaforma i corsi hanno una riga a parte: ciò
+  che JAV tiene (incassi meno la parte dei treinador), questo mese, nell'anno
+  e da sempre.
+
+**Passare una famiglia a un club.** Nei corsi, da **Persone** apri il
+genitore (o l'atleta adulto) e premi **«Passa a un club»**, poi scegli il
+club. Si può solo se la famiglia non ha quote da pagare nei corsi. I figli
+lasciano i corsi ed entrano nel club con la cintura bianca e il piano per
+età: iscrizione dell'anno a pro rata e mensilità dal mese prossimo. Le quote
+già pagate restano nei conti dei corsi.
+
+### 3.2 Lo Shop: fornitori e «Fornitori da avvisare»
+
+Nell'area amministrazione, pagina dello Shop («Fai la Spesa con Jav»):
+
+- **Impostazioni del negozio**: oltre a spedizione e ordine minimo, l'**email
+  da cui scrivere ai fornitori** (per esempio info@…: le loro risposte
+  tornano lì e la casella tiene una copia di ogni ordine mandato) e la
+  **firma** in fondo alle email.
+- **Fornitori**: le aziende che fanno la merce (integratori, attrezzatura,
+  judogi…). Per ognuna nome, email per gli ordini, telefono, partita IVA,
+  sede e una descrizione che vede il cliente. «Modifica» corregge una
+  scheda, email compresa. Senza email gli ordini non le si possono mandare.
+- **Categorie e fornitori**: le categorie con cui il cliente filtra i
+  prodotti. Accanto a ogni categoria scegli il **fornitore**: tutti i
+  prodotti della categoria che non hanno un fornitore loro vanno a lui. Da
+  qui puoi anche mettere più prodotti in una categoria in un colpo solo.
+- **Prodotti in catalogo**: ogni prodotto mostra a quale fornitore andranno
+  i suoi ordini, e se lo eredita dalla categoria («dalla categoria …»). Nel
+  prodotto puoi scegliere un fornitore diverso, che vale al posto di quello
+  della categoria, e le sue categorie.
+- **Fornitori da avvisare**: gli ordini pagati che i fornitori non hanno
+  ancora ricevuto, una scheda per fornitore con quanti ordini e quanti pezzi.
+  Premi **«Prepara email»**: si apre l'email già scritta — tutti gli ordini
+  di quel fornitore, ciascuno con i prodotti, l'indirizzo di consegna, il
+  telefono e le note del cliente, e la richiesta di rispondere con corriere
+  e tracking. Non ci sono prezzi. Puoi cambiare destinatario, oggetto e
+  testo, poi premi **«Invia»**: l'email parte e quegli ordini risultano
+  mandati, quindi spariscono dalla lista. Se l'email non parte (per esempio
+  perché l'invio delle email non è ancora configurato) te lo dice e nessun
+  ordine viene segnato: puoi riprovare senza rischio di doppioni. Sotto
+  trovi le **righe senza fornitore** — prodotti che non sanno a chi andare:
+  scegli il fornitore sul prodotto o sulla sua categoria e compaiono subito
+  sotto quel fornitore — e lo **storico degli invii**, con il testo esatto
+  di ogni email.
+- **Ordini**: il pulsante «Invia alle aziende per email» su un singolo
+  ordine manda solo quello che non è ancora partito; un ordine mandato dalla
+  lista dei fornitori non ripartirà da qui. Quando il fornitore risponde con
+  il tracking, «Segna come spedito» avvisa il cliente.
+
+## 4. Per i treinador (e gli adjunto)
+
+Entrando si apre **Presenze di oggi**: la lezione in corso è già scelta; un
+tocco sul cerchio segna l'entrata dell'atleta, 📝 aggiunge una nota per la
+segreteria. Si può scegliere un altro giorno per correggere. **Calendario**
+mostra le lezioni della settimana dei tuoi corsi; **Cartellino** ha il
+pulsante Entro / Esco e le ore di oggi e del mese.
+
+Le famiglie, dalla loro pagina, possono segnare "È arrivato" solo per oggi.
+
+**Nei corsi JAV nelle scuole** non ci sono cinture né ranking; al loro posto
+c'è **I miei guadagni**: per ogni mese e ogni tuo corso, quanto è entrato
+dalle mensilità e quanto ti spetta (la tua percentuale), più quanto arriverà
+quando le famiglie avranno pagato le quote già emesse.
+
+## 4bis. Per gli istruttori (vecchia sezione)
+
+Ruolo **Istruttore**. Vedi i tuoi corsi:
+
+- **Presenze**: apri il corso e il giorno, un tocco per atleta presente o
+  assente. Non si segnano presenze nel futuro.
+- **Cinture**: dalla scheda di un atleta registri un passaggio di grado (solo
+  verso un grado superiore), con data e nota.
+
+## 5. Rete promoter, contratti e provvigioni
+
+Il gestionale conserva la sua parte commerciale, utile se il club ha
+procacciatori o affiliati che portano iscritti:
+
+- **Promoter**: hanno un link personale, vedono la propria rete, i propri
+  clienti e le proprie provvigioni.
+- **Contratti e pratiche**: un cliente può sottoscrivere più servizi in una
+  pratica sola (dati e documenti una volta, un bonifico solo); paga in unica
+  soluzione, 3 o 12 rate. Ogni bonifico lo conferma l'amministrazione.
+- **Provvigioni**: si calcolano **solo** quando un contratto diventa attivo
+  (pagato **e** approvato), sulla catena degli sponsor com'era in quel
+  momento; con le rate partono una quota alla volta. Prima di approvare,
+  l'amministrazione vede e conferma un'anteprima di chi riceve cosa.
+- **IVA**: un privato non paga IVA sui contratti; un'azienda paga prezzo + IVA.
+
+## 6. Domande frequenti
+
+**"Ho dimenticato l'Organization ID."** Chiedilo alla segreteria: non è
+recuperabile dalla pagina di login.
+
+**"Ho caricato la prova ma la quota è tornata da pagare."** La segreteria ha
+rifiutato la prova: il motivo è nella notifica e nell'email che hai ricevuto.
+
+**"Mio figlio non si può iscrivere a una gara."** Accanto al suo nome c'è il
+motivo: di solito il certificato agonistico manca o scade prima della gara,
+oppure l'età non rientra, oppure le iscrizioni sono chiuse.
+
+**"Perché mio figlio è in quel piano?"** Il piano dipende dall'età al 1°
+settembre della stagione. Se serve un'eccezione, la segreteria può fissarlo a
+mano.
+
+**"Posso usarlo dal telefono?"** Sì: il portale è pensato prima di tutto per
+il telefono, compresa la foto della ricevuta e del certificato.

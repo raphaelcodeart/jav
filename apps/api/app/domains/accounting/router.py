@@ -48,8 +48,8 @@ async def get_my_summary(
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """The caller's own totals: paid by card and bank transfer, JavCash,
-    contracts, and commissions when they are also a promoter."""
+    """The caller's own totals: paid by bank transfer, JavCash, contracts,
+    and commissions when they are also a promoter."""
     return await accounting_service.my_summary(
         db, organization_id=current_user.organization_id, user_id=current_user.user_id
     )
@@ -62,7 +62,7 @@ async def get_my_detail(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Detail of one of the caller's own movements or of what it refers to
-    (`ref` = wallet:<id> / order:<id> / redemption:<id> / contract:<id>).
+    (`ref` = wallet:<id> / order:<id> / contract:<id>).
     Anything not theirs is not found."""
     try:
         return await accounting_details.build_detail(

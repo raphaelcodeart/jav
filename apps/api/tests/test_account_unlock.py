@@ -1,4 +1,4 @@
-"""Sblocco dell'account da parte del superadmin (Session 88).
+"""Sblocco dell'account da parte del superadmin.
 
 Un cliente fermo davanti ai controlli d'ingresso -- email da confermare,
 privacy da accettare, profilo da completare -- può essere sbloccato dal

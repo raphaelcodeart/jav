@@ -1,4 +1,4 @@
-"""Session 36's "Miei Clienti" promoter CRM: a promoter registers a brand-
+"""The "Miei Clienti" promoter CRM: a promoter registers a brand-
 new customer themselves (no self-registration/referral-link click needed)
 and activates a contract for them, even though the customer has never
 logged in. Covers the network-attribution parity with a normal referral
@@ -60,27 +60,16 @@ def _customer_payload(**overrides):
     return CustomerCreate(**defaults)
 
 
-async def _make_internal_product_version(db, organization_id, actor_user_id, *, energy_type="ELECTRICITY"):
+async def _make_internal_product_version(db, organization_id, actor_user_id):
     product = await catalog_service.create_product(
         db, organization_id=organization_id, actor_user_id=actor_user_id,
         payload=ProductCreate(
             code=f"CRM-{uuid.uuid4().hex[:6]}", customer_type="PRIVATE", category="INTERNAL",
-            energy_type=energy_type, name="Luce Standard", base_price_cents=5000,
+            name="Abbonamento mensile", base_price_cents=5000,
         ),
     )
     _, versions = await catalog_service.get_product_with_versions(db, organization_id=organization_id, product_id=product.id)
     return versions[0]
-
-
-def _supply_point_payload(energy_type="ELECTRICITY"):
-    from app.domains.customers.schemas import SupplyPointCreate
-
-    return SupplyPointCreate(
-        energy_type=energy_type,
-        pod_code="IT001E12345678" if energy_type != "GAS" else None,
-        pdr_code="00000000000000" if energy_type == "GAS" else None,
-        meter_number=None, street="Via Roma 1", city="Milano", province="MI", postal_code="20100", country="IT",
-    )
 
 
 @pytest.mark.asyncio
@@ -168,7 +157,7 @@ async def test_promoter_activates_a_contract_for_their_own_recruited_customer(db
 
     contract = await contracts_service.create_contract_for_recruited_customer(
         db, organization_id=organization_id, promoter_user_id=promoter_user.id, customer_id=customer.id,
-        product_version_id=version.id, supply_point_payload=_supply_point_payload(), email=customer.email,
+        product_version_id=version.id, email=customer.email,
     )
 
     assert contract.status == "DOCUMENTS_PENDING"
@@ -192,7 +181,7 @@ async def test_promoter_cannot_activate_a_contract_for_someone_elses_customer(db
     with pytest.raises(contracts_service.SelfServiceContractError):
         await contracts_service.create_contract_for_recruited_customer(
             db, organization_id=organization_id, promoter_user_id=user_b.id, customer_id=customer_a.id,
-            product_version_id=version.id, supply_point_payload=_supply_point_payload(), email=customer_a.email,
+            product_version_id=version.id, email=customer_a.email,
         )
 
 
@@ -223,7 +212,7 @@ async def test_reset_password_marks_the_account_email_verified_if_not_already(db
     assert user.email_verified_at is not None
 
 
-# --- Session 67: the administration registers customers the same way -----------------
+# --- The administration registers customers the same way -----------------
 
 
 @pytest.mark.asyncio

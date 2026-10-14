@@ -4,18 +4,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.audit import service as audit_service
-from app.domains.customers.models import Address, Company, Customer, CustomerProfile, SupplyPoint
+from app.domains.customers.models import Address, Company, Customer, CustomerProfile
 from app.domains.customers.schemas import (
     CustomerCreate,
     CustomerUpdate,
-    SupplyPointCreate,
-    SupplyPointUpdate,
 )
 from app.domains.users import service as users_service
 
 PRIVATE_LIKE_KINDS = {"PRIVATE", "SOLE_PROPRIETOR"}
 COMPANY_LIKE_KINDS = {"COMPANY", "CONDOMINIUM"}
-ENERGY_TYPE_LABELS = {"ELECTRICITY": "Energia elettrica", "GAS": "Gas", "DUAL_FUEL": "Luce e gas"}
 
 
 class CustomerValidationError(Exception):
@@ -86,7 +83,7 @@ async def list_customers(
                 users_by_id[c.user_id].privacy_accepted_at is not None if c.user_id in users_by_id else None
             ),
             "user_status": users_by_id[c.user_id].status if c.user_id in users_by_id else None,
-            # Session 88: il terzo controllo d'ingresso, che prima non si vedeva.
+            # Il terzo controllo d'ingresso, che prima non si vedeva.
             "profile_complete": (
                 users_service.is_profile_complete(users_by_id[c.user_id]) if c.user_id in users_by_id else None
             ),
@@ -108,9 +105,6 @@ async def get_customer_detail(db: AsyncSession, *, organization_id: uuid.UUID, c
     company = await db.get(Company, customer_id)
     addresses = (
         await db.execute(select(Address).where(Address.customer_id == customer_id))
-    ).scalars().all()
-    supply_points = (
-        await db.execute(select(SupplyPoint).where(SupplyPoint.customer_id == customer_id))
     ).scalars().all()
 
     current_promoter_agent_id = None
@@ -140,7 +134,6 @@ async def get_customer_detail(db: AsyncSession, *, organization_id: uuid.UUID, c
         "display_name": display_name_for(customer.kind, profile, company),
         "created_at": customer.created_at,
         "addresses": list(addresses),
-        "supply_points": list(supply_points),
         "current_promoter_agent_id": current_promoter_agent_id,
         "current_promoter_name": current_promoter_name,
     }
@@ -244,82 +237,6 @@ async def update_customer(
     await db.commit()
     await db.refresh(customer)
     return customer
-
-
-async def add_supply_point(
-    db: AsyncSession,
-    *,
-    organization_id: uuid.UUID,
-    customer_id: uuid.UUID,
-    payload: SupplyPointCreate,
-    actor_user_id: uuid.UUID,
-) -> SupplyPoint | None:
-    customer = await db.get(Customer, customer_id)
-    if customer is None or customer.organization_id != organization_id:
-        return None
-
-    address = Address(
-        organization_id=organization_id,
-        customer_id=customer_id,
-        kind="SUPPLY",
-        street=payload.street,
-        city=payload.city,
-        province=payload.province,
-        postal_code=payload.postal_code,
-        country=payload.country,
-    )
-    db.add(address)
-    await db.flush()
-
-    label = payload.label or (
-        f"{ENERGY_TYPE_LABELS.get(payload.energy_type, payload.energy_type)} - {payload.street}, {payload.city}"
-    )
-    supply_point = SupplyPoint(
-        organization_id=organization_id,
-        customer_id=customer_id,
-        label=label,
-        energy_type=payload.energy_type,
-        pod_code=payload.pod_code,
-        pdr_code=payload.pdr_code,
-        meter_number=payload.meter_number,
-        supply_address_id=address.id,
-    )
-    db.add(supply_point)
-
-    await audit_service.record(
-        db, organization_id=organization_id, actor_user_id=actor_user_id,
-        action="customer.supply_point_added", entity_type="customer", entity_id=str(customer_id),
-        new_value={"energy_type": payload.energy_type, "label": label},
-    )
-    await db.commit()
-    await db.refresh(supply_point)
-    return supply_point
-
-
-async def update_supply_point(
-    db: AsyncSession,
-    *,
-    organization_id: uuid.UUID,
-    supply_point_id: uuid.UUID,
-    payload: SupplyPointUpdate,
-    actor_user_id: uuid.UUID,
-) -> SupplyPoint | None:
-    supply_point = await db.get(SupplyPoint, supply_point_id)
-    if supply_point is None or supply_point.organization_id != organization_id:
-        return None
-
-    previous = {"label": supply_point.label}
-    if payload.label is not None:
-        supply_point.label = payload.label
-
-    await audit_service.record(
-        db, organization_id=organization_id, actor_user_id=actor_user_id,
-        action="customer.supply_point_updated", entity_type="supply_point", entity_id=str(supply_point_id),
-        previous_value=previous, new_value={"label": supply_point.label},
-    )
-    await db.commit()
-    await db.refresh(supply_point)
-    return supply_point
 
 
 async def set_customer_photo(

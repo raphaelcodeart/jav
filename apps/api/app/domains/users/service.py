@@ -105,7 +105,7 @@ async def unfreeze_user(
     return user
 
 
-# --- Sblocco dell'account da parte del superadmin (Session 88) -----------------------------------
+# --- Sblocco dell'account da parte del superadmin -----------------------------------
 #
 # Un cliente che non riceve l'email di conferma, o che non riesce a finire il
 # profilo, resta fermo davanti ai tre controlli d'ingresso (email confermata,

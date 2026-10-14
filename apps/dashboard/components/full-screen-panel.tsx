@@ -49,13 +49,13 @@ export function FullScreenPanel({
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950 light:bg-slate-50 animate-fade-in">
-      <div className="sticky top-0 z-10 border-b border-white/10 light:border-slate-200 bg-slate-950/95 light:bg-white/95 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-50 animate-fade-in">
+      <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 backdrop-blur-sm">
         <div className="mx-auto max-w-3xl px-4 sm:px-6 py-3 flex items-center gap-3">
           <button
             onClick={onClose}
             aria-label="Torna indietro"
-            className="p-2 -ml-2 rounded-xl hover:bg-white/10 light:hover:bg-slate-900/5 text-slate-400 hover:text-white light:hover:text-slate-900 transition cursor-pointer shrink-0"
+            className="p-2 -ml-2 rounded-xl hover:bg-slate-900/5 text-slate-400 hover:text-slate-900 transition cursor-pointer shrink-0"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -63,9 +63,9 @@ export function FullScreenPanel({
           </button>
           <div className="min-w-0 flex-1">
             {eyebrow && (
-              <p className="text-[10px] font-semibold text-orange-400 uppercase tracking-wide">{eyebrow}</p>
+              <p className="text-[10px] font-semibold text-brand-600 uppercase tracking-wide">{eyebrow}</p>
             )}
-            <h2 className="text-base sm:text-lg font-bold text-white light:text-slate-900 truncate">{title}</h2>
+            <h2 className="text-base sm:text-lg font-bold text-slate-900 truncate">{title}</h2>
           </div>
         </div>
         {subtitle && (
@@ -94,22 +94,22 @@ export function FullScreenSteps({ steps, current }: { steps: string[]; current: 
             <div
               className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 ${
                 active
-                  ? "bg-orange-600 text-white"
+                  ? "bg-brand-600 text-white"
                   : done
                     ? "bg-emerald-500/80 text-white"
-                    : "bg-white/10 light:bg-slate-900/10 text-slate-400"
+                    : " bg-slate-900/10 text-slate-400"
               }`}
             >
               {done ? "✓" : i + 1}
             </div>
             <span
               className={`text-[11px] font-semibold truncate ${
-                active ? "text-white light:text-slate-900" : "text-slate-500"
+                active ? " text-slate-900" : "text-slate-500"
               }`}
             >
               {label}
             </span>
-            {i < steps.length - 1 && <div className="w-4 sm:w-8 h-px bg-white/10 light:bg-slate-300 shrink-0" />}
+            {i < steps.length - 1 && <div className="w-4 sm:w-8 h-px bg-slate-300 shrink-0" />}
           </div>
         );
       })}

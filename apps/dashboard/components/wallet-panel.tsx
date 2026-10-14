@@ -15,20 +15,16 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 // Finer-grained label than TYPE_LABELS alone -- distinguishes a plain admin
-// top-up from the lines a partner-invoice redemption or a product-order
-// cashback request always write together (see
-// docs/cashback-partner-invoices-plan.md and
-// orders/service.py::_credit_order_cashback), without needing to read the
-// free-text note.
+// top-up from the lines a product-order cashback request always writes
+// together (see orders/service.py::_credit_order_cashback), without needing
+// to read the free-text note.
 const SOURCE_LABELS: Record<string, string> = {
   MANUAL_ADMIN: "Ricarica manuale",
   WELCOME_BONUS: "Omaggio di benvenuto",
-  INVOICE_REDEMPTION_BASE: "Riscatto fattura",
-  INVOICE_REDEMPTION_BONUS: "Bonus 5% riscatto fattura",
   ORDER_CASHBACK_BASE: "Cashback ordine",
   ORDER_CASHBACK_BONUS: "Bonus 5% cashback ordine",
   // Automatic, surcharge-free credit on a paid Jav contract --
-  // deliberately a different rule from the two 5% ones above.
+  // deliberately a different rule from the 5% order one above.
   CONTRACT_CASHBACK: "Cashback contratto Jav",
 };
 
@@ -41,35 +37,24 @@ function shortCode(id: string): string {
   return id.slice(0, 8).toUpperCase();
 }
 
-/** Every cashback/bonus credit carries reference_order_id or
-    reference_invoice_redemption_id (see wallets/schemas.py::
-    WalletTransactionRead) -- shown here as a clickable chip so it's never
-    just an anonymous "+X JavCash" with no way to trace where it came
-    from. Deep-links into "I miei Ordini"/"Riscatta Cashback" on whichever
+/** Every order cashback/bonus credit carries reference_order_id (see
+    wallets/schemas.py::WalletTransactionRead) -- shown here as a clickable
+    chip so it's never just an anonymous "+X JavCash" with no way to trace
+    where it came from. Deep-links into "I miei Ordini" on whichever
     dashboard this panel is mounted in (customer or promoter both use this
     component). */
 function referenceLink(t: WalletTransactionRead): { label: string; href: string } | null {
   const basePath = typeof window !== "undefined" && window.location.pathname.startsWith("/promoter") ? "/promoter" : "/customer";
-  // reference_order_id / reference_imported_order_id are two different FK
-  // columns internally (two different tables, see imported_products/models.py),
-  // but both land the customer on the exact same unified "I miei Ordini"
-  // list -- never distinguished here.
-  const orderId =
-    t.reference_order_id ?? t.reference_imported_order_id ?? t.reference_cj_order_id ?? t.reference_shopify_order_id
-    ?? t.reference_aliexpress_order_id;
-  if (orderId) {
-    return { label: `Ordine #${shortCode(orderId)}`, href: `${basePath}?tab=orders` };
-  }
-  if (t.reference_invoice_redemption_id) {
-    return { label: `Riscatto #${shortCode(t.reference_invoice_redemption_id)}`, href: `${basePath}?tab=cashback` };
+  if (t.reference_order_id) {
+    return { label: `Ordine #${shortCode(t.reference_order_id)}`, href: `${basePath}?tab=orders` };
   }
   return null;
 }
 
 // The wallet only ever holds JavCash, Jav's internal credit -- see
 // docs/business-rules.md#internal-wallet. Never format a wallet
-// balance/transaction amount as plain EUR; real-money payments (Stripe,
-// bonifico) are formatted separately, with euro(), wherever they appear
+// balance/transaction amount as plain EUR; real-money payments (bonifico)
+// are formatted separately, with euro(), wherever they appear
 // (e.g. customer-orders-panel.tsx, admin-orders-panel.tsx).
 function javCash(cents: number): string {
   return `${(cents / 100).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} JavCash`;
@@ -165,21 +150,21 @@ export function WalletPanel() {
   return (
     <div className="space-y-6">
       {/* Balance + address */}
-      <div className="glass-card rounded-2xl p-6 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70">
+      <div className="glass-card rounded-2xl p-6 border-slate-200 bg-white/70">
         {wallet === undefined ? (
           <p className="text-sm text-slate-500">Caricamento...</p>
         ) : (
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Saldo disponibile</p>
-              <p className="text-3xl font-bold text-white light:text-slate-900">{javCash(wallet.balance_cents)}</p>
+              <p className="text-3xl font-bold text-slate-900">{javCash(wallet.balance_cents)}</p>
             </div>
             <div>
               <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Il tuo indirizzo wallet</p>
               <button
                 onClick={handleCopyAddress}
                 title="Copia indirizzo"
-                className="flex items-center gap-2 font-mono text-xs text-slate-300 light:text-slate-600 bg-white/5 light:bg-slate-900/5 border border-white/10 light:border-slate-200 rounded-lg px-3 py-2 hover:bg-white/10 transition cursor-pointer"
+                className="flex items-center gap-2 font-mono text-xs text-slate-600 bg-slate-900/5 border border-slate-200 rounded-lg px-3 py-2 hover:bg-slate-100 transition cursor-pointer"
               >
                 {wallet.address}
                 <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -198,47 +183,47 @@ export function WalletPanel() {
       {/* Send form -- only for wallets with can_transfer enabled (denied by
           default, turned on per promoter by an admin) */}
       {wallet && !wallet.can_transfer ? (
-        <div className="glass-card rounded-2xl p-6 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70">
-          <h3 className="text-sm font-semibold text-white light:text-slate-900 mb-2">Invia denaro</h3>
+        <div className="glass-card rounded-2xl p-6 border-slate-200 bg-white/70">
+          <h3 className="text-sm font-semibold text-slate-900 mb-2">Invia denaro</h3>
           <p className="text-xs text-slate-500">L&apos;invio di bonifici wallet non è abilitato per il tuo account.</p>
         </div>
       ) : wallet ? (
-      <div className="glass-card rounded-2xl p-6 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70">
-        <h3 className="text-sm font-semibold text-white light:text-slate-900 mb-4">Invia denaro</h3>
+      <div className="glass-card rounded-2xl p-6 border-slate-200 bg-white/70">
+        <h3 className="text-sm font-semibold text-slate-900 mb-4">Invia denaro</h3>
         <form onSubmit={handleSend} className="grid grid-cols-1 sm:grid-cols-[2fr_1fr_2fr_auto] gap-3 items-end">
           <div className="space-y-1">
-            <label className="text-[10px] font-semibold text-slate-300 light:text-slate-600 uppercase block">Indirizzo destinatario</label>
+            <label className=" font-semibold text-slate-600 uppercase block">Indirizzo destinatario</label>
             <input
               required
               value={toAddress}
               onChange={(e) => setToAddress(e.target.value)}
               placeholder="0x..."
-              className="w-full rounded-xl glass-input px-3 py-2 text-sm font-mono focus:border-orange-500"
+              className="w-full rounded-xl glass-input px-3 py-2 text-sm font-mono focus:border-brand-500"
             />
           </div>
           <div className="space-y-1">
-            <label className="text-[10px] font-semibold text-slate-300 light:text-slate-600 uppercase block">Importo (JavCash)</label>
+            <label className=" font-semibold text-slate-600 uppercase block">Importo (JavCash)</label>
             <input
               required
               inputMode="decimal"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0,00"
-              className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500"
+              className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500"
             />
           </div>
           <div className="space-y-1">
-            <label className="text-[10px] font-semibold text-slate-300 light:text-slate-600 uppercase block">Nota (opzionale)</label>
+            <label className=" font-semibold text-slate-600 uppercase block">Nota (opzionale)</label>
             <input
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500"
+              className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500"
             />
           </div>
           <button
             type="submit"
             disabled={sendLoading}
-            className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50 whitespace-nowrap"
+            className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50 whitespace-nowrap"
           >
             {sendLoading ? "Invio..." : "Invia"}
           </button>
@@ -253,15 +238,15 @@ export function WalletPanel() {
       ) : null}
 
       {/* Transaction history */}
-      <div className="glass-card rounded-2xl border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70 overflow-hidden">
+      <div className="glass-card rounded-2xl border-slate-200 bg-white/70 overflow-hidden">
         <div className="p-5 pb-3">
-          <h3 className="text-sm font-semibold text-white light:text-slate-900">Storico transazioni</h3>
+          <h3 className="text-sm font-semibold text-slate-900">Storico transazioni</h3>
         </div>
         {transactionsError && <p className="px-5 pb-3 text-sm text-rose-400">Impossibile caricare le transazioni.</p>}
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-left text-xs">
             <thead>
-              <tr className="border-b border-white/5 light:border-slate-200 text-slate-400 light:text-slate-500 font-semibold">
+              <tr className="border-b border-slate-200 text-slate-500 font-semibold">
                 <th className="py-2 px-5">Tipo</th>
                 <th className="py-2 px-5">Controparte</th>
                 <th className="py-2 px-5">Riferimento</th>
@@ -270,7 +255,7 @@ export function WalletPanel() {
                 <th className="py-2 px-5">Data</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5 light:divide-slate-200">
+            <tbody className="divide-y divide-slate-200">
               {transactions === undefined ? (
                 <tr><td colSpan={6} className="text-center py-6 text-slate-500">Caricamento...</td></tr>
               ) : transactions.length === 0 ? (
@@ -280,7 +265,7 @@ export function WalletPanel() {
                   const isOutgoing = t.from_wallet_id === wallet?.id;
                   const ref = referenceLink(t);
                   return (
-                    <tr key={t.id} className="text-slate-300 light:text-slate-600">
+                    <tr key={t.id} className=" text-slate-600">
                       <td className="py-2 px-5">{transactionLabel(t)}</td>
                       <td className="py-2 px-5">
                         {isOutgoing ? (t.to_display_name ?? "Sistema") : (t.from_display_name ?? "Sistema")}
@@ -289,7 +274,7 @@ export function WalletPanel() {
                         {ref ? (
                           <a
                             href={ref.href}
-                            className="inline-flex items-center gap-1 font-mono text-[11px] px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-400 border border-orange-500/20 hover:bg-orange-500/20 transition"
+                            className="inline-flex items-center gap-1 font-mono text-[11px] px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-600 border border-brand-500/20 hover:bg-brand-500/20 transition"
                           >
                             {ref.label}
                             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">

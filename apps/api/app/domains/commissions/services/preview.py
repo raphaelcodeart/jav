@@ -144,7 +144,7 @@ async def build_commission_preview(db: AsyncSession, *, organization_id: uuid.UU
     if contract.paid_at and plan is None:
         # Paid, but not through a plan (a confirmed bank transfer): one payment.
         plan = payment_plans.plan_by_key(payment_plans.PLAN_FULL)
-    # Paid: what that plan costs (Session 84: the rate cost more than one go).
+    # Paid: what that plan costs (the rate cost more than one go).
     gross = payment_plans.plan_gross_cents(plan, contract) if plan is not None else int(contract.gross_amount_cents or 0)
 
     def _schedule(p: payment_plans.PaymentPlan) -> list[dict]:
@@ -170,7 +170,7 @@ async def build_commission_preview(db: AsyncSession, *, organization_id: uuid.UU
                 },
                 "release": (
                     "Alla tua conferma di questa anteprima" if n == 1
-                    else "Quando Stripe conferma l'incasso della rata (o la confermi tu a mano)"
+                    else "Quando confermi il bonifico di questa rata"
                 ),
             })
         return rows

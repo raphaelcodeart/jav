@@ -21,7 +21,7 @@ async function fetchQuote(productVersionId: string): Promise<OrderQuoteRead> {
 }
 
 async function fetchPaymentInfo(): Promise<{ iban: string | null; holder: string; instructions: string | null }> {
-  const res = await fetch("/api/proxy/invoice-redemptions/payment-info");
+  const res = await fetch("/api/proxy/organizations/me/payment-info");
   if (!res.ok) throw new Error("Impossibile caricare le coordinate di pagamento.");
   return res.json();
 }
@@ -36,7 +36,7 @@ function StepBadge({ n, done }: { n: number; done?: boolean }) {
   return (
     <span
       className={`flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold shrink-0 ${
-        done ? "bg-emerald-500 text-white" : "bg-orange-600 text-white"
+        done ? "bg-emerald-500 text-white" : "bg-brand-600 text-white"
       }`}
     >
       {done ? (
@@ -63,7 +63,7 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
     >
       <span
         className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
-          checked ? "bg-orange-600" : "bg-white/15 light:bg-slate-300"
+          checked ? "bg-brand-600" : " bg-slate-300"
         }`}
       >
         <span
@@ -73,7 +73,7 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
           style={{ height: "18px", width: "18px" }}
         />
       </span>
-      <span className="text-sm font-semibold text-white light:text-slate-900">{label}</span>
+      <span className="text-sm font-semibold text-slate-900">{label}</span>
     </button>
   );
 }
@@ -104,9 +104,8 @@ export function ProductCheckoutModal({
 
   const [creditAmount, setCreditAmount] = useState("0.00");
   const [useCredit, setUseCredit] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<"BANK_TRANSFER" | "CARD" | null>(null);
   const [cashbackRequested, setCashbackRequested] = useState(false);
-  const [step, setStep] = useState<"choose" | "bank_instructions" | "card_redirect" | "success">("choose");
+  const [step, setStep] = useState<"choose" | "bank_instructions" | "success">("choose");
   const [placedOrder, setPlacedOrder] = useState<OrderRead | null>(null);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -124,6 +123,8 @@ export function ProductCheckoutModal({
   });
 
   const maxUsableCents = quote ? Math.min(quote.max_creditable_cents, quote.customer_wallet_balance_cents) : 0;
+  // Si paga solo con bonifico: se l'IBAN non è configurato non c'è modo.
+  const paymentMethod = quote?.bank_transfer_available ? "BANK_TRANSFER" : null;
 
   useEffect(() => {
     if (!quote) return;
@@ -131,10 +132,6 @@ export function ProductCheckoutModal({
     // JavCash rather than having it silently pre-applied to the maximum.
     setUseCredit(false);
     setCreditAmount("0.00");
-    // Default to whichever residual payment method is actually available.
-    if (quote.bank_transfer_available) setPaymentMethod("BANK_TRANSFER");
-    else if (quote.card_available) setPaymentMethod("CARD");
-    else setPaymentMethod(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quote?.product_version_id]);
 
@@ -156,7 +153,7 @@ export function ProductCheckoutModal({
     : 0;
   const totalToPayCents = residualCents + cashbackSurchargeCents;
   const needsPaymentMethod = totalToPayCents > 0;
-  const noMethodAvailable = quote ? !quote.bank_transfer_available && !quote.card_available : false;
+  const noMethodAvailable = quote ? !quote.bank_transfer_available : false;
   const otpConfirmed = creditCents === 0 || !!otpCode.trim();
 
   function setCreditFraction(fraction: number) {
@@ -214,21 +211,6 @@ export function ProductCheckoutModal({
         setStep("success");
         return;
       }
-      if (order.payment_method === "CARD") {
-        const returnUrl = window.location.href;
-        const sessionRes = await fetch(
-          `/api/proxy/orders/mine/${order.id}/checkout-session?success_url=${encodeURIComponent(returnUrl)}&cancel_url=${encodeURIComponent(returnUrl)}`,
-          { method: "POST" }
-        );
-        if (!sessionRes.ok) throw new Error(await friendlyApiError(sessionRes));
-        const { checkout_url } = await sessionRes.json();
-        // Opens in a NEW TAB rather than navigating away -- if the payment
-        // fails or Stripe hiccups, the customer never loses this page (and
-        // whatever else they had open in the dashboard).
-        window.open(checkout_url, "_blank", "noopener,noreferrer");
-        setStep("card_redirect");
-        return;
-      }
       setStep("bank_instructions");
     } catch (err: any) {
       setSubmitError(err.message || "Impossibile completare l'acquisto.");
@@ -238,13 +220,13 @@ export function ProductCheckoutModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 light:bg-slate-900/40 backdrop-blur-sm animate-fade-in">
-      <div className="w-full max-w-xl glass-card rounded-2xl p-6 border-white/10 light:border-slate-300 bg-slate-950 light:bg-white animate-scale-up max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+      <div className="w-full max-w-xl glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold text-white light:text-slate-900">Acquista {quote ? "" : productName}</h3>
+          <h3 className="text-lg font-bold text-slate-900">Acquista {quote ? "" : productName}</h3>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-white/10 light:hover:bg-slate-900/10 text-slate-400 transition cursor-pointer"
+            className="p-1.5 rounded-lg hover:bg-slate-900/10 text-slate-400 transition cursor-pointer"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -262,33 +244,12 @@ export function ProductCheckoutModal({
             <svg className="w-14 h-14 text-emerald-400 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <p className="text-sm text-slate-300 light:text-slate-600">
+            <p className="text-sm text-slate-600">
               Ordine confermato -- pagato interamente con i tuoi JavCash.
             </p>
             <button
               onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-xs font-semibold text-white transition cursor-pointer"
-            >
-              Chiudi
-            </button>
-          </div>
-        )}
-
-        {step === "card_redirect" && placedOrder && (
-          <div className="text-center py-6 space-y-3">
-            <svg className="w-14 h-14 text-orange-400 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-            </svg>
-            <p className="text-sm text-slate-300 light:text-slate-600">
-              Abbiamo aperto Stripe in una nuova scheda per completare il pagamento di{" "}
-              <strong className="text-orange-400">{euro(placedOrder.residual_amount_cents)}</strong>.
-            </p>
-            <p className="text-xs text-slate-500">
-              Puoi tornare qui in qualsiasi momento: trovi l&apos;ordine anche in &ldquo;I miei Ordini&rdquo;.
-            </p>
-            <button
-              onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-xs font-semibold text-white transition cursor-pointer"
+              className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer"
             >
               Chiudi
             </button>
@@ -297,25 +258,25 @@ export function ProductCheckoutModal({
 
         {step === "bank_instructions" && placedOrder && (
           <div className="space-y-3">
-            <p className="text-sm text-slate-300 light:text-slate-600">
-              Ordine creato. Paga <strong className="text-orange-400">{euro(placedOrder.residual_amount_cents)}</strong> tramite
+            <p className="text-sm text-slate-600">
+              Ordine creato. Paga <strong className="text-brand-600">{euro(placedOrder.residual_amount_cents)}</strong> tramite
               bonifico per confermarlo.
             </p>
-            <div className="p-4 rounded-xl bg-white/5 light:bg-slate-900/5 border border-white/10 light:border-slate-200 text-xs space-y-1.5">
+            <div className="p-4 rounded-xl bg-slate-900/5 border border-slate-200 text-xs space-y-1.5">
               {paymentInfo?.iban ? (
                 <>
                   <p><span className="text-slate-500">IBAN:</span> <span className="font-mono">{paymentInfo.iban}</span></p>
                   <p><span className="text-slate-500">Intestatario:</span> {paymentInfo.holder}</p>
-                  {paymentInfo.instructions && <p className="text-slate-400 light:text-slate-500 pt-1">{paymentInfo.instructions}</p>}
+                  {paymentInfo.instructions && <p className=" text-slate-500 pt-1">{paymentInfo.instructions}</p>}
                 </>
               ) : (
                 <p className="text-slate-500">Contatta l&apos;amministrazione per le coordinate bancarie.</p>
               )}
-              <p className="pt-1"><span className="text-slate-500">Causale consigliata:</span> <span className="font-mono text-orange-400">Ordine {placedOrder.id.slice(0, 8).toUpperCase()}</span></p>
+              <p className="pt-1"><span className="text-slate-500">Causale consigliata:</span> <span className="font-mono text-brand-600">Ordine {placedOrder.id.slice(0, 8).toUpperCase()}</span></p>
             </div>
             <button
               onClick={onClose}
-              className="w-full px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-xs font-semibold text-white transition cursor-pointer"
+              className="w-full px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer"
             >
               Ho capito
             </button>
@@ -325,14 +286,14 @@ export function ProductCheckoutModal({
         {step === "choose" && quote && (
           <div className="space-y-5">
             {/* Product + headline price, with a live "prezzo scontato" once JavCash is applied */}
-            <div className="p-4 rounded-xl bg-white/5 light:bg-slate-900/5 border border-white/10 light:border-slate-200">
-              <p className="text-sm font-semibold text-white light:text-slate-900 mb-2">{quote.product_name}</p>
+            <div className="p-4 rounded-xl bg-slate-900/5 border border-slate-200">
+              <p className="text-sm font-semibold text-slate-900 mb-2">{quote.product_name}</p>
               <div className="flex items-end gap-3 flex-wrap">
                 <div>
                   <p className="text-[10px] text-slate-500 uppercase tracking-wide">
                     {creditCents > 0 ? "Prezzo scontato" : "Prezzo"}
                   </p>
-                  <p className={`text-2xl font-extrabold ${creditCents > 0 ? "text-emerald-400" : "text-white light:text-slate-900"}`}>
+                  <p className={`text-2xl font-extrabold ${creditCents > 0 ? "text-emerald-400" : " text-slate-900"}`}>
                     {euro(Math.max(residualCents, 0))}
                   </p>
                 </div>
@@ -350,7 +311,7 @@ export function ProductCheckoutModal({
               </div>
               {quote.max_creditable_cents > 0 && (
                 <p className="text-[11px] text-slate-500 mt-2">
-                  Il tuo saldo: <strong className="text-white light:text-slate-900">{javCash(quote.customer_wallet_balance_cents)}</strong>
+                  Il tuo saldo: <strong className=" text-slate-900">{javCash(quote.customer_wallet_balance_cents)}</strong>
                   {" "}· su questo prodotto puoi usarne fino a {javCash(maxUsableCents)} (max {quote.credit_discount_percentage}% di sconto)
                 </p>
               )}
@@ -358,7 +319,7 @@ export function ProductCheckoutModal({
 
             {/* Step 1 -- spend JavCash */}
             {quote.max_creditable_cents > 0 && (
-              <div className="p-4 rounded-xl border border-white/10 light:border-slate-200 space-y-3">
+              <div className="p-4 rounded-xl border border-slate-200 space-y-3">
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                   <div className="flex items-center gap-2.5">
                     <StepBadge n={1} />
@@ -382,8 +343,8 @@ export function ProductCheckoutModal({
                             onClick={() => setCreditFraction(fraction)}
                             className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${
                               isActive
-                                ? "bg-orange-600 border-orange-600 text-white"
-                                : "bg-white/5 light:bg-slate-900/5 border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 hover:bg-white/10"
+                                ? "bg-brand-600 border-brand-600 text-white"
+                                : " bg-slate-900/5 border-slate-300 text-slate-600 hover:bg-slate-100"
                             }`}
                           >
                             {fraction === 1 ? "Massimo" : `${Math.round(fraction * 100)}%`}
@@ -392,18 +353,18 @@ export function ProductCheckoutModal({
                       })}
                     </div>
                     <div className="flex items-center gap-2">
-                      <label className="text-[10px] font-semibold text-slate-300 light:text-slate-600 uppercase shrink-0">
+                      <label className=" font-semibold text-slate-600 uppercase shrink-0">
                         Importo personalizzato
                       </label>
                       <input
                         inputMode="decimal"
                         value={creditAmount}
                         onChange={(e) => { setCreditAmount(e.target.value); setOtpRequested(false); setOtpCode(""); }}
-                        className="w-full max-w-[140px] rounded-lg glass-input px-3 py-1.5 text-sm focus:border-orange-500"
+                        className="w-full max-w-[140px] rounded-lg glass-input px-3 py-1.5 text-sm focus:border-brand-500"
                       />
                       <span className="text-xs text-slate-500 shrink-0">JavCash</span>
                     </div>
-                    <p className="text-xs px-3 py-2 rounded-lg bg-orange-500/10 border border-orange-500/20 text-orange-300">
+                    <p className="text-xs px-3 py-2 rounded-lg bg-brand-500/10 border border-brand-500/20 text-brand-600">
                       Stai usando <strong>{javCash(creditCents)}</strong> = <strong>{effectiveDiscountPct}% di sconto</strong> su questo ordine.
                     </p>
                   </div>
@@ -413,10 +374,10 @@ export function ProductCheckoutModal({
 
             {/* Step 2 -- OTP confirmation, only when spending credit */}
             {creditCents > 0 && (
-              <div className="p-4 rounded-xl border border-white/10 light:border-slate-200 space-y-2.5">
+              <div className="p-4 rounded-xl border border-slate-200 space-y-2.5">
                 <div className="flex items-center gap-2.5">
                   <StepBadge n={2} done={!!otpCode.trim()} />
-                  <p className="text-sm font-semibold text-white light:text-slate-900">Conferma i JavCash</p>
+                  <p className="text-sm font-semibold text-slate-900">Conferma i JavCash</p>
                 </div>
                 <p className="text-[11px] text-slate-500 pl-8">
                   Per sicurezza, confermi l&apos;uso dei tuoi JavCash con il tuo PIN o con un codice che ti mandiamo via email.
@@ -437,13 +398,13 @@ export function ProductCheckoutModal({
 
             {/* Step 3 -- optional return cashback */}
             {canRequestCashback && (
-              <div className="p-4 rounded-xl border border-white/10 light:border-slate-200 space-y-2.5">
+              <div className="p-4 rounded-xl border border-slate-200 space-y-2.5">
                 <div className="flex items-center gap-2.5">
                   <StepBadge n={creditCents > 0 ? 3 : 2} />
                   <Toggle checked={cashbackRequested} onChange={setCashbackRequested} label="Riscuoti subito cashback" />
                 </div>
                 <p className="text-[11px] text-slate-500 pl-8">
-                  Paga il <strong className="text-orange-400">{quote.cashback_percentage}%</strong> in più ora
+                  Paga il <strong className="text-brand-600">{quote.cashback_percentage}%</strong> in più ora
                   ({euro(Math.round((residualCents * quote.cashback_percentage) / 100))}) e ricevi l&apos;intero importo
                   pagato oggi accreditato come JavCash sul tuo wallet, non appena il pagamento è confermato.
                 </p>
@@ -452,10 +413,10 @@ export function ProductCheckoutModal({
 
             {/* Step 4 -- payment method for whatever is still owed in real money */}
             {needsPaymentMethod && (
-              <div className="p-4 rounded-xl border border-white/10 light:border-slate-200 space-y-2.5">
+              <div className="p-4 rounded-xl border border-slate-200 space-y-2.5">
                 <div className="flex items-center gap-2.5">
                   <StepBadge n={[creditCents > 0, canRequestCashback].filter(Boolean).length + 2} done={!!paymentMethod} />
-                  <p className="text-sm font-semibold text-white light:text-slate-900">Come vuoi pagare il resto?</p>
+                  <p className="text-sm font-semibold text-slate-900">Come vuoi pagare il resto?</p>
                 </div>
                 {noMethodAvailable ? (
                   <p className="text-xs text-rose-400 pl-8">
@@ -463,64 +424,38 @@ export function ProductCheckoutModal({
                   </p>
                 ) : (
                   <div className="pl-8 flex gap-2.5">
-                    {quote.bank_transfer_available && (
-                      <button
-                        type="button"
-                        onClick={() => setPaymentMethod("BANK_TRANSFER")}
-                        className={`flex-1 flex items-center justify-center gap-2 px-3 py-3 rounded-xl text-sm font-semibold border-2 transition cursor-pointer ${
-                          paymentMethod === "BANK_TRANSFER"
-                            ? "bg-orange-600 border-orange-600 text-white shadow-lg shadow-orange-500/20"
-                            : "bg-white/5 light:bg-slate-900/5 border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 hover:bg-white/10"
-                        }`}
-                      >
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M3 21h18M4 10h16M4 10l8-6 8 6M6 10v9m4-9v9m4-9v9m4-9v9" />
-                        </svg>
-                        Bonifico
-                      </button>
-                    )}
-                    {quote.card_available && (
-                      <button
-                        type="button"
-                        onClick={() => setPaymentMethod("CARD")}
-                        className={`flex-1 flex items-center justify-center gap-2 px-3 py-3 rounded-xl text-sm font-semibold border-2 transition cursor-pointer ${
-                          paymentMethod === "CARD"
-                            ? "bg-orange-600 border-orange-600 text-white shadow-lg shadow-orange-500/20"
-                            : "bg-white/5 light:bg-slate-900/5 border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 hover:bg-white/10"
-                        }`}
-                      >
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M2 10h20M6 15h4M2 7a2 2 0 012-2h16a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V7z" />
-                        </svg>
-                        Carta
-                      </button>
-                    )}
+                    <div className="flex-1 flex items-center justify-center gap-2 px-3 py-3 rounded-xl text-sm font-semibold border-2 bg-brand-600 border-brand-600 text-white shadow-lg shadow-brand-500/20">
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M3 21h18M4 10h16M4 10l8-6 8 6M6 10v9m4-9v9m4-9v9m4-9v9" />
+                      </svg>
+                      Bonifico
+                    </div>
                   </div>
                 )}
               </div>
             )}
 
             {/* Always-visible running total */}
-            <div className="p-4 rounded-xl bg-gradient-to-br from-orange-600/10 to-amber-500/5 border border-orange-500/20 space-y-1.5">
+            <div className="p-4 rounded-xl bg-gradient-to-br from-brand-600/10 to-brand-400/5 border border-brand-500/20 space-y-1.5">
               <div className="flex items-center justify-between">
-                <p className="text-xs text-slate-400 light:text-slate-500">Prezzo prodotto</p>
-                <p className="text-xs text-slate-400 light:text-slate-500">{euro(quote.amount_cents)}</p>
+                <p className="text-xs text-slate-500">Prezzo prodotto</p>
+                <p className="text-xs text-slate-500">{euro(quote.amount_cents)}</p>
               </div>
               {creditCents > 0 && (
                 <div className="flex items-center justify-between">
-                  <p className="text-xs text-slate-400 light:text-slate-500">JavCash usati</p>
+                  <p className="text-xs text-slate-500">JavCash usati</p>
                   <p className="text-xs text-emerald-400">-{javCash(creditCents)}</p>
                 </div>
               )}
               {cashbackSurchargeCents > 0 && (
                 <div className="flex items-center justify-between">
-                  <p className="text-xs text-slate-400 light:text-slate-500">Cashback ({quote.cashback_percentage}%)</p>
-                  <p className="text-xs text-orange-400">+{euro(cashbackSurchargeCents)}</p>
+                  <p className="text-xs text-slate-500">Cashback ({quote.cashback_percentage}%)</p>
+                  <p className="text-xs text-brand-600">+{euro(cashbackSurchargeCents)}</p>
                 </div>
               )}
-              <div className="flex items-center justify-between pt-1.5 border-t border-white/10 light:border-slate-300">
-                <p className="text-sm font-bold text-white light:text-slate-900">Totale da pagare ora</p>
-                <p className={`text-xl font-extrabold ${totalToPayCents > 0 ? "text-orange-400" : "text-emerald-400"}`}>
+              <div className="flex items-center justify-between pt-1.5 border-t border-slate-300">
+                <p className="text-sm font-bold text-slate-900">Totale da pagare ora</p>
+                <p className={`text-xl font-extrabold ${totalToPayCents > 0 ? "text-brand-600" : "text-emerald-400"}`}>
                   {euro(Math.max(totalToPayCents, 0))}
                 </p>
               </div>
@@ -540,7 +475,7 @@ export function ProductCheckoutModal({
                 || (needsPaymentMethod && (noMethodAvailable || !paymentMethod))
                 || !otpConfirmed
               }
-              className="w-full px-4 py-3 rounded-xl bg-gradient-to-r from-orange-600 to-amber-500 hover:from-orange-500 hover:to-amber-400 text-sm font-bold text-white shadow-lg shadow-orange-500/20 transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99]"
+              className="w-full px-4 py-3 rounded-xl bg-gradient-to-r from-brand-600 to-brand-400 hover:from-brand-500 hover:to-brand-400 text-sm font-bold text-white shadow-lg shadow-brand-500/20 transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99]"
             >
               {submitLoading ? "Elaborazione..." : totalToPayCents > 0 ? "Conferma e procedi al pagamento" : "Conferma ordine"}
             </button>

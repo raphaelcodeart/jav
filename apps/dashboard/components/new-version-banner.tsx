@@ -47,13 +47,13 @@ export function NewVersionBanner() {
 
   if (!outdated) return null;
   return (
-    <div className="fixed bottom-4 inset-x-4 sm:inset-x-auto sm:right-4 sm:max-w-sm z-[100] rounded-2xl border border-orange-500/40 bg-slate-900 light:bg-white shadow-2xl p-4 flex items-center gap-3">
-      <p className="text-xs text-slate-200 light:text-slate-700 flex-1">
+    <div className="fixed bottom-4 inset-x-4 sm:inset-x-auto sm:right-4 sm:max-w-sm z-[100] rounded-2xl border border-brand-500/40 bg-white shadow-2xl p-4 flex items-center gap-3">
+      <p className="text-xs text-slate-700 flex-1">
         È disponibile una versione aggiornata dell&apos;app. Ricarica la pagina per usarla.
       </p>
       <button
         onClick={() => window.location.reload()}
-        className="shrink-0 rounded-xl bg-orange-600 hover:bg-orange-500 px-3 py-2 text-xs font-semibold text-white cursor-pointer"
+        className="shrink-0 rounded-xl bg-brand-600 hover:bg-brand-500 px-3 py-2 text-xs font-semibold text-white cursor-pointer"
       >
         Aggiorna
       </button>

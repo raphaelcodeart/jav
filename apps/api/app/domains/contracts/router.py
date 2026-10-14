@@ -8,18 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import get_db
 from app.core.deps import CurrentUser, get_current_user, require_permission
 from app.domains.audit import service as audit_service
-from app.domains.catalog import pricing
-from app.domains.catalog.models import ProductVersion
-from app.domains.contracts import dossier, payment_plans
+from app.domains.contracts import dossier
 from app.domains.contracts import service as contract_service
 from app.domains.contracts.models import Contract
 from app.domains.contracts.schemas import (
-    ContractCheckoutRequest,
     ContractCreate,
     ContractForCustomerCreate,
     ContractIbanUpdate,
-    ContractPaymentOptionRead,
-    ContractPaymentOptionsRead,
     ContractRead,
     ContractSelfServiceCreate,
     ContractStatusHistoryRead,
@@ -28,11 +23,7 @@ from app.domains.contracts.schemas import (
 from app.domains.contracts.service import InvalidProducerAgentError, SelfServiceContractError
 from app.domains.contracts.state_machine import InvalidTransitionError
 from app.domains.customers.models import Customer
-from app.domains.integrations import google_drive
-from app.domains.integrations.google_drive import GoogleDriveError
-from app.domains.integrations.schemas import DriveUploadResultRead
 from app.domains.network import service as network_service
-from app.domains.organizations import service as organizations_service
 from app.domains.support.service import actor_role_for
 
 router = APIRouter(prefix="/contracts", tags=["contracts"])
@@ -87,7 +78,6 @@ async def create_contract(
             db,
             organization_id=current_user.organization_id,
             customer_id=payload.customer_id,
-            supply_point_id=payload.supply_point_id,
             product_version_id=payload.product_version_id,
             producer_agent_id=payload.producer_agent_id,
             actor_user_id=current_user.user_id,
@@ -113,15 +103,13 @@ async def create_my_contract(
     """'Attiva Contratto': any authenticated customer can self-activate a Jav
     product -- no contracts.create permission needed, same "self
     checkout, own account only" pattern as POST /orders/mine. Creates the
-    supply point and the contract in one call, then immediately advances it
-    to DOCUMENTS_PENDING -- see contracts/service.py::create_contract_self_service."""
+    contract and immediately advances it to DOCUMENTS_PENDING -- see contracts/service.py::create_contract_self_service."""
     try:
         contract = await contract_service.create_contract_self_service(
             db,
             organization_id=current_user.organization_id,
             customer_user_id=current_user.user_id,
             product_version_id=payload.product_version_id,
-            supply_point_payload=payload.supply_point,
             email=payload.email,
             holder_first_name=payload.holder_first_name,
             holder_last_name=payload.holder_last_name,
@@ -162,7 +150,7 @@ async def create_contract_for_my_customer(
         contract = await contract_service.create_contract_for_recruited_customer(
             db, organization_id=current_user.organization_id, promoter_user_id=current_user.user_id,
             customer_id=payload.customer_id, product_version_id=payload.product_version_id,
-            supply_point_payload=payload.supply_point, email=payload.email,
+            email=payload.email,
             holder_first_name=payload.holder_first_name, holder_last_name=payload.holder_last_name,
             pec=payload.pec, iban=payload.iban,
         )
@@ -173,95 +161,6 @@ async def create_contract_for_my_customer(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     rows = await contract_service.to_read_dicts(db, [contract])
     return ContractRead(**rows[0])
-
-
-@router.get("/mine/{contract_id}/payment-options", response_model=ContractPaymentOptionsRead)
-async def get_my_contract_payment_options(
-    contract_id: uuid.UUID,
-    current_user: CurrentUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> ContractPaymentOptionsRead:
-    """How this contract can be paid, priced. Own contract only.
-
-    Every figure is computed here from the amount frozen on the contract --
-    the browser is never asked what anything costs, it only picks a plan
-    key."""
-    contract = await _get_org_scoped_contract(
-        db, organization_id=current_user.organization_id, contract_id=contract_id
-    )
-    await _assert_own_contract_or_staff(db, current_user=current_user, contract=contract)
-
-    card_available = await organizations_service.is_stripe_configured(
-        db, organization_id=current_user.organization_id
-    )
-    payable = contract_service.is_payable(contract)
-    version = await db.get(ProductVersion, contract.product_version_id) if contract.product_version_id else None
-    cashback_percentage = int(version.contract_cashback_percentage or 0) if version is not None else 0
-    options = (
-        [
-            ContractPaymentOptionRead(
-                key=b.plan.key, label=b.plan.label, description=b.plan.description,
-                instalments=b.plan.instalments, instalment_cents=b.instalment_cents,
-                total_cents=b.total_cents, rounding_difference_cents=b.rounding_difference_cents,
-                discount_percentage=b.discount_percentage, discount_cents=b.discount_cents,
-            )
-            for b in payment_plans.available_breakdowns(
-                contract,
-                full_payment_discount_percentage=await organizations_service.get_contract_full_payment_discount_percentage(
-                    db, organization_id=current_user.organization_id
-                ),
-            )
-        ]
-        if payable
-        else []
-    )
-    return ContractPaymentOptionsRead(
-        contract_id=contract.id, payable=payable, status=contract.status,
-        missing_amount=contract.status in contract_service.PREPAYABLE_STATUSES and not contract.gross_amount_cents,
-        gross_amount_cents=contract.gross_amount_cents, card_available=card_available,
-        options=options, paid_at=contract.paid_at, payment_plan=contract.payment_plan,
-        cashback_percentage=cashback_percentage,
-        cashback_total_cents=(
-            pricing.contract_cashback_cents(version=version, gross_amount_cents=contract.gross_amount_cents)
-            if version is not None and contract.gross_amount_cents
-            else 0
-        ),
-    )
-
-
-@router.post("/mine/{contract_id}/checkout-session")
-async def create_my_contract_checkout_session(
-    contract_id: uuid.UUID,
-    payload: ContractCheckoutRequest,
-    success_url: str,
-    cancel_url: str,
-    current_user: CurrentUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> dict:
-    """Opens Stripe Checkout for one's own contract -- before or after the
-    documents are approved (contracts/service.py::PREPAYABLE_STATUSES). Returns the URL; the contract
-    is NOT marked paid here -- only the verified webhook does that."""
-    from app.domains.payments import service as payments_service
-
-    contract = await _get_org_scoped_contract(
-        db, organization_id=current_user.organization_id, contract_id=contract_id
-    )
-    await _assert_own_contract_or_staff(db, current_user=current_user, contract=contract)
-    if contract.paid_at is not None:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Questo contratto risulta già pagato.")
-    if not contract_service.is_payable(contract):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Questo contratto non si può pagare in questo stato.")
-
-    try:
-        url = await payments_service.create_checkout_session_for_contract(
-            db, organization_id=current_user.organization_id, contract=contract,
-            plan_key=payload.payment_plan, success_url=success_url, cancel_url=cancel_url,
-        )
-    except payments_service.StripeNotConfiguredError as exc:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
-    except payments_service.PaymentsError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
-    return {"checkout_url": url}
 
 
 @router.get("", response_model=list[ContractRead])
@@ -465,8 +364,8 @@ async def confirm_instalment_manually(
     current_user: CurrentUser = Depends(require_permission("contracts.review")),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Staff confirming an instalment Stripe did not collect. On an active
-    contract it releases that instalment's commissions."""
+    """Staff confirming that the bank transfer for one instalment arrived.
+    On an active contract it releases that instalment's commissions."""
     from app.domains.contracts import instalments as instalments_service
 
     contract = await _get_org_scoped_contract(
@@ -484,38 +383,12 @@ async def confirm_instalment_manually(
         new_value={"instalment_number": number},
     )
     await db.commit()
-    # A month paid by other means earns its cashback like one Stripe
-    # collected -- until Session 59 it earned none. Keyed by the instalment
-    # number, so a later Stripe retry of the same month cannot credit it twice.
+    # Every confirmed month earns its cashback. Keyed by the instalment
+    # number, so confirming the same month twice cannot credit it twice.
     await contract_service.credit_contract_instalment_cashback(
         db, organization_id=current_user.organization_id, contract=contract, instalment_number=row.number
     )
     return {"number": row.number, "status": row.status}
-
-
-@router.post("/{contract_id}/stop-billing", response_model=ContractRead)
-async def stop_contract_billing(
-    contract_id: uuid.UUID,
-    current_user: CurrentUser = Depends(require_permission("contracts.review")),
-    db: AsyncSession = Depends(get_db),
-) -> ContractRead:
-    """"Interrompi addebiti": Stripe stops charging this contract every month.
-    In a pratica only this contract's line leaves the subscription."""
-    from app.domains.payments import service as payments_service
-
-    contract = await _get_org_scoped_contract(
-        db, organization_id=current_user.organization_id, contract_id=contract_id
-    )
-    try:
-        contract = await payments_service.stop_contract_billing(
-            db, organization_id=current_user.organization_id, contract=contract, actor_user_id=current_user.user_id
-        )
-    except payments_service.StripeNotConfiguredError as exc:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
-    except payments_service.PaymentsError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
-    rows = await contract_service.to_read_dicts(db, [contract])
-    return ContractRead(**rows[0])
 
 
 @router.post("/{contract_id}/transition", response_model=ContractRead)
@@ -607,41 +480,4 @@ async def download_contract_dossier(
             "Content-Disposition": f'attachment; filename="{ascii_name}"; filename*=UTF-8\'\'{quoted}',
             "Content-Length": str(len(content)),
         },
-    )
-
-
-@router.post("/{contract_id}/dossier/drive", response_model=DriveUploadResultRead)
-async def send_contract_dossier_to_drive(
-    contract_id: uuid.UUID,
-    current_user: CurrentUser = Depends(require_permission("documents.review")),
-    db: AsyncSession = Depends(get_db),
-) -> DriveUploadResultRead:
-    """Lo stesso fascicolo dello zip, in una cartella Google Drive chiamata
-    `<nome cliente>-<id contratto>`. Stesso contenuto perché lo costruisce
-    lo stesso modulo: le due strade non possono divergere."""
-    contract = await _get_org_scoped_contract(
-        db, organization_id=current_user.organization_id, contract_id=contract_id
-    )
-    built = await dossier.build_dossier(
-        db, organization_id=current_user.organization_id, contract=contract
-    )
-    try:
-        result = await google_drive.upload_dossier(
-            db, organization_id=current_user.organization_id, dossier=built
-        )
-    except GoogleDriveError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
-
-    await audit_service.record(
-        db, organization_id=current_user.organization_id, actor_user_id=current_user.user_id,
-        action="contract.dossier_sent_to_drive", entity_type="contract", entity_id=str(contract_id),
-        new_value={"folder": result.folder_name, "uploaded": result.uploaded, "replaced": result.replaced},
-    )
-    await db.commit()
-
-    return DriveUploadResultRead(
-        folder_name=result.folder_name,
-        folder_url=result.folder_url,
-        uploaded=result.uploaded,
-        replaced=result.replaced,
     )

@@ -185,7 +185,7 @@ async def get_contract_documents(
 
     from app.domains.contracts.requests import contract_kind
 
-    # Session 85: the kind of the contract's pratica (privato / azienda).
+    # The kind of the contract's pratica (privato / azienda).
     customer_kind = await contract_kind(db, contract)
 
     rows = await documents_service.get_contract_documents_status(
@@ -252,7 +252,7 @@ async def delete_document(
     current_user: CurrentUser = Depends(require_permission("documents.download")),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    """Takes one page out of a document (Session 82): the blurry photo, the
+    """Takes one page out of a document: the blurry photo, the
     wrong page. Whoever may upload there may remove a page that is not yet
     approved. Once the pratica is sent, only staff may remove the LAST page
     of a slot -- a customer or promoter replaces a page by adding the good

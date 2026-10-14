@@ -104,17 +104,17 @@ export function ContractCommissionsModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 light:bg-slate-900/40 backdrop-blur-sm animate-fade-in">
-      <div className="w-full max-w-3xl max-h-[85vh] overflow-y-auto glass-card rounded-2xl p-6 border-white/10 light:border-slate-300 bg-slate-950 light:bg-white animate-scale-up">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+      <div className="w-full max-w-3xl max-h-[85vh] overflow-y-auto glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up">
         <div className="flex items-start justify-between mb-4 gap-3">
           <div>
-            <h3 className="text-lg font-bold text-white light:text-slate-900">Provvigioni generate da questo contratto</h3>
+            <h3 className="text-lg font-bold text-slate-900">Provvigioni generate da questo contratto</h3>
             <div className="flex items-center gap-2 mt-0.5 flex-wrap">
               {first && (
                 <>
-                  <span className="text-xs text-slate-400 light:text-slate-500">{first.customer_name} — {first.product_name}</span>
+                  <span className="text-xs text-slate-500">{first.customer_name} — {first.product_name}</span>
                   <span className="text-slate-600">·</span>
-                  <span className="text-xs text-slate-400 light:text-slate-500">Prodotto da {first.producer_name}</span>
+                  <span className="text-xs text-slate-500">Prodotto da {first.producer_name}</span>
                 </>
               )}
             </div>
@@ -132,7 +132,7 @@ export function ContractCommissionsModal({
             )}
             <button
               onClick={onClose}
-              className="p-1 hover:bg-white/5 rounded-lg text-slate-400 light:text-slate-500 hover:text-white transition cursor-pointer"
+              className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-900 transition cursor-pointer"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
@@ -149,9 +149,9 @@ export function ContractCommissionsModal({
         )}
 
         <div className="grid grid-cols-3 gap-3 mb-5">
-          <div className="rounded-xl bg-white/5 light:bg-slate-900/5 p-3 text-center">
+          <div className="rounded-xl bg-slate-900/5 p-3 text-center">
             <p className="text-[10px] text-slate-500 uppercase">Totale movimenti</p>
-            <p className="text-lg font-bold text-white light:text-slate-900">{isLoading ? "…" : euro(totalAll)}</p>
+            <p className="text-lg font-bold text-slate-900">{isLoading ? "…" : euro(totalAll)}</p>
           </div>
           <div className="rounded-xl bg-sky-500/10 border border-sky-500/20 p-3 text-center">
             <p className="text-[10px] text-sky-300 uppercase">Maturate</p>
@@ -163,16 +163,16 @@ export function ContractCommissionsModal({
           </div>
         </div>
 
-        <h4 className="text-sm font-semibold text-white light:text-slate-900 mb-2">Registro provvigioni</h4>
+        <h4 className="text-sm font-semibold text-slate-900 mb-2">Registro provvigioni</h4>
         <div className="mb-5">
           <ContractCommissionLog contractId={contractId} />
         </div>
 
-        <h4 className="text-sm font-semibold text-white light:text-slate-900 mb-2">Movimenti scritti in contabilità</h4>
-        <div className="overflow-x-auto rounded-xl border border-white/5 light:border-slate-200">
+        <h4 className="text-sm font-semibold text-slate-900 mb-2">Movimenti scritti in contabilità</h4>
+        <div className="overflow-x-auto rounded-xl border border-slate-200">
           <table className="w-full border-collapse text-left text-xs">
             <thead>
-              <tr className="border-b border-white/5 light:border-slate-200 text-slate-400 light:text-slate-500 font-semibold bg-white/2 light:bg-slate-900/[0.02]">
+              <tr className="border-b border-slate-200 text-slate-500 font-semibold bg-slate-900/[0.02]">
                 <th className="py-2 px-3">Promoter beneficiario</th>
                 <th className="py-2 px-3">Livello</th>
                 <th className="py-2 px-3">Qualifica</th>
@@ -182,7 +182,7 @@ export function ContractCommissionsModal({
                 <th className="py-2 px-3 text-right">Azioni</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5 light:divide-slate-200">
+            <tbody className="divide-y divide-slate-200">
               {isLoading && (
                 <tr><td colSpan={7} className="text-center py-8 text-slate-500">Caricamento...</td></tr>
               )}
@@ -190,17 +190,17 @@ export function ContractCommissionsModal({
                 <tr><td colSpan={7} className="text-center py-8 text-slate-500">Nessuna provvigione ancora calcolata per questo contratto.</td></tr>
               )}
               {sorted.map((m) => (
-                <tr key={m.id} className="text-slate-300 light:text-slate-600">
+                <tr key={m.id} className=" text-slate-600">
                   <td className="py-2 px-3">
-                    <div className="font-medium text-white light:text-slate-900">{m.agent_name}</div>
+                    <div className="font-medium text-slate-900">{m.agent_name}</div>
                     <div className="text-[10px] text-slate-500 font-mono">{m.agent_promoter_code}</div>
                   </td>
                   <td className="py-2 px-3">
                     {m.depth_from_producer === 0 ? "Produttore" : `${m.depth_from_producer}° livello`}
                   </td>
-                  <td className="py-2 px-3 text-orange-400 font-semibold">{m.rank_at_calculation ?? "—"}</td>
+                  <td className="py-2 px-3 text-brand-600 font-semibold">{m.rank_at_calculation ?? "—"}</td>
                   <td className="py-2 px-3">{MOVEMENT_TYPE_LABELS[m.movement_type] ?? m.movement_type}</td>
-                  <td className="py-2 px-3 text-right font-semibold text-orange-400">{euro(m.amount_cents)}</td>
+                  <td className="py-2 px-3 text-right font-semibold text-brand-600">{euro(m.amount_cents)}</td>
                   <td className="py-2 px-3">
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                       m.status === "PAID"

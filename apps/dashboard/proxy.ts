@@ -1,16 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const SESSION_COOKIE = "jav_session";
-const PROTECTED_PREFIXES = ["/customer", "/promoter", "/admin"];
+const PROTECTED_PREFIXES = ["/customer", "/promoter", "/admin", "/staff", "/club"];
 
 export function proxy(request: NextRequest) {
-  // Shopify apre l'URL dell'app (la home) con ?shop=&hmac= quando si installa
-  // l'app sul negozio: quella richiesta va al flusso di installazione.
-  const { pathname, searchParams } = request.nextUrl;
-  if (pathname === "/" && searchParams.has("shop") && searchParams.has("hmac")) {
-    const target = new URL(`/api/shopify/oauth/install${request.nextUrl.search}`, request.url);
-    return NextResponse.redirect(target);
-  }
   const isProtected = PROTECTED_PREFIXES.some((p) => request.nextUrl.pathname.startsWith(p));
   if (!isProtected) return NextResponse.next();
 
@@ -27,5 +20,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/customer/:path*", "/promoter/:path*", "/admin/:path*"],
+  matcher: ["/customer/:path*", "/promoter/:path*", "/admin/:path*", "/staff/:path*", "/club/:path*"],
 };

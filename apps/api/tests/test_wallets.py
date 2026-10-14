@@ -29,8 +29,8 @@ async def _get_or_create_role(db, organization_id, *, role_code: str) -> Role:
 
 
 async def _enable_transfer(db, wallet):
-    """Peer-to-peer transfer is denied by default (Wallet.can_transfer,
-    added Session 23) -- tests that exercise debit_and_transfer's OWN logic
+    """Peer-to-peer transfer is denied by default (Wallet.can_transfer)
+    -- tests that exercise debit_and_transfer's OWN logic
     (insufficient balance, self-transfer, cross-org lookup, idempotency) opt
     the sender wallet in explicitly so they keep testing what they're named
     for, not the permission gate. See test_transfer_is_denied_by_default_
@@ -95,7 +95,7 @@ async def test_admin_credit_increases_balance_and_notifies(db, organization_id):
 
 @pytest.mark.asyncio
 async def test_credit_wallet_sends_email_for_a_plain_top_up(db, organization_id):
-    """Admin "Ricarica" (no reference_invoice_redemption_id) must email the
+    """Admin "Ricarica" (no reference_order_id) must email the
     customer -- see wallets/service.py::credit_wallet's call to
     _send_wallet_credited_email."""
     from unittest.mock import AsyncMock, patch
@@ -113,40 +113,6 @@ async def test_credit_wallet_sends_email_for_a_plain_top_up(db, organization_id)
     mock_email.assert_awaited_once()
     assert mock_email.call_args.kwargs["user_id"] == customer.id
     assert mock_email.call_args.kwargs["amount_cents"] == 5000
-
-
-@pytest.mark.asyncio
-async def test_credit_wallet_skips_email_when_already_sent_by_invoice_redemptions(db, organization_id):
-    """A partner-invoice cashback credit passes reference_invoice_redemption_id
-    -- that flow already sends its own richer email
-    (invoice_redemptions/service.py::confirm_payment), so credit_wallet must
-    not send a second one for the same credit."""
-    from unittest.mock import AsyncMock, patch
-
-    from app.domains.invoice_redemptions import service as redemptions_service
-    from app.domains.partners import service as partners_service
-    from app.domains.partners.schemas import PartnerCreate
-
-    admin = await _make_user_with_role(db, organization_id, role_code="ADMIN")
-    customer = await _make_user_with_role(db, organization_id)
-    wallet = await wallet_service.get_or_create_wallet(db, organization_id=organization_id, user_id=customer.id)
-    partner = await partners_service.create_partner(
-        db, organization_id=organization_id, payload=PartnerCreate(name=f"Partner {uuid.uuid4().hex[:6]}")
-    )
-    redemption = await redemptions_service.submit_redemption(
-        db, organization_id=organization_id, customer_user_id=customer.id, partner_id=partner.id,
-        declared_amount_cents=10000, file_bytes=b"%PDF-1.4\nfake invoice", content_type="application/pdf",
-        original_filename="bolletta.pdf",
-    )
-
-    with patch.object(wallet_service, "_send_wallet_credited_email", new_callable=AsyncMock) as mock_email:
-        await wallet_service.credit_wallet(
-            db, organization_id=organization_id, wallet_id=wallet.id, amount_cents=5000, type_="ADMIN_CREDIT",
-            actor_user_id=admin.id, reference_invoice_redemption_id=redemption.id,
-            source="INVOICE_REDEMPTION_BASE", idempotency_key=str(uuid.uuid4()),
-        )
-
-    mock_email.assert_not_awaited()
 
 
 @pytest.mark.asyncio

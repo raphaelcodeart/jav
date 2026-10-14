@@ -16,6 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import utcnow
 from app.domains.audit import service as audit_service
+from app.domains.jav_market.models import SHOP as JAV_MARKET_SHOP
+from app.domains.jav_market.models import JavMarketProducer
 from app.domains.shop_categories.models import SHOPS, ShopCategory, ShopCategoryProduct
 
 
@@ -179,6 +181,21 @@ async def _name_taken(
     return (await db.execute(stmt)).first() is not None
 
 
+async def _check_producer(
+    db: AsyncSession, *, organization_id: uuid.UUID, shop: str, producer_id: uuid.UUID | None
+) -> None:
+    """Il fornitore di una categoria esiste solo nello Shop, dove gli ordini
+    partono verso un'azienda: nelle sezioni del catalogo la merce la
+    spediamo noi, e un fornitore lì non verrebbe mai letto."""
+    if producer_id is None:
+        return
+    if shop != JAV_MARKET_SHOP:
+        raise ShopCategoryValidationError("Il fornitore si sceglie solo per le categorie dello Shop.")
+    producer = await db.get(JavMarketProducer, producer_id)
+    if producer is None or producer.organization_id != organization_id:
+        raise ShopCategoryNotFoundError("Fornitore non trovato.")
+
+
 async def create_category(
     db: AsyncSession,
     *,
@@ -186,6 +203,7 @@ async def create_category(
     shop: str,
     name: str,
     position: int = 0,
+    producer_id: uuid.UUID | None = None,
     actor_user_id: uuid.UUID,
 ) -> ShopCategory:
     shop = normalize_shop(shop)
@@ -194,20 +212,26 @@ async def create_category(
         raise ShopCategoryValidationError("Il nome della categoria è obbligatorio.")
     if await _name_taken(db, organization_id=organization_id, shop=shop, name=name):
         raise ShopCategoryValidationError("Esiste già una categoria con questo nome in questo shop.")
+    await _check_producer(db, organization_id=organization_id, shop=shop, producer_id=producer_id)
 
     category = ShopCategory(
-        organization_id=organization_id, shop=shop, name=name, position=position, active=True
+        organization_id=organization_id, shop=shop, name=name, position=position, active=True,
+        producer_id=producer_id,
     )
     db.add(category)
     await db.flush()
     await audit_service.record(
         db, organization_id=organization_id, actor_user_id=actor_user_id,
         action="shop_category.created", entity_type="shop_category", entity_id=str(category.id),
-        new_value={"shop": shop, "name": name},
+        new_value={"shop": shop, "name": name, "producer_id": str(producer_id) if producer_id else None},
     )
     await db.commit()
     await db.refresh(category)
     return category
+
+
+#: «Non toccare il fornitore»: None vuol già dire «toglilo».
+UNCHANGED = object()
 
 
 async def update_category(
@@ -218,10 +242,14 @@ async def update_category(
     name: str | None = None,
     position: int | None = None,
     active: bool | None = None,
+    producer_id: uuid.UUID | None | object = UNCHANGED,
     actor_user_id: uuid.UUID,
 ) -> ShopCategory:
     category = await get_category(db, organization_id=organization_id, category_id=category_id)
-    previous = {"name": category.name, "position": category.position, "active": category.active}
+    previous = {
+        "name": category.name, "position": category.position, "active": category.active,
+        "producer_id": str(category.producer_id) if category.producer_id else None,
+    }
 
     if name is not None:
         new_name = name.strip()
@@ -236,13 +264,20 @@ async def update_category(
         category.position = position
     if active is not None:
         category.active = active
+    if producer_id is not UNCHANGED:
+        assert producer_id is None or isinstance(producer_id, uuid.UUID)
+        await _check_producer(db, organization_id=organization_id, shop=category.shop, producer_id=producer_id)
+        category.producer_id = producer_id
     category.updated_at = utcnow()
 
     await audit_service.record(
         db, organization_id=organization_id, actor_user_id=actor_user_id,
         action="shop_category.updated", entity_type="shop_category", entity_id=str(category.id),
         previous_value=previous,
-        new_value={"name": category.name, "position": category.position, "active": category.active},
+        new_value={
+            "name": category.name, "position": category.position, "active": category.active,
+            "producer_id": str(category.producer_id) if category.producer_id else None,
+        },
     )
     await db.commit()
     await db.refresh(category)

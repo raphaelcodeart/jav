@@ -12,8 +12,7 @@ activates and pays nobody is the exact failure documented in
 promoter had been deactivated *after* they signed up, and
 `POST /contracts/mine` never caught that refusal — so a business condition
 the system understands perfectly surfaced as an unhandled exception, with no
-way forward for a customer who had done nothing wrong. Three real customers
-were in this state.
+way forward for a customer who had done nothing wrong.
 
 Business decision (taken explicitly): walk **up** to the nearest ACTIVE
 sponsor rather than block. The branch that built the relationship keeps it,
@@ -32,8 +31,7 @@ from app.domains.audit.models import AuditLog
 from app.domains.catalog.models import Product, ProductVersion
 from app.domains.contracts import service as contract_service
 from app.domains.contracts.models import Contract, ContractAttribution
-from app.domains.customers.models import Address, Customer, SupplyPoint
-from app.domains.customers.schemas import SupplyPointCreate
+from app.domains.customers.models import Address, Customer
 from app.domains.network import service as network_service
 from app.domains.referral import service as referral_service
 from app.domains.users.models import User
@@ -63,12 +61,12 @@ async def _make_agent(db, organization_id, *, name, parent_agent_id=None, user_i
 async def _make_internal_product(db, organization_id) -> ProductVersion:
     product = Product(
         organization_id=organization_id, code=f"LU-{uuid.uuid4().hex[:6]}",
-        energy_type="ELECTRICITY", customer_type="BOTH", category="INTERNAL",
+        customer_type="BOTH", category="INTERNAL",
     )
     db.add(product)
     await db.flush()
     version = ProductVersion(
-        product_id=product.id, version_label="1.0", name="Luce Energia Circolare",
+        product_id=product.id, version_label="1.0", name="Abbonamento annuale",
         base_price_cents=15_00, valid_from=NOW,
     )
     db.add(version)
@@ -91,10 +89,6 @@ async def _make_customer_referred_by(db, organization_id, agent_id, *, with_logi
     )
     db.add(address)
     await db.flush()
-    db.add(SupplyPoint(
-        organization_id=organization_id, customer_id=customer.id, energy_type="ELECTRICITY",
-        supply_address_id=address.id,
-    ))
     code = await referral_service.get_or_create_promoter_code(
         db, organization_id=organization_id, agent_id=agent_id
     )
@@ -105,13 +99,6 @@ async def _make_customer_referred_by(db, organization_id, agent_id, *, with_logi
     await db.commit()
     await db.refresh(customer)
     return customer, user
-
-
-def _supply_point_payload() -> SupplyPointCreate:
-    return SupplyPointCreate(
-        energy_type="ELECTRICITY", pod_code="IT001E12345678",
-        street="Via Test 1", city="Roma", province="RM", postal_code="00100",
-    )
 
 
 async def _terminate(db, agent):
@@ -134,8 +121,7 @@ async def test_customer_can_still_activate_when_their_promoter_was_deactivated(d
 
     contract = await contract_service.create_contract_self_service(
         db, organization_id=organization_id, customer_user_id=customer_user.id,
-        product_version_id=version.id, supply_point_payload=_supply_point_payload(),
-        email="cliente@example.com",
+        product_version_id=version.id, email="cliente@example.com",
     )
 
     attribution = await db.get(ContractAttribution, contract.contract_attribution_id)
@@ -156,8 +142,7 @@ async def test_the_substitution_is_audited_not_silent(db, organization_id):
 
     contract = await contract_service.create_contract_self_service(
         db, organization_id=organization_id, customer_user_id=customer_user.id,
-        product_version_id=version.id, supply_point_payload=_supply_point_payload(),
-        email="cliente@example.com",
+        product_version_id=version.id, email="cliente@example.com",
     )
 
     rows = list((await db.execute(
@@ -181,8 +166,7 @@ async def test_no_substitution_audit_row_when_the_promoter_is_fine(db, organizat
 
     contract = await contract_service.create_contract_self_service(
         db, organization_id=organization_id, customer_user_id=customer_user.id,
-        product_version_id=version.id, supply_point_payload=_supply_point_payload(),
-        email="cliente@example.com",
+        product_version_id=version.id, email="cliente@example.com",
     )
 
     attribution = await db.get(ContractAttribution, contract.contract_attribution_id)
@@ -208,8 +192,7 @@ async def test_it_walks_past_several_deactivated_levels(db, organization_id):
 
     contract = await contract_service.create_contract_self_service(
         db, organization_id=organization_id, customer_user_id=customer_user.id,
-        product_version_id=version.id, supply_point_payload=_supply_point_payload(),
-        email="cliente@example.com",
+        product_version_id=version.id, email="cliente@example.com",
     )
     attribution = await db.get(ContractAttribution, contract.contract_attribution_id)
     assert attribution.producer_agent_id == top.id
@@ -230,8 +213,7 @@ async def test_a_clear_italian_error_when_the_whole_upline_is_inactive(db, organ
     with pytest.raises(contract_service.SelfServiceContractError) as exc:
         await contract_service.create_contract_self_service(
             db, organization_id=organization_id, customer_user_id=customer_user.id,
-            product_version_id=version.id, supply_point_payload=_supply_point_payload(),
-            email="cliente@example.com",
+            product_version_id=version.id, email="cliente@example.com",
         )
     message = str(exc.value)
     assert "assistenza" in message
@@ -255,7 +237,7 @@ async def test_the_inheriting_sponsor_can_activate_for_that_customer_from_the_cr
     contract = await contract_service.create_contract_for_recruited_customer(
         db, organization_id=organization_id, promoter_user_id=sponsor_user.id,
         customer_id=customer.id, product_version_id=version.id,
-        supply_point_payload=_supply_point_payload(), email="cliente@example.com",
+        email="cliente@example.com",
     )
     assert contract.activated_by_promoter_id == sponsor.id
     assert contract.created_by_role == "PROMOTER"
@@ -278,7 +260,7 @@ async def test_an_unrelated_promoter_still_cannot_activate_for_someone_elses_cus
         await contract_service.create_contract_for_recruited_customer(
             db, organization_id=organization_id, promoter_user_id=stranger_user.id,
             customer_id=customer.id, product_version_id=version.id,
-            supply_point_payload=_supply_point_payload(), email="cliente@example.com",
+            email="cliente@example.com",
         )
 
 
@@ -295,8 +277,7 @@ async def test_no_contract_row_is_left_behind_when_activation_is_refused(db, org
     with pytest.raises(contract_service.SelfServiceContractError):
         await contract_service.create_contract_self_service(
             db, organization_id=organization_id, customer_user_id=customer_user.id,
-            product_version_id=version.id, supply_point_payload=_supply_point_payload(),
-            email="cliente@example.com",
+            product_version_id=version.id, email="cliente@example.com",
         )
 
     contracts = list((await db.execute(

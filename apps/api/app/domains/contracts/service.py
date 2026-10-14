@@ -2,7 +2,6 @@ import calendar
 import logging
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,18 +17,11 @@ from app.domains.contracts.models import (
     ContractStatusHistory,
 )
 from app.domains.contracts.state_machine import assert_transition_allowed, event_name_for
-from app.domains.customers.models import SupplyPoint
 from app.domains.network import service as network_service
 from app.domains.network.models import AgentProfile
 from app.domains.notifications import service as notifications_service
 from app.domains.outbox import service as outbox_service
 from app.domains.users.models import User
-
-if TYPE_CHECKING:
-    # Annotation-only -- the real import stays function-local in
-    # create_contract_self_service, matching this module's existing
-    # convention (see e.g. the customers/network imports below).
-    from app.domains.customers.schemas import SupplyPointCreate
 
 # Statuses that represent "the contract's term is running" -- entering one of
 # these (re)starts the clock on activated_at/expires_at. Renewing a lapsed
@@ -39,12 +31,12 @@ TERM_START_STATUSES = {"ACTIVE", "RENEWED"}
 logger = logging.getLogger(__name__)
 
 #: wallet_transactions.source for the automatic credit a paid Jav
-#: contract generates. A distinct value from ORDER_CASHBACK_BASE and
-#: INVOICE_REDEMPTION_BASE precisely so accounting can tell the three apart
-#: at a glance -- they are three different business rules, not one.
+#: contract generates. A distinct value from ORDER_CASHBACK_BASE precisely so
+#: accounting can tell the two apart at a glance -- they are two different
+#: business rules, not one.
 CONTRACT_CASHBACK_SOURCE = "CONTRACT_CASHBACK"
 
-#: Where a customer may pay a contract from. Business decision (Session 49):
+#: Where a customer may pay a contract from. Business decision:
 #: payment is NOT gated on the documents being approved -- a customer can
 #: fill in the data, skip the documents, and pay straight away. What stays
 #: gated is activation: a contract paid early keeps its status, and only an
@@ -74,7 +66,7 @@ def _add_months(dt: datetime, months: int) -> datetime:
 
 
 async def to_read_dicts(db: AsyncSession, contracts: list[Contract]) -> list[dict]:
-    """Bulk-attaches product_name/supply_point_label to a page of contracts --
+    """Bulk-attaches product_name and agent names to a page of contracts --
     the "name prominent, id small below" rule applies to every contract list in
     the app, so this is the single place that does the join instead of each
     caller re-deriving it (or, worse, the UI showing a bare UUID)."""
@@ -82,10 +74,9 @@ async def to_read_dicts(db: AsyncSession, contracts: list[Contract]) -> list[dic
         return []
 
     product_version_ids = {c.product_version_id for c in contracts if c.product_version_id is not None}
-    supply_point_ids = {c.supply_point_id for c in contracts}
     # Both "who filled it in for the customer" and "who originally brought
     # the customer in" are shown by name, never as a bare UUID -- same
-    # "name prominent" rule the product/supply-point joins above follow.
+    # "name prominent" rule the product join below follows.
     agent_ids = {c.activated_by_promoter_id for c in contracts if c.activated_by_promoter_id} | {
         c.first_referrer_agent_id for c in contracts if c.first_referrer_agent_id
     }
@@ -113,21 +104,15 @@ async def to_read_dicts(db: AsyncSession, contracts: list[Contract]) -> list[dic
             )
         ).all()
     }
-    supply_points: dict[uuid.UUID, SupplyPoint] = {
-        sp.id: sp
-        for sp in (await db.execute(select(SupplyPoint).where(SupplyPoint.id.in_(supply_point_ids)))).scalars()
-    }
 
     def _agent_name(agent_id: uuid.UUID | None) -> str | None:
         return agent_names.get(agent_id) if agent_id is not None else None
 
     result = []
     for c in contracts:
-        sp = supply_points.get(c.supply_point_id)
         row = {
             "id": c.id,
             "customer_id": c.customer_id,
-            "supply_point_id": c.supply_point_id,
             "product_version_id": c.product_version_id,
             "status": c.status,
             "notes": c.notes,
@@ -140,10 +125,6 @@ async def to_read_dicts(db: AsyncSession, contracts: list[Contract]) -> list[dic
             "activated_at": c.activated_at,
             "expires_at": c.expires_at,
             "product_name": product_names.get(c.product_version_id) if c.product_version_id else None,
-            "supply_point_label": sp.label if sp else None,
-            "pod_code": sp.pod_code if sp else None,
-            "pdr_code": sp.pdr_code if sp else None,
-            "energy_type": sp.energy_type if sp else None,
             "contract_request_id": c.contract_request_id,
             "created_by_role": c.created_by_role,
             "activated_by_promoter_id": c.activated_by_promoter_id,
@@ -159,10 +140,8 @@ async def to_read_dicts(db: AsyncSession, contracts: list[Contract]) -> list[dic
             "vat_amount_cents": c.vat_amount_cents,
             "gross_amount_cents": c.gross_amount_cents,
             "payment_plan": c.payment_plan,
-            "payment_discount_cents": int(c.payment_discount_cents or 0),
             "payment_method": c.payment_method,
             "paid_at": c.paid_at,
-            "billing_stopped_at": c.billing_stopped_at,
             "terms_accepted_at": c.terms_accepted_at,
             "terms_version": c.terms_version,
         }
@@ -228,7 +207,6 @@ async def create_contract(
     *,
     organization_id: uuid.UUID,
     customer_id: uuid.UUID,
-    supply_point_id: uuid.UUID,
     product_version_id: uuid.UUID | None,
     producer_agent_id: uuid.UUID,
     actor_user_id: uuid.UUID,
@@ -259,7 +237,7 @@ async def create_contract(
     version row and the customer's own kind -- never from anything a caller
     passed in -- and frozen onto the contract. See catalog/pricing.py.
 
-    Every contract belongs to a pratica (Session 52). A caller building one
+    Every contract belongs to a pratica. A caller building one
     passes `contract_request_id` (and `notify_staff=False`: the pratica
     announces itself once, when it is sent, not once per point); any other
     caller gets a pratica of one created here with the same holder data.
@@ -323,7 +301,6 @@ async def create_contract(
         organization_id=organization_id,
         customer_id=customer_id,
         contract_request_id=contract_request_id,
-        supply_point_id=supply_point_id,
         product_version_id=product_version_id,
         contract_attribution_id=attribution.id,
         status="DRAFT",
@@ -403,7 +380,7 @@ async def freeze_price(
     from app.domains.customers.models import Customer
 
     if customer_kind is None:
-        # Session 85: a pratica passes its own kind (privato / azienda).
+        # A pratica passes its own kind (privato / azienda).
         customer = await db.get(Customer, contract.customer_id)
         customer_kind = customer.kind if customer is not None else None
     price, instalments_price = await _price_for(db, version=version, customer_kind=customer_kind)
@@ -540,7 +517,6 @@ async def create_contract_self_service(
     organization_id: uuid.UUID,
     customer_user_id: uuid.UUID,
     product_version_id: uuid.UUID,
-    supply_point_payload: "SupplyPointCreate",
     email: str,
     holder_first_name: str | None = None,
     holder_last_name: str | None = None,
@@ -558,7 +534,6 @@ async def create_contract_self_service(
     hand, self-service has no "save for later, not ready to send yet" step;
     the customer's next action is exactly what DOCUMENTS_PENDING says:
     upload the required documents (business-rules.md#contract-self-service)."""
-    from app.domains.customers import service as customers_service
     from app.domains.customers.models import Customer
 
     customer = (
@@ -590,16 +565,9 @@ async def create_contract_self_service(
         db, organization_id=organization_id, customer_id=customer.id
     )
 
-    supply_point = await customers_service.add_supply_point(
-        db, organization_id=organization_id, customer_id=customer.id,
-        payload=supply_point_payload, actor_user_id=customer_user_id,
-    )
-    if supply_point is None:
-        raise SelfServiceContractError("Unable to create supply point")
-
     contract = await create_contract(
         db, organization_id=organization_id, customer_id=customer.id,
-        supply_point_id=supply_point.id, product_version_id=product_version_id,
+        product_version_id=product_version_id,
         producer_agent_id=producer_agent_id, actor_user_id=customer_user_id,
         correlation_id=str(uuid.uuid4()), email=email,
         holder_first_name=holder_first_name, holder_last_name=holder_last_name, pec=pec, iban=iban,
@@ -635,7 +603,6 @@ async def create_contract_for_recruited_customer(
     promoter_user_id: uuid.UUID,
     customer_id: uuid.UUID,
     product_version_id: uuid.UUID,
-    supply_point_payload: "SupplyPointCreate",
     email: str,
     holder_first_name: str | None = None,
     holder_last_name: str | None = None,
@@ -654,7 +621,6 @@ async def create_contract_for_recruited_customer(
     never activate a contract for someone else's customer this way, even
     though POST /contracts (contracts.create-gated, staff-only in
     practice) technically lets an admin attribute to any agent."""
-    from app.domains.customers import service as customers_service
     from app.domains.customers.models import Customer
 
     customer = await db.get(Customer, customer_id)
@@ -680,16 +646,9 @@ async def create_contract_for_recruited_customer(
             "Questo contratto non è disponibile per la tipologia di questo cliente."
         )
 
-    supply_point = await customers_service.add_supply_point(
-        db, organization_id=organization_id, customer_id=customer.id,
-        payload=supply_point_payload, actor_user_id=promoter_user_id,
-    )
-    if supply_point is None:
-        raise SelfServiceContractError("Unable to create supply point")
-
     contract = await create_contract(
         db, organization_id=organization_id, customer_id=customer.id,
-        supply_point_id=supply_point.id, product_version_id=product_version_id,
+        product_version_id=product_version_id,
         producer_agent_id=promoter_agent.id, actor_user_id=promoter_user_id,
         correlation_id=str(uuid.uuid4()), email=email,
         holder_first_name=holder_first_name, holder_last_name=holder_last_name, pec=pec, iban=iban,
@@ -717,8 +676,7 @@ async def set_contract_iban(
 ) -> Contract:
     """Lets a customer add/correct their own contract's IBAN after creation
     (e.g. the admin created the contract before receiving it, or the
-    customer wants to switch bank accounts) -- same "editable afterwards"
-    spirit as supply_points.label."""
+    customer wants to switch bank accounts)."""
     previous = contract.iban
     contract.iban = iban
     await audit_service.record(
@@ -733,8 +691,8 @@ async def set_contract_iban(
 
 # Transitions with no separate decision of their own -- entering the key
 # status on the left always immediately continues to the value on the
-# right, so a human never has to click through it as its own step. Added
-# Session 29 per explicit request ("l'amministratore deve recensire il
+# right, so a human never has to click through it as its own step. By
+# explicit request ("l'amministratore deve recensire il
 # contratto solo nel passo finale di renderlo pagato"): APPROVED and
 # PAYMENT_PENDING/PAID were real staff clicks before, now only "Approva"
 # (UNDER_REVIEW -> APPROVED, which cascades on into PAYMENT_PENDING) and
@@ -781,18 +739,15 @@ async def transition_contract(
         contract.network_snapshot_id = snapshot.id
 
     if to_status == "PAID" and contract.paid_at is None:
-        # Nobody paid through Stripe: this is staff confirming a bank
-        # transfer, which is always the whole amount in one go -- whatever
-        # card plan the customer may have opened and abandoned before.
+        # Staff moving the contract on from the contract list: a bank
+        # transfer confirmed by hand. The plan the customer announced from the
+        # pratica is kept; with none announced it is the whole amount in one
+        # go, at the list price.
         contract.paid_at = utcnow()
-        # A transfer the customer announced from the pratica (Session 65)
-        # keeps the discount frozen then; any other confirmation by staff is
-        # the list price, whatever card plan was opened and abandoned before.
-        chosen_transfer = contract.payment_method == "BANK_TRANSFER" and contract.payment_plan == "FULL"
-        contract.payment_plan = "FULL"
-        contract.payment_method = "BANK_TRANSFER"
+        chosen_transfer = contract.payment_method == "BANK_TRANSFER" and contract.payment_plan is not None
         if not chosen_transfer:
-            contract.payment_discount_cents = 0
+            contract.payment_plan = "FULL"
+            contract.payment_method = "BANK_TRANSFER"
     if to_status == "PAID":
         from app.domains.contracts import instalments as instalments_service
 
@@ -856,7 +811,7 @@ async def transition_contract(
 
     if from_status == "ACTIVATION_PENDING" and to_status == "ACTIVE":
         # Every instalment the customer has already paid releases its slice
-        # of the commissions now, in this same transaction (Session 50).
+        # of the commissions now, in this same transaction.
         from app.domains.contracts import instalments as instalments_service
 
         await instalments_service.release_paid_instalments(db, contract=contract)
@@ -878,6 +833,16 @@ async def transition_contract(
         await credit_contract_cashback(
             db, organization_id=organization_id, contract=contract, actor_user_id=actor_user_id
         )
+        # On an instalment plan the first instalment is paid now too: its
+        # JavCash, keyed by the instalment number, so the same month credited
+        # again from the pratica's own confirmation is still one credit.
+        from app.domains.contracts import payment_plans
+
+        plan = payment_plans.plan_by_key(contract.payment_plan)
+        if plan is not None and plan.instalments > 1:
+            await credit_contract_instalment_cashback(
+                db, organization_id=organization_id, contract=contract, instalment_number=1
+            )
 
     if to_status == "ACTIVE":
         # Tells whoever brought this customer in (the one-level "Invita un amico"
@@ -893,17 +858,16 @@ async def transition_contract(
 
     if to_status == "REJECTED" and contract.paid_at is not None:
         # Payment is accepted before approval, so rejecting a contract can
-        # now mean rejecting one somebody has already paid for -- and, on an
-        # instalment plan, one whose card Stripe is still going to charge.
-        # Refunding and cancelling are deliberate human decisions, never
-        # automatic, but nobody may be left to discover them by accident.
+        # now mean rejecting one somebody has already paid for. Refunding is
+        # a deliberate human decision, never automatic, but nobody may be
+        # left to discover it by accident.
         await notifications_service.notify_roles(
             db, organization_id=organization_id, roles=notifications_service.STAFF_NOTIFY_ROLES,
             type_="CONTRACT_PAID_REJECTED", entity_type="contract", entity_id=contract.id,
             title=f"Respinto un contratto già pagato: {str(contract.id)[:8].upper()}",
             body=(
-                "Il cliente aveva già pagato. Valuta il rimborso su Stripe, il cashback JavCash "
-                "accreditato e, se a rate, annulla l'abbonamento."
+                "Il cliente aveva già pagato. Valuta il rimborso del bonifico e il cashback JavCash "
+                "accreditato; se a rate, avvisa il cliente di non inviare i bonifici successivi."
             ),
         )
         await db.commit()
@@ -929,14 +893,11 @@ async def credit_contract_cashback(
 ) -> None:
     """Credits the automatic JavCash a paid Jav contract earns.
 
-    This is the "servizi Jav e formazione" rule, and it is
-    deliberately a DIFFERENT mechanism from the partner-invoice cashback --
-    which is exactly what was asked for:
+    This is the "servizi Jav e formazione" rule, and it is deliberately a
+    DIFFERENT mechanism from the orders' one:
 
-      - Partner esterni (invoice_redemptions): the customer pays Jav 5% of
-        the invoice to unlock the credit. Untouched by any of this.
       - Prodotti DROPSHIPPING/PARTNER (orders): opt-in, the customer pays a
-        5% surcharge on the order to earn cashback. Also untouched.
+        5% surcharge on the order to earn cashback. Untouched by any of this.
       - Servizi nostri (INTERNAL contracts): NO surcharge, nothing extra to
         pay, nothing to opt into. Paying the contract is itself what earns
         the credit, and the percentage of the gross (VAT included) that
@@ -944,17 +905,17 @@ async def credit_contract_cashback(
         only does this once an admin says so.
 
     This function credits the WHOLE contract at once, which is right for a
-    single payment (card or confirmed bank transfer). An instalment plan is
+    single payment (one confirmed bank transfer). An instalment plan is
     skipped here and handled by credit_contract_instalment_cashback, as the
     administrator chose: a slice with every instalment collected (Session
     49, the default -- a customer who stops paying after the first month has
     not been handed the whole year), or the whole amount in advance at the
-    first instalment (Session 59).
+    first instalment.
 
     Exactly-once is enforced twice over: `contracts.cashback_credited_at` as
     the readable guard, and a deterministic wallet idempotency key against
     the UNIQUE constraint on wallet_transactions for the case the guard is
-    raced (a replayed Stripe webhook, say).
+    raced (two administrators confirming at once, say).
 
     Never raises: by the time this runs the contract is already committed as
     PAID, and a wallet problem must not undo that."""
@@ -977,9 +938,7 @@ async def credit_contract_cashback(
         # skipped rather than silently guessed.
         logger.warning("Contract %s has no gross_amount_cents snapshot; skipping cashback", contract.id)
         return
-    # On what was actually paid: a one-go discount lowers the cashback too.
-    paid_cents = gross - int(contract.payment_discount_cents or 0)
-    amount_cents = pricing.contract_cashback_cents(version=version, gross_amount_cents=paid_cents)
+    amount_cents = pricing.contract_cashback_cents(version=version, gross_amount_cents=gross)
     credited = await _credit_contract_javcash(
         db, organization_id=organization_id, contract=contract, amount_cents=amount_cents,
         actor_user_id=actor_user_id, idempotency_key=f"contract-cashback:{contract.id}",
@@ -1010,10 +969,9 @@ async def credit_contract_instalment_cashback(
     again per instalment, whatever the setting says later -- the ledger row
     of the advance is what decides, not the setting.
 
-    The idempotency key is the instalment NUMBER, not the Stripe invoice: the
-    same month confirmed by hand by an administrator and later collected by a
-    Stripe retry of the same invoice is still one month. The amount is the
-    plan's own instalment, never whatever the invoice said. Never raises."""
+    The idempotency key is the instalment NUMBER: the same month confirmed
+    twice is still one month. The amount is the plan's own instalment, never
+    whatever the transfer said. Never raises."""
     from app.domains.contracts import payment_plans
     from app.domains.organizations import service as organizations_service
     from app.domains.wallets.models import WalletTransaction
@@ -1106,40 +1064,7 @@ async def _credit_contract_javcash(
     return True
 
 
-# --- Pagamento del contratto (Stripe) ---------------------------------------
-
-
-async def attach_stripe_checkout_session(
-    db: AsyncSession, *, contract: Contract, session_id: str, plan_key: str, discount_cents: int = 0
-) -> Contract:
-    """Records which Checkout Session is currently live for this contract,
-    and which plan it was opened for. Overwrites any previous one, so only
-    the customer's latest attempt is ever honoured by the webhook -- same
-    rule as orders.
-
-    Deliberately does NOT change the contract's status: it stays
-    PAYMENT_PENDING until Stripe confirms, exactly as it would stay
-    PAYMENT_PENDING waiting for an admin to confirm a bank transfer."""
-    contract.stripe_checkout_session_id = session_id
-    contract.payment_plan = plan_key
-    contract.payment_discount_cents = discount_cents
-    contract.payment_method = "CARD"
-    contract.updated_at = utcnow()
-    await db.commit()
-    await db.refresh(contract)
-    return contract
-
-
-async def attach_stripe_subscription(
-    db: AsyncSession, *, contract: Contract, subscription_id: str, customer_id: str | None
-) -> Contract:
-    contract.stripe_subscription_id = subscription_id
-    if customer_id:
-        contract.stripe_customer_id = customer_id
-    contract.updated_at = utcnow()
-    await db.commit()
-    await db.refresh(contract)
-    return contract
+# --- Pagamento del contratto (bonifico) -------------------------------------
 
 
 async def has_accepted_commission_plan(db: AsyncSession, *, contract_id: uuid.UUID) -> bool:
@@ -1191,83 +1116,44 @@ async def accept_commission_plan(
     return plan
 
 
-async def mark_paid_via_stripe(
-    db: AsyncSession, *, organization_id: uuid.UUID, stripe_checkout_session_id: str,
-    stripe_invoice_id: str | None = None,
-) -> Contract | None:
-    """Called only from the verified Stripe webhook, for a Checkout Session
-    opened on one contract by itself (the flow before pratiche, whose open
-    sessions must still be honoured). The success URL is never treated as
-    proof of anything -- a customer can open it by hand.
-
-    Returns None rather than raising when no contract matches: an event for
-    another organization, or for a session superseded by a newer attempt, is
-    not this call's problem to solve and must not make Stripe retry forever.
-    """
-    contract = (
-        await db.execute(
-            select(Contract).where(
-                Contract.organization_id == organization_id,
-                Contract.stripe_checkout_session_id == stripe_checkout_session_id,
-            )
-        )
-    ).scalar_one_or_none()
-    if contract is None:
-        return None
-    return await record_card_payment(
-        db, organization_id=organization_id, contract=contract, stripe_invoice_id=stripe_invoice_id
-    )
-
-
-async def record_card_payment(
+async def record_transfer_payment(
     db: AsyncSession,
     *,
     organization_id: uuid.UUID,
     contract: Contract,
-    stripe_invoice_id: str | None = None,
+    confirmed_by_user_id: uuid.UUID,
     notify_staff: bool = True,
-    bank_transfer_confirmed_by: uuid.UUID | None = None,
 ) -> Contract:
-    """Stripe confirmed the (first) card payment of this contract.
+    """An administrator confirmed the (first) bank transfer of this contract.
 
-    For an instalment plan this is the FIRST payment: the contract is in
-    force from then on and the remaining instalments are collected
-    automatically. `contract.payment_plan` must already say which plan was
-    paid -- it decides the instalment schedule and how the JavCash is
-    credited.
+    For an instalment plan this is the FIRST instalment: the contract is in
+    force from then on, and every later instalment is confirmed one by one
+    (instalments.py::confirm_manually). `contract.payment_plan` must already
+    say which plan the customer chose -- it decides the instalment schedule
+    and how the JavCash is credited.
 
     `notify_staff=False` lets a pratica paying ten contracts at once say so
     in one notification instead of ten (see contracts/requests.py)."""
     from app.domains.contracts import instalments as instalments_service
 
-    # Session 65: the same recording serves a bank transfer an administrator
-    # confirmed -- one path, so nothing (instalment row, cashback, activation)
-    # can differ between the two ways of paying.
-    if bank_transfer_confirmed_by is not None:
-        source = instalments_service.SOURCE_ADMIN
-        reason = "Bonifico confermato dall'amministrazione"
-    else:
-        source = instalments_service.SOURCE_STRIPE_CHECKOUT
-        reason = "Pagamento confermato da Stripe"
+    source = instalments_service.SOURCE_ADMIN
+    reason = "Bonifico confermato dall'amministrazione"
 
     if contract.status == "PAYMENT_PENDING" and await has_accepted_commission_plan(db, contract_id=contract.id):
         # paid_at first: otherwise the PAID transition takes this for a
-        # transfer confirmed by staff and rewrites the plan the customer paid
-        # with to FULL / BANK_TRANSFER (a 12-instalment card payment recorded
-        # as one payment -- fixed in Session 65).
+        # transfer confirmed from the contract list, with no plan chosen by
+        # the customer, and rewrites the plan to FULL.
         contract.paid_at = utcnow()
         await instalments_service.record_payment(
-            db, contract=contract, source=source, number=1, invoice_id=stripe_invoice_id,
-            actor_user_id=bank_transfer_confirmed_by,
+            db, contract=contract, source=source, number=1, actor_user_id=confirmed_by_user_id,
         )
         return await transition_contract(
             db, organization_id=organization_id, contract=contract, to_status="PAID",
-            actor_user_id=bank_transfer_confirmed_by or contract.created_by_user_id or contract.customer_id,
-            reason=reason, notes=None, correlation_id=str(uuid.uuid4()),
+            actor_user_id=confirmed_by_user_id, reason=reason, notes=None, correlation_id=str(uuid.uuid4()),
         )
     if contract.paid_at is not None:
-        # Already handled (a redelivery that slipped past the event guard,
-        # or an admin confirming in parallel). Idempotent by design.
+        # Already handled (two administrators confirming in parallel).
+        # Idempotent by design.
         return contract
 
     # Paid BEFORE approval -- allowed on purpose (PREPAYABLE_STATUSES). The
@@ -1276,8 +1162,8 @@ async def record_card_payment(
     # nobody has approved the documents yet. Approval later finds paid_at set
     # and carries the contract straight through PAID to ACTIVE.
     #
-    # A contract that is no longer activatable at all (rejected while the
-    # customer sat on the Stripe page) still gets its payment recorded --
+    # A contract that is no longer activatable at all (rejected after the
+    # customer announced the transfer) still gets its payment recorded --
     # the money did move -- but earns no credit, and staff are told to refund.
     #
     # Also the path for a contract already approved (PAYMENT_PENDING) whose
@@ -1290,11 +1176,10 @@ async def record_card_payment(
     accepted = contract.status in PREPAYABLE_STATUSES
     if accepted:
         await instalments_service.record_payment(
-            db, contract=contract, source=source, number=1, invoice_id=stripe_invoice_id,
-            actor_user_id=bank_transfer_confirmed_by,
+            db, contract=contract, source=source, number=1, actor_user_id=confirmed_by_user_id,
         )
     await audit_service.record(
-        db, organization_id=organization_id, actor_user_id=bank_transfer_confirmed_by,
+        db, organization_id=organization_id, actor_user_id=confirmed_by_user_id,
         action="contract.paid_before_approval" if accepted else "contract.paid_while_not_activatable",
         entity_type="contract", entity_id=str(contract.id),
         new_value={"status": contract.status, "payment_plan": contract.payment_plan},
@@ -1309,7 +1194,7 @@ async def record_card_payment(
             body=(
                 "Il cliente ha già pagato: il contratto si attiva appena approvi i documenti e accetti l'anteprima provvigioni."
                 if accepted
-                else "Il contratto non è più attivabile: valuta il rimborso su Stripe e interrompi gli addebiti di questo contratto."
+                else "Il contratto non è più attivabile: valuta il rimborso del bonifico al cliente."
             ),
         )
     await db.commit()
@@ -1318,122 +1203,13 @@ async def record_card_payment(
         await credit_contract_cashback(
             db, organization_id=organization_id, contract=contract, actor_user_id=None
         )
+        # On an instalment plan what arrived is the first instalment, and it
+        # earns its JavCash now (keyed by the instalment number: once).
+        from app.domains.contracts import payment_plans
+
+        plan = payment_plans.plan_by_key(contract.payment_plan)
+        if plan is not None and plan.instalments > 1:
+            await credit_contract_instalment_cashback(
+                db, organization_id=organization_id, contract=contract, instalment_number=1
+            )
     return contract
-
-
-async def record_subscription_invoice(
-    db: AsyncSession,
-    *,
-    organization_id: uuid.UUID,
-    subscription_id: str,
-    paid: bool,
-    amount_cents: int,
-    invoice_id: str | None = None,
-    billing_reason: str | None = None,
-    lines: list[tuple[str, int]] | None = None,
-) -> str:
-    """One monthly invoice of a subscription succeeded or failed.
-
-    A subscription belongs either to one contract (paid on its own) or to a
-    pratica, where it carries one line per contract (Session 52): then each
-    `(subscription_item_id, amount_cents)` in `lines` is that contract's
-    instalment, and each contract records its own month -- its own cashback,
-    its own slice of commissions -- exactly as if it had been paid alone.
-
-    Nothing about any contract's status changes: a single failed monthly
-    charge is not grounds for automatically suspending somebody's energy
-    contract -- that is a decision for a human with the context. What this
-    does is make sure a human finds out, on both sides.
-    """
-    contracts = list(
-        (
-            await db.execute(
-                select(Contract).where(
-                    Contract.organization_id == organization_id,
-                    Contract.stripe_subscription_id == subscription_id,
-                )
-            )
-        ).scalars()
-    )
-    if not contracts:
-        return "nessun contratto per questo abbonamento"
-
-    if len(contracts) == 1 and contracts[0].stripe_subscription_item_id is None:
-        targets = [(contracts[0], amount_cents)]
-    else:
-        by_item = {c.stripe_subscription_item_id: c for c in contracts if c.stripe_subscription_item_id}
-        targets = [(by_item[item_id], cents) for item_id, cents in (lines or []) if item_id in by_item]
-        if not targets:
-            return "nessuna riga della fattura corrisponde a un contratto"
-
-    from app.domains.contracts import instalments as instalments_service
-
-    codes = ", ".join(str(c.id)[:8].upper() for c, _ in targets)
-    # The first instalment is recorded by the checkout handler, which is
-    # guaranteed to run for it; its invoice.paid (billing_reason
-    # "subscription_create") may or may not find the contracts yet, so it
-    # must not be the one that records. Every later month is recorded here,
-    # keyed by the invoice.
-    is_later_month = bool(invoice_id) and billing_reason != "subscription_create"
-
-    if paid:
-        for contract, cents in targets:
-            if is_later_month and contract.status not in ("REJECTED", "CANCELLED"):
-                # The same month's slice of the commissions: released at once
-                # on an active contract, held until activation otherwise.
-                row = await instalments_service.record_payment(
-                    db, contract=contract, source=instalments_service.SOURCE_STRIPE_INVOICE, invoice_id=invoice_id,
-                )
-                if row is not None:
-                    await db.commit()
-                    await credit_contract_instalment_cashback(
-                        db, organization_id=organization_id, contract=contract, instalment_number=row.number
-                    )
-            await audit_service.record(
-                db, organization_id=organization_id, actor_user_id=None,
-                action="contract.instalment_paid", entity_type="contract", entity_id=str(contract.id),
-                new_value={"amount_cents": cents, "subscription_id": subscription_id, "invoice_id": invoice_id},
-            )
-        await db.commit()
-        return f"rata incassata per {'il contratto' if len(targets) == 1 else 'i contratti'} {codes}"
-
-    for contract, cents in targets:
-        if is_later_month:
-            await instalments_service.record_failure(db, contract=contract, invoice_id=invoice_id)
-        await audit_service.record(
-            db, organization_id=organization_id, actor_user_id=None,
-            action="contract.instalment_failed", entity_type="contract", entity_id=str(contract.id),
-            new_value={"amount_cents": cents, "subscription_id": subscription_id, "invoice_id": invoice_id},
-            reason="Addebito della rata non riuscito",
-        )
-    first = targets[0][0]
-    await notifications_service.notify_roles(
-        db, organization_id=organization_id, roles=notifications_service.STAFF_NOTIFY_ROLES,
-        type_="CONTRACT_INSTALMENT_FAILED", entity_type="contract", entity_id=first.id,
-        title=(
-            f"Rata non riscossa: contratto {codes}"
-            if len(targets) == 1
-            else f"Rata non riscossa: {len(targets)} contratti della pratica {str(first.contract_request_id)[:8].upper()}"
-        ),
-        body=(
-            "L'addebito mensile non è andato a buon fine: le provvigioni di questa rata restano ferme. "
-            "Se il cliente paga in altro modo, confermala a mano dal registro provvigioni del contratto."
-        ),
-    )
-    customer_user_id = await _customer_user_id_for(db, contract=first)
-    if customer_user_id is not None:
-        await notifications_service.notify_user(
-            db, organization_id=organization_id, user_id=customer_user_id,
-            type_="CONTRACT_INSTALMENT_FAILED", entity_type="contract", entity_id=first.id,
-            title="Rata del contratto non addebitata",
-            body="Non siamo riusciti ad addebitare la rata mensile. Controlla la tua carta: riproveremo a breve.",
-        )
-    await db.commit()
-    return f"rata NON riscossa per {'il contratto' if len(targets) == 1 else 'i contratti'} {codes}"
-
-
-async def _customer_user_id_for(db: AsyncSession, *, contract: Contract) -> uuid.UUID | None:
-    from app.domains.customers.models import Customer
-
-    customer = await db.get(Customer, contract.customer_id)
-    return customer.user_id if customer is not None else None

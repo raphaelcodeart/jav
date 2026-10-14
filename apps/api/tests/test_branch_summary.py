@@ -12,7 +12,7 @@ from app.domains.catalog.models import Product, ProductVersion
 from app.domains.commissions.models import Rank
 from app.domains.commissions.tasks.dispatch import process_pending_outbox_events
 from app.domains.contracts import service as contract_service
-from app.domains.customers.models import Address, Customer, SupplyPoint
+from app.domains.customers.models import Address, Customer
 from app.domains.network import service as network_service
 from app.domains.users.models import User
 
@@ -31,7 +31,7 @@ async def _make_actor(db, organization_id):
 
 
 async def _make_contract_ready_to_activate(db, organization_id, actor_user_id, producer_agent_id):
-    product = Product(organization_id=organization_id, code=f"P-{uuid.uuid4().hex[:6]}", energy_type="ELECTRICITY", customer_type="PRIVATE")
+    product = Product(organization_id=organization_id, code=f"P-{uuid.uuid4().hex[:6]}", customer_type="PRIVATE")
     db.add(product)
     await db.flush()
     product_version = ProductVersion(
@@ -50,15 +50,10 @@ async def _make_contract_ready_to_activate(db, organization_id, actor_user_id, p
     )
     db.add(address)
     await db.flush()
-    supply_point = SupplyPoint(
-        organization_id=organization_id, customer_id=customer.id, energy_type="ELECTRICITY", supply_address_id=address.id,
-    )
-    db.add(supply_point)
     await db.commit()
 
     contract = await contract_service.create_contract(
-        db, organization_id=organization_id, customer_id=customer.id, supply_point_id=supply_point.id,
-        product_version_id=product_version.id, producer_agent_id=producer_agent_id,
+        db, organization_id=organization_id, customer_id=customer.id, product_version_id=product_version.id, producer_agent_id=producer_agent_id,
         actor_user_id=actor_user_id, correlation_id=str(uuid.uuid4()),
     )
     return contract

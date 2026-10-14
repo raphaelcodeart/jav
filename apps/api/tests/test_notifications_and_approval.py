@@ -10,7 +10,7 @@ import pytest
 from app.core.security import hash_password
 from app.domains.catalog.models import Product, ProductVersion
 from app.domains.contracts import service as contract_service
-from app.domains.customers.models import Address, Customer, SupplyPoint
+from app.domains.customers.models import Address, Customer
 from app.domains.network import service as network_service
 from app.domains.notifications import service as notifications_service
 from app.domains.rbac.models import Role, UserRole
@@ -164,11 +164,9 @@ async def test_creating_a_contract_notifies_staff(db, organization_id):
     )
     db.add(address)
     await db.flush()
-    supply_point = SupplyPoint(organization_id=organization_id, customer_id=customer.id, energy_type="ELECTRICITY", supply_address_id=address.id)
-    db.add(supply_point)
     await db.commit()
 
-    product = Product(organization_id=organization_id, code=f"NOTIF-{uuid.uuid4().hex[:6]}", energy_type="ELECTRICITY", customer_type="PRIVATE")
+    product = Product(organization_id=organization_id, code=f"NOTIF-{uuid.uuid4().hex[:6]}", customer_type="PRIVATE")
     db.add(product)
     await db.flush()
     from app.core.db import utcnow
@@ -181,8 +179,7 @@ async def test_creating_a_contract_notifies_staff(db, organization_id):
     )
 
     await contract_service.create_contract(
-        db, organization_id=organization_id, customer_id=customer.id, supply_point_id=supply_point.id,
-        product_version_id=product_version.id, producer_agent_id=agent.id,
+        db, organization_id=organization_id, customer_id=customer.id, product_version_id=product_version.id, producer_agent_id=agent.id,
         actor_user_id=admin.id, correlation_id=str(uuid.uuid4()),
     )
 

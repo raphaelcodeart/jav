@@ -37,7 +37,7 @@ async def test_customer_can_open_ticket_and_read_it_back(db, organization_id):
 
     ticket = await support_service.create_ticket(
         db, organization_id=organization_id, actor_user_id=customer_user.id, actor_role="CUSTOMER",
-        payload=TicketCreate(subject="Bolletta non ricevuta", category="FATTURAZIONE", message="Non ho ricevuto la bolletta di giugno."),
+        payload=TicketCreate(subject="Ricevuta non arrivata", category="FATTURAZIONE", message="Non ho ricevuto la ricevuta di giugno."),
     )
     assert ticket.status == "OPEN"
 
@@ -47,7 +47,7 @@ async def test_customer_can_open_ticket_and_read_it_back(db, organization_id):
     )
     assert detail is not None
     assert len(detail["messages"]) == 1
-    assert detail["messages"][0]["body"] == "Non ho ricevuto la bolletta di giugno."
+    assert detail["messages"][0]["body"] == "Non ho ricevuto la ricevuta di giugno."
     assert detail["messages"][0]["author_role"] == "CUSTOMER"
 
 
@@ -219,7 +219,7 @@ async def test_deleting_a_ticket_from_another_org_returns_none(db, organization_
 
 @pytest.mark.asyncio
 async def test_account_closure_opens_one_ticket_for_the_staff_and_never_two(db, organization_id, monkeypatch):
-    """Session 89: «Richiedi chiusura account» apre un ticket (che avvisa lo
+    """«Richiedi chiusura account» apre un ticket (che avvisa lo
     staff anche per email) e conferma al cliente; una seconda richiesta
     mentre la prima è aperta non ne crea un'altra."""
     sent: list[dict] = []

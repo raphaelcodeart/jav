@@ -377,7 +377,7 @@ async def open_account_closure(
 async def request_account_closure(
     db: AsyncSession, *, organization_id: uuid.UUID, user_id: uuid.UUID, actor_role: str, reason: str | None,
 ) -> Ticket:
-    """«Richiedi chiusura account» (Session 89, richiesta dell'utente): non
+    """«Richiedi chiusura account» (richiesta dell'utente): non
     cancella niente da sola. Apre un ticket di supporto -- che come ogni
     ticket avvisa lo staff nell'app e per email all'indirizzo delle notifiche
     (info@example.com di base) -- e conferma al cliente di averla

@@ -1,13 +1,10 @@
-"""Ciò che i negozi di prodotti importati condividono a livello di schema.
+"""Ciò che i negozi con carrello condividono a livello di schema.
 
 Oggi una cosa sola: la sequenza dei numeri d'ordine.
 
-Sta qui e non dentro un negozio perché è di tutti. Il cliente in "I miei
-Ordini" vede insieme AliExpress, CJ e Shopify: se ogni negozio contasse per
-conto suo esisterebbero tre "ordine 1042" diversi, e al primo problema
-nessuno saprebbe di quale si parla. Metterla in uno dei tre domini
-costringerebbe gli altri due a importarlo, rompendo l'isolamento che
-`marketplaces/rules.py` descrive.
+Sta qui e non dentro un negozio perché è di tutti: se un secondo negozio
+nascesse contando per conto suo esisterebbero due "ordine 1042" diversi, e
+al primo problema nessuno saprebbe di quale si parla.
 
 Il numero lo assegna il database (`server_default=nextval`), non
 l'applicazione: una sequenza Postgres non salta e non duplica nemmeno con

@@ -1,4 +1,4 @@
-"""Mandatory-verification/profile-completion account gates (Session 27):
+"""Mandatory-verification/profile-completion account gates:
 email verification (new registrations only -- see the 0026 migration's
 grandfather backfill for existing accounts), mandatory fiscal-code/residence
 profile completion (applies retroactively to everyone), and the

@@ -26,7 +26,7 @@ from app.core.security import hash_password
 from app.domains.catalog import pricing
 from app.domains.catalog.models import Product, ProductVersion
 from app.domains.contracts import service as contract_service
-from app.domains.customers.models import Address, Customer, SupplyPoint
+from app.domains.customers.models import Address, Customer
 from app.domains.network import service as network_service
 from app.domains.users.models import User
 from app.domains.wallets.models import Wallet, WalletTransaction
@@ -56,12 +56,12 @@ async def _make_product(
 ):
     product = Product(
         organization_id=organization_id, code=f"EC-{uuid.uuid4().hex[:6]}",
-        energy_type="ELECTRICITY", customer_type=customer_type, category="INTERNAL",
+        customer_type=customer_type, category="INTERNAL",
     )
     db.add(product)
     await db.flush()
     version = ProductVersion(
-        product_id=product.id, version_label="1.0", name="Energia Circolare BAR",
+        product_id=product.id, version_label="1.0", name="Abbonamento annuale BAR",
         base_price_cents=price_cents, valid_from=NOW,
         tax_configuration={"vat_percentage": vat_percentage} if vat_percentage is not None else {},
         contract_cashback_percentage=contract_cashback_percentage,
@@ -95,16 +95,9 @@ async def _make_customer(db, organization_id, *, kind: str, with_login: bool = F
     )
     db.add(address)
     await db.flush()
-    supply_point = SupplyPoint(
-        organization_id=organization_id, customer_id=customer.id, energy_type="ELECTRICITY",
-        supply_address_id=address.id,
-    )
-    db.add(supply_point)
     await db.commit()
     await db.refresh(customer)
-    return customer, supply_point
-
-
+    return customer
 async def _make_producer(db, organization_id):
     return await network_service.create_agent(
         db, organization_id=organization_id, first_name="Prod", last_name="Uttore",
@@ -119,12 +112,11 @@ async def _make_producer(db, organization_id):
 async def test_private_contract_carries_no_vat(db, organization_id):
     actor_user_id = await _make_actor(db, organization_id)
     _product, version = await _make_product(db, organization_id, price_cents=249_00, vat_percentage=22.0)
-    customer, supply_point = await _make_customer(db, organization_id, kind="PRIVATE")
+    customer = await _make_customer(db, organization_id, kind="PRIVATE")
     producer = await _make_producer(db, organization_id)
 
     contract = await contract_service.create_contract(
-        db, organization_id=organization_id, customer_id=customer.id, supply_point_id=supply_point.id,
-        product_version_id=version.id, producer_agent_id=producer.id,
+        db, organization_id=organization_id, customer_id=customer.id, product_version_id=version.id, producer_agent_id=producer.id,
         actor_user_id=actor_user_id, correlation_id=str(uuid.uuid4()),
     )
 
@@ -140,12 +132,11 @@ async def test_private_contract_carries_no_vat(db, organization_id):
 async def test_business_contract_adds_vat_on_top(db, organization_id):
     actor_user_id = await _make_actor(db, organization_id)
     _product, version = await _make_product(db, organization_id, price_cents=249_00, vat_percentage=22.0)
-    customer, supply_point = await _make_customer(db, organization_id, kind="COMPANY")
+    customer = await _make_customer(db, organization_id, kind="COMPANY")
     producer = await _make_producer(db, organization_id)
 
     contract = await contract_service.create_contract(
-        db, organization_id=organization_id, customer_id=customer.id, supply_point_id=supply_point.id,
-        product_version_id=version.id, producer_agent_id=producer.id,
+        db, organization_id=organization_id, customer_id=customer.id, product_version_id=version.id, producer_agent_id=producer.id,
         actor_user_id=actor_user_id, correlation_id=str(uuid.uuid4()),
     )
 
@@ -165,12 +156,11 @@ async def test_a_sole_proprietor_is_a_business_for_vat(db, organization_id):
     to keep the two from being "helpfully" merged later."""
     actor_user_id = await _make_actor(db, organization_id)
     _product, version = await _make_product(db, organization_id, price_cents=100_00, vat_percentage=22.0)
-    customer, supply_point = await _make_customer(db, organization_id, kind="SOLE_PROPRIETOR")
+    customer = await _make_customer(db, organization_id, kind="SOLE_PROPRIETOR")
     producer = await _make_producer(db, organization_id)
 
     contract = await contract_service.create_contract(
-        db, organization_id=organization_id, customer_id=customer.id, supply_point_id=supply_point.id,
-        product_version_id=version.id, producer_agent_id=producer.id,
+        db, organization_id=organization_id, customer_id=customer.id, product_version_id=version.id, producer_agent_id=producer.id,
         actor_user_id=actor_user_id, correlation_id=str(uuid.uuid4()),
     )
     assert contract.vat_amount_cents == 22_00
@@ -182,12 +172,11 @@ async def test_vat_snapshot_survives_a_later_product_price_change(db, organizati
     restate a contract somebody already signed."""
     actor_user_id = await _make_actor(db, organization_id)
     _product, version = await _make_product(db, organization_id, price_cents=100_00, vat_percentage=22.0)
-    customer, supply_point = await _make_customer(db, organization_id, kind="COMPANY")
+    customer = await _make_customer(db, organization_id, kind="COMPANY")
     producer = await _make_producer(db, organization_id)
 
     contract = await contract_service.create_contract(
-        db, organization_id=organization_id, customer_id=customer.id, supply_point_id=supply_point.id,
-        product_version_id=version.id, producer_agent_id=producer.id,
+        db, organization_id=organization_id, customer_id=customer.id, product_version_id=version.id, producer_agent_id=producer.id,
         actor_user_id=actor_user_id, correlation_id=str(uuid.uuid4()),
     )
     original_gross = contract.gross_amount_cents
@@ -205,12 +194,11 @@ async def test_vat_snapshot_survives_a_later_product_price_change(db, organizati
 
 
 def test_product_audience_matching_covers_the_legacy_vocabulary():
-    """`products.customer_type` used to hold PMI / ENERGY_INTENSIVE /
-    SOLE_PROPRIETOR, a vocabulary that never lined up with `customers.kind`.
+    """`products.customer_type` used to hold PMI / SOLE_PROPRIETOR /
+    CONDOMINIUM, a vocabulary that never lined up with `customers.kind`.
     Old values must keep parsing rather than blowing up or, worse, silently
     excluding everyone."""
     assert pricing.normalize_product_customer_type("PMI") == "BUSINESS"
-    assert pricing.normalize_product_customer_type("ENERGY_INTENSIVE") == "BUSINESS"
     assert pricing.normalize_product_customer_type("SOLE_PROPRIETOR") == "BUSINESS"
     assert pricing.normalize_product_customer_type(None) == "BOTH"
     # An unrecognized value fails OPEN, showing the product to everyone --
@@ -230,7 +218,6 @@ def test_product_audience_matching_covers_the_legacy_vocabulary():
 async def test_a_promoter_cannot_activate_a_business_only_contract_for_a_private(db, organization_id):
     """Server-side enforcement, not just a filtered catalog: this goes through
     the CRM path a promoter actually uses."""
-    from app.domains.customers.schemas import SupplyPointCreate
     from app.domains.referral import service as referral_service
 
     promoter_user = User(
@@ -247,7 +234,7 @@ async def test_a_promoter_cannot_activate_a_business_only_contract_for_a_private
         db, organization_id=organization_id, agent_id=agent.id
     )
 
-    customer, _sp = await _make_customer(db, organization_id, kind="PRIVATE")
+    customer = await _make_customer(db, organization_id, kind="PRIVATE")
     await referral_service.attribute_customer(
         db, organization_id=organization_id, customer_id=customer.id, promoter_code_id=code.id,
         referral_session_id=None,
@@ -259,10 +246,6 @@ async def test_a_promoter_cannot_activate_a_business_only_contract_for_a_private
         await contract_service.create_contract_for_recruited_customer(
             db, organization_id=organization_id, promoter_user_id=promoter_user.id,
             customer_id=customer.id, product_version_id=version.id,
-            supply_point_payload=SupplyPointCreate(
-                energy_type="ELECTRICITY", pod_code="IT001E12345678",
-                street="Via Test 1", city="Roma", province="RM", postal_code="00100",
-            ),
             email="cliente@example.com",
         )
 
@@ -276,12 +259,11 @@ async def test_paying_a_contract_credits_javcash_with_no_surcharge(db, organizat
     _product, version = await _make_product(
         db, organization_id, price_cents=249_00, vat_percentage=22.0, contract_cashback_percentage=100
     )
-    customer, supply_point = await _make_customer(db, organization_id, kind="PRIVATE", with_login=True)
+    customer = await _make_customer(db, organization_id, kind="PRIVATE", with_login=True)
     producer = await _make_producer(db, organization_id)
 
     contract = await contract_service.create_contract(
-        db, organization_id=organization_id, customer_id=customer.id, supply_point_id=supply_point.id,
-        product_version_id=version.id, producer_agent_id=producer.id,
+        db, organization_id=organization_id, customer_id=customer.id, product_version_id=version.id, producer_agent_id=producer.id,
         actor_user_id=actor_user_id, correlation_id=str(uuid.uuid4()),
     )
     for step in ["SUBMITTED", "UNDER_REVIEW", "APPROVED", "PAID"]:
@@ -314,12 +296,11 @@ async def test_contract_cashback_is_credited_exactly_once(db, organization_id):
     _product, version = await _make_product(
         db, organization_id, price_cents=100_00, vat_percentage=None, contract_cashback_percentage=50
     )
-    customer, supply_point = await _make_customer(db, organization_id, kind="PRIVATE", with_login=True)
+    customer = await _make_customer(db, organization_id, kind="PRIVATE", with_login=True)
     producer = await _make_producer(db, organization_id)
 
     contract = await contract_service.create_contract(
-        db, organization_id=organization_id, customer_id=customer.id, supply_point_id=supply_point.id,
-        product_version_id=version.id, producer_agent_id=producer.id,
+        db, organization_id=organization_id, customer_id=customer.id, product_version_id=version.id, producer_agent_id=producer.id,
         actor_user_id=actor_user_id, correlation_id=str(uuid.uuid4()),
     )
     for step in ["SUBMITTED", "UNDER_REVIEW", "APPROVED", "PAID"]:
@@ -347,12 +328,11 @@ async def test_a_product_without_contract_cashback_credits_nothing(db, organizat
     so paying a contract must change no wallet until an admin opts in."""
     actor_user_id = await _make_actor(db, organization_id)
     _product, version = await _make_product(db, organization_id, contract_cashback_percentage=0)
-    customer, supply_point = await _make_customer(db, organization_id, kind="PRIVATE", with_login=True)
+    customer = await _make_customer(db, organization_id, kind="PRIVATE", with_login=True)
     producer = await _make_producer(db, organization_id)
 
     contract = await contract_service.create_contract(
-        db, organization_id=organization_id, customer_id=customer.id, supply_point_id=supply_point.id,
-        product_version_id=version.id, producer_agent_id=producer.id,
+        db, organization_id=organization_id, customer_id=customer.id, product_version_id=version.id, producer_agent_id=producer.id,
         actor_user_id=actor_user_id, correlation_id=str(uuid.uuid4()),
     )
     for step in ["SUBMITTED", "UNDER_REVIEW", "APPROVED", "PAID"]:

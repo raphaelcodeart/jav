@@ -1,4 +1,4 @@
-"""Session 37: the one-off "omaggio di benvenuto" every account can claim
+"""The one-off "omaggio di benvenuto" every account can claim
 exactly once, ever. The whole "only once" guarantee rests on
 wallet_transactions' UNIQUE idempotency_key rather than a separate claimed
 flag, so these tests lean hard on double-claim attempts."""
@@ -121,6 +121,5 @@ async def test_the_bonus_shows_up_in_the_wallet_history(db, organization_id):
     assert len(rows) == 1
     assert rows[0]["source"] == "WELCOME_BONUS"
     assert rows[0]["amount_cents"] == 2000
-    # Not tied to an order or a redemption -- it comes from nothing.
+    # Not tied to an order -- it comes from nothing.
     assert rows[0]["reference_order_id"] is None
-    assert rows[0]["reference_invoice_redemption_id"] is None

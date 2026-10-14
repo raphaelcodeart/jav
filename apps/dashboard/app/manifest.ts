@@ -6,12 +6,12 @@ import type { MetadataRoute } from "next";
 // convention; this covers the Android/PWA "manifest" side of the same ask.
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Jav",
+    name: "Jav · Judo Arte e Vida",
     short_name: "Jav",
     start_url: "/login",
     display: "standalone",
-    background_color: "#090d16",
-    theme_color: "#ea580c",
+    background_color: "#ffffff",
+    theme_color: "#e43f21",
     icons: [
       { src: "/icon.png", sizes: "512x512", type: "image/png" },
       { src: "/apple-icon.png", sizes: "180x180", type: "image/png" },

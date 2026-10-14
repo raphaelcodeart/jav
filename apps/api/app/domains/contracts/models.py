@@ -3,7 +3,6 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
-    Text,
     BigInteger,
     CheckConstraint,
     Date,
@@ -11,6 +10,7 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    Text,
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -25,14 +25,14 @@ CONTRACT_REQUEST_STATUSES = frozenset({"DRAFT", "SUBMITTED", "CANCELLED"})
 
 
 class ContractRequest(UUIDPKMixin, TimestampMixin, Base):
-    """La pratica di attivazione (Session 52): one customer, N supply points,
-    N contracts, filled in and paid together.
+    """La pratica: one customer, N contracts, filled in and paid
+    together.
 
     Deliberately thin. Each contract keeps everything it owned before --
     package, frozen price, status, documents of its own, approval,
     instalments, commissions -- and the pratica owns only what is genuinely
     common: who the holder is, the documents that are the same for every
-    point, and the single checkout that pays them all. A contract rejected,
+    contract, and the single bank transfer that pays them all. A contract rejected,
     suspended or cancelled inside a pratica affects no other contract in it.
 
     The holder fields are copied onto every contract at creation and on
@@ -53,7 +53,7 @@ class ContractRequest(UUIDPKMixin, TimestampMixin, Base):
     email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     pec: Mapped[str | None] = mapped_column(String(320), nullable=True)
     iban: Mapped[str | None] = mapped_column(String(34), nullable=True)
-    #: Session 85: who the contracts of this pratica are FOR -- PRIVATE, or a
+    #: Who the contracts of this pratica are FOR -- PRIVATE, or a
     #: business kind (COMPANY / SOLE_PROPRIETOR / CONDOMINIUM) -- chosen in the
     #: pratica's own data form. Null (older pratiche) = the customer's kind.
     #: It decides VAT, which packages fit, the PEC and the documents; always
@@ -63,7 +63,7 @@ class ContractRequest(UUIDPKMixin, TimestampMixin, Base):
     #: fiscal code -- the representative's name is holder_first/last_name.
     company_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     legal_rep_fiscal_code: Mapped[str | None] = mapped_column(String(16), nullable=True)
-    #: Session 89: a private pratica's holder fiscal code (a business one has
+    #: A private pratica's holder fiscal code (a business one has
     #: legal_rep_fiscal_code), and the birth date and place of the person
     #: named in holder_first/last_name -- the holder, or the legal
     #: representative. Asked so that the fiscal code is checked against
@@ -73,9 +73,7 @@ class ContractRequest(UUIDPKMixin, TimestampMixin, Base):
     #: «Roma (RM)», «Albania (estero)» -- as shown; the Belfiore code beside it.
     holder_birth_place: Mapped[str | None] = mapped_column(String(160), nullable=True)
     holder_birth_place_code: Mapped[str | None] = mapped_column(String(4), nullable=True)
-    #: The supply address every point of the pratica starts from, asked once
-    #: with the holder data (Session 53). A point moved elsewhere keeps its
-    #: own address on its supply point.
+    #: The holder's address, asked once with the holder data.
     street: Mapped[str | None] = mapped_column(String(255), nullable=True)
     city: Mapped[str | None] = mapped_column(String(128), nullable=True)
     province: Mapped[str | None] = mapped_column(String(8), nullable=True)
@@ -93,7 +91,7 @@ class ContractRequest(UUIDPKMixin, TimestampMixin, Base):
     submitted_at: Mapped[datetime | None] = mapped_column(nullable=True)
     cancelled_at: Mapped[datetime | None] = mapped_column(nullable=True)
     updated_at: Mapped[datetime | None] = mapped_column(nullable=True)
-    #: Session 83: a message for the administration -- from the customer, or
+    #: A message for the administration -- from the customer, or
     #: above all from the promoter filling the pratica in for somebody
     #: ("chiamare dopo le 18", "il contatore è in cantina").
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -101,9 +99,10 @@ class ContractRequest(UUIDPKMixin, TimestampMixin, Base):
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
     notes_updated_at: Mapped[datetime | None] = mapped_column(nullable=True)
-    # --- Session 65: paying the pratica by bank transfer -------------------------
-    #: The customer chose "bonifico" (single payment, with the one-go discount):
-    #: the amount frozen at that moment, confirmed later by an administrator.
+    # --- Paying the pratica by bank transfer --------------------------------------
+    #: The customer announced the transfer and chose a payment plan: the amount
+    #: of the first transfer (the whole price, or the first instalment) is
+    #: frozen at that moment and confirmed later by an administrator.
     bank_transfer_requested_at: Mapped[datetime | None] = mapped_column(nullable=True)
     bank_transfer_total_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     bank_transfer_confirmed_at: Mapped[datetime | None] = mapped_column(nullable=True)
@@ -115,49 +114,10 @@ class ContractRequest(UUIDPKMixin, TimestampMixin, Base):
     payment_proof_uploaded_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
 
-class ContractRequestCheckout(UUIDPKMixin, TimestampMixin, Base):
-    """One Stripe Checkout Session opened to pay a pratica.
-
-    `lines` freezes exactly what the session charges: one entry per contract,
-    `{"contract_id", "gross_cents", "instalment_cents"}`. The webhook pays
-    those contracts and no others, whatever has changed in the pratica since
-    -- a contract rejected while the customer sat on the Stripe page is still
-    recorded as paid (the money moved) and staff are told to refund it.
-
-    One row per session rather than one "current session" column on the
-    pratica: a customer who opens the payment in two tabs and completes the
-    older one has still paid, and that payment must be found, not dropped
-    because a newer session overwrote the reference to it.
-    """
-
-    __tablename__ = "contract_request_checkouts"
-
-    organization_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("organizations.id"), index=True
-    )
-    contract_request_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("contract_requests.id"), index=True
-    )
-    stripe_checkout_session_id: Mapped[str] = mapped_column(String(255), unique=True)
-    payment_plan: Mapped[str] = mapped_column(String(16))
-    lines: Mapped[list] = mapped_column(JSONB, default=list)
-    #: Sum over the lines of what the plan collects in total, and per month.
-    total_cents: Mapped[int] = mapped_column(BigInteger)
-    instalment_cents: Mapped[int] = mapped_column(BigInteger)
-    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
-    )
-    completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
-    stripe_subscription_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    stripe_customer_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    #: What the webhook did with it, in words -- for whoever investigates.
-    outcome: Mapped[str | None] = mapped_column(String(255), nullable=True)
-
-
 class Contract(UUIDPKMixin, TimestampMixin, Base):
     __tablename__ = "contracts"
     __table_args__ = (
-        # The package is chosen per point after the documents (Session 52), so
+        # The package is chosen per point after the documents, so
         # a contract may exist without one -- but only while it is a draft.
         CheckConstraint(
             "product_version_id IS NOT NULL OR status IN ('DRAFT', 'CANCELLED')", name="product_required"
@@ -173,7 +133,6 @@ class Contract(UUIDPKMixin, TimestampMixin, Base):
     contract_request_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("contract_requests.id"), index=True
     )
-    supply_point_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("supply_points.id"))
     product_version_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("product_versions.id"), nullable=True
     )
@@ -186,10 +145,10 @@ class Contract(UUIDPKMixin, TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(32), default="DRAFT", index=True)
     # Free-text context set at creation by whoever originated the deal (the
     # inviting promoter or the admin creating it directly) -- e.g. "cliente
-    # arrivato dalla promozione Luce Green, preferisce essere ricontattato la
-    # sera". Distinct from ContractStatusHistory.notes, which is per-transition.
+    # arrivato dalla promozione di settembre, preferisce essere ricontattato
+    # la sera". Distinct from ContractStatusHistory.notes, which is per-transition.
     notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
-    # Bank account for this specific subscription's direct-debit payments --
+    # Bank account for this specific contract's payments --
     # collected when the contract is requested (a customer may have different
     # payment details per contract), never inferred from the customer's other
     # contracts. Nullable: an admin creating a contract on the customer's
@@ -197,14 +156,13 @@ class Contract(UUIDPKMixin, TimestampMixin, Base):
     iban: Mapped[str | None] = mapped_column(String(34), nullable=True)
     # Contact email for this specific contract/pratica -- deliberately independent
     # of the customer's account login email (a customer may want a contract
-    # followed at a different address, e.g. a family member's or the
-    # supply point's own). Nullable for compatibility with contracts created
+    # followed at a different address, e.g. a family member's). Nullable for compatibility with contracts created
     # before this field existed.
     email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     # The contract holder as typed into the activation wizard (pre-filled
     # from the account, freely editable) plus an optional PEC. Per contract
-    # for the same reason as email/iban above. Null on contracts created
-    # before migration 0040 and on staff-created ones.
+    # for the same reason as email/iban above. Null on staff-created
+    # contracts.
     holder_first_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     holder_last_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     pec: Mapped[str | None] = mapped_column(String(320), nullable=True)
@@ -271,7 +229,7 @@ class Contract(UUIDPKMixin, TimestampMixin, Base):
     vat_rate: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
     vat_amount_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     gross_amount_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    #: Session 84: the same breakdown for the contract paid in rate (3 or 12),
+    #: The same breakdown for the contract paid in rate (3 or 12),
     #: frozen alongside the one above: the product's monthly price x the
     #: months of the term, VAT on top as above. The four columns above stay
     #: the one-go price. Null (older contracts, a product with no monthly
@@ -283,39 +241,18 @@ class Contract(UUIDPKMixin, TimestampMixin, Base):
 
     # --- Payment -----------------------------------------------------------
     #
-    # A contract has never been paid through this app before (every contract
-    # in production sits at DRAFT/DOCUMENTS_PENDING/UNDER_REVIEW), so none of
-    # this restates existing behaviour -- it is the payment step that did not
-    # exist. Stripe is the only source of truth that any of it was paid: the
-    # success URL is never treated as proof, only the verified webhook is.
-    #: How the customer chose to pay:
-    #:   FULL       -- one-off payment of the whole amount
-    #:   MONTHLY_12 -- twelve monthly instalments (a real Stripe
-    #:                 subscription, never twelve hand-made payments)
-    #:   FINANCING  -- "Finanziaria Stripe": the amount is financed and the
-    #:                 customer repays the financing provider, not us.
-    #: Nothing writes this column yet -- the contract payment step is not
-    #: built (see docs/server-migration-guide.md §9). The values are fixed
-    #: here so the column has one agreed vocabulary before anything starts
-    #: relying on it.
+    # Contracts are paid by bank transfer only, and only an administrator
+    # confirming the money arrived marks anything paid: what the customer
+    # announces is a promise, never proof.
+    #: How the customer chose to pay (contracts/payment_plans.py): FULL, one
+    #: transfer for the whole amount; INSTALMENTS_3 / MONTHLY_12, one
+    #: transfer per instalment, each confirmed by an administrator.
     payment_plan: Mapped[str | None] = mapped_column(String(16), nullable=True)
-    #: Session 64: the discount taken off a single payment, frozen when the
-    #: customer chose it (0 for instalments, bank transfers and older contracts).
-    payment_discount_cents: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
-    #: CARD / BANK_TRANSFER.
+    #: BANK_TRANSFER -- the only method; null until the customer chooses.
     payment_method: Mapped[str | None] = mapped_column(String(16), nullable=True)
-    stripe_checkout_session_id: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
-    stripe_customer_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    #: Shared by every contract of a pratica paid in instalments: one
-    #: subscription, one line (`stripe_subscription_item_id`) per contract.
-    stripe_subscription_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    stripe_subscription_item_id: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
-    #: An administrator removed this contract's line from the subscription:
-    #: the card is no longer charged for it, the other contracts carry on.
-    billing_stopped_at: Mapped[datetime | None] = mapped_column(nullable=True)
     paid_at: Mapped[datetime | None] = mapped_column(nullable=True)
     #: Guard making the JavCash credit for this contract exactly-once even
-    #: if the webhook is replayed, on top of the wallet ledger's own unique
+    #: if a confirmation is repeated, on top of the wallet ledger's own unique
     #: idempotency key -- same belt-and-braces pattern as orders.
     cashback_credited_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
@@ -371,7 +308,7 @@ class ContractCommissionPlan(UUIDPKMixin, TimestampMixin, Base):
     """The commission preview an administrator accepted before this contract
     could activate -- kept verbatim, as the log they can reopen later.
 
-    Business rule (Session 50): approving a contract is the act that sets
+    Business rule: approving a contract is the act that sets
     commissions going, so the administrator must see who is paid what, and
     how it is spread over the customer's instalments, before it happens.
     `preview` is exactly what was on their screen; the ledger rows that
@@ -405,17 +342,13 @@ class ContractInstalment(UUIDPKMixin, TimestampMixin, Base):
     It is what releases commissions a slice at a time: each row, once PAID
     on an ACTIVE contract, emits exactly one ContractInstalmentPaid outbox
     event (commission_event_id, set once) and the engine pays 1/N of every
-    beneficiary's commission for it. The UNIQUE (contract_id, number) and
-    the UNIQUE (contract_id, stripe_invoice_id) are what make "Stripe confirmed it" and
-    "an administrator confirmed it" unable to pay the same month twice.
+    beneficiary's commission for it. The UNIQUE (contract_id, number) is
+    what makes two confirmations of the same month unable to pay it twice.
     """
 
     __tablename__ = "contract_instalments"
     __table_args__ = (
         UniqueConstraint("contract_id", "number", name="uq_contract_instalments_contract_number"),
-        # Per contract, not globally: one monthly invoice of a pratica pays
-        # every contract in it (Session 52).
-        UniqueConstraint("contract_id", "stripe_invoice_id"),
     )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
@@ -428,15 +361,14 @@ class ContractInstalment(UUIDPKMixin, TimestampMixin, Base):
     due_date: Mapped[date] = mapped_column(Date)
     #: What the customer pays for this instalment.
     amount_cents: Mapped[int] = mapped_column(BigInteger)
-    #: SCHEDULED / PAID / FAILED
+    #: SCHEDULED / PAID
     status: Mapped[str] = mapped_column(String(16), default="SCHEDULED")
     paid_at: Mapped[datetime | None] = mapped_column(nullable=True)
-    #: STRIPE_CHECKOUT / STRIPE_INVOICE / ADMIN
+    #: ADMIN -- an administrator confirmed the transfer.
     payment_source: Mapped[str | None] = mapped_column(String(16), nullable=True)
     confirmed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
-    stripe_invoice_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     commission_event_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     commission_released_at: Mapped[datetime | None] = mapped_column(nullable=True)
     commission_calculation_id: Mapped[uuid.UUID | None] = mapped_column(

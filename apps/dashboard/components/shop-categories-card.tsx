@@ -4,6 +4,7 @@ import { useState } from "react";
 import { FullScreenPanel } from "@/components/full-screen-panel";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { friendlyApiError } from "@/lib/api-error";
+import { useI18n } from "@/lib/i18n/provider";
 import type { ShopCategoryRead, ShopKey } from "@/lib/types";
 
 /** Categorie di uno shop (Session 73).
@@ -62,10 +63,10 @@ export function sameCategorySelection(a: string[], b: string[]): boolean {
   return left.every((id, i) => id === right[i]);
 }
 
-const cardClass = "glass-card rounded-2xl border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70";
-const inputClass = "w-full rounded-lg glass-input px-3 py-2 text-sm focus:border-orange-500";
+const cardClass = "glass-card rounded-2xl border-slate-200 bg-white/70";
+const inputClass = "w-full rounded-lg glass-input px-3 py-2 text-sm focus:border-brand-500";
 const ghostClass =
-  "px-3 py-1.5 rounded-lg bg-white/5 light:bg-slate-900/5 hover:bg-white/10 border border-white/10 light:border-slate-300 text-xs font-semibold text-slate-300 light:text-slate-600 transition cursor-pointer disabled:opacity-50";
+  "px-3 py-1.5 rounded-lg bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-xs font-semibold text-slate-600 transition cursor-pointer disabled:opacity-50";
 
 export interface ShopCategoriesCardProps {
   /** Gli shop gestiti da questa card. Con più di uno compare un selettore
@@ -75,9 +76,9 @@ export interface ShopCategoriesCardProps {
 
 /** Il bottone "Gestisci Categorie" (Session 74): sta in testa a ogni pagina
     shop, visibile da qualunque scheda, e apre la stessa gestione della card.
-    Nasce da una richiesta esplicita dell'utente, che nella pagina Shop
-    AliExpress non trovava dove intervenire sulle categorie: una card
-    richiudibile in mezzo ai prodotti non si vede abbastanza. */
+    Nasce da una richiesta esplicita dell'utente, che nella pagina di uno
+    shop non trovava dove intervenire sulle categorie: una card richiudibile
+    in mezzo ai prodotti non si vede abbastanza. */
 export function ManageCategoriesButton({ shops }: ShopCategoriesCardProps) {
   const [open, setOpen] = useState(false);
   const [selectedShop, setSelectedShop] = useState<ShopKey | null>(null);
@@ -92,7 +93,7 @@ export function ManageCategoriesButton({ shops }: ShopCategoriesCardProps) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-orange-600 to-amber-500 hover:from-orange-500 hover:to-amber-400 text-white text-xs font-bold shadow-lg shadow-orange-500/20 transition-all duration-200 cursor-pointer active:scale-[0.98]"
+        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-brand-600 to-brand-400 hover:from-brand-500 hover:to-brand-400 text-white text-xs font-bold shadow-lg shadow-brand-500/20 transition-all duration-200 cursor-pointer active:scale-[0.98]"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h10" />
@@ -115,8 +116,8 @@ export function ManageCategoriesButton({ shops }: ShopCategoriesCardProps) {
                     onClick={() => setSelectedShop(s.key)}
                     className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition cursor-pointer ${
                       shop === s.key
-                        ? "bg-orange-600 border-orange-600 text-white"
-                        : "bg-white/5 light:bg-slate-900/5 border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 hover:bg-white/10"
+                        ? "bg-brand-600 border-brand-600 text-white"
+                        : " bg-slate-900/5 border-slate-300 text-slate-600 hover:bg-slate-100"
                     }`}
                   >
                     {s.label}
@@ -152,16 +153,16 @@ export function ShopCategoriesCard({ shops }: ShopCategoriesCardProps) {
         className="w-full flex flex-wrap items-center justify-between gap-2 px-5 py-4 text-left cursor-pointer"
       >
         <span>
-          <span className="block text-sm font-bold text-white light:text-slate-900">Categorie dello shop</span>
-          <span className="block text-xs text-slate-400 light:text-slate-500 mt-0.5">
+          <span className="block text-sm font-bold text-slate-900">Categorie dello shop</span>
+          <span className="block text-xs text-slate-500 mt-0.5">
             Le categorie con cui il cliente filtra i prodotti di questo shop, sotto il pulsante dello shop.
           </span>
         </span>
-        <span className="text-xs font-semibold text-orange-400">{open ? "Chiudi" : "Gestisci"}</span>
+        <span className="text-xs font-semibold text-brand-600">{open ? "Chiudi" : "Gestisci"}</span>
       </button>
 
       {open && (
-        <div className="px-5 pb-5 pt-4 border-t border-white/5 light:border-slate-200 space-y-4">
+        <div className="px-5 pb-5 pt-4 border-t border-slate-200 space-y-4">
           {shops.length > 1 && (
             <div className="flex flex-wrap gap-2">
               {shops.map((s) => (
@@ -171,8 +172,8 @@ export function ShopCategoriesCard({ shops }: ShopCategoriesCardProps) {
                   onClick={() => setSelectedShop(s.key)}
                   className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition cursor-pointer ${
                     shop === s.key
-                      ? "bg-orange-600 border-orange-600 text-white"
-                      : "bg-white/5 light:bg-slate-900/5 border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 hover:bg-white/10"
+                      ? "bg-brand-600 border-brand-600 text-white"
+                      : " bg-slate-900/5 border-slate-300 text-slate-600 hover:bg-slate-100"
                   }`}
                 >
                   {s.label}
@@ -193,7 +194,19 @@ export function ShopCategoriesCard({ shops }: ShopCategoriesCardProps) {
   );
 }
 
-function CategoryList({ shop, categories }: { shop: ShopKey; categories: ShopCategoryRead[] | undefined }) {
+/** `producers`, se c'è, aggiunge a ogni categoria la scelta del fornitore:
+    lo passa solo il pannello dello Shop, l'unico shop in cui gli ordini
+    partono verso un'azienda (vedi admin-jav-market-panel.tsx). */
+export function CategoryList({
+  shop,
+  categories,
+  producers,
+}: {
+  shop: ShopKey;
+  categories: ShopCategoryRead[] | undefined;
+  producers?: { id: string; name: string }[];
+}) {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   // Le modifiche in corso, per id: il valore mostrato è la bozza se c'è,
   // altrimenti quello del server. Niente useEffect di sincronizzazione.
@@ -290,7 +303,7 @@ function CategoryList({ shop, categories }: { shop: ShopKey; categories: ShopCat
           tutti i prodotti senza filtri.
         </p>
       ) : (
-        <div className="rounded-xl border border-white/10 light:border-slate-200 divide-y divide-white/5 light:divide-slate-200">
+        <div className="rounded-xl border border-slate-200 divide-y divide-slate-200">
           {categories.map((c) => {
             const draft = drafts[c.id] ?? {};
             const name = draft.name ?? c.name;
@@ -314,10 +327,27 @@ function CategoryList({ shop, categories }: { shop: ShopKey; categories: ShopCat
                 <span className="text-[11px] text-slate-500 w-20 text-right shrink-0">
                   {c.product_count} {c.product_count === 1 ? "prodotto" : "prodotti"}
                 </span>
+                {producers && (
+                  <select
+                    className="rounded-md glass-input px-2 py-1.5 text-xs max-w-[12rem]"
+                    aria-label={t("shopSuppliers.categorySupplier")}
+                    title={t("shopSuppliers.categorySupplierHint")}
+                    value={c.producer_id ?? ""}
+                    disabled={busyId === c.id}
+                    onChange={(e) => patch(c, { producer_id: e.target.value || null })}
+                  >
+                    <option value="">{t("shopSuppliers.categoryNoSupplier")}</option>
+                    {producers.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
                 {changed && (
                   <button
                     type="button"
-                    className="px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50"
+                    className="px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50"
                     disabled={busyId === c.id || !name.trim()}
                     onClick={() =>
                       patch(c, {
@@ -340,7 +370,7 @@ function CategoryList({ shop, categories }: { shop: ShopKey; categories: ShopCat
                 </button>
                 <button
                   type="button"
-                  className="px-3 py-1.5 rounded-lg bg-white/5 light:bg-slate-900/5 hover:bg-rose-600 hover:text-white border border-white/10 light:border-slate-300 text-xs font-semibold text-slate-300 light:text-slate-600 transition cursor-pointer"
+                  className="px-3 py-1.5 rounded-lg bg-slate-900/5 hover:bg-rose-600 hover:text-white border border-slate-300 text-xs font-semibold text-slate-600 transition cursor-pointer"
                   onClick={() => { setDeleting(c); setDeleteError(null); }}
                 >
                   Elimina
@@ -353,7 +383,7 @@ function CategoryList({ shop, categories }: { shop: ShopKey; categories: ShopCat
 
       <form onSubmit={create} className="flex flex-wrap items-end gap-2">
         <label className="flex-1 min-w-[180px]">
-          <span className="block text-[10px] font-semibold text-slate-400 light:text-slate-500 uppercase tracking-wide mb-1">
+          <span className="block font-semibold text-slate-500 uppercase tracking-wide mb-1">
             Nuova categoria
           </span>
           <input
@@ -367,25 +397,26 @@ function CategoryList({ shop, categories }: { shop: ShopKey; categories: ShopCat
         <button
           type="submit"
           disabled={creating || !newName.trim()}
-          className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-xs font-bold text-white transition cursor-pointer disabled:opacity-50"
+          className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-bold text-white transition cursor-pointer disabled:opacity-50"
         >
           {creating ? "..." : "Aggiungi categoria"}
         </button>
       </form>
 
+      {producers && <p className="text-[11px] text-slate-500">{t("shopSuppliers.categorySupplierHint")}</p>}
       <p className="text-[11px] text-slate-500">
         Il numero a sinistra è l&apos;ordine in cui le categorie compaiono al cliente. Una categoria nascosta sparisce
         dai filtri dello Shop ma resta qui, con i suoi prodotti: i prodotti tornano semplicemente visibili senza filtro.
       </p>
 
       {deleting && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 light:bg-slate-900/40 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-md glass-card rounded-2xl p-6 border-white/10 light:border-slate-300 bg-slate-950 light:bg-white animate-scale-up">
-            <h3 className="text-lg font-bold text-white light:text-slate-900 mb-2">Elimina categoria</h3>
-            <p className="text-xs text-slate-400 light:text-slate-500 mb-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-md glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up">
+            <h3 className="text-lg font-bold text-slate-900 mb-2">Elimina categoria</h3>
+            <p className="text-xs text-slate-500 mb-4">
               Stai per eliminare la categoria{" "}
-              <span className="font-semibold text-slate-300 light:text-slate-700">&quot;{deleting.name}&quot;</span>.{" "}
-              <strong className="text-slate-200 light:text-slate-800">
+              <span className="font-semibold text-slate-700">&quot;{deleting.name}&quot;</span>.{" "}
+              <strong className=" text-slate-800">
                 I {deleting.product_count} prodotti che contiene non vengono eliminati
               </strong>
               : restano in vendita e semplicemente non appartengono più a nessuna categoria, finché non li assegni a
@@ -395,7 +426,7 @@ function CategoryList({ shop, categories }: { shop: ShopKey; categories: ShopCat
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => { setDeleting(null); setDeleteError(null); }}
-                className="px-4 py-2 rounded-xl bg-white/5 light:bg-slate-900/5 hover:bg-white/10 text-xs font-semibold text-slate-300 light:text-slate-600 border border-white/5 light:border-slate-200 transition cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 text-xs font-semibold text-slate-600 border border-slate-200 transition cursor-pointer"
               >
                 Annulla
               </button>
@@ -433,7 +464,7 @@ export function ProductCategoriesField({
 
   return (
     <div>
-      <span className="block text-[10px] font-semibold text-slate-400 light:text-slate-500 uppercase tracking-wide mb-1">
+      <span className="block font-semibold text-slate-500 uppercase tracking-wide mb-1">
         Categorie nello Shop
       </span>
       {error ? (
@@ -455,8 +486,8 @@ export function ProductCategoriesField({
                 onClick={() => toggle(c.id)}
                 className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition cursor-pointer ${
                   checked
-                    ? "bg-orange-600 border-orange-600 text-white"
-                    : "bg-white/5 light:bg-slate-900/5 border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 hover:bg-white/10"
+                    ? "bg-brand-600 border-brand-600 text-white"
+                    : " bg-slate-900/5 border-slate-300 text-slate-600 hover:bg-slate-100"
                 } ${c.active ? "" : "opacity-60"}`}
               >
                 {checked ? "✓ " : ""}
@@ -478,21 +509,12 @@ export function ProductCategoriesField({
 
 // --- Assegnazione in blocco -------------------------------------------------
 
-/** Dove stanno i prodotti di ogni shop, per l'amministratore. Il vecchio
-    plugin dei prodotti a mano vive dentro il Marketplace AliExpress, quindi
-    le sue righe si assegnano alle stesse categorie. */
+/** Dove stanno i prodotti di ogni shop, per l'amministratore. */
 const PRODUCTS_ENDPOINT: Record<ShopKey, string[]> = {
   internal: ["/api/proxy/products"],
   partner: ["/api/proxy/products"],
   dropshipping: ["/api/proxy/products"],
-  cj: ["/api/proxy/cj/products"],
-  shopify: ["/api/proxy/shopify/products"],
-  aliexpress: ["/api/proxy/aliexpress/products", "/api/proxy/imported-products/products"],
   jav_market: ["/api/proxy/jav-market/products"],
-  kappa_market: ["/api/proxy/kappa-market/products"],
-  vaitto_market: ["/api/proxy/vaitto-market/products"],
-  symphonya_market: ["/api/proxy/symphonya-market/products"],
-  soleil_market: ["/api/proxy/soleil-market/products"],
 };
 
 type AssignableProduct = { id: string; name: string; category_ids?: string[]; category?: string };
@@ -518,7 +540,7 @@ async function fetchAssignableProducts(shop: ShopKey): Promise<AssignableProduct
     uno: si sceglie la categoria, si spuntano i prodotti e si aggiungono (o
     si tolgono). Serve soprattutto dopo un'importazione in blocco, quando i
     prodotti sono decine e le categorie arrivano dopo. */
-function BulkAssign({ shop, categories }: { shop: ShopKey; categories: ShopCategoryRead[] | undefined }) {
+export function BulkAssign({ shop, categories }: { shop: ShopKey; categories: ShopCategoryRead[] | undefined }) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [categoryId, setCategoryId] = useState("");
@@ -582,11 +604,11 @@ function BulkAssign({ shop, categories }: { shop: ShopKey; categories: ShopCateg
   if (!categories || categories.length === 0) return null;
 
   return (
-    <div className="pt-4 border-t border-white/5 light:border-slate-200 space-y-3">
+    <div className="pt-4 border-t border-slate-200 space-y-3">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="text-xs font-semibold text-orange-400 cursor-pointer"
+        className="text-xs font-semibold text-brand-600 cursor-pointer"
       >
         {open ? "Chiudi assegnazione in blocco" : "Assegna più prodotti a una categoria"}
       </button>
@@ -597,7 +619,7 @@ function BulkAssign({ shop, categories }: { shop: ShopKey; categories: ShopCateg
             <select
               value={categoryId}
               onChange={(e) => setCategoryId(e.target.value)}
-              className="rounded-lg glass-input px-3 py-2 text-sm focus:border-orange-500"
+              className="rounded-lg glass-input px-3 py-2 text-sm focus:border-brand-500"
             >
               <option value="">Scegli la categoria...</option>
               {categories.map((c) => (
@@ -610,7 +632,7 @@ function BulkAssign({ shop, categories }: { shop: ShopKey; categories: ShopCateg
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Filtra i prodotti per nome..."
-              className="flex-1 min-w-[180px] rounded-lg glass-input px-3 py-2 text-sm focus:border-orange-500"
+              className="flex-1 min-w-[180px] rounded-lg glass-input px-3 py-2 text-sm focus:border-brand-500"
             />
           </div>
           {!products ? (
@@ -618,11 +640,11 @@ function BulkAssign({ shop, categories }: { shop: ShopKey; categories: ShopCateg
           ) : visible.length === 0 ? (
             <p className="text-xs text-slate-500">Nessun prodotto da assegnare.</p>
           ) : (
-            <div className="max-h-64 overflow-y-auto rounded-xl border border-white/10 light:border-slate-200 divide-y divide-white/5 light:divide-slate-200">
+            <div className="max-h-64 overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-200">
               {visible.map((p) => (
                 <label key={p.id} className="flex items-center gap-2 px-3 py-2 text-xs cursor-pointer">
                   <input type="checkbox" checked={picked.has(p.id)} onChange={() => toggle(p.id)} />
-                  <span className="flex-1 truncate text-slate-200 light:text-slate-700">{p.name}</span>
+                  <span className="flex-1 truncate text-slate-700">{p.name}</span>
                   {category && (p.category_ids ?? []).includes(category.id) && (
                     <span className="text-[10px] font-bold text-emerald-400">già dentro</span>
                   )}
@@ -635,7 +657,7 @@ function BulkAssign({ shop, categories }: { shop: ShopKey; categories: ShopCateg
               type="button"
               disabled={busy || !category || picked.size === 0}
               onClick={() => apply(true)}
-              className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-xs font-bold text-white cursor-pointer disabled:opacity-50"
+              className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-bold text-white cursor-pointer disabled:opacity-50"
             >
               {busy ? "Attendi..." : `Aggiungi alla categoria (${picked.size})`}
             </button>
@@ -643,7 +665,7 @@ function BulkAssign({ shop, categories }: { shop: ShopKey; categories: ShopCateg
               type="button"
               disabled={busy || !category || picked.size === 0}
               onClick={() => apply(false)}
-              className="px-3 py-2 rounded-xl bg-white/5 light:bg-slate-900/5 border border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 text-xs font-semibold cursor-pointer disabled:opacity-50"
+              className="px-3 py-2 rounded-xl bg-slate-900/5 border border-slate-300 text-slate-600 text-xs font-semibold cursor-pointer disabled:opacity-50"
             >
               Togli dalla categoria
             </button>

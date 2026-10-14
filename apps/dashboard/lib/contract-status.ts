@@ -25,7 +25,7 @@ export function contractStatusBadge(status: string): string {
     case "RENEWED":
       return "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
     case "DRAFT":
-      return "bg-slate-500/10 light:bg-slate-200/50 text-slate-400 light:text-slate-500 border-slate-500/20 light:border-slate-300";
+      return " bg-slate-200/50 text-slate-500 border-slate-300";
     case "REJECTED":
     case "CANCELLED":
     case "SUSPENDED":
@@ -33,7 +33,7 @@ export function contractStatusBadge(status: string): string {
     case "UNDER_REVIEW":
       return "bg-sky-500/10 text-sky-400 border-sky-500/20";
     default:
-      return "bg-amber-500/10 text-amber-400 border-amber-500/20";
+      return "bg-amber-500/10 text-amber-700 border-amber-500/20";
   }
 }
 
@@ -43,33 +43,15 @@ export const PAYMENT_PLAN_LABELS: Record<string, string> = {
   MONTHLY_12: "12 rate mensili",
 };
 
-export const ENERGY_POINT_LABELS: Record<string, string> = {
-  ELECTRICITY: "Luce",
-  GAS: "Gas",
-};
-
-/** How a supply point is named on screen: its code when one was recorded
-    (contracts from before Session 53), otherwise its place among the points
-    of its kind in the pratica -- "POD 1", "POD 2", "PDR 1" -- since the code
-    is no longer asked. A POD is luce, a PDR gas. */
-export function pointCode(point: {
-  pod_code?: string | null;
-  pdr_code?: string | null;
-  position?: number;
-  point_kind?: string | null;
-  energy_type?: string | null;
-}): string {
-  if (point.pod_code) return `POD ${point.pod_code}`;
-  if (point.pdr_code) return `PDR ${point.pdr_code}`;
-  const kind = point.point_kind ?? (point.energy_type === "GAS" ? "PDR" : "POD");
-  return point.position ? `${kind} ${point.position}` : "Punto di fornitura";
+/** How a contract of a pratica is named on screen: its place in the
+    pratica -- "Contratto 1", "Contratto 2". */
+export function pointCode(point: { position?: number }): string {
+  return point.position ? `Contratto ${point.position}` : "Contratto";
 }
 
-/** "2 POD · 1 PDR" -- how many points of each kind a pratica has. */
-export function pointsBreakdown(points: { point_kind?: string | null }[]): string {
-  const pdr = points.filter((p) => p.point_kind === "PDR").length;
-  const pod = points.length - pdr;
-  return [pod > 0 ? `${pod} POD` : null, pdr > 0 ? `${pdr} PDR` : null].filter(Boolean).join(" · ");
+/** "3 contratti" -- how many contracts a pratica holds. */
+export function pointsBreakdown(points: unknown[]): string {
+  return points.length === 1 ? "1 contratto" : `${points.length} contratti`;
 }
 
 export function formatDate(value: string | null | undefined): string {

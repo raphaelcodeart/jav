@@ -23,7 +23,7 @@ async def get_my_account_closure(
     current_user: CurrentUser = Depends(require_permission("tickets.create")),
     db: AsyncSession = Depends(get_db),
 ) -> TicketRead | None:
-    """Session 89: la richiesta di chiusura account ancora aperta, o null.
+    """La richiesta di chiusura account ancora aperta, o null.
     Prima di /{ticket_id}, che altrimenti leggerebbe «account-closure» come id."""
     ticket = await support_service.open_account_closure(
         db, organization_id=current_user.organization_id, user_id=current_user.user_id
@@ -39,7 +39,7 @@ async def request_account_closure(
     current_user: CurrentUser = Depends(require_permission("tickets.create")),
     db: AsyncSession = Depends(get_db),
 ) -> TicketRead:
-    """Session 89: «Richiedi chiusura account» dalle Impostazioni -- apre un
+    """«Richiedi chiusura account» dalle Impostazioni -- apre un
     ticket allo staff (che riceve anche l'email), non cancella niente."""
     try:
         ticket = await support_service.request_account_closure(

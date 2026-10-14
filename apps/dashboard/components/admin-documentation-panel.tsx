@@ -13,7 +13,7 @@ const AUDIENCE_LABELS: Record<string, string> = {
 };
 const AUDIENCE_COLORS: Record<string, string> = {
   CUSTOMER: "bg-sky-500/10 text-sky-400 border-sky-500/20",
-  PROMOTER: "bg-orange-500/10 text-orange-400 border-orange-500/20",
+  PROMOTER: "bg-brand-500/10 text-brand-600 border-brand-500/20",
   BOTH: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
 };
 const STATUS_LABELS: Record<string, string> = { PUBLISHED: "Pubblicato", ARCHIVED: "Archiviato" };
@@ -58,7 +58,7 @@ function PdfUpload({ postId, currentFilename, onUploaded }: { postId: string; cu
       <input ref={inputRef} type="file" accept="application/pdf" onChange={handleFileChange} className="hidden" id={`pdf-input-${postId}`} />
       <label
         htmlFor={`pdf-input-${postId}`}
-        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/5 light:bg-slate-900/5 hover:bg-white/10 border border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 cursor-pointer transition"
+        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 cursor-pointer transition"
       >
         {uploading ? "Caricamento..." : currentFilename ? `Sostituisci PDF (${currentFilename})` : "Carica PDF"}
       </label>
@@ -197,13 +197,13 @@ export function AdminDocumentationPanel() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <p className="text-xs text-slate-400 light:text-slate-500 max-w-2xl">
+        <p className="text-xs text-slate-500 max-w-2xl">
           Pubblica materiale per i clienti (guide, novità) o per i promoter (listini, materiale formativo) --
           scegli per ognuno chi lo vede. Come un post: testo, e facoltativamente una foto, un PDF da scaricare e un link video.
         </p>
         <button
           onClick={() => setShowCreate(true)}
-          className="shrink-0 px-4 py-2 rounded-xl text-xs font-semibold bg-orange-600 hover:bg-orange-500 text-white shadow-lg shadow-orange-500/20 transition cursor-pointer"
+          className="shrink-0 px-4 py-2 rounded-xl text-xs font-semibold bg-brand-600 hover:bg-brand-500 text-white shadow-lg shadow-brand-500/20 transition cursor-pointer"
         >
           + Nuovo Post
         </button>
@@ -218,7 +218,7 @@ export function AdminDocumentationPanel() {
           <p className="text-sm text-slate-500 col-span-2 text-center py-8">Nessun post pubblicato ancora.</p>
         ) : (
           posts.map((p) => (
-            <div key={p.id} className="glass-card rounded-2xl border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70 overflow-hidden flex flex-col">
+            <div key={p.id} className="glass-card rounded-2xl border-slate-200 bg-white/70 overflow-hidden flex flex-col">
               {p.image_url && (
                 // eslint-disable-next-line @next/next/no-img-element -- externally-hosted, variable-source uploaded photo
                 <img src={p.image_url} alt="" className="w-full h-36 object-cover" />
@@ -232,23 +232,23 @@ export function AdminDocumentationPanel() {
                     {STATUS_LABELS[p.status]}
                   </span>
                 </div>
-                <h3 className="text-sm font-bold text-white light:text-slate-900">{p.title}</h3>
-                {p.body && <p className="text-xs text-slate-400 light:text-slate-500 line-clamp-3 whitespace-pre-wrap">{p.body}</p>}
+                <h3 className="text-sm font-bold text-slate-900">{p.title}</h3>
+                {p.body && <p className="text-xs text-slate-500 line-clamp-3 whitespace-pre-wrap">{p.body}</p>}
                 <div className="flex items-center gap-3 text-[10px] text-slate-500 mt-1">
                   {p.pdf_url && <span>📎 PDF allegato</span>}
                   {p.video_url && <span>🎬 Video allegato</span>}
                   <span className="ml-auto">{new Date(p.created_at).toLocaleDateString("it-IT")}</span>
                 </div>
-                <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/5 light:border-slate-200">
+                <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-200">
                   <button
                     onClick={() => openEdit(p)}
-                    className="px-2.5 py-1.5 rounded-lg bg-orange-600/10 hover:bg-orange-600/20 border border-orange-500/20 text-orange-400 text-xs font-semibold transition cursor-pointer"
+                    className="px-2.5 py-1.5 rounded-lg bg-brand-600/10 hover:bg-brand-600/20 border border-brand-500/20 text-brand-600 text-xs font-semibold transition cursor-pointer"
                   >
                     Modifica
                   </button>
                   <button
                     onClick={() => handleToggleStatus(p)}
-                    className="px-2.5 py-1.5 rounded-lg bg-white/5 light:bg-slate-900/5 hover:bg-white/10 border border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 text-xs font-semibold transition cursor-pointer"
+                    className="px-2.5 py-1.5 rounded-lg bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 text-xs font-semibold transition cursor-pointer"
                   >
                     {p.status === "PUBLISHED" ? "Archivia" : "Ripubblica"}
                   </button>
@@ -266,12 +266,12 @@ export function AdminDocumentationPanel() {
       </div>
 
       {showCreate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 light:bg-slate-900/40 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-lg glass-card rounded-2xl p-6 border-white/10 light:border-slate-300 bg-slate-950 light:bg-white animate-scale-up max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-lg glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-white light:text-slate-900">Nuovo Post</h3>
+              <h3 className="text-lg font-bold text-slate-900">Nuovo Post</h3>
               <button onClick={() => setShowCreate(false)}
-                className="p-1 hover:bg-white/5 rounded-lg text-slate-400 light:text-slate-500 hover:text-white transition cursor-pointer">
+                className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-900 transition cursor-pointer">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -280,29 +280,29 @@ export function AdminDocumentationPanel() {
 
             <form onSubmit={handleCreate} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Titolo</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">Titolo</label>
                 <input required value={title} onChange={(e) => setTitle(e.target.value)}
-                  className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500" />
+                  className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Testo</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">Testo</label>
                 <textarea rows={4} value={body} onChange={(e) => setBody(e.target.value)}
-                  className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500 resize-none" />
+                  className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500 resize-none" />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Chi lo vede</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">Chi lo vede</label>
                 <select value={audience} onChange={(e) => setAudience(e.target.value)}
-                  className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-slate-900 light:bg-white focus:border-orange-500">
+                  className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-white focus:border-brand-500">
                   <option value="BOTH">Clienti e promoter</option>
                   <option value="CUSTOMER">Solo clienti</option>
                   <option value="PROMOTER">Solo promoter</option>
                 </select>
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Link video (opzionale)</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">Link video (opzionale)</label>
                 <input type="url" value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)}
                   placeholder="https://youtube.com/..."
-                  className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500" />
+                  className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
               </div>
               <p className="text-[11px] text-slate-500">Dopo aver creato il post potrai allegare una foto e un PDF.</p>
 
@@ -312,11 +312,11 @@ export function AdminDocumentationPanel() {
 
               <div className="flex justify-end gap-3 mt-4">
                 <button type="button" onClick={() => setShowCreate(false)}
-                  className="px-4 py-2 rounded-xl bg-white/5 light:bg-slate-900/5 hover:bg-white/10 text-xs font-semibold text-slate-300 light:text-slate-600 border border-white/5 light:border-slate-200 transition cursor-pointer">
+                  className="px-4 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 text-xs font-semibold text-slate-600 border border-slate-200 transition cursor-pointer">
                   Annulla
                 </button>
                 <button type="submit" disabled={createLoading}
-                  className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50">
+                  className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50">
                   {createLoading ? "Creazione..." : "Crea Post"}
                 </button>
               </div>
@@ -326,21 +326,21 @@ export function AdminDocumentationPanel() {
       )}
 
       {editingPost && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 light:bg-slate-900/40 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-lg glass-card rounded-2xl p-6 border-white/10 light:border-slate-300 bg-slate-950 light:bg-white animate-scale-up max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-lg glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-white light:text-slate-900">Modifica Post</h3>
+              <h3 className="text-lg font-bold text-slate-900">Modifica Post</h3>
               <button onClick={() => setEditingPost(null)}
-                className="p-1 hover:bg-white/5 rounded-lg text-slate-400 light:text-slate-500 hover:text-white transition cursor-pointer">
+                className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-900 transition cursor-pointer">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
 
-            <div className="mb-5 pb-5 border-b border-white/5 light:border-slate-200 space-y-4">
+            <div className="mb-5 pb-5 border-b border-slate-200 space-y-4">
               <div>
-                <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block mb-2">Foto</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block mb-2">Foto</label>
                 <PhotoUpload
                   currentUrl={editImageUrl}
                   uploadPath={`documentation/${editingPost.id}/image`}
@@ -353,7 +353,7 @@ export function AdminDocumentationPanel() {
                 />
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block mb-2">PDF</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block mb-2">PDF</label>
                 <PdfUpload
                   postId={editingPost.id}
                   currentFilename={editPdfFilename}
@@ -368,29 +368,29 @@ export function AdminDocumentationPanel() {
 
             <form onSubmit={handleEditSave} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Titolo</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">Titolo</label>
                 <input required value={editTitle} onChange={(e) => setEditTitle(e.target.value)}
-                  className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500" />
+                  className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Testo</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">Testo</label>
                 <textarea rows={4} value={editBody} onChange={(e) => setEditBody(e.target.value)}
-                  className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500 resize-none" />
+                  className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500 resize-none" />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Chi lo vede</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">Chi lo vede</label>
                 <select value={editAudience} onChange={(e) => setEditAudience(e.target.value)}
-                  className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-slate-900 light:bg-white focus:border-orange-500">
+                  className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-white focus:border-brand-500">
                   <option value="BOTH">Clienti e promoter</option>
                   <option value="CUSTOMER">Solo clienti</option>
                   <option value="PROMOTER">Solo promoter</option>
                 </select>
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Link video (opzionale)</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">Link video (opzionale)</label>
                 <input type="url" value={editVideoUrl} onChange={(e) => setEditVideoUrl(e.target.value)}
                   placeholder="https://youtube.com/..."
-                  className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500" />
+                  className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
               </div>
 
               {editError && (
@@ -399,11 +399,11 @@ export function AdminDocumentationPanel() {
 
               <div className="flex justify-end gap-3 mt-4">
                 <button type="button" onClick={() => setEditingPost(null)}
-                  className="px-4 py-2 rounded-xl bg-white/5 light:bg-slate-900/5 hover:bg-white/10 text-xs font-semibold text-slate-300 light:text-slate-600 border border-white/5 light:border-slate-200 transition cursor-pointer">
+                  className="px-4 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 text-xs font-semibold text-slate-600 border border-slate-200 transition cursor-pointer">
                   Chiudi
                 </button>
                 <button type="submit" disabled={editLoading}
-                  className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50">
+                  className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50">
                   {editLoading ? "Salvataggio..." : "Salva Modifiche"}
                 </button>
               </div>
@@ -413,10 +413,10 @@ export function AdminDocumentationPanel() {
       )}
 
       {deletingPost && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 light:bg-slate-900/40 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-md glass-card rounded-2xl p-6 border-white/10 light:border-slate-300 bg-slate-950 light:bg-white animate-scale-up">
-            <h3 className="text-lg font-bold text-white light:text-slate-900 mb-2">Eliminare &ldquo;{deletingPost.title}&rdquo;?</h3>
-            <p className="text-xs text-slate-400 light:text-slate-500 mb-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-md glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up">
+            <h3 className="text-lg font-bold text-slate-900 mb-2">Eliminare &ldquo;{deletingPost.title}&rdquo;?</h3>
+            <p className="text-xs text-slate-500 mb-4">
               Il post sparirà subito dal feed di chi lo vedeva. Questa azione non si può annullare.
             </p>
             {deleteError && (
@@ -425,7 +425,7 @@ export function AdminDocumentationPanel() {
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => setDeletingPost(null)}
-                className="px-4 py-2 rounded-xl bg-white/5 light:bg-slate-900/5 hover:bg-white/10 text-xs font-semibold text-slate-300 light:text-slate-600 border border-white/5 light:border-slate-200 transition cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 text-xs font-semibold text-slate-600 border border-slate-200 transition cursor-pointer"
               >
                 Annulla
               </button>

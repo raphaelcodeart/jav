@@ -55,18 +55,15 @@ const MAX_PAGES = 20;
 const DOCUMENT_TYPE_LABELS: Record<string, string> = {
   IDENTITY: "Documento d'identità",
   FISCAL_CODE: "Codice fiscale",
-  UTILITY_BILL: "Fattura luce/gas",
   CHAMBER_OF_COMMERCE: "Visura camerale / Certificato di attribuzione P.IVA",
   OTHER: "Documento aggiuntivo",
 };
 
 /** What each slot is for, in the words a customer standing at a scanner
-    would use. Shown under the title so nobody has to guess whether "Fattura
-    luce/gas" means theirs or the one they are switching away from. */
+    would use. Shown under the title so nobody has to guess what to upload. */
 const DOCUMENT_TYPE_HINTS: Record<string, string> = {
   IDENTITY: "Carta d'identità, patente o passaporto dell'intestatario, in corso di validità: fronte e retro.",
   FISCAL_CODE: "Tessera sanitaria o codice fiscale dell'intestatario.",
-  UTILITY_BILL: "Una bolletta recente della fornitura da attivare o cambiare: tutte le pagine.",
   CHAMBER_OF_COMMERCE:
     "Visura camerale (azienda o ditta) oppure, per un libero professionista, il certificato di attribuzione della partita IVA.",
 };
@@ -84,8 +81,8 @@ const MAX_DESCRIPTION_LENGTH = 120;
 function statusColor(status: string): string {
   if (status === "APPROVED") return "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
   if (status === "REJECTED") return "bg-rose-500/10 text-rose-400 border-rose-500/20";
-  if (status === "MISSING") return "bg-white/5 light:bg-slate-900/5 text-slate-400 border-white/10 light:border-slate-300";
-  return "bg-amber-500/10 text-amber-400 border-amber-500/20";
+  if (status === "MISSING") return " bg-slate-900/5 text-slate-400 border-slate-300";
+  return "bg-amber-500/10 text-amber-700 border-amber-500/20";
 }
 
 async function fetchDocuments(path: string): Promise<ContractDocumentsRead> {
@@ -133,9 +130,8 @@ export function useRequestDocuments(requestId: string) {
 /** One contract's documents (`contractId`) or a pratica's shared ones
     (`requestId`) -- same slots, same upload, same review.
 
-    `onlyTypes` narrows the slots shown, for a screen that is about one
-    supply point: there the identity and fiscal code already live on the
-    pratica, and only the point's own bill belongs. */
+    `onlyTypes` narrows the slots shown, for a screen that only needs some
+    of them (the identity and fiscal code already live on the pratica). */
 export function ContractDocumentsPanel({
   contractId,
   requestId,
@@ -271,14 +267,14 @@ export function ContractDocumentsPanel({
   function reviewControls(doc: DocumentRead) {
     if (!isStaff || doc.status !== "PENDING_REVIEW") return null;
     return (
-      <div className="mt-3 pt-3 border-t border-white/5 light:border-slate-200 space-y-2">
+      <div className="mt-3 pt-3 border-t border-slate-200 space-y-2">
         {reviewingId === doc.id ? (
           <>
             <input
               value={reviewNote}
               onChange={(e) => setReviewNote(e.target.value)}
               placeholder="Nota (opzionale)..."
-              className="w-full rounded-lg glass-input px-3 py-1.5 text-xs focus:border-orange-500"
+              className="w-full rounded-lg glass-input px-3 py-1.5 text-xs focus:border-brand-500"
             />
             <div className="flex gap-2">
               <button
@@ -295,7 +291,7 @@ export function ContractDocumentsPanel({
               </button>
               <button
                 onClick={() => { setReviewingId(null); setReviewNote(""); }}
-                className="px-3 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 text-xs font-semibold transition cursor-pointer"
+                className="px-3 py-1 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-400 text-xs font-semibold transition cursor-pointer"
               >
                 Annulla
               </button>
@@ -304,7 +300,7 @@ export function ContractDocumentsPanel({
         ) : (
           <button
             onClick={() => setReviewingId(doc.id)}
-            className="px-3 py-1 rounded-lg bg-white/5 light:bg-slate-900/5 hover:bg-white/10 border border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 text-xs font-semibold transition cursor-pointer"
+            className="px-3 py-1 rounded-lg bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 text-xs font-semibold transition cursor-pointer"
           >
             Verifica documento
           </button>
@@ -330,7 +326,7 @@ export function ContractDocumentsPanel({
         className={`flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl border text-xs ${
           missing === 0
             ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-            : "bg-amber-500/10 border-amber-500/20 text-amber-400"
+            : "bg-amber-500/10 border-amber-500/20 text-amber-700"
         }`}
       >
         <span className="font-semibold">
@@ -364,14 +360,14 @@ export function ContractDocumentsPanel({
         return (
           <div
             key={row.document_type}
-            className="p-3 rounded-xl bg-white/5 light:bg-slate-900/5 border border-white/5 light:border-slate-200"
+            className="p-3 rounded-xl bg-slate-900/5 border border-slate-200"
           >
             <div className="flex items-start justify-between gap-3 flex-wrap">
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-white light:text-slate-900">
+                <p className="text-sm font-semibold text-slate-900">
                   {DOCUMENT_TYPE_LABELS[row.document_type] ?? row.document_type}
                   {isRequired ? (
-                    <span className="ml-2 text-[10px] font-semibold text-orange-400 uppercase tracking-wide">
+                    <span className="ml-2 text-[10px] font-semibold text-brand-600 uppercase tracking-wide">
                       Obbligatorio
                     </span>
                   ) : (
@@ -381,7 +377,7 @@ export function ContractDocumentsPanel({
                   )}
                 </p>
                 {DOCUMENT_TYPE_HINTS[row.document_type] && pages.length === 0 && (
-                  <p className="text-[11px] text-slate-400 light:text-slate-500 mt-0.5">
+                  <p className=" text-slate-500 mt-0.5">
                     {DOCUMENT_TYPE_HINTS[row.document_type]}
                   </p>
                 )}
@@ -401,7 +397,7 @@ export function ContractDocumentsPanel({
                 visura is the most common reason a business pratica is
                 rejected, and the one the uploader can check before sending. */}
             {row.document_type === "CHAMBER_OF_COMMERCE" && (
-              <div className="mt-2 flex items-start gap-2 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-amber-300 light:text-amber-700 text-[11px] leading-snug">
+              <div className="mt-2 flex items-start gap-2 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-amber-700 leading-snug">
                 <svg className="w-4 h-4 shrink-0 mt-px" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
                 </svg>
@@ -418,14 +414,14 @@ export function ContractDocumentsPanel({
                 {pages.map((pageDoc, i) => (
                   <li
                     key={pageDoc.id}
-                    className="rounded-lg bg-white/5 light:bg-white border border-white/5 light:border-slate-200 px-2.5 py-2"
+                    className="rounded-lg bg-white border border-slate-200 px-2.5 py-2"
                   >
                     <div className="flex items-center gap-2">
-                      <span className="w-6 h-6 rounded-md bg-orange-500/15 text-orange-400 text-[10px] font-bold flex items-center justify-center shrink-0">
+                      <span className="w-6 h-6 rounded-md bg-brand-500/15 text-brand-600 text-[10px] font-bold flex items-center justify-center shrink-0">
                         {i + 1}
                       </span>
                       <div className="min-w-0 flex-1">
-                        <p className="text-xs text-slate-200 light:text-slate-700 truncate">{pageDoc.original_filename}</p>
+                        <p className="text-xs text-slate-700 truncate">{pageDoc.original_filename}</p>
                         <p className="text-[10px] text-slate-500 truncate">
                           {pageDoc.uploaded_by_name ?? "—"} · {new Date(pageDoc.created_at).toLocaleDateString("it-IT")}
                         </p>
@@ -437,7 +433,7 @@ export function ContractDocumentsPanel({
                       )}
                       <button
                         onClick={() => setPreviewDoc(pageDoc)}
-                        className="px-2 py-1 rounded-md text-[11px] font-semibold text-slate-300 light:text-slate-600 hover:bg-white/10 cursor-pointer shrink-0"
+                        className="px-2 py-1 rounded-md font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer shrink-0"
                       >
                         Vedi
                       </button>
@@ -456,7 +452,7 @@ export function ContractDocumentsPanel({
                       )}
                     </div>
                     {pageDoc.review_note && (
-                      <p className="text-[11px] text-slate-400 light:text-slate-500 mt-1.5">
+                      <p className=" text-slate-500 mt-1.5">
                         <span className="font-semibold">Nota amministrazione:</span> {pageDoc.review_note}
                       </p>
                     )}
@@ -495,7 +491,7 @@ export function ContractDocumentsPanel({
               <div className="mt-2.5 flex flex-wrap items-center gap-2">
                 <label
                   htmlFor={`${inputId}-camera`}
-                  className={`px-3 py-1.5 rounded-lg bg-orange-600/10 hover:bg-orange-600/20 border border-orange-500/20 text-orange-400 text-xs font-semibold cursor-pointer transition inline-flex items-center gap-1.5 ${busyHere ? "pointer-events-none opacity-50" : ""}`}
+                  className={`px-3 py-1.5 rounded-lg bg-brand-600/10 hover:bg-brand-600/20 border border-brand-500/20 text-brand-600 text-xs font-semibold cursor-pointer transition inline-flex items-center gap-1.5 ${busyHere ? "pointer-events-none opacity-50" : ""}`}
                 >
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
@@ -505,7 +501,7 @@ export function ContractDocumentsPanel({
                 </label>
                 <label
                   htmlFor={inputId}
-                  className={`px-3 py-1.5 rounded-lg bg-white/5 light:bg-slate-900/5 hover:bg-white/10 border border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 text-xs font-semibold cursor-pointer transition ${busyHere ? "pointer-events-none opacity-50" : ""}`}
+                  className={`px-3 py-1.5 rounded-lg bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 text-xs font-semibold cursor-pointer transition ${busyHere ? "pointer-events-none opacity-50" : ""}`}
                 >
                   {busyHere
                     ? "Caricamento..."
@@ -536,7 +532,7 @@ export function ContractDocumentsPanel({
           one is labelled by whoever uploads it, which is why the label is
           asked for BEFORE the file picker opens rather than after. */}
       <div className="pt-1">
-        <p className="text-xs font-semibold text-slate-400 light:text-slate-500 uppercase tracking-wider mb-2">
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
           Altri documenti allegati
         </p>
 
@@ -550,11 +546,11 @@ export function ContractDocumentsPanel({
           {extra.map((doc) => (
             <div
               key={doc.id}
-              className="p-3 rounded-xl bg-white/5 light:bg-slate-900/5 border border-white/5 light:border-slate-200"
+              className="p-3 rounded-xl bg-slate-900/5 border border-slate-200"
             >
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-white light:text-slate-900">
+                  <p className="text-sm font-semibold text-slate-900">
                     {doc.description || DOCUMENT_TYPE_LABELS[doc.document_type] || doc.document_type}
                   </p>
                   <p className="text-[11px] text-slate-500 mt-0.5">
@@ -568,14 +564,14 @@ export function ContractDocumentsPanel({
                   </span>
                   <button
                     onClick={() => setPreviewDoc(doc)}
-                    className="px-2.5 py-1 rounded-lg bg-white/5 light:bg-slate-900/5 hover:bg-white/10 border border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 text-xs font-semibold transition cursor-pointer"
+                    className="px-2.5 py-1 rounded-lg bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 text-xs font-semibold transition cursor-pointer"
                   >
                     Visualizza
                   </button>
                 </div>
               </div>
               {doc.review_note && (
-                <p className="text-[11px] text-slate-400 light:text-slate-500 mt-2">
+                <p className=" text-slate-500 mt-2">
                   <span className="font-semibold">Nota amministrazione:</span> {doc.review_note}
                 </p>
               )}
@@ -585,8 +581,8 @@ export function ContractDocumentsPanel({
         </div>
 
         {addingExtra ? (
-          <div className="mt-2 p-3 rounded-xl bg-white/5 light:bg-slate-900/5 border border-orange-500/20 space-y-2">
-            <label className="text-[10px] font-semibold text-slate-300 light:text-slate-600 uppercase block">
+          <div className="mt-2 p-3 rounded-xl bg-slate-900/5 border border-brand-500/20 space-y-2">
+            <label className=" font-semibold text-slate-600 uppercase block">
               Che documento stai allegando?
             </label>
             <input
@@ -595,7 +591,7 @@ export function ContractDocumentsPanel({
               maxLength={MAX_DESCRIPTION_LENGTH}
               onChange={(e) => setExtraLabel(e.target.value)}
               placeholder="Es. Carta d'identità retro, Delega firmata, Contratto di locazione"
-              className="w-full rounded-xl glass-input px-3 py-2.5 text-sm focus:border-orange-500"
+              className="w-full rounded-xl glass-input px-3 py-2.5 text-sm focus:border-brand-500"
             />
             <p className="text-[10px] text-slate-500">
               Scrivi cos&apos;è, così l&apos;amministrazione sa cosa sta verificando. PDF, JPG o PNG, massimo 15 MB, oppure scatta una foto.
@@ -627,20 +623,20 @@ export function ContractDocumentsPanel({
               <button
                 onClick={() => extraFileInput.current?.click()}
                 disabled={!canPickExtraFile || uploadingType === "OTHER"}
-                className="px-3 py-1.5 rounded-lg bg-orange-600/10 hover:bg-orange-600/20 border border-orange-500/20 text-orange-400 text-xs font-semibold transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                className="px-3 py-1.5 rounded-lg bg-brand-600/10 hover:bg-brand-600/20 border border-brand-500/20 text-brand-600 text-xs font-semibold transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {uploadingType === "OTHER" ? "Caricamento..." : "Scegli il file e carica"}
               </button>
               <button
                 onClick={() => extraCameraInput.current?.click()}
                 disabled={!canPickExtraFile || uploadingType === "OTHER"}
-                className="px-3 py-1.5 rounded-lg bg-white/5 light:bg-slate-900/5 hover:bg-white/10 border border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 text-xs font-semibold transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                className="px-3 py-1.5 rounded-lg bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 text-xs font-semibold transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Scatta una foto
               </button>
               <button
                 onClick={() => { setAddingExtra(false); setExtraLabel(""); }}
-                className="px-3 py-1.5 rounded-lg bg-white/5 light:bg-slate-900/5 hover:bg-white/10 text-slate-400 text-xs font-semibold transition cursor-pointer"
+                className="px-3 py-1.5 rounded-lg bg-slate-900/5 hover:bg-slate-100 text-slate-400 text-xs font-semibold transition cursor-pointer"
               >
                 Annulla
               </button>
@@ -649,7 +645,7 @@ export function ContractDocumentsPanel({
         ) : (
           <button
             onClick={() => setAddingExtra(true)}
-            className="mt-2 w-full px-3 py-2.5 rounded-xl border border-dashed border-white/15 light:border-slate-300 text-slate-300 light:text-slate-600 hover:border-orange-500/40 hover:text-orange-400 text-xs font-semibold transition cursor-pointer"
+            className="mt-2 w-full px-3 py-2.5 rounded-xl border border-dashed border-slate-300 text-slate-600 hover:border-brand-500/40 hover:text-brand-600 text-xs font-semibold transition cursor-pointer"
           >
             + Aggiungi un altro documento
           </button>

@@ -136,7 +136,7 @@ async def test_reassign_customer_with_no_attribution_attributes_them(db, organiz
 
 async def _promote_customer_to_agent(db, organization_id, customer, *, parent_agent_id, name="Dual Role"):
     """Makes an existing registered customer ALSO a promoter, placed under
-    parent_agent_id -- the dual-role situation Session 37's tree-follow
+    parent_agent_id -- the dual-role situation the tree-follow
     behaviour exists for."""
     first_name, last_name = name.split(" ", 1)
     agent = await network_service.create_agent(

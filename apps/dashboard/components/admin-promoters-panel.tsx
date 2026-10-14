@@ -7,13 +7,12 @@ import { ShareButtons } from "@/components/share-buttons";
 import { PhotoUpload } from "@/components/photo-upload";
 import { AdminPromoterNetworkModal } from "@/components/admin-promoter-network-modal";
 import { friendlyApiError } from "@/lib/api-error";
-import { DEFAULT_ORGANIZATION_ID } from "@/lib/config";
 import { downloadCsv } from "@/lib/csv-export";
 import type { AgentListItemRead, PromoterCodeRead, RankEvaluationChangeRead, RankRead, RootPromoterCreateResponse, WalletAdminListItemRead } from "@/lib/types";
 
 const STATUS_COLORS: Record<string, string> = {
   ACTIVE: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-  SUSPENDED: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+  SUSPENDED: "bg-amber-500/10 text-amber-700 border-amber-500/20",
   TERMINATED: "bg-rose-500/10 text-rose-400 border-rose-500/20",
   PENDING_APPROVAL: "bg-sky-500/10 text-sky-400 border-sky-500/20",
 };
@@ -45,7 +44,7 @@ async function fetchRanks(): Promise<RankRead[]> {
 function AgentAvatar({ url, size = 36 }: { url: string | null; size?: number }) {
   return (
     <div
-      className="rounded-full overflow-hidden border border-white/10 light:border-slate-200 bg-slate-800 light:bg-slate-100 flex items-center justify-center shrink-0"
+      className="rounded-full overflow-hidden border border-slate-200 bg-slate-100 flex items-center justify-center shrink-0"
       style={{ width: size, height: size }}
     >
       {url ? (
@@ -180,7 +179,6 @@ export function AdminPromotersPanel({
       if (!res.ok) throw new Error(await friendlyApiError(res, "Impossibile recuperare il link del promoter."));
       const data: PromoterCodeRead = await res.json();
       const url = new URL(`/r/${data.code}`, window.location.origin);
-      url.searchParams.set("org", DEFAULT_ORGANIZATION_ID);
       if (newTab) newTab.location.href = url.toString();
     } catch (err: any) {
       newTab?.close();
@@ -410,7 +408,7 @@ export function AdminPromotersPanel({
             placeholder="Cerca promoter o codice..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-xl glass-input pl-10 pr-4 py-2 text-xs focus:border-orange-500"
+            className="w-full rounded-xl glass-input pl-10 pr-4 py-2 text-xs focus:border-brand-500"
           />
           <svg className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -420,7 +418,7 @@ export function AdminPromotersPanel({
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="rounded-xl glass-input px-3 py-2 text-xs bg-slate-900 light:bg-white focus:border-orange-500"
+            className="rounded-xl glass-input px-3 py-2 text-xs bg-white focus:border-brand-500"
           >
             <option value="ALL">Tutti gli stati</option>
             <option value="ACTIVE">Solo attivi</option>
@@ -431,7 +429,7 @@ export function AdminPromotersPanel({
             onClick={handleEvaluateRanks}
             disabled={evaluatingRanks}
             title="Rivaluta il grado di ogni promoter attivo in base al fatturato del mese scorso, come farebbe il job automatico di fine mese"
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 light:bg-slate-900/5 hover:bg-white/10 border border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 text-xs font-semibold transition cursor-pointer disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 text-xs font-semibold transition cursor-pointer disabled:opacity-50"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
@@ -440,7 +438,7 @@ export function AdminPromotersPanel({
           </button>
           <button
             onClick={handleExportCsv}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 light:bg-slate-900/5 hover:bg-white/10 border border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 text-xs font-semibold transition cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 text-xs font-semibold transition cursor-pointer"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -450,7 +448,7 @@ export function AdminPromotersPanel({
           <button
             onClick={() => setShowCreateRoot(true)}
             title="Crea un promoter senza sponsor, con accesso già attivo -- l'unico modo di avviare un nuovo ramo indipendente, dato che ogni altra iscrizione richiede il link di un promoter già esistente"
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 light:bg-slate-900/5 hover:bg-white/10 border border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 text-xs font-semibold transition cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 text-xs font-semibold transition cursor-pointer"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0H5a2 2 0 01-2-2v-4m6 6h10a2 2 0 002-2v-4" />
@@ -459,7 +457,7 @@ export function AdminPromotersPanel({
           </button>
           <button
             onClick={() => setShowCreate(true)}
-            className="px-4 py-2 rounded-xl text-xs font-semibold bg-orange-600 hover:bg-orange-500 text-white shadow-lg shadow-orange-500/20 transition cursor-pointer"
+            className="px-4 py-2 rounded-xl text-xs font-semibold bg-brand-600 hover:bg-brand-500 text-white shadow-lg shadow-brand-500/20 transition cursor-pointer"
           >
             + Nuovo Promoter
           </button>
@@ -487,7 +485,7 @@ export function AdminPromotersPanel({
             </span>
             <button
               onClick={() => setEvaluationResult(null)}
-              className="text-slate-400 hover:text-white cursor-pointer"
+              className="text-slate-400 hover:text-slate-900 cursor-pointer"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
@@ -495,10 +493,10 @@ export function AdminPromotersPanel({
             </button>
           </div>
           {evaluationResult.length > 0 && (
-            <ul className="space-y-1 text-slate-300 light:text-slate-600">
+            <ul className="space-y-1 text-slate-600">
               {evaluationResult.map((c) => (
                 <li key={c.agent_id}>
-                  <span className={c.direction === "PROMOTED" ? "text-emerald-400" : "text-amber-400"}>
+                  <span className={c.direction === "PROMOTED" ? "text-emerald-400" : "text-amber-700"}>
                     {c.direction === "PROMOTED" ? "▲" : "▼"}
                   </span>{" "}
                   {c.display_name}: {c.previous_rank_code ?? "—"} → {c.new_rank_code}
@@ -509,11 +507,11 @@ export function AdminPromotersPanel({
         </div>
       )}
 
-      <div className="glass-card rounded-2xl border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70 overflow-hidden">
+      <div className="glass-card rounded-2xl border-slate-200 bg-white/70 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-left text-sm">
             <thead>
-              <tr className="border-b border-white/5 light:border-slate-200 text-slate-400 light:text-slate-500 font-semibold">
+              <tr className="border-b border-slate-200 text-slate-500 font-semibold">
                 <th className="py-3 px-6"></th>
                 <th className="py-3 px-6">Nome</th>
                 <th className="py-3 px-6">Codice</th>
@@ -523,23 +521,23 @@ export function AdminPromotersPanel({
                 <th className="py-3 px-6 text-right">Azioni</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5 light:divide-slate-200">
+            <tbody className="divide-y divide-slate-200">
               {agents === undefined ? (
                 <tr><td colSpan={7} className="text-center py-8 text-slate-500">Caricamento...</td></tr>
               ) : filtered.length === 0 ? (
                 <tr><td colSpan={7} className="text-center py-8 text-slate-500">Nessun promoter trovato.</td></tr>
               ) : (
                 pagination.pageItems.map((a) => (
-                  <tr key={a.id} className="text-slate-300 light:text-slate-600 hover:bg-white/5 transition-colors">
+                  <tr key={a.id} className=" text-slate-600 hover:bg-slate-100 transition-colors">
                     <td className="py-4 px-6"><AgentAvatar url={a.photo_url} /></td>
                     <td className="py-4 px-6">
                       <div className="flex items-center gap-1.5">
-                        <p className="font-medium text-white light:text-slate-900">{a.display_name}</p>
+                        <p className="font-medium text-slate-900">{a.display_name}</p>
                         <button
                           onClick={() => handleOpenReferralLink(a.id)}
                           disabled={referralLinkLoadingId === a.id}
                           title="Apri il link personale di invito di questo promoter"
-                          className="p-1 rounded-md hover:bg-white/10 light:hover:bg-slate-900/10 text-slate-400 hover:text-orange-400 transition cursor-pointer disabled:opacity-40"
+                          className="p-1 rounded-md hover:bg-slate-900/10 text-slate-400 hover:text-brand-600 transition cursor-pointer disabled:opacity-40"
                         >
                           {referralLinkLoadingId === a.id ? (
                             <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -613,7 +611,7 @@ export function AdminPromotersPanel({
                     </td>
                     <td className="py-4 px-6 font-mono text-xs">{a.promoter_code}</td>
                     <td className="py-4 px-6">
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-orange-500/10 text-orange-400 border-orange-500/20">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-brand-500/10 text-brand-600 border-brand-500/20">
                         {a.rank_code ?? "—"}
                       </span>
                     </td>
@@ -656,7 +654,7 @@ export function AdminPromotersPanel({
                           <button
                             onClick={() => setNetworkAgent(a)}
                             title="Apri la rete di questo promoter"
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/5 light:bg-slate-900/5 hover:bg-white/10 border border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 text-xs font-semibold transition cursor-pointer"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 text-xs font-semibold transition cursor-pointer"
                           >
                             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0H5a2 2 0 01-2-2v-4m6 6h10a2 2 0 002-2v-4m0-6h-6m6 0v6m0-6l-8 8" />
@@ -666,7 +664,7 @@ export function AdminPromotersPanel({
                           <button
                             onClick={() => openEdit(a)}
                             title="Modifica promoter"
-                            className="p-1.5 rounded-lg bg-orange-600/10 hover:bg-orange-600/20 border border-orange-500/20 text-orange-400 transition cursor-pointer"
+                            className="p-1.5 rounded-lg bg-brand-600/10 hover:bg-brand-600/20 border border-brand-500/20 text-brand-600 transition cursor-pointer"
                           >
                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -704,7 +702,7 @@ export function AdminPromotersPanel({
                                 className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition cursor-pointer disabled:opacity-50 ${
                                   enabled
                                     ? "bg-emerald-600/10 hover:bg-emerald-600/20 border-emerald-500/20 text-emerald-400"
-                                    : "bg-white/5 light:bg-slate-900/5 hover:bg-white/10 border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600"
+                                    : " bg-slate-900/5 hover:bg-slate-100 border-slate-300 text-slate-600"
                                 }`}
                               >
                                 {transferToggleId === a.user_id ? "..." : enabled ? "Bonifico: ON" : "Bonifico: OFF"}
@@ -717,7 +715,7 @@ export function AdminPromotersPanel({
                                 onClick={() => handleSetAgentStatus(a.id, { status: "TERMINATED" })}
                                 disabled={agentActionId === a.id}
                                 title="Toglie la qualifica di promoter: torna un semplice cliente. Può ricandidarsi in autonomia con 'Lavora con noi'."
-                                className="px-2.5 py-1.5 rounded-lg bg-white/5 light:bg-slate-900/5 hover:bg-white/10 border border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 text-xs font-semibold transition cursor-pointer disabled:opacity-50"
+                                className="px-2.5 py-1.5 rounded-lg bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 text-xs font-semibold transition cursor-pointer disabled:opacity-50"
                               >
                                 Disattiva
                               </button>
@@ -745,7 +743,7 @@ export function AdminPromotersPanel({
                                   onClick={() => handleSetAgentStatus(a.id, { is_blacklisted: false })}
                                   disabled={agentActionId === a.id}
                                   title="Toglie il blocco: da ora una nuova candidatura 'Lavora con noi' torna ad attivarsi da sola."
-                                  className="px-2.5 py-1.5 rounded-lg bg-white/5 light:bg-slate-900/5 hover:bg-white/10 border border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 text-xs font-semibold transition cursor-pointer disabled:opacity-50"
+                                  className="px-2.5 py-1.5 rounded-lg bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 text-xs font-semibold transition cursor-pointer disabled:opacity-50"
                                 >
                                   Rimuovi blacklist
                                 </button>
@@ -767,12 +765,12 @@ export function AdminPromotersPanel({
       </div>
 
       {showCreate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 light:bg-slate-900/40 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-lg glass-card rounded-2xl p-6 border-white/10 light:border-slate-300 bg-slate-950 light:bg-white animate-scale-up max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-lg glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-white light:text-slate-900">Nuovo Promoter</h3>
+              <h3 className="text-lg font-bold text-slate-900">Nuovo Promoter</h3>
               <button onClick={() => setShowCreate(false)}
-                className="p-1 hover:bg-white/5 rounded-lg text-slate-400 light:text-slate-500 hover:text-white transition cursor-pointer">
+                className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-900 transition cursor-pointer">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -782,30 +780,30 @@ export function AdminPromotersPanel({
             <form onSubmit={handleCreate} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Nome</label>
+                  <label className="text-xs font-semibold text-slate-600 uppercase block">Nome</label>
                   <input required value={firstName} onChange={(e) => setFirstName(e.target.value)}
-                    className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500" />
+                    className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Cognome</label>
+                  <label className="text-xs font-semibold text-slate-600 uppercase block">Cognome</label>
                   <input required value={lastName} onChange={(e) => setLastName(e.target.value)}
-                    className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500" />
+                    className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
                 </div>
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Codice Promoter</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">Codice Promoter</label>
                 <input required value={promoterCode} onChange={(e) => setPromoterCode(e.target.value)}
                   placeholder="Es: S1-MARIO-ROSSI"
-                  className="w-full rounded-xl glass-input px-3 py-2 text-sm font-mono focus:border-orange-500" />
+                  className="w-full rounded-xl glass-input px-3 py-2 text-sm font-mono focus:border-brand-500" />
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Sponsor (ramo di appartenenza)</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">Sponsor (ramo di appartenenza)</label>
                 <select
                   value={parentAgentId}
                   onChange={(e) => setParentAgentId(e.target.value)}
-                  className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-slate-900 light:bg-white focus:border-orange-500"
+                  className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-white focus:border-brand-500"
                 >
                   <option value="">— Nessuno (nuova radice di rete) —</option>
                   {(agents ?? []).map((a) => (
@@ -815,19 +813,19 @@ export function AdminPromotersPanel({
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Cliente già registrato (opzionale)</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">Cliente già registrato (opzionale)</label>
                 <input type="email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)}
                   placeholder="Email del cliente da promuovere a promoter"
-                  className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500" />
+                  className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
                 <p className="text-[11px] text-slate-500">Se indicata, il login esistente del cliente diventerà anche promoter una volta approvato — invece di crearne uno nuovo senza accesso.</p>
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Qualifica iniziale</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">Qualifica iniziale</label>
                 <select
                   value={rankId}
                   onChange={(e) => setRankId(e.target.value)}
-                  className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-slate-900 light:bg-white focus:border-orange-500"
+                  className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-white focus:border-brand-500"
                 >
                   <option value="">— Nessuna —</option>
                   {ranks.map((r) => (
@@ -842,11 +840,11 @@ export function AdminPromotersPanel({
 
               <div className="flex justify-end gap-3 mt-4">
                 <button type="button" onClick={() => setShowCreate(false)}
-                  className="px-4 py-2 rounded-xl bg-white/5 light:bg-slate-900/5 hover:bg-white/10 text-xs font-semibold text-slate-300 light:text-slate-600 border border-white/5 light:border-slate-200 transition cursor-pointer">
+                  className="px-4 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 text-xs font-semibold text-slate-600 border border-slate-200 transition cursor-pointer">
                   Annulla
                 </button>
                 <button type="submit" disabled={createLoading}
-                  className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50">
+                  className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50">
                   {createLoading ? "Creazione..." : "Crea Promoter"}
                 </button>
               </div>
@@ -856,46 +854,46 @@ export function AdminPromotersPanel({
       )}
 
       {showCreateRoot && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 light:bg-slate-900/40 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-lg glass-card rounded-2xl p-6 border-white/10 light:border-slate-300 bg-slate-950 light:bg-white animate-scale-up max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-lg glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-white light:text-slate-900">Nuovo Promoter Radice</h3>
+              <h3 className="text-lg font-bold text-slate-900">Nuovo Promoter Radice</h3>
               <button onClick={() => setShowCreateRoot(false)}
-                className="p-1 hover:bg-white/5 rounded-lg text-slate-400 light:text-slate-500 hover:text-white transition cursor-pointer">
+                className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-900 transition cursor-pointer">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
-            <p className="text-xs text-slate-400 light:text-slate-500 mb-4">
+            <p className="text-xs text-slate-500 mb-4">
               Crea un account già attivo, senza sponsor sopra di lui. Genero password temporanea e link personale pronti da consegnare.
             </p>
 
             <form onSubmit={handleCreateRoot} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Nome</label>
+                  <label className="text-xs font-semibold text-slate-600 uppercase block">Nome</label>
                   <input required value={rootFirstName} onChange={(e) => setRootFirstName(e.target.value)}
-                    className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500" />
+                    className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Cognome</label>
+                  <label className="text-xs font-semibold text-slate-600 uppercase block">Cognome</label>
                   <input required value={rootLastName} onChange={(e) => setRootLastName(e.target.value)}
-                    className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500" />
+                    className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
                 </div>
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Email</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">Email</label>
                 <input required type="email" value={rootEmail} onChange={(e) => setRootEmail(e.target.value)}
-                  className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500" />
+                  className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Codice Promoter (opzionale)</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">Codice Promoter (opzionale)</label>
                 <input value={rootPromoterCode} onChange={(e) => setRootPromoterCode(e.target.value)}
                   placeholder="Vuoto = generato automaticamente"
-                  className="w-full rounded-xl glass-input px-3 py-2 text-sm font-mono focus:border-orange-500" />
+                  className="w-full rounded-xl glass-input px-3 py-2 text-sm font-mono focus:border-brand-500" />
               </div>
 
               {rootCreateError && (
@@ -904,11 +902,11 @@ export function AdminPromotersPanel({
 
               <div className="flex justify-end gap-3 mt-4">
                 <button type="button" onClick={() => setShowCreateRoot(false)}
-                  className="px-4 py-2 rounded-xl bg-white/5 light:bg-slate-900/5 hover:bg-white/10 text-xs font-semibold text-slate-300 light:text-slate-600 border border-white/5 light:border-slate-200 transition cursor-pointer">
+                  className="px-4 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 text-xs font-semibold text-slate-600 border border-slate-200 transition cursor-pointer">
                   Annulla
                 </button>
                 <button type="submit" disabled={rootCreateLoading}
-                  className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50">
+                  className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50">
                   {rootCreateLoading ? "Creazione..." : "Crea Promoter Radice"}
                 </button>
               </div>
@@ -918,22 +916,22 @@ export function AdminPromotersPanel({
       )}
 
       {rootCreateResult && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 light:bg-slate-900/40 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-lg glass-card rounded-2xl p-6 border-white/10 light:border-slate-300 bg-slate-950 light:bg-white animate-scale-up">
-            <h3 className="text-lg font-bold text-white light:text-slate-900 mb-1">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-lg glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up">
+            <h3 className="text-lg font-bold text-slate-900 mb-1">
               {rootCreateResult.display_name} è attivo
             </h3>
-            <p className="text-xs text-slate-400 light:text-slate-500 mb-4">
+            <p className="text-xs text-slate-500 mb-4">
               Consegna queste credenziali fuori da questa schermata (non restano salvate da nessuna parte): questa è l&apos;unica volta in cui la password viene mostrata. Digli di cambiarla al primo accesso.
             </p>
 
             <div className="space-y-3 mb-4">
               <div>
-                <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block mb-1">Email</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block mb-1">Email</label>
                 <div className="rounded-xl glass-input px-3 py-2 text-sm font-mono">{rootCreateResult.email}</div>
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block mb-1">Password temporanea</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block mb-1">Password temporanea</label>
                 <div className="flex gap-2">
                   <div className="flex-1 rounded-xl glass-input px-3 py-2 text-sm font-mono">{rootCreateResult.temporary_password}</div>
                   <button
@@ -943,14 +941,14 @@ export function AdminPromotersPanel({
                       setRootPasswordCopied(true);
                       setTimeout(() => setRootPasswordCopied(false), 2000);
                     }}
-                    className="px-3 py-2 rounded-xl bg-white/5 light:bg-slate-900/5 hover:bg-white/10 border border-white/10 light:border-slate-300 text-xs font-semibold text-slate-300 light:text-slate-600 transition cursor-pointer"
+                    className="px-3 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-xs font-semibold text-slate-600 transition cursor-pointer"
                   >
                     {rootPasswordCopied ? "Copiata!" : "Copia"}
                   </button>
                 </div>
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block mb-1">Link personale (da condividere con i suoi invitati)</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block mb-1">Link personale (da condividere con i suoi invitati)</label>
                 <div className="flex gap-2">
                   <div className="flex-1 rounded-xl glass-input px-3 py-2 text-xs font-mono truncate">{rootCreateResult.personal_link}</div>
                   <button
@@ -960,7 +958,7 @@ export function AdminPromotersPanel({
                       setRootLinkCopied(true);
                       setTimeout(() => setRootLinkCopied(false), 2000);
                     }}
-                    className="px-3 py-2 rounded-xl bg-white/5 light:bg-slate-900/5 hover:bg-white/10 border border-white/10 light:border-slate-300 text-xs font-semibold text-slate-300 light:text-slate-600 transition cursor-pointer"
+                    className="px-3 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-xs font-semibold text-slate-600 transition cursor-pointer"
                   >
                     {rootLinkCopied ? "Copiato!" : "Copia"}
                   </button>
@@ -980,7 +978,7 @@ export function AdminPromotersPanel({
             <div className="flex justify-end">
               <button
                 onClick={() => setRootCreateResult(null)}
-                className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-xs font-semibold text-white transition cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer"
               >
                 Fatto
               </button>
@@ -990,20 +988,20 @@ export function AdminPromotersPanel({
       )}
 
       {editingAgent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 light:bg-slate-900/40 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-lg glass-card rounded-2xl p-6 border-white/10 light:border-slate-300 bg-slate-950 light:bg-white animate-scale-up max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-lg glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-white light:text-slate-900">Modifica Promoter</h3>
+              <h3 className="text-lg font-bold text-slate-900">Modifica Promoter</h3>
               <button onClick={() => setEditingAgent(null)}
-                className="p-1 hover:bg-white/5 rounded-lg text-slate-400 light:text-slate-500 hover:text-white transition cursor-pointer">
+                className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-900 transition cursor-pointer">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
 
-            <div className="mb-5 pb-5 border-b border-white/5 light:border-slate-200">
-              <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block mb-2">Foto profilo</label>
+            <div className="mb-5 pb-5 border-b border-slate-200">
+              <label className="text-xs font-semibold text-slate-600 uppercase block mb-2">Foto profilo</label>
               <PhotoUpload
                 currentUrl={editPhotoUrl}
                 uploadPath={`network/agents/${editingAgent.id}/photo`}
@@ -1018,30 +1016,30 @@ export function AdminPromotersPanel({
             <form onSubmit={handleEditSave} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Nome</label>
+                  <label className="text-xs font-semibold text-slate-600 uppercase block">Nome</label>
                   <input required value={editFirstName} onChange={(e) => setEditFirstName(e.target.value)}
-                    className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500" />
+                    className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Cognome</label>
+                  <label className="text-xs font-semibold text-slate-600 uppercase block">Cognome</label>
                   <input required value={editLastName} onChange={(e) => setEditLastName(e.target.value)}
-                    className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500" />
+                    className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
                 </div>
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Codice Promoter</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">Codice Promoter</label>
                 <input disabled value={editingAgent.promoter_code}
                   title="Il codice promoter non è modificabile: è incorporato nei link di invito già condivisi"
                   className="w-full rounded-xl glass-input px-3 py-2 text-sm font-mono opacity-60 cursor-not-allowed" />
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Qualifica</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">Qualifica</label>
                 <select
                   value={editRankId}
                   onChange={(e) => setEditRankId(e.target.value)}
-                  className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-slate-900 light:bg-white focus:border-orange-500"
+                  className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-white focus:border-brand-500"
                 >
                   <option value="">— Nessuna —</option>
                   {ranks.map((r) => (
@@ -1051,11 +1049,11 @@ export function AdminPromotersPanel({
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Stato</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">Stato</label>
                 <select
                   value={editStatus}
                   onChange={(e) => setEditStatus(e.target.value)}
-                  className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-slate-900 light:bg-white focus:border-orange-500"
+                  className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-white focus:border-brand-500"
                 >
                   <option value="ACTIVE">Attivo</option>
                   <option value="SUSPENDED">Sospeso</option>
@@ -1069,11 +1067,11 @@ export function AdminPromotersPanel({
 
               <div className="flex justify-end gap-3 mt-4">
                 <button type="button" onClick={() => setEditingAgent(null)}
-                  className="px-4 py-2 rounded-xl bg-white/5 light:bg-slate-900/5 hover:bg-white/10 text-xs font-semibold text-slate-300 light:text-slate-600 border border-white/5 light:border-slate-200 transition cursor-pointer">
+                  className="px-4 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 text-xs font-semibold text-slate-600 border border-slate-200 transition cursor-pointer">
                   Annulla
                 </button>
                 <button type="submit" disabled={editLoading}
-                  className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50">
+                  className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50">
                   {editLoading ? "Salvataggio..." : "Salva Modifiche"}
                 </button>
               </div>
@@ -1091,24 +1089,24 @@ export function AdminPromotersPanel({
       )}
 
       {rejectingAgent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 light:bg-slate-900/40 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-md glass-card rounded-2xl p-6 border-white/10 light:border-slate-300 bg-slate-950 light:bg-white animate-scale-up">
-            <h3 className="text-lg font-bold text-white light:text-slate-900 mb-2">Rifiuta {rejectingAgent.display_name}</h3>
-            <p className="text-xs text-slate-400 light:text-slate-500 mb-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-md glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up">
+            <h3 className="text-lg font-bold text-slate-900 mb-2">Rifiuta {rejectingAgent.display_name}</h3>
+            <p className="text-xs text-slate-500 mb-4">
               Il profilo suggerito viene segnato come cessato. Il codice promoter {rejectingAgent.promoter_code} non sarà più utilizzabile.
             </p>
-            <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block mb-1">Motivazione (opzionale)</label>
+            <label className="text-xs font-semibold text-slate-600 uppercase block mb-1">Motivazione (opzionale)</label>
             <textarea
               rows={3}
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
               placeholder="Es: codice duplicato, dati incompleti..."
-              className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500 resize-none mb-4"
+              className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500 resize-none mb-4"
             />
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => { setRejectingAgent(null); setRejectReason(""); }}
-                className="px-4 py-2 rounded-xl bg-white/5 light:bg-slate-900/5 hover:bg-white/10 text-xs font-semibold text-slate-300 light:text-slate-600 border border-white/5 light:border-slate-200 transition cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 text-xs font-semibold text-slate-600 border border-slate-200 transition cursor-pointer"
               >
                 Annulla
               </button>

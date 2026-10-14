@@ -32,7 +32,7 @@ function contractStatusColor(status: string): string {
   if (status === "ACTIVE" || status === "RENEWED") return "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
   if (status === "REJECTED" || status === "CANCELLED") return "bg-rose-500/10 text-rose-400 border-rose-500/20";
   if (status === "DRAFT") return "bg-slate-500/10 text-slate-400 border-slate-500/20";
-  return "bg-amber-500/10 text-amber-400 border-amber-500/20";
+  return "bg-amber-500/10 text-amber-700 border-amber-500/20";
 }
 
 async function fetchAllContracts(): Promise<ContractRead[]> {
@@ -75,7 +75,7 @@ function euro(cents: number): string {
 function CustomerAvatar({ url, size = 36 }: { url: string | null; size?: number }) {
   return (
     <div
-      className="rounded-full overflow-hidden border border-white/10 light:border-slate-200 bg-slate-800 light:bg-slate-100 flex items-center justify-center shrink-0"
+      className="rounded-full overflow-hidden border border-slate-200 bg-slate-100 flex items-center justify-center shrink-0"
       style={{ width: size, height: size }}
     >
       {url ? (
@@ -378,20 +378,20 @@ export function AdminCustomersPanel({
             placeholder="Cerca cliente..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-xl glass-input pl-10 pr-4 py-2 text-xs focus:border-orange-500"
+            className="w-full rounded-xl glass-input pl-10 pr-4 py-2 text-xs focus:border-brand-500"
           />
           <svg className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <label className="flex items-center gap-1.5 text-xs text-slate-400 light:text-slate-500 cursor-pointer whitespace-nowrap">
+          <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer whitespace-nowrap">
             <input type="checkbox" checked={activeOnly} onChange={(e) => setActiveOnly(e.target.checked)} className="cursor-pointer" />
             Solo con contratto attivo
           </label>
           <button
             onClick={handleExportCsv}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 light:bg-slate-900/5 hover:bg-white/10 border border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 text-xs font-semibold transition cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 text-xs font-semibold transition cursor-pointer"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -400,7 +400,7 @@ export function AdminCustomersPanel({
           </button>
           <button
             onClick={() => setShowCreate(true)}
-            className="px-4 py-2 rounded-xl text-xs font-semibold bg-orange-600 hover:bg-orange-500 text-white shadow-lg shadow-orange-500/20 transition cursor-pointer"
+            className="px-4 py-2 rounded-xl text-xs font-semibold bg-brand-600 hover:bg-brand-500 text-white shadow-lg shadow-brand-500/20 transition cursor-pointer"
           >
             + Nuovo Cliente
           </button>
@@ -411,11 +411,11 @@ export function AdminCustomersPanel({
       {freezeError && <p className="text-sm text-rose-400">{freezeError}</p>}
       {loginError && <p className="text-sm text-rose-400">{loginError}</p>}
 
-      <div className="glass-card rounded-2xl border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70 overflow-hidden">
+      <div className="glass-card rounded-2xl border-slate-200 bg-white/70 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-left text-sm">
             <thead>
-              <tr className="border-b border-white/5 light:border-slate-200 text-slate-400 light:text-slate-500 font-semibold">
+              <tr className="border-b border-slate-200 text-slate-500 font-semibold">
                 <th className="py-3 px-6"></th>
                 <th className="py-3 px-6">Nominativo</th>
                 <th className="py-3 px-6">Tipo</th>
@@ -424,7 +424,7 @@ export function AdminCustomersPanel({
                 <th className="py-3 px-6 text-right">Azioni</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5 light:divide-slate-200">
+            <tbody className="divide-y divide-slate-200">
               {customers === undefined ? (
                 <tr>
                   <td colSpan={6} className="text-center py-8 text-slate-500">Caricamento...</td>
@@ -435,14 +435,14 @@ export function AdminCustomersPanel({
                 </tr>
               ) : (
                 pagination.pageItems.map((c) => (
-                  <tr key={c.id} className="text-slate-300 light:text-slate-600 hover:bg-white/5 transition-colors">
+                  <tr key={c.id} className=" text-slate-600 hover:bg-slate-100 transition-colors">
                     <td className="py-4 px-6"><CustomerAvatar url={c.photo_url} /></td>
                     <td className="py-4 px-6">
-                      <p className="font-medium text-white light:text-slate-900">{c.display_name}</p>
+                      <p className="font-medium text-slate-900">{c.display_name}</p>
                       <p className="text-[10px] text-slate-500">{c.email}</p>
                       <p className="text-[10px] text-slate-500">Iscritto: {new Date(c.created_at).toLocaleDateString("it-IT")}</p>
                       {!c.user_id && (
-                        <span className="inline-block mt-1.5 px-1.5 py-0.5 rounded text-[9px] font-bold border bg-amber-500/10 text-amber-400 border-amber-500/20">
+                        <span className="inline-block mt-1.5 px-1.5 py-0.5 rounded text-[9px] font-bold border bg-amber-500/10 text-amber-700 border-amber-500/20">
                           Senza accesso
                         </span>
                       )}
@@ -484,7 +484,7 @@ export function AdminCustomersPanel({
                             <button
                               onClick={() => setUnlocking(c)}
                               title="Segna come fatti i controlli che mancano: il cliente potrà entrare"
-                              className="px-1.5 py-0.5 rounded text-[9px] font-bold border border-orange-500/40 text-orange-400 hover:bg-orange-500/10 cursor-pointer"
+                              className="px-1.5 py-0.5 rounded text-[9px] font-bold border border-brand-500/40 text-brand-600 hover:bg-brand-500/10 cursor-pointer"
                             >
                               Sblocca
                             </button>
@@ -498,7 +498,7 @@ export function AdminCustomersPanel({
                       )}
                     </td>
                     <td className="py-4 px-6">
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-amber-500/10 text-amber-400 border-amber-500/20">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-amber-500/10 text-amber-700 border-amber-500/20">
                         {KIND_LABELS[c.kind] ?? c.kind}
                       </span>
                     </td>
@@ -510,7 +510,7 @@ export function AdminCustomersPanel({
                           <button
                             onClick={() => setWizardFor({ customer: c, producer: null })}
                             title="Attiva contratti per questo cliente"
-                            className="px-2.5 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-[11px] font-bold transition cursor-pointer whitespace-nowrap"
+                            className="px-2.5 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[11px] font-bold transition cursor-pointer whitespace-nowrap"
                           >
                             + Contratti
                           </button>
@@ -519,7 +519,7 @@ export function AdminCustomersPanel({
                             onClick={() => handleCreateLogin(c)}
                             disabled={loginLoadingId === c.id}
                             title="Il cliente non ha un accesso: senza, non può pagare i contratti"
-                            className="px-2.5 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-400 text-[11px] font-bold transition cursor-pointer whitespace-nowrap disabled:opacity-50"
+                            className="px-2.5 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-700 text-[11px] font-bold transition cursor-pointer whitespace-nowrap disabled:opacity-50"
                           >
                             {loginLoadingId === c.id ? "Creazione..." : "Crea accesso"}
                           </button>
@@ -527,7 +527,7 @@ export function AdminCustomersPanel({
                         <button
                           onClick={() => openView(c.id)}
                           title="Mostra dettagli"
-                          className="p-1.5 rounded-lg bg-white/5 light:bg-slate-900/5 hover:bg-white/10 text-slate-400 light:text-slate-500 hover:text-white transition cursor-pointer"
+                          className="p-1.5 rounded-lg bg-slate-900/5 hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition cursor-pointer"
                         >
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -537,7 +537,7 @@ export function AdminCustomersPanel({
                         <button
                           onClick={() => openEdit(c)}
                           title="Modifica cliente"
-                          className="p-1.5 rounded-lg bg-orange-600/10 hover:bg-orange-600/20 border border-orange-500/20 text-orange-400 transition cursor-pointer"
+                          className="p-1.5 rounded-lg bg-brand-600/10 hover:bg-brand-600/20 border border-brand-500/20 text-brand-600 transition cursor-pointer"
                         >
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -602,13 +602,13 @@ export function AdminCustomersPanel({
       )}
 
       {showCreate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 light:bg-slate-900/40 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-lg glass-card rounded-2xl p-6 border-white/10 light:border-slate-300 bg-slate-950 light:bg-white animate-scale-up max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-lg glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-white light:text-slate-900">Nuovo Cliente</h3>
+              <h3 className="text-lg font-bold text-slate-900">Nuovo Cliente</h3>
               <button
                 onClick={() => setShowCreate(false)}
-                className="p-1 hover:bg-white/5 rounded-lg text-slate-400 light:text-slate-500 hover:text-white transition cursor-pointer"
+                className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-900 transition cursor-pointer"
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
@@ -616,7 +616,7 @@ export function AdminCustomersPanel({
               </button>
             </div>
 
-            <p className="text-xs text-slate-400 light:text-slate-500 mb-4">
+            <p className="text-xs text-slate-500 mb-4">
               Il cliente riceve l&apos;email per impostare la password: così potrà pagare i contratti che attivi per lui.
             </p>
             <NewCustomerForm
@@ -635,12 +635,12 @@ export function AdminCustomersPanel({
       )}
 
       {viewingId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 light:bg-slate-900/40 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-lg glass-card rounded-2xl p-6 border-white/10 light:border-slate-300 bg-slate-950 light:bg-white animate-scale-up max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-lg glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-white light:text-slate-900">Dettagli Cliente</h3>
+              <h3 className="text-lg font-bold text-slate-900">Dettagli Cliente</h3>
               <button onClick={() => setViewingId(null)}
-                className="p-1 hover:bg-white/5 rounded-lg text-slate-400 light:text-slate-500 hover:text-white transition cursor-pointer">
+                className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-900 transition cursor-pointer">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -653,32 +653,32 @@ export function AdminCustomersPanel({
             {viewingDetail && (
               <div className="space-y-4 text-sm">
                 <div>
-                  <p className="text-lg font-semibold text-white light:text-slate-900">{viewingDetail.display_name}</p>
-                  <span className="inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold border bg-amber-500/10 text-amber-400 border-amber-500/20">
+                  <p className="text-lg font-semibold text-slate-900">{viewingDetail.display_name}</p>
+                  <span className="inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold border bg-amber-500/10 text-amber-700 border-amber-500/20">
                     {KIND_LABELS[viewingDetail.kind] ?? viewingDetail.kind}
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 p-4 rounded-xl bg-white/5 light:bg-slate-900/5 border border-white/5 light:border-slate-200">
+                <div className="grid grid-cols-2 gap-4 p-4 rounded-xl bg-slate-900/5 border border-slate-200">
                   <div>
                     <span className="text-[10px] text-slate-500 uppercase font-semibold">Email</span>
-                    <p className="text-slate-200 light:text-slate-700">{viewingDetail.email}</p>
+                    <p className=" text-slate-700">{viewingDetail.email}</p>
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-500 uppercase font-semibold">Telefono</span>
-                    <p className="text-slate-200 light:text-slate-700">{viewingDetail.phone ?? "—"}</p>
+                    <p className=" text-slate-700">{viewingDetail.phone ?? "—"}</p>
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-500 uppercase font-semibold">PEC</span>
-                    <p className="text-slate-200 light:text-slate-700">{viewingDetail.pec ?? "—"}</p>
+                    <p className=" text-slate-700">{viewingDetail.pec ?? "—"}</p>
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-500 uppercase font-semibold">Codice Fiscale</span>
-                    <p className="font-mono text-xs text-slate-200 light:text-slate-700">{viewingDetail.fiscal_code ?? "—"}</p>
+                    <p className="font-mono text-xs text-slate-700">{viewingDetail.fiscal_code ?? "—"}</p>
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-500 uppercase font-semibold">Partita IVA</span>
-                    <p className="font-mono text-xs text-slate-200 light:text-slate-700">{viewingDetail.vat_number ?? "—"}</p>
+                    <p className="font-mono text-xs text-slate-700">{viewingDetail.vat_number ?? "—"}</p>
                   </div>
                 </div>
 
@@ -687,25 +687,24 @@ export function AdminCustomersPanel({
                   {customerContracts.length === 0 ? (
                     <p className="text-xs text-slate-500">Nessun contratto per questo cliente.</p>
                   ) : (
-                    <div className="rounded-xl border border-white/5 light:border-slate-200 overflow-hidden">
+                    <div className="rounded-xl border border-slate-200 overflow-hidden">
                       <table className="w-full text-left text-xs">
                         <thead>
-                          <tr className="bg-white/5 light:bg-slate-900/5 text-slate-400 light:text-slate-500">
+                          <tr className=" bg-slate-900/5 text-slate-500">
                             <th className="py-2 px-3 font-semibold">Prodotto</th>
                             <th className="py-2 px-3 font-semibold">Stato</th>
                             <th className="py-2 px-3 font-semibold">Scadenza</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-white/5 light:divide-slate-200">
+                        <tbody className="divide-y divide-slate-200">
                           {customerContracts.map((c) => (
                             <Fragment key={c.id}>
                               <tr
                                 onClick={() => setExpandedContractId(expandedContractId === c.id ? null : c.id)}
-                                className="cursor-pointer hover:bg-white/5 transition-colors text-slate-300 light:text-slate-600"
+                                className="cursor-pointer hover:bg-slate-100 transition-colors text-slate-600"
                               >
                                 <td className="py-2 px-3">
-                                  <div className="font-medium text-white light:text-slate-900">{c.product_name ?? "Prodotto"}</div>
-                                  <div className="text-slate-500">{c.supply_point_label ?? ""}</div>
+                                  <div className="font-medium text-slate-900">{c.product_name ?? "Prodotto"}</div>
                                 </td>
                                 <td className="py-2 px-3">
                                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${contractStatusColor(c.status)}`}>
@@ -717,8 +716,8 @@ export function AdminCustomersPanel({
                                 </td>
                               </tr>
                               {expandedContractId === c.id && (
-                                <tr className="bg-white/5 light:bg-slate-900/5">
-                                  <td colSpan={3} className="py-3 px-3 text-slate-300 light:text-slate-600 space-y-1">
+                                <tr className=" bg-slate-900/5">
+                                  <td colSpan={3} className="py-3 px-3 text-slate-600 space-y-1">
                                     <div><span className="text-slate-500">Creato:</span> {new Date(c.created_at).toLocaleDateString("it-IT")}</div>
                                     {c.activated_at && (
                                       <div><span className="text-slate-500">Attivato:</span> {new Date(c.activated_at).toLocaleDateString("it-IT")}</div>
@@ -741,25 +740,8 @@ export function AdminCustomersPanel({
                     <p className="text-[10px] text-slate-500 uppercase font-semibold mb-2">Indirizzi</p>
                     <div className="space-y-2">
                       {viewingDetail.addresses.map((a) => (
-                        <div key={a.id} className="p-3 rounded-xl bg-white/5 light:bg-slate-900/5 border border-white/5 light:border-slate-200 text-xs text-slate-300 light:text-slate-600">
+                        <div key={a.id} className="p-3 rounded-xl bg-slate-900/5 border border-slate-200 text-xs text-slate-600">
                           {a.street}, {a.postal_code} {a.city} ({a.province}) — {a.country}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {viewingDetail.supply_points.length > 0 && (
-                  <div>
-                    <p className="text-[10px] text-slate-500 uppercase font-semibold mb-2">Punti di Fornitura</p>
-                    <div className="space-y-2">
-                      {viewingDetail.supply_points.map((sp) => (
-                        <div key={sp.id} className="p-3 rounded-xl bg-white/5 light:bg-slate-900/5 border border-white/5 light:border-slate-200 text-xs text-slate-300 light:text-slate-600">
-                          <div className="flex items-center justify-between">
-                            <span className="font-semibold text-white light:text-slate-900">{sp.label ?? sp.energy_type}</span>
-                            <span className="font-mono text-[10px] text-slate-500">{sp.pod_code ?? sp.pdr_code ?? "—"}</span>
-                          </div>
-                          <div className="text-[10px] text-slate-500 mt-0.5">{sp.energy_type}</div>
                         </div>
                       ))}
                     </div>
@@ -769,7 +751,7 @@ export function AdminCustomersPanel({
                 {viewingDetail.user_id && (
                   <div>
                     <p className="text-[10px] text-slate-500 uppercase font-semibold mb-2">Wallet</p>
-                    <div className="p-4 rounded-xl bg-white/5 light:bg-slate-900/5 border border-white/5 light:border-slate-200 space-y-3">
+                    <div className="p-4 rounded-xl bg-slate-900/5 border border-slate-200 space-y-3">
                       {viewingWallet === undefined ? (
                         <p className="text-xs text-slate-500">Caricamento...</p>
                       ) : viewingWallet === null ? (
@@ -778,35 +760,35 @@ export function AdminCustomersPanel({
                         <div className="flex items-center justify-between">
                           <div>
                             <span className="text-[10px] text-slate-500 uppercase font-semibold">Saldo</span>
-                            <p className="text-lg font-bold text-white light:text-slate-900">{euro(viewingWallet.balance_cents)}</p>
+                            <p className="text-lg font-bold text-slate-900">{euro(viewingWallet.balance_cents)}</p>
                           </div>
                           <span className="font-mono text-[10px] text-slate-500">{viewingWallet.address}</span>
                         </div>
                       )}
 
-                      <form onSubmit={handleTopUp} className="flex items-end gap-2 pt-2 border-t border-white/5 light:border-slate-200">
+                      <form onSubmit={handleTopUp} className="flex items-end gap-2 pt-2 border-t border-slate-200">
                         <div className="space-y-1 flex-1">
-                          <label className="text-[10px] font-semibold text-slate-300 light:text-slate-600 uppercase block">Importo (EUR)</label>
+                          <label className=" font-semibold text-slate-600 uppercase block">Importo (EUR)</label>
                           <input
                             required
                             inputMode="decimal"
                             value={topUpAmount}
                             onChange={(e) => setTopUpAmount(e.target.value)}
                             placeholder="0,00"
-                            className="w-full rounded-lg glass-input px-3 py-1.5 text-sm focus:border-orange-500"
+                            className="w-full rounded-lg glass-input px-3 py-1.5 text-sm focus:border-brand-500"
                           />
                         </div>
                         <div className="space-y-1 flex-1">
-                          <label className="text-[10px] font-semibold text-slate-300 light:text-slate-600 uppercase block">Nota (opzionale)</label>
+                          <label className=" font-semibold text-slate-600 uppercase block">Nota (opzionale)</label>
                           <input
                             value={topUpNote}
                             onChange={(e) => setTopUpNote(e.target.value)}
                             placeholder="Cashback ordine..."
-                            className="w-full rounded-lg glass-input px-3 py-1.5 text-sm focus:border-orange-500"
+                            className="w-full rounded-lg glass-input px-3 py-1.5 text-sm focus:border-brand-500"
                           />
                         </div>
                         <button type="submit" disabled={topUpLoading}
-                          className="px-4 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50 shrink-0">
+                          className="px-4 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50 shrink-0">
                           {topUpLoading ? "..." : "Ricarica"}
                         </button>
                       </form>
@@ -820,7 +802,7 @@ export function AdminCustomersPanel({
                   </div>
                 )}
 
-                <p className="font-mono text-[10px] text-slate-500 pt-2 border-t border-white/5 light:border-slate-200">{viewingDetail.id}</p>
+                <p className="font-mono text-[10px] text-slate-500 pt-2 border-t border-slate-200">{viewingDetail.id}</p>
               </div>
             )}
           </div>
@@ -828,20 +810,20 @@ export function AdminCustomersPanel({
       )}
 
       {editingCustomer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 light:bg-slate-900/40 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-lg glass-card rounded-2xl p-6 border-white/10 light:border-slate-300 bg-slate-950 light:bg-white animate-scale-up max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-lg glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-white light:text-slate-900">Modifica Cliente</h3>
+              <h3 className="text-lg font-bold text-slate-900">Modifica Cliente</h3>
               <button onClick={() => setEditingCustomer(null)}
-                className="p-1 hover:bg-white/5 rounded-lg text-slate-400 light:text-slate-500 hover:text-white transition cursor-pointer">
+                className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-900 transition cursor-pointer">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
 
-            <div className="mb-5 pb-5 border-b border-white/5 light:border-slate-200">
-              <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block mb-2">Foto profilo</label>
+            <div className="mb-5 pb-5 border-b border-slate-200">
+              <label className="text-xs font-semibold text-slate-600 uppercase block mb-2">Foto profilo</label>
               <PhotoUpload
                 currentUrl={editPhotoUrl}
                 uploadPath={`customers/${editingCustomer.id}/photo`}
@@ -857,54 +839,54 @@ export function AdminCustomersPanel({
               {PRIVATE_LIKE.has(editingCustomer.kind) ? (
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Nome</label>
+                    <label className="text-xs font-semibold text-slate-600 uppercase block">Nome</label>
                     <input required value={editFirstName} onChange={(e) => setEditFirstName(e.target.value)}
-                      className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500" />
+                      className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Cognome</label>
+                    <label className="text-xs font-semibold text-slate-600 uppercase block">Cognome</label>
                     <input required value={editLastName} onChange={(e) => setEditLastName(e.target.value)}
-                      className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500" />
+                      className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
                   </div>
                 </div>
               ) : (
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Ragione sociale</label>
+                  <label className="text-xs font-semibold text-slate-600 uppercase block">Ragione sociale</label>
                   <input required value={editCompanyName} onChange={(e) => setEditCompanyName(e.target.value)}
-                    className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500" />
+                    className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
                 </div>
               )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Email</label>
+                  <label className="text-xs font-semibold text-slate-600 uppercase block">Email</label>
                   <input required type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)}
-                    className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500" />
+                    className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Telefono</label>
+                  <label className="text-xs font-semibold text-slate-600 uppercase block">Telefono</label>
                   <input value={editPhone} onChange={(e) => setEditPhone(e.target.value)}
-                    className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500" />
+                    className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
                 </div>
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">PEC</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">PEC</label>
                 <input type="email" value={editPec} onChange={(e) => setEditPec(e.target.value)}
                   placeholder="nome@pec.it"
-                  className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500" />
+                  className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Codice Fiscale</label>
+                  <label className="text-xs font-semibold text-slate-600 uppercase block">Codice Fiscale</label>
                   <input value={editFiscalCode} onChange={(e) => setEditFiscalCode(e.target.value)}
-                    className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500" />
+                    className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Partita IVA</label>
+                  <label className="text-xs font-semibold text-slate-600 uppercase block">Partita IVA</label>
                   <input value={editVatNumber} onChange={(e) => setEditVatNumber(e.target.value)}
-                    className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500" />
+                    className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
                 </div>
               </div>
 
@@ -914,27 +896,27 @@ export function AdminCustomersPanel({
 
               <div className="flex justify-end gap-3 mt-4">
                 <button type="button" onClick={() => setEditingCustomer(null)}
-                  className="px-4 py-2 rounded-xl bg-white/5 light:bg-slate-900/5 hover:bg-white/10 text-xs font-semibold text-slate-300 light:text-slate-600 border border-white/5 light:border-slate-200 transition cursor-pointer">
+                  className="px-4 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 text-xs font-semibold text-slate-600 border border-slate-200 transition cursor-pointer">
                   Annulla
                 </button>
                 <button type="submit" disabled={editLoading}
-                  className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50">
+                  className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50">
                   {editLoading ? "Salvataggio..." : "Salva Modifiche"}
                 </button>
               </div>
             </form>
 
-            <div className="mt-6 pt-5 border-t border-white/5 light:border-slate-200">
-              <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block mb-2">Promoter di riferimento</label>
-              <p className="text-xs text-slate-400 light:text-slate-500 mb-3">
-                Attualmente attribuito a: <span className="font-semibold text-white light:text-slate-900">{editingDetail?.current_promoter_name ?? "—"}</span>
+            <div className="mt-6 pt-5 border-t border-slate-200">
+              <label className="text-xs font-semibold text-slate-600 uppercase block mb-2">Promoter di riferimento</label>
+              <p className="text-xs text-slate-500 mb-3">
+                Attualmente attribuito a: <span className="font-semibold text-slate-900">{editingDetail?.current_promoter_name ?? "—"}</span>
               </p>
               <form onSubmit={handleReassign} className="space-y-3">
                 <select
                   required
                   value={reassignAgentId}
                   onChange={(e) => setReassignAgentId(e.target.value)}
-                  className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-slate-900 light:bg-white focus:border-orange-500"
+                  className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-white focus:border-brand-500"
                 >
                   <option value="">— Seleziona nuovo promoter —</option>
                   {(agentsForReassign ?? [])
@@ -948,7 +930,7 @@ export function AdminCustomersPanel({
                   value={reassignReason}
                   onChange={(e) => setReassignReason(e.target.value)}
                   placeholder="Motivo della riassegnazione..."
-                  className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500"
+                  className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500"
                 />
                 {reassignError && (
                   <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs">{reassignError}</div>
@@ -957,7 +939,7 @@ export function AdminCustomersPanel({
                   <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs">Promoter riassegnato con successo.</div>
                 )}
                 <button type="submit" disabled={reassignLoading}
-                  className="w-full px-4 py-2 rounded-xl bg-white/5 light:bg-slate-900/5 hover:bg-white/10 text-xs font-semibold text-slate-300 light:text-slate-600 border border-white/10 light:border-slate-300 transition cursor-pointer disabled:opacity-50">
+                  className="w-full px-4 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 text-xs font-semibold text-slate-600 border border-slate-300 transition cursor-pointer disabled:opacity-50">
                   {reassignLoading ? "Riassegnazione..." : "Riassegna Promoter"}
                 </button>
               </form>

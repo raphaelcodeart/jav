@@ -23,7 +23,6 @@ class OrderRead(BaseModel):
     cashback_credited_at: datetime | None = None
     status: str
     payment_method: str
-    stripe_checkout_session_id: str | None = None
     payment_proof_uploaded_at: datetime | None = None
     note: str | None
     paid_at: datetime | None
@@ -35,10 +34,10 @@ class OrderRead(BaseModel):
 class OrderQuoteRead(BaseModel):
     """What the checkout screen shows before an order is actually created --
     lets the buyer (customer self-checkout or admin) see the credit cap, the
-    customer's balance, and which payment methods for the residual are even
-    switched on before committing to anything. A frontend must grey out or
-    hide "Paga con bonifico"/"Paga con carta" entirely when the matching flag
-    is false -- the backend enforces this too (create_order rejects an
+    customer's balance, and whether the bank transfer for the residual is
+    even switched on (an IBAN is configured) before committing to anything.
+    A frontend must grey out or hide "Paga con bonifico" when the flag is
+    false -- the backend enforces this too (create_order rejects an
     unavailable method), this is what lets the UI never offer it in the
     first place."""
 
@@ -49,7 +48,6 @@ class OrderQuoteRead(BaseModel):
     max_creditable_cents: int
     customer_wallet_balance_cents: int
     bank_transfer_available: bool
-    card_available: bool
     cashback_available: bool
     cashback_percentage: int
 
@@ -104,18 +102,5 @@ class OrderCancelRequest(BaseModel):
     reason: str = Field(min_length=1, max_length=500)
 
 
-class OrderPaymentMethodUpdate(BaseModel):
-    """Lets a customer switch an existing AWAITING_PAYMENT order between
-    BANK_TRANSFER and CARD -- e.g. "actually, let me just pay by card now
-    instead of waiting on a bank transfer" -- see
-    orders/service.py::change_payment_method."""
-
-    payment_method: str
-
-
 class PaymentProofUrlRead(BaseModel):
     url: str
-
-
-class CheckoutSessionRead(BaseModel):
-    checkout_url: str

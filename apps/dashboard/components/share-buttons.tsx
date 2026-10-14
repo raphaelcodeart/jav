@@ -144,7 +144,7 @@ export function ShareButtons({
           which is why the label stays neutral. */}
       <button
         onClick={handleNative}
-        className={`${pill} bg-white/5 light:bg-slate-900/5 text-slate-300 light:text-slate-600 border-white/10 light:border-slate-300 hover:bg-white/10 hidden [@media(pointer:coarse)]:inline-flex`}
+        className={`${pill} bg-slate-900/5 text-slate-600 border-slate-300 hover:bg-slate-100 hidden [@media(pointer:coarse)]:inline-flex`}
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342a4 4 0 010-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a4 4 0 105.367-5.925 4 4 0 00-5.367 5.925zm0 8.658a4 4 0 105.367 5.925 4 4 0 00-5.367-5.925z" />
@@ -154,7 +154,7 @@ export function ShareButtons({
 
       <button
         onClick={handleCopy}
-        className={`${pill} bg-gradient-to-r from-orange-600 to-amber-500 hover:from-orange-500 hover:to-amber-400 text-white border-transparent shadow-lg shadow-orange-500/20`}
+        className={`${pill} bg-gradient-to-r from-brand-600 to-brand-400 hover:from-brand-500 hover:to-brand-400 text-white border-transparent shadow-lg shadow-brand-500/20`}
       >
         {result === "copied" || result === "shared" ? (
           <>
@@ -213,7 +213,7 @@ export function ShareMenu({
             className="w-full max-w-sm glass-card rounded-2xl p-5 animate-scale-up"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-sm font-semibold text-white light:text-slate-900 mb-1">
+            <h3 className="text-sm font-semibold text-slate-900 mb-1">
               {heading ?? "Condividi il link"}
             </h3>
             <p className="text-[11px] text-slate-500 mb-4 break-all font-mono">{url}</p>

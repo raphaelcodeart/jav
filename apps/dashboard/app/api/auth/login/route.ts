@@ -1,26 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
 import { friendlyApiError } from "@/lib/api-error";
-import { decodeRolesFromAccessToken, setSession } from "@/lib/session";
+import { decodeOrganizationIdFromAccessToken, decodeRolesFromAccessToken, setSession } from "@/lib/session";
 
 const API_INTERNAL_URL = process.env.API_INTERNAL_URL ?? "http://localhost:8000";
 
+// auth/router.py::login: 401 wrong credentials (or a disabled account, told
+// apart by its message), 423 locked after too many attempts, 429 rate limit.
+const LOGIN_ERROR_CODES: Record<number, string> = { 401: "invalid", 423: "locked", 429: "rate" };
+
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  const { email, password, organizationId } = body as {
-    email: string;
-    password: string;
-    organizationId: string;
-  };
+  // No organization id from the form: the API resolves it (one club per
+  // installation) and returns it inside the access token.
+  const { email, password } = body as { email: string; password: string };
 
   const apiRes = await fetch(`${API_INTERNAL_URL}/api/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password, organization_id: organizationId }),
+    body: JSON.stringify({ email, password }),
   });
 
   if (!apiRes.ok) {
+    // `code` lets the login page say it in the reader's language; `error`
+    // stays the Italian sentence for anything without a code.
+    const code = LOGIN_ERROR_CODES[apiRes.status];
     const message = await friendlyApiError(apiRes, "Accesso non riuscito. Riprova.");
-    return NextResponse.json({ error: message }, { status: apiRes.status });
+    const disabled = message === "Questo account è stato disabilitato. Contatta l'amministratore.";
+    return NextResponse.json({ error: message, code: disabled ? "disabled" : code }, { status: apiRes.status });
   }
 
   const setCookieHeader = apiRes.headers.get("set-cookie") ?? "";
@@ -29,6 +35,7 @@ export async function POST(request: NextRequest) {
 
   const { access_token: accessToken } = (await apiRes.json()) as { access_token: string };
 
+  const organizationId = decodeOrganizationIdFromAccessToken(accessToken);
   await setSession({ accessToken, refreshToken, organizationId, email });
 
   // The access token already carries the roles the API assigned at login

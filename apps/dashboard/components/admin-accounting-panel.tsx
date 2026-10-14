@@ -13,20 +13,19 @@ import { JavCashAmount } from "@/components/jav-cash-amount";
 import { AccountingDetailModal } from "@/components/accounting-detail-modal";
 import { movementDetailRef, movementEntity } from "@/lib/accounting-format";
 
-type MovementFilter = "ALL" | "JAVCASH" | "BANK_TRANSFER" | "CARD";
+type MovementFilter = "ALL" | "JAVCASH" | "BANK_TRANSFER";
 
 const FILTER_TABS: { key: MovementFilter; label: string }[] = [
   { key: "ALL", label: "Tutte" },
   { key: "JAVCASH", label: "JavCash" },
   { key: "BANK_TRANSFER", label: "Bonifico" },
-  { key: "CARD", label: "Carta" },
 ];
 
 const CATEGORY_COLORS: Record<string, string> = {
   Ricarica: "bg-sky-500/10 text-sky-400 border-sky-500/20",
-  Cashback: "bg-orange-500/10 text-orange-400 border-orange-500/20",
+  Cashback: "bg-brand-500/10 text-brand-600 border-brand-500/20",
   Pagamento: "bg-violet-500/10 text-violet-400 border-violet-500/20",
-  Contratto: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+  Contratto: "bg-amber-500/10 text-amber-700 border-amber-500/20",
   Trasferimento: "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
   Storno: "bg-slate-500/10 text-slate-400 border-slate-500/20",
   Altro: "bg-slate-500/10 text-slate-400 border-slate-500/20",
@@ -51,7 +50,7 @@ function DirectionBadge({ direction }: { direction: "in" | "out" }) {
 function CurrencyBadge({ m }: { m: FinancialMovementRead }) {
   if (m.currency === "JAVCASH") {
     return (
-      <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-orange-500/10 border border-orange-500/20 text-orange-400 text-[11px] font-bold whitespace-nowrap">
+      <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-brand-500/10 border border-brand-500/20 text-brand-600 text-[11px] font-bold whitespace-nowrap">
         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <circle cx="12" cy="12" r="9" strokeWidth={1.75} />
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 7v10M9.5 9.5c0-1 .9-1.8 2.5-1.8s2.5.7 2.5 1.6c0 2.2-5 1-5 3.2 0 .9 1 1.7 2.5 1.7s2.5-.8 2.5-1.8" />
@@ -65,7 +64,7 @@ function CurrencyBadge({ m }: { m: FinancialMovementRead }) {
       <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M14.121 15.536c-1.171 1.952-3.07 1.952-4.242 0-1.172-1.953-1.172-5.119 0-7.072 1.171-1.952 3.07-1.952 4.242 0M8 10.5h4m-4 3h4" />
       </svg>
-      {m.payment_method === "CARD" ? "Carta" : m.payment_method === "BANK_TRANSFER" ? "Bonifico" : "Euro"}
+      {m.payment_method === "BANK_TRANSFER" ? "Bonifico" : "Euro"}
     </span>
   );
 }
@@ -91,8 +90,8 @@ export function AdminAccountingPanel() {
   const [customerId, setCustomerId] = useState<string>("ALL");
   const [filter, setFilter] = useState<MovementFilter>("ALL");
   const [search, setSearch] = useState("");
-  // Session 54: every row opens its detail -- order, cashback redemption,
-  // contract or JavCash movement -- with the exact time and author of each
+  // Session 54: every row opens its detail -- order, contract or JavCash
+  // movement -- with the exact time and author of each
   // step, as the customer sees it.
   const [detailRef, setDetailRef] = useState<string | null>(null);
 
@@ -132,9 +131,6 @@ export function AdminAccountingPanel() {
   const totalBankTransferCents = scopedList
     .filter((m) => m.currency === "EUR" && m.payment_method === "BANK_TRANSFER")
     .reduce((sum, m) => sum + Math.abs(m.amount_cents), 0);
-  const totalCardCents = scopedList
-    .filter((m) => m.currency === "EUR" && m.payment_method === "CARD")
-    .reduce((sum, m) => sum + Math.abs(m.amount_cents), 0);
 
   // Paginates the FILTERED movements; the CSV export keeps using
   // filteredList so it always exports the whole filtered set.
@@ -151,7 +147,7 @@ export function AdminAccountingPanel() {
         movementLabel(m),
         m.product_name ?? "",
         m.currency === "JAVCASH" ? "JavCash" : "EUR",
-        m.payment_method ? (m.payment_method === "CARD" ? "Carta" : "Bonifico") : "",
+        m.payment_method ? "Bonifico" : "",
         movementDirection(m) === "in" ? "Entrata" : "Uscita",
         (Math.abs(m.amount_cents) / 100).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
         m.note ?? "",
@@ -166,9 +162,9 @@ export function AdminAccountingPanel() {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-semibold text-white light:text-slate-900">Contabilità</h3>
-        <p className="text-xs text-slate-400 light:text-slate-500 mt-1">
-          Ogni movimento JavCash e ogni pagamento reale (carta o bonifico) di tutti i clienti, in un unico posto.
+        <h3 className="text-lg font-semibold text-slate-900">Contabilità</h3>
+        <p className="text-xs text-slate-500 mt-1">
+          Ogni movimento JavCash e ogni pagamento reale (bonifico) di tutti i clienti, in un unico posto.
           Filtra per cliente per vedere il suo estratto conto personale.
         </p>
       </div>
@@ -176,11 +172,11 @@ export function AdminAccountingPanel() {
       {/* Customer filter */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="space-y-1">
-          <label className="text-[10px] font-semibold text-slate-300 light:text-slate-600 uppercase block">Cliente</label>
+          <label className=" font-semibold text-slate-600 uppercase block">Cliente</label>
           <select
             value={customerId}
             onChange={(e) => setCustomerId(e.target.value)}
-            className="w-full max-w-xs rounded-xl glass-input px-3 py-2 text-sm bg-slate-900 light:bg-white focus:border-orange-500"
+            className="w-full max-w-xs rounded-xl glass-input px-3 py-2 text-sm bg-white focus:border-brand-500"
           >
             <option value="ALL">Tutti i clienti ({customers.length})</option>
             {customers.map((c) => (
@@ -189,7 +185,7 @@ export function AdminAccountingPanel() {
           </select>
         </div>
         <div className="space-y-1 flex-1 min-w-[200px]">
-          <label className="text-[10px] font-semibold text-slate-300 light:text-slate-600 uppercase block">Cerca</label>
+          <label className=" font-semibold text-slate-600 uppercase block">Cerca</label>
           <div className="relative">
             <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />
@@ -199,27 +195,23 @@ export function AdminAccountingPanel() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Prodotto, cliente, tipo movimento..."
-              className="w-full pl-9 pr-3 py-2 rounded-xl bg-white/5 light:bg-slate-900/5 border border-white/10 light:border-slate-300 text-sm text-white light:text-slate-900 placeholder:text-slate-500 focus:outline-none focus:border-orange-500/50 transition"
+              className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-900/5 border border-slate-300 text-sm text-slate-900 placeholder:text-slate-500 focus:outline-none focus:border-brand-500/50 transition"
             />
           </div>
         </div>
       </div>
 
       {/* Totals -- scoped to the selected customer, or org-wide when "Tutti" */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="glass-card rounded-2xl p-5 border-white/5 light:border-slate-200 bg-gradient-to-br from-orange-500/10 to-transparent">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="glass-card rounded-2xl p-5 border-slate-200 bg-gradient-to-br from-brand-500/10 to-transparent">
           <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Saldo netto JavCash</p>
-          <p className={`text-xl font-bold ${totalJavCashCents < 0 ? "text-rose-400" : "text-orange-400"}`}>
+          <p className={`text-xl font-bold ${totalJavCashCents < 0 ? "text-rose-400" : "text-brand-600"}`}>
             {javCash(totalJavCashCents)}
           </p>
         </div>
-        <div className="glass-card rounded-2xl p-5 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70">
+        <div className="glass-card rounded-2xl p-5 border-slate-200 bg-white/70">
           <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Incassato con Bonifico</p>
-          <p className="text-xl font-bold text-white light:text-slate-900">{euro(totalBankTransferCents)}</p>
-        </div>
-        <div className="glass-card rounded-2xl p-5 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70">
-          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Incassato con Carta (Stripe)</p>
-          <p className="text-xl font-bold text-white light:text-slate-900">{euro(totalCardCents)}</p>
+          <p className="text-xl font-bold text-slate-900">{euro(totalBankTransferCents)}</p>
         </div>
       </div>
 
@@ -234,8 +226,8 @@ export function AdminAccountingPanel() {
                 onClick={() => setFilter(tab.key)}
                 className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold border transition cursor-pointer ${
                   filter === tab.key
-                    ? "bg-orange-600 border-orange-600 text-white"
-                    : "bg-white/5 light:bg-slate-900/5 border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 hover:bg-white/10"
+                    ? "bg-brand-600 border-brand-600 text-white"
+                    : " bg-slate-900/5 border-slate-300 text-slate-600 hover:bg-slate-100"
                 }`}
               >
                 {tab.label}
@@ -247,18 +239,18 @@ export function AdminAccountingPanel() {
         <button
           onClick={handleExportCsv}
           disabled={filteredList.length === 0}
-          className="px-3.5 py-1.5 rounded-xl text-xs font-semibold border border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 hover:bg-white/10 transition cursor-pointer disabled:opacity-40"
+          className="px-3.5 py-1.5 rounded-xl text-xs font-semibold border border-slate-300 text-slate-600 hover:bg-slate-100 transition cursor-pointer disabled:opacity-40"
         >
           Scarica report CSV
         </button>
       </div>
 
       {/* Movements */}
-      <div className="glass-card rounded-2xl border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70 overflow-hidden">
+      <div className="glass-card rounded-2xl border-slate-200 bg-white/70 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-left text-xs">
             <thead>
-              <tr className="border-b border-white/5 light:border-slate-200 text-slate-400 light:text-slate-500 font-semibold">
+              <tr className="border-b border-slate-200 text-slate-500 font-semibold">
                 <th className="py-2 px-5">Data</th>
                 <th className="py-2 px-5"></th>
                 {customerId === "ALL" && <th className="py-2 px-5">Cliente</th>}
@@ -268,7 +260,7 @@ export function AdminAccountingPanel() {
                 <th className="py-2 px-5 text-right">Importo</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5 light:divide-slate-200">
+            <tbody className="divide-y divide-slate-200">
               {movements === undefined ? (
                 <tr><td colSpan={7} className="text-center py-6 text-slate-500">Caricamento...</td></tr>
               ) : filteredList.length === 0 ? (
@@ -284,9 +276,9 @@ export function AdminAccountingPanel() {
                         const ref = movementDetailRef(m);
                         if (ref) setDetailRef(ref);
                       }}
-                      className="text-slate-300 light:text-slate-600 hover:bg-white/5 light:hover:bg-slate-50 cursor-pointer"
+                      className=" text-slate-600 hover:bg-slate-50 cursor-pointer"
                     >
-                      <td className="py-2.5 px-5 whitespace-nowrap text-slate-400 light:text-slate-500">{formatDate(m.created_at)}</td>
+                      <td className="py-2.5 px-5 whitespace-nowrap text-slate-500">{formatDate(m.created_at)}</td>
                       <td className="py-2.5 px-5"><DirectionBadge direction={direction} /></td>
                       {customerId === "ALL" && (
                         <td className="py-2.5 px-5">
@@ -295,7 +287,7 @@ export function AdminAccountingPanel() {
                               e.stopPropagation();
                               if (m.customer_user_id) setCustomerId(m.customer_user_id);
                             }}
-                            className="font-medium text-white light:text-slate-900 hover:text-orange-400 transition cursor-pointer text-left"
+                            className="font-medium text-slate-900 hover:text-brand-600 transition cursor-pointer text-left"
                           >
                             {m.customer_display_name ?? "—"}
                           </button>
@@ -307,7 +299,7 @@ export function AdminAccountingPanel() {
                         </span>
                       </td>
                       <td className="py-2.5 px-5">
-                        <p className="font-medium text-white light:text-slate-900">{movementLabel(m)}</p>
+                        <p className="font-medium text-slate-900">{movementLabel(m)}</p>
                         {m.product_name && <p className="text-slate-500 text-[11px]">{m.product_name}</p>}
                         {movementEntity(m) && (
                           <button
@@ -315,7 +307,7 @@ export function AdminAccountingPanel() {
                               e.stopPropagation();
                               setDetailRef(movementEntity(m)!.ref);
                             }}
-                            className="mt-0.5 text-[10px] font-bold text-orange-400 hover:text-orange-300 cursor-pointer"
+                            className="mt-0.5 text-[10px] font-bold text-brand-600 hover:text-brand-600 cursor-pointer"
                           >
                             {movementEntity(m)!.label} →
                           </button>

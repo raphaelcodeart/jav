@@ -42,7 +42,6 @@ const KNOWN_MESSAGES: Record<string, string> = {
   "Notification not found": "Notifica non trovata.",
   "Product not found": "Prodotto non trovato.",
   "Product version not found": "Versione del prodotto non trovata.",
-  "Supply point not found": "Punto di fornitura non trovato.",
   "Ticket not found": "Ticket non trovato.",
   "Commission movement not found": "Movimento di commissione non trovato.",
   "Invalid or expired promoter code": "Codice promoter non valido o scaduto.",
@@ -108,7 +107,7 @@ const PERMISSION_LABELS: Record<string, string> = {
   // so a plain ADMIN clicking "Ricarica" got a generic "non hai i permessi"
   // instead of being told which permission they were actually missing.
   "wallet.credit": "ricaricare un wallet",
-  "organization.manage_payments": "gestire le impostazioni di pagamento",
+  "shop.manage": "gestire lo Shop",
 };
 
 const GENERIC_FALLBACK = "Si è verificato un errore imprevisto. Riprova più tardi.";
@@ -265,10 +264,9 @@ export function translateErrorDetail(detail: unknown): string {
 
   // Unrecognized, but still a human-written sentence (not a stack trace or
   // an HTML page) -- show it rather than hide real information behind a
-  // generic message. 400 and not 200 since Session 87: a sentence quoting an
-  // imported product's title («Computer portatile da 15.6 pollici con…»)
-  // went past 200 and a customer saw «errore imprevisto» instead of «non si
-  // può spedire in Italia». The braces/angle-brackets check is what keeps
+  // generic message. 400 and not 200 since Session 87: a sentence quoting a
+  // long product title went past 200 and a customer saw «errore imprevisto»
+  // instead of the real reason. The braces/angle-brackets check is what keeps
   // JSON and HTML out; length alone never did that job well.
   if (detail.length > 0 && detail.length < 400 && !/[<>{}]/.test(detail)) return detail;
   return GENERIC_FALLBACK;

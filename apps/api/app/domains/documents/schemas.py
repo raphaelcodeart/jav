@@ -9,7 +9,7 @@ from app.domains.documents.models import DOCUMENT_STATUSES, DOCUMENT_TYPES
 class DocumentRead(BaseModel):
     id: uuid.UUID
     #: Exactly one of these is set: the document belongs to one contract, or
-    #: to its whole pratica (Session 52).
+    #: to its whole pratica.
     contract_id: uuid.UUID | None = None
     contract_request_id: uuid.UUID | None = None
     document_type: str
@@ -61,7 +61,7 @@ class RequiredDocumentStatus(BaseModel):
     #: The latest page -- kept for screens that show one status per slot.
     document: DocumentRead | None = None
     #: Every page of this document, oldest first: front and back of an ID,
-    #: the 4 or 20 pages of a bill. At most MAX_PAGES_PER_DOCUMENT.
+    #: the 4 or 20 pages of a visura. At most MAX_PAGES_PER_DOCUMENT.
     pages: list[DocumentRead] = []
 
 
@@ -74,7 +74,7 @@ class ContractDocumentsRead(BaseModel):
     #: uploaded it. Never gates the contract.
     extra: list[DocumentRead] = []
     #: Only on a pratica's documents: what still has to be uploaded before the
-    #: pratica can go on (identity, bill, visura/P.IVA for a business).
+    #: pratica can go on (identity, visura/P.IVA for a business).
     #: Empty = the documents step is done.
     blocking_missing: list[str] = []
 
@@ -87,7 +87,6 @@ class DocumentTypeInfo(BaseModel):
 DOCUMENT_TYPE_LABELS = {
     "IDENTITY": "Documento d'identità",
     "FISCAL_CODE": "Codice fiscale",
-    "UTILITY_BILL": "Fattura luce/gas",
     "CHAMBER_OF_COMMERCE": "Visura camerale / Certificato di attribuzione P.IVA",
     "OTHER": "Documento aggiuntivo",
 }

@@ -135,19 +135,19 @@ export function AdminProductRequestsPanel() {
   }
 
   const deleteModal = deleting && (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 light:bg-slate-900/40 backdrop-blur-sm animate-fade-in">
-      <div className="w-full max-w-md glass-card rounded-2xl p-6 border-white/10 light:border-slate-300 bg-slate-950 light:bg-white animate-scale-up">
-        <h3 className="text-lg font-bold text-white light:text-slate-900 mb-2">Elimina richiesta</h3>
-        <p className="text-xs text-slate-400 light:text-slate-500 mb-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+      <div className="w-full max-w-md glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up">
+        <h3 className="text-lg font-bold text-slate-900 mb-2">Elimina richiesta</h3>
+        <p className="text-xs text-slate-500 mb-4">
           Stai per eliminare definitivamente la richiesta{" "}
-          <span className="font-semibold text-slate-300 light:text-slate-700">«{deleting.product_name}»</span> e
+          <span className="font-semibold text-slate-700">«{deleting.product_name}»</span> e
           tutti i suoi messaggi. L&apos;operazione non può essere annullata.
         </p>
         {deleteError && <p className="text-xs text-rose-400 mb-3">{deleteError}</p>}
         <div className="flex justify-end gap-3">
           <button
             onClick={() => { setDeleting(null); setDeleteError(null); }}
-            className="px-4 py-2 rounded-xl bg-white/5 light:bg-slate-900/5 hover:bg-white/10 text-xs font-semibold text-slate-300 light:text-slate-600 border border-white/5 light:border-slate-200 transition cursor-pointer"
+            className="px-4 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 text-xs font-semibold text-slate-600 border border-slate-200 transition cursor-pointer"
           >
             Annulla
           </button>
@@ -169,16 +169,16 @@ export function AdminProductRequestsPanel() {
       <div className="space-y-4">
         <button
           onClick={() => setSelectedId(null)}
-          className="text-xs text-slate-400 hover:text-white light:hover:text-slate-900 transition cursor-pointer flex items-center gap-1"
+          className="text-xs text-slate-400 hover:text-slate-900 transition cursor-pointer flex items-center gap-1"
         >
           ← Torna a tutte le richieste
         </button>
 
-        <div className="glass-card rounded-2xl p-6 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70">
+        <div className="glass-card rounded-2xl p-6 border-slate-200 bg-white/70">
           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-4">
             <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-orange-400">Prodotto cercato</p>
-              <h3 className="text-lg font-semibold text-white light:text-slate-900 break-words">{detail.product_name}</h3>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-brand-600">Prodotto cercato</p>
+              <h3 className="text-lg font-semibold text-slate-900 break-words">{detail.product_name}</h3>
               <p className="text-xs text-slate-500 mt-1">
                 {OPENER_LABELS[detail.opened_by_role] ?? detail.opened_by_role} · {detail.opened_by_name ?? "—"} ·
                 aperta il {formatDateTime(detail.created_at)}
@@ -188,7 +188,7 @@ export function AdminProductRequestsPanel() {
                   href={detail.reference_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-xs text-orange-400 hover:text-orange-300 break-all"
+                  className="text-xs text-brand-600 hover:text-brand-600 break-all"
                 >
                   {detail.reference_url}
                 </a>
@@ -199,7 +199,7 @@ export function AdminProductRequestsPanel() {
                 value={detail.status}
                 onChange={(e) => handleStatusChange(e.target.value)}
                 disabled={statusLoading}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold border bg-slate-900 light:bg-white cursor-pointer ${productRequestStatusColor(detail.status)}`}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold border bg-white cursor-pointer ${productRequestStatusColor(detail.status)}`}
               >
                 {Object.entries(STAFF_STATUS_LABELS).map(([code, label]) => (
                   <option key={code} value={code}>{label}</option>
@@ -210,7 +210,7 @@ export function AdminProductRequestsPanel() {
                 onClick={() => { if (canDelete) setDeleting(detail); }}
                 disabled={!canDelete}
                 title={canDelete ? "Elimina richiesta" : "Si elimina solo una richiesta conclusa (trovato, non trovato o chiusa)"}
-                className="p-2 rounded-xl border border-white/10 light:border-slate-300 text-slate-400 hover:text-rose-400 hover:border-rose-500/30 hover:bg-rose-500/10 transition cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-slate-400 disabled:hover:border-white/10 disabled:hover:bg-transparent"
+                className="p-2 rounded-xl border border-slate-300 text-slate-400 hover:text-rose-400 hover:border-rose-500/30 hover:bg-rose-500/10 transition cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-slate-400 disabled:hover:border-slate-300 disabled:hover:bg-transparent"
               >
                 <TrashIcon className="w-4 h-4" />
               </button>
@@ -225,8 +225,8 @@ export function AdminProductRequestsPanel() {
                   <div
                     className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${
                       isStaff
-                        ? "bg-orange-600/10 border border-orange-500/20 text-slate-200 light:text-slate-700"
-                        : "bg-white/5 light:bg-slate-900/5 border border-white/5 light:border-slate-200 text-slate-200 light:text-slate-700"
+                        ? "bg-brand-600/10 border border-brand-500/20 text-slate-700"
+                        : " bg-slate-900/5 border border-slate-200 text-slate-700"
                     }`}
                   >
                     <div className="flex items-center gap-2 mb-1">
@@ -249,12 +249,12 @@ export function AdminProductRequestsPanel() {
                 value={reply}
                 onChange={(e) => setReply(e.target.value)}
                 placeholder="Rispondi al cliente…"
-                className="flex-1 min-w-0 rounded-xl glass-input px-3 py-2.5 text-sm focus:border-orange-500"
+                className="flex-1 min-w-0 rounded-xl glass-input px-3 py-2.5 text-sm focus:border-brand-500"
               />
               <button
                 type="submit"
                 disabled={replyLoading}
-                className="px-4 py-2 rounded-xl text-xs font-semibold bg-orange-600 hover:bg-orange-500 text-white transition cursor-pointer disabled:opacity-50"
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-brand-600 hover:bg-brand-500 text-white transition cursor-pointer disabled:opacity-50"
               >
                 {replyLoading ? "Invio…" : "Rispondi"}
               </button>
@@ -273,23 +273,23 @@ export function AdminProductRequestsPanel() {
     <div className="space-y-6">
       <div className="flex flex-col gap-3">
         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-          <p className="text-sm text-slate-400 light:text-slate-500 flex-1">
+          <p className="text-sm text-slate-500 flex-1">
             Prodotti che i clienti ci chiedono di cercare dallo Shop («Non hai trovato ciò che cercavi?»).{" "}
-            <strong className="text-white light:text-slate-900">{waiting}</strong> in attesa di una nostra risposta.
+            <strong className=" text-slate-900">{waiting}</strong> in attesa di una nostra risposta.
           </p>
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Cerca per prodotto o cliente…"
-            className="rounded-xl glass-input px-3 py-2 text-xs bg-slate-900 light:bg-white focus:border-orange-500 w-full sm:w-64"
+            className="rounded-xl glass-input px-3 py-2 text-xs bg-white focus:border-brand-500 w-full sm:w-64"
           />
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="rounded-xl glass-input px-3 py-2 text-xs bg-slate-900 light:bg-white focus:border-orange-500"
+            className="rounded-xl glass-input px-3 py-2 text-xs bg-white focus:border-brand-500"
           >
             <option value="ACTIVE">Da gestire (nuove e in lavorazione)</option>
             <option value="ALL">Tutti gli stati</option>
@@ -306,7 +306,7 @@ export function AdminProductRequestsPanel() {
         {requests === undefined ? (
           <p className="text-sm text-slate-500 text-center py-8">Caricamento…</p>
         ) : filtered.length === 0 ? (
-          <div className="glass-card rounded-2xl p-12 text-center border-white/5 light:border-slate-200">
+          <div className="glass-card rounded-2xl p-12 text-center border-slate-200">
             <p className="text-sm text-slate-500">
               {(requests ?? []).length === 0 ? "Nessuna richiesta di prodotto ancora." : "Nessuna richiesta corrisponde ai filtri."}
             </p>
@@ -318,16 +318,16 @@ export function AdminProductRequestsPanel() {
             return (
               <div
                 key={r.id}
-                className="glass-card rounded-2xl p-4 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70 hover:bg-white/5 transition flex items-center justify-between gap-4"
+                className="glass-card rounded-2xl p-4 border-slate-200 bg-white/70 hover:bg-slate-100 transition flex items-center justify-between gap-4"
               >
                 <button onClick={() => setSelectedId(r.id)} className="min-w-0 flex-1 text-left cursor-pointer">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-sm font-semibold text-white light:text-slate-900 truncate">{r.product_name}</p>
+                    <p className="text-sm font-semibold text-slate-900 truncate">{r.product_name}</p>
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border shrink-0 ${productRequestStatusColor(r.status)}`}>
                       {STAFF_STATUS_LABELS[r.status] ?? r.status}
                     </span>
                     {needsReply && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-600 text-white shrink-0">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-brand-600 text-white shrink-0">
                         Da rispondere
                       </span>
                     )}

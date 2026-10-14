@@ -17,7 +17,7 @@ import reportlab.rl_config
 from app.domains.catalog.models import Product, ProductVersion
 from app.domains.contracts import dossier
 from app.domains.contracts import service as contract_service
-from app.domains.customers.models import Address, Company, Customer, CustomerProfile, SupplyPoint
+from app.domains.customers.models import Address, Company, Customer, CustomerProfile
 from app.domains.documents import service as documents_service
 from app.domains.network import service as network_service
 from tests.test_commission_engine_integration import _make_actor
@@ -45,22 +45,17 @@ async def _make_contract(db, organization_id, *, kind="PRIVATE", first_name="Mar
     )
     db.add(address)
     await db.flush()
-    supply_point = SupplyPoint(
-        organization_id=organization_id, customer_id=customer.id, energy_type="ELECTRICITY",
-        supply_address_id=address.id, pod_code="IT001E12345678", label="Abitazione principale",
-    )
-    db.add(supply_point)
 
     product = Product(
         organization_id=organization_id, code=f"DOS-{uuid.uuid4().hex[:6]}",
-        energy_type="ELECTRICITY", customer_type="BOTH", category="INTERNAL",
+        customer_type="BOTH", category="INTERNAL",
     )
     db.add(product)
     await db.flush()
     from app.core.db import utcnow
 
     version = ProductVersion(
-        product_id=product.id, version_label="1.0", name="Energia Circolare",
+        product_id=product.id, version_label="1.0", name="Abbonamento annuale",
         base_price_cents=24900, contract_duration_months=12, valid_from=utcnow(),
     )
     db.add(version)
@@ -72,7 +67,7 @@ async def _make_contract(db, organization_id, *, kind="PRIVATE", first_name="Mar
     )
     contract = await contract_service.create_contract(
         db, organization_id=organization_id, customer_id=customer.id,
-        supply_point_id=supply_point.id, product_version_id=version.id,
+        product_version_id=version.id,
         producer_agent_id=agent.id, actor_user_id=actor_user_id, correlation_id=str(uuid.uuid4()),
     )
     return contract, actor_user_id
@@ -142,8 +137,8 @@ async def test_the_archive_is_named_after_the_customer_and_the_contract(db, orga
 async def test_the_archive_holds_the_summary_plus_every_attachment(db, organization_id):
     contract, actor_user_id = await _make_contract(db, organization_id)
     await _upload(db, organization_id, contract, actor_user_id, document_type="IDENTITY")
-    await _upload(db, organization_id, contract, actor_user_id, document_type="UTILITY_BILL",
-                  content=JPEG_BYTES, content_type="image/jpeg", filename="bolletta.jpg")
+    await _upload(db, organization_id, contract, actor_user_id, document_type="FISCAL_CODE",
+                  content=JPEG_BYTES, content_type="image/jpeg", filename="codice-fiscale.jpg")
     await _upload(db, organization_id, contract, actor_user_id, document_type="OTHER",
                   description="Delega firmata")
 
@@ -152,13 +147,13 @@ async def test_the_archive_holds_the_summary_plus_every_attachment(db, organizat
     assert names[0] == dossier.SUMMARY_FILENAME
     assert names[1:] == [
         "01 - Documento d'identità.pdf",
-        "02 - Fattura luce gas.jpg",
+        "02 - Codice fiscale.jpg",
         "03 - Delega firmata.pdf",
     ]
 
     with zipfile.ZipFile(io.BytesIO(dossier.zip_bytes(built))) as archive:
         assert archive.namelist() == names
-        assert archive.read("02 - Fattura luce gas.jpg") == JPEG_BYTES
+        assert archive.read("02 - Codice fiscale.jpg") == JPEG_BYTES
         assert archive.read(dossier.SUMMARY_FILENAME).startswith(b"%PDF")
 
 
@@ -226,11 +221,9 @@ async def test_the_summary_pdf_actually_carries_the_data(db, organization_id, mo
     assert pdf.startswith(b"%PDF")
     for expected in (
         b"Mario Rossi",            # intestatario
-        b"IT001E12345678",         # POD
-        b"Energia Circolare",      # prodotto
+        b"Abbonamento annuale",    # prodotto
         b"RSSMRA80A01H501U",       # codice fiscale
         b"Anna Bianchi",           # promoter
-        b"Abitazione principale",  # punto di fornitura
     ):
         assert expected in pdf, f"manca dal PDF: {expected!r}"
 

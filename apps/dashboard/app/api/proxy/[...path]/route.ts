@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { clearSession, getSession, refreshSession, type Session } from "@/lib/session";
+import { CLUB_COOKIE } from "@/lib/club-cookie";
 
 const API_INTERNAL_URL = process.env.API_INTERNAL_URL ?? "http://localhost:8000";
+
+/** Il club in cui lo staff della piattaforma è "entrato" (pannello Club):
+ * l'API lo legge da questa intestazione (club/scope.py). Per un account di
+ * un club l'API la ignora, quindi inoltrarla sempre non apre niente. */
+function clubHeader(request: NextRequest): Record<string, string> {
+  const club = request.cookies.get(CLUB_COOKIE)?.value;
+  return club ? { "X-Jav-Club": club } : {};
+}
 
 /** True only for this app's own "your access token is bad/expired" 401 --
  * never for a permission (403) or a business-rule 401 from elsewhere -- so a
@@ -40,7 +49,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const url = `${API_INTERNAL_URL}/api/${path.join("/")}${search}`;
 
   let apiRes = await fetch(url, {
-    headers: { Authorization: `Bearer ${session.accessToken}` },
+    headers: { Authorization: `Bearer ${session.accessToken}`, ...clubHeader(request) },
     cache: "no-store",
   });
 
@@ -48,7 +57,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const refreshed: Session | null = await refreshSession(session);
     if (!refreshed) return sessionExpired();
     apiRes = await fetch(url, {
-      headers: { Authorization: `Bearer ${refreshed.accessToken}` },
+      headers: { Authorization: `Bearer ${refreshed.accessToken}`, ...clubHeader(request) },
       cache: "no-store",
     });
     if (await isExpiredTokenResponse(apiRes)) return sessionExpired();
@@ -101,6 +110,7 @@ async function proxyWithBody(
   const url = `${API_INTERNAL_URL}/api/${path.join("/")}${search}`;
   const upstreamHeaders = (token: string) => ({
     Authorization: `Bearer ${token}`,
+    ...clubHeader(request),
     "Content-Type": isMultipart ? requestContentType : "application/json",
   });
 
@@ -144,7 +154,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ path: 
 // Real bug, fixed here: PATCH had never been implemented on this route at
 // all (only GET/POST existed) -- every "save changes" edit form that PATCHes
 // through this proxy (customer edit, promoter edit, product edit, contract
-// IBAN, supply-point label, document review, ...) was silently 405ing since
+// IBAN, holder data, document review, ...) was silently 405ing since
 // the day each was built. Confirmed live before this fix.
 export async function PATCH(request: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
   return proxyWithBody(request, ctx, "PATCH");

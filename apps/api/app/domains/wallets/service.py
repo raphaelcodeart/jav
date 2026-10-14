@@ -176,8 +176,8 @@ async def credit_wallet(
     type_: str,
     actor_user_id: uuid.UUID | None,
     reference_contract_id: uuid.UUID | None = None,
-    reference_invoice_redemption_id: uuid.UUID | None = None,
     reference_order_id: uuid.UUID | None = None,
+    reference_club_athlete_id: uuid.UUID | None = None,
     source: str | None = None,
     note: str | None = None,
     idempotency_key: str,
@@ -202,8 +202,8 @@ async def credit_wallet(
         amount_cents=amount_cents,
         type=type_,
         reference_contract_id=reference_contract_id,
-        reference_invoice_redemption_id=reference_invoice_redemption_id,
         reference_order_id=reference_order_id,
+        reference_club_athlete_id=reference_club_athlete_id,
         source=source,
         note=note,
         actor_user_id=actor_user_id,
@@ -248,17 +248,12 @@ async def credit_wallet(
         raise
     await db.refresh(txn)
 
-    # A partner-invoice cashback credit already gets its own, richer email
-    # (with the partner name and the base/bonus split) from
-    # invoice_redemptions/service.py::confirm_payment, right after it calls
-    # this function twice -- reference_invoice_redemption_id being set is
-    # exactly how this function tells the two cases apart, so that flow
-    # never ends up sending the customer two emails for one credit. Same
-    # reasoning for reference_order_id: orders/service.py's own "pagamento
-    # completato" email already mentions the cashback credited alongside it
-    # (see orders/service.py::_send_order_paid_email), so this generic one
-    # would just be a second, redundant email for the same single event.
-    if reference_invoice_redemption_id is None and reference_order_id is None:
+    # orders/service.py's own "pagamento completato" email already mentions
+    # the cashback credited alongside it (see
+    # orders/service.py::_send_order_paid_email), so for a credit tied to an
+    # order this generic one would just be a second, redundant email for the
+    # same single event.
+    if reference_order_id is None:
         await _send_wallet_credited_email(
             db, user_id=wallet.user_id, amount_cents=amount_cents, note=note, source=source
         )
@@ -270,10 +265,10 @@ async def _send_wallet_credited_email(
 ) -> None:
     """Best-effort, fires after the credit is already committed -- an SMTP
     hiccup here must never undo money that has already landed in the
-    wallet. Covers every credit_wallet() caller except the invoice-
-    redemption cashback flow (see the caller above, which already sends its
-    own): the admin "Ricarica" top-up (POST /wallets/admin/topup) and the
-    self-claimed welcome bonus.
+    wallet. Covers every credit_wallet() caller not tied to an order (whose
+    own "pagamento completato" email already mentions the credit): the admin
+    "Ricarica" top-up (POST /wallets/admin/topup) and the self-claimed
+    welcome bonus.
 
     The copy varies by `source` because the default wording ("un
     amministratore ha accreditato manualmente...") is simply untrue for a
@@ -506,333 +501,6 @@ async def debit_wallet_for_purchase(
     return txn
 
 
-async def debit_wallet_for_imported_purchase(
-    db: AsyncSession,
-    *,
-    organization_id: uuid.UUID,
-    wallet_id: uuid.UUID,
-    amount_cents: int,
-    reference_imported_order_id: uuid.UUID,
-    actor_user_id: uuid.UUID,
-    note: str | None = None,
-    idempotency_key: str,
-) -> WalletTransaction:
-    """Same as debit_wallet_for_purchase above, for the parallel "Acquisti
-    Jav" imported-products plugin (Session 34) -- a dedicated sibling
-    rather than an extra optional parameter on debit_wallet_for_purchase, so
-    that function's existing required reference_order_id keeps working
-    completely unchanged for every current caller. See
-    imported_products/models.py for why this whole feature stays a separate
-    table/domain rather than reusing `orders`."""
-    existing = await _get_by_idempotency_key(db, idempotency_key=idempotency_key)
-    if existing is not None:
-        return existing
-
-    result = await db.execute(
-        update(Wallet)
-        .where(Wallet.id == wallet_id, Wallet.balance_cents >= amount_cents)
-        .values(balance_cents=Wallet.balance_cents - amount_cents)
-    )
-    if result.rowcount == 0:
-        raise InsufficientBalanceError("Insufficient balance")
-
-    txn = WalletTransaction(
-        organization_id=organization_id,
-        from_wallet_id=wallet_id,
-        to_wallet_id=None,
-        amount_cents=amount_cents,
-        type="PURCHASE_DEBIT",
-        reference_imported_order_id=reference_imported_order_id,
-        note=note,
-        actor_user_id=actor_user_id,
-        idempotency_key=idempotency_key,
-    )
-    db.add(txn)
-    try:
-        await db.flush()
-    except IntegrityError:
-        # Same recovery the commit below already had, which the flush was
-        # missing: uq_wallet_transactions_idempotency_key can just as easily
-        # be violated here (two concurrent requests carrying the same key),
-        # and so can a foreign key (a reference id that no longer exists).
-        # Unhandled, either surfaced as a 500 on an operation that is
-        # perfectly recoverable.
-        await db.rollback()
-        existing = await _get_by_idempotency_key(db, idempotency_key=idempotency_key)
-        if existing is not None:
-            return existing
-        raise
-
-    wallet = await db.get(Wallet, wallet_id)
-    assert wallet is not None  # just updated above by this same wallet_id
-    await audit_service.record(
-        db, organization_id=organization_id, actor_user_id=actor_user_id,
-        action="wallet.debited_for_purchase", entity_type="wallet_transaction", entity_id=str(txn.id),
-        new_value={
-            "from_wallet_id": str(wallet_id), "amount_cents": amount_cents,
-            "reference_imported_order_id": str(reference_imported_order_id),
-        },
-    )
-    await notifications_service.notify_user(
-        db, organization_id=organization_id, user_id=wallet.user_id, type_="ORDER_CREDIT_APPLIED",
-        entity_type="wallet_transaction", entity_id=txn.id,
-        title=f"{amount_cents / 100:.2f} EUR di credito usati per un tuo ordine",
-        body=note,
-    )
-    try:
-        await db.commit()
-    except IntegrityError:
-        await db.rollback()
-        existing = await _get_by_idempotency_key(db, idempotency_key=idempotency_key)
-        if existing is not None:
-            return existing
-        raise
-    await db.refresh(txn)
-    return txn
-
-
-
-async def debit_wallet_for_cj_purchase(
-    db: AsyncSession,
-    *,
-    organization_id: uuid.UUID,
-    wallet_id: uuid.UUID,
-    amount_cents: int,
-    reference_cj_order_id: uuid.UUID,
-    actor_user_id: uuid.UUID,
-    note: str | None = None,
-    idempotency_key: str,
-) -> WalletTransaction:
-    """Same as debit_wallet_for_imported_purchase, for the Shop Jav Partner
-    (CJ Dropshipping, Session 60) orders -- the third, separate order table,
-    see cj_dropshipping/models.py."""
-    existing = await _get_by_idempotency_key(db, idempotency_key=idempotency_key)
-    if existing is not None:
-        return existing
-
-    result = await db.execute(
-        update(Wallet)
-        .where(Wallet.id == wallet_id, Wallet.balance_cents >= amount_cents)
-        .values(balance_cents=Wallet.balance_cents - amount_cents)
-    )
-    if result.rowcount == 0:
-        raise InsufficientBalanceError("Insufficient balance")
-
-    txn = WalletTransaction(
-        organization_id=organization_id,
-        from_wallet_id=wallet_id,
-        to_wallet_id=None,
-        amount_cents=amount_cents,
-        type="PURCHASE_DEBIT",
-        reference_cj_order_id=reference_cj_order_id,
-        note=note,
-        actor_user_id=actor_user_id,
-        idempotency_key=idempotency_key,
-    )
-    db.add(txn)
-    try:
-        await db.flush()
-    except IntegrityError:
-        # Same recovery the commit below already had, which the flush was
-        # missing: uq_wallet_transactions_idempotency_key can just as easily
-        # be violated here (two concurrent requests carrying the same key),
-        # and so can a foreign key (a reference id that no longer exists).
-        # Unhandled, either surfaced as a 500 on an operation that is
-        # perfectly recoverable.
-        await db.rollback()
-        existing = await _get_by_idempotency_key(db, idempotency_key=idempotency_key)
-        if existing is not None:
-            return existing
-        raise
-
-    wallet = await db.get(Wallet, wallet_id)
-    assert wallet is not None  # just updated above by this same wallet_id
-    await audit_service.record(
-        db, organization_id=organization_id, actor_user_id=actor_user_id,
-        action="wallet.debited_for_purchase", entity_type="wallet_transaction", entity_id=str(txn.id),
-        new_value={
-            "from_wallet_id": str(wallet_id), "amount_cents": amount_cents,
-            "reference_cj_order_id": str(reference_cj_order_id),
-        },
-    )
-    await notifications_service.notify_user(
-        db, organization_id=organization_id, user_id=wallet.user_id, type_="ORDER_CREDIT_APPLIED",
-        entity_type="wallet_transaction", entity_id=txn.id,
-        title=f"{amount_cents / 100:.2f} EUR di credito usati per un tuo ordine",
-        body=note,
-    )
-    try:
-        await db.commit()
-    except IntegrityError:
-        await db.rollback()
-        existing = await _get_by_idempotency_key(db, idempotency_key=idempotency_key)
-        if existing is not None:
-            return existing
-        raise
-    await db.refresh(txn)
-    return txn
-
-
-async def debit_wallet_for_shopify_purchase(
-    db: AsyncSession,
-    *,
-    organization_id: uuid.UUID,
-    wallet_id: uuid.UUID,
-    amount_cents: int,
-    reference_shopify_order_id: uuid.UUID,
-    actor_user_id: uuid.UUID,
-    note: str | None = None,
-    idempotency_key: str,
-) -> WalletTransaction:
-    """Same as debit_wallet_for_cj_purchase, for the Marketplace 3 (Shopify,
-    Session 68) orders -- see shopify_dropshipping/models.py."""
-    existing = await _get_by_idempotency_key(db, idempotency_key=idempotency_key)
-    if existing is not None:
-        return existing
-
-    result = await db.execute(
-        update(Wallet)
-        .where(Wallet.id == wallet_id, Wallet.balance_cents >= amount_cents)
-        .values(balance_cents=Wallet.balance_cents - amount_cents)
-    )
-    if result.rowcount == 0:
-        raise InsufficientBalanceError("Insufficient balance")
-
-    txn = WalletTransaction(
-        organization_id=organization_id,
-        from_wallet_id=wallet_id,
-        to_wallet_id=None,
-        amount_cents=amount_cents,
-        type="PURCHASE_DEBIT",
-        reference_shopify_order_id=reference_shopify_order_id,
-        note=note,
-        actor_user_id=actor_user_id,
-        idempotency_key=idempotency_key,
-    )
-    db.add(txn)
-    try:
-        await db.flush()
-    except IntegrityError:
-        # Same recovery the commit below already had, which the flush was
-        # missing: uq_wallet_transactions_idempotency_key can just as easily
-        # be violated here (two concurrent requests carrying the same key),
-        # and so can a foreign key (a reference id that no longer exists).
-        # Unhandled, either surfaced as a 500 on an operation that is
-        # perfectly recoverable.
-        await db.rollback()
-        existing = await _get_by_idempotency_key(db, idempotency_key=idempotency_key)
-        if existing is not None:
-            return existing
-        raise
-
-    wallet = await db.get(Wallet, wallet_id)
-    assert wallet is not None  # just updated above by this same wallet_id
-    await audit_service.record(
-        db, organization_id=organization_id, actor_user_id=actor_user_id,
-        action="wallet.debited_for_purchase", entity_type="wallet_transaction", entity_id=str(txn.id),
-        new_value={
-            "from_wallet_id": str(wallet_id), "amount_cents": amount_cents,
-            "reference_shopify_order_id": str(reference_shopify_order_id),
-        },
-    )
-    await notifications_service.notify_user(
-        db, organization_id=organization_id, user_id=wallet.user_id, type_="ORDER_CREDIT_APPLIED",
-        entity_type="wallet_transaction", entity_id=txn.id,
-        title=f"{amount_cents / 100:.2f} EUR di credito usati per un tuo ordine",
-        body=note,
-    )
-    try:
-        await db.commit()
-    except IntegrityError:
-        await db.rollback()
-        existing = await _get_by_idempotency_key(db, idempotency_key=idempotency_key)
-        if existing is not None:
-            return existing
-        raise
-    await db.refresh(txn)
-    return txn
-
-
-async def debit_wallet_for_aliexpress_purchase(
-    db: AsyncSession,
-    *,
-    organization_id: uuid.UUID,
-    wallet_id: uuid.UUID,
-    amount_cents: int,
-    reference_aliexpress_order_id: uuid.UUID,
-    actor_user_id: uuid.UUID,
-    note: str | None = None,
-    idempotency_key: str,
-) -> WalletTransaction:
-    """Same as debit_wallet_for_shopify_purchase, for the Marketplace 3
-    (AliExpress DS API, Session 71) orders -- see
-    aliexpress_dropshipping/models.py."""
-    existing = await _get_by_idempotency_key(db, idempotency_key=idempotency_key)
-    if existing is not None:
-        return existing
-
-    result = await db.execute(
-        update(Wallet)
-        .where(Wallet.id == wallet_id, Wallet.balance_cents >= amount_cents)
-        .values(balance_cents=Wallet.balance_cents - amount_cents)
-    )
-    if result.rowcount == 0:
-        raise InsufficientBalanceError("Insufficient balance")
-
-    txn = WalletTransaction(
-        organization_id=organization_id,
-        from_wallet_id=wallet_id,
-        to_wallet_id=None,
-        amount_cents=amount_cents,
-        type="PURCHASE_DEBIT",
-        reference_aliexpress_order_id=reference_aliexpress_order_id,
-        note=note,
-        actor_user_id=actor_user_id,
-        idempotency_key=idempotency_key,
-    )
-    db.add(txn)
-    try:
-        await db.flush()
-    except IntegrityError:
-        # Same recovery as the commit below: two concurrent requests
-        # carrying the same idempotency key violate the unique index right
-        # here just as easily, and so does a reference id that no longer
-        # exists. Unhandled, both surface as a 500 on an operation that is
-        # perfectly recoverable.
-        await db.rollback()
-        existing = await _get_by_idempotency_key(db, idempotency_key=idempotency_key)
-        if existing is not None:
-            return existing
-        raise
-
-    wallet = await db.get(Wallet, wallet_id)
-    assert wallet is not None  # just updated above by this same wallet_id
-    await audit_service.record(
-        db, organization_id=organization_id, actor_user_id=actor_user_id,
-        action="wallet.debited_for_purchase", entity_type="wallet_transaction", entity_id=str(txn.id),
-        new_value={
-            "from_wallet_id": str(wallet_id), "amount_cents": amount_cents,
-            "reference_aliexpress_order_id": str(reference_aliexpress_order_id),
-        },
-    )
-    await notifications_service.notify_user(
-        db, organization_id=organization_id, user_id=wallet.user_id, type_="ORDER_CREDIT_APPLIED",
-        entity_type="wallet_transaction", entity_id=txn.id,
-        title=f"{amount_cents / 100:.2f} EUR di credito usati per un tuo ordine",
-        body=note,
-    )
-    try:
-        await db.commit()
-    except IntegrityError:
-        await db.rollback()
-        existing = await _get_by_idempotency_key(db, idempotency_key=idempotency_key)
-        if existing is not None:
-            return existing
-        raise
-    await db.refresh(txn)
-    return txn
-
-
 async def debit_wallet_for_jav_market_purchase(
     db: AsyncSession,
     *,
@@ -844,166 +512,53 @@ async def debit_wallet_for_jav_market_purchase(
     note: str | None = None,
     idempotency_key: str,
 ) -> WalletTransaction:
-    """Come le gemelle degli altri negozi, per gli ordini di «Fai la Spesa
-    con Jav» (Marketplace 4, Session 79) -- vedi jav_market/models.py."""
-    existing = await _get_by_idempotency_key(db, idempotency_key=idempotency_key)
-    if existing is not None:
-        return existing
-
-    result = await db.execute(
-        update(Wallet)
-        .where(Wallet.id == wallet_id, Wallet.balance_cents >= amount_cents)
-        .values(balance_cents=Wallet.balance_cents - amount_cents)
+    """Come debit_wallet_for_purchase, per gli ordini dello Shop («Fai la
+    Spesa con Jav») -- vedi jav_market/models.py."""
+    return await _debit_for_reference(
+        db, organization_id=organization_id, wallet_id=wallet_id, amount_cents=amount_cents,
+        actor_user_id=actor_user_id, note=note, idempotency_key=idempotency_key,
+        reference={"reference_jav_market_order_id": reference_jav_market_order_id},
+        notification_title=f"{amount_cents / 100:.2f} EUR di credito usati per un tuo ordine",
     )
-    if result.rowcount == 0:
-        raise InsufficientBalanceError("Insufficient balance")
-
-    txn = WalletTransaction(
-        organization_id=organization_id,
-        from_wallet_id=wallet_id,
-        to_wallet_id=None,
-        amount_cents=amount_cents,
-        type="PURCHASE_DEBIT",
-        reference_jav_market_order_id=reference_jav_market_order_id,
-        note=note,
-        actor_user_id=actor_user_id,
-        idempotency_key=idempotency_key,
-    )
-    db.add(txn)
-    try:
-        await db.flush()
-    except IntegrityError:
-        # Same recovery as the commit below: two concurrent requests
-        # carrying the same idempotency key violate the unique index right
-        # here just as easily, and so does a reference id that no longer
-        # exists. Unhandled, both surface as a 500 on an operation that is
-        # perfectly recoverable.
-        await db.rollback()
-        existing = await _get_by_idempotency_key(db, idempotency_key=idempotency_key)
-        if existing is not None:
-            return existing
-        raise
-
-    wallet = await db.get(Wallet, wallet_id)
-    assert wallet is not None  # just updated above by this same wallet_id
-    await audit_service.record(
-        db, organization_id=organization_id, actor_user_id=actor_user_id,
-        action="wallet.debited_for_purchase", entity_type="wallet_transaction", entity_id=str(txn.id),
-        new_value={
-            "from_wallet_id": str(wallet_id), "amount_cents": amount_cents,
-            "reference_jav_market_order_id": str(reference_jav_market_order_id),
-        },
-    )
-    await notifications_service.notify_user(
-        db, organization_id=organization_id, user_id=wallet.user_id, type_="ORDER_CREDIT_APPLIED",
-        entity_type="wallet_transaction", entity_id=txn.id,
-        title=f"{amount_cents / 100:.2f} EUR di credito usati per un tuo ordine",
-        body=note,
-    )
-    try:
-        await db.commit()
-    except IntegrityError:
-        await db.rollback()
-        existing = await _get_by_idempotency_key(db, idempotency_key=idempotency_key)
-        if existing is not None:
-            return existing
-        raise
-    await db.refresh(txn)
-    return txn
 
 
-async def debit_wallet_for_kappa_market_purchase(
+async def debit_wallet_for_club_fees(
     db: AsyncSession,
     *,
     organization_id: uuid.UUID,
     wallet_id: uuid.UUID,
     amount_cents: int,
-    reference_kappa_market_order_id: uuid.UUID,
+    reference_club_proof_id: uuid.UUID,
     actor_user_id: uuid.UUID,
     note: str | None = None,
     idempotency_key: str,
 ) -> WalletTransaction:
-    """Come le gemelle degli altri negozi, per gli ordini di «Market Kappa»
-    (Marketplace 5, Session 87) -- vedi kappa_market/models.py."""
-    existing = await _get_by_idempotency_key(db, idempotency_key=idempotency_key)
-    if existing is not None:
-        return existing
-
-    result = await db.execute(
-        update(Wallet)
-        .where(Wallet.id == wallet_id, Wallet.balance_cents >= amount_cents)
-        .values(balance_cents=Wallet.balance_cents - amount_cents)
+    """Il credito usato per pagare quote del club (club/service.py::
+    upload_payment_proof). Se la segreteria rifiuta la prova, il credito
+    torna con reverse_transaction."""
+    return await _debit_for_reference(
+        db, organization_id=organization_id, wallet_id=wallet_id, amount_cents=amount_cents,
+        actor_user_id=actor_user_id, note=note, idempotency_key=idempotency_key,
+        reference={"reference_club_proof_id": reference_club_proof_id},
+        notification_title=f"{amount_cents / 100:.2f} EUR di credito usati per le quote del club",
     )
-    if result.rowcount == 0:
-        raise InsufficientBalanceError("Insufficient balance")
-
-    txn = WalletTransaction(
-        organization_id=organization_id,
-        from_wallet_id=wallet_id,
-        to_wallet_id=None,
-        amount_cents=amount_cents,
-        type="PURCHASE_DEBIT",
-        reference_kappa_market_order_id=reference_kappa_market_order_id,
-        note=note,
-        actor_user_id=actor_user_id,
-        idempotency_key=idempotency_key,
-    )
-    db.add(txn)
-    try:
-        await db.flush()
-    except IntegrityError:
-        # Same recovery as the commit below: two concurrent requests
-        # carrying the same idempotency key violate the unique index right
-        # here just as easily, and so does a reference id that no longer
-        # exists. Unhandled, both surface as a 500 on an operation that is
-        # perfectly recoverable.
-        await db.rollback()
-        existing = await _get_by_idempotency_key(db, idempotency_key=idempotency_key)
-        if existing is not None:
-            return existing
-        raise
-
-    wallet = await db.get(Wallet, wallet_id)
-    assert wallet is not None  # just updated above by this same wallet_id
-    await audit_service.record(
-        db, organization_id=organization_id, actor_user_id=actor_user_id,
-        action="wallet.debited_for_purchase", entity_type="wallet_transaction", entity_id=str(txn.id),
-        new_value={
-            "from_wallet_id": str(wallet_id), "amount_cents": amount_cents,
-            "reference_kappa_market_order_id": str(reference_kappa_market_order_id),
-        },
-    )
-    await notifications_service.notify_user(
-        db, organization_id=organization_id, user_id=wallet.user_id, type_="ORDER_CREDIT_APPLIED",
-        entity_type="wallet_transaction", entity_id=txn.id,
-        title=f"{amount_cents / 100:.2f} EUR di credito usati per un tuo ordine",
-        body=note,
-    )
-    try:
-        await db.commit()
-    except IntegrityError:
-        await db.rollback()
-        existing = await _get_by_idempotency_key(db, idempotency_key=idempotency_key)
-        if existing is not None:
-            return existing
-        raise
-    await db.refresh(txn)
-    return txn
 
 
-async def debit_wallet_for_vaitto_market_purchase(
+async def _debit_for_reference(
     db: AsyncSession,
     *,
     organization_id: uuid.UUID,
     wallet_id: uuid.UUID,
     amount_cents: int,
-    reference_vaitto_market_order_id: uuid.UUID,
     actor_user_id: uuid.UUID,
-    note: str | None = None,
+    note: str | None,
     idempotency_key: str,
+    reference: dict,
+    notification_title: str,
 ) -> WalletTransaction:
-    """Come le gemelle degli altri negozi, per gli ordini di «Marketplace VAITTO»
-    (Marketplace 6, Session 88) -- vedi vaitto_market/models.py."""
+    """Un addebito PURCHASE_DEBIT legato a ciò che ha pagato (`reference`:
+    una colonna per tabella, vedi models.py). Stessa guardia atomica sul
+    saldo e stesso replay per chiave di idempotenza di debit_wallet_for_purchase."""
     existing = await _get_by_idempotency_key(db, idempotency_key=idempotency_key)
     if existing is not None:
         return existing
@@ -1022,10 +577,10 @@ async def debit_wallet_for_vaitto_market_purchase(
         to_wallet_id=None,
         amount_cents=amount_cents,
         type="PURCHASE_DEBIT",
-        reference_vaitto_market_order_id=reference_vaitto_market_order_id,
         note=note,
         actor_user_id=actor_user_id,
         idempotency_key=idempotency_key,
+        **reference,
     )
     db.add(txn)
     try:
@@ -1049,172 +604,12 @@ async def debit_wallet_for_vaitto_market_purchase(
         action="wallet.debited_for_purchase", entity_type="wallet_transaction", entity_id=str(txn.id),
         new_value={
             "from_wallet_id": str(wallet_id), "amount_cents": amount_cents,
-            "reference_vaitto_market_order_id": str(reference_vaitto_market_order_id),
+            **{k: str(v) for k, v in reference.items()},
         },
     )
     await notifications_service.notify_user(
         db, organization_id=organization_id, user_id=wallet.user_id, type_="ORDER_CREDIT_APPLIED",
-        entity_type="wallet_transaction", entity_id=txn.id,
-        title=f"{amount_cents / 100:.2f} EUR di credito usati per un tuo ordine",
-        body=note,
-    )
-    try:
-        await db.commit()
-    except IntegrityError:
-        await db.rollback()
-        existing = await _get_by_idempotency_key(db, idempotency_key=idempotency_key)
-        if existing is not None:
-            return existing
-        raise
-    await db.refresh(txn)
-    return txn
-
-
-async def debit_wallet_for_symphonya_market_purchase(
-    db: AsyncSession,
-    *,
-    organization_id: uuid.UUID,
-    wallet_id: uuid.UUID,
-    amount_cents: int,
-    reference_symphonya_market_order_id: uuid.UUID,
-    actor_user_id: uuid.UUID,
-    note: str | None = None,
-    idempotency_key: str,
-) -> WalletTransaction:
-    """Come le gemelle degli altri negozi, per gli ordini di «Marketplace SYMPHONYA»
-    (Marketplace 6, Session 88) -- vedi symphonya_market/models.py."""
-    existing = await _get_by_idempotency_key(db, idempotency_key=idempotency_key)
-    if existing is not None:
-        return existing
-
-    result = await db.execute(
-        update(Wallet)
-        .where(Wallet.id == wallet_id, Wallet.balance_cents >= amount_cents)
-        .values(balance_cents=Wallet.balance_cents - amount_cents)
-    )
-    if result.rowcount == 0:
-        raise InsufficientBalanceError("Insufficient balance")
-
-    txn = WalletTransaction(
-        organization_id=organization_id,
-        from_wallet_id=wallet_id,
-        to_wallet_id=None,
-        amount_cents=amount_cents,
-        type="PURCHASE_DEBIT",
-        reference_symphonya_market_order_id=reference_symphonya_market_order_id,
-        note=note,
-        actor_user_id=actor_user_id,
-        idempotency_key=idempotency_key,
-    )
-    db.add(txn)
-    try:
-        await db.flush()
-    except IntegrityError:
-        # Same recovery as the commit below: two concurrent requests
-        # carrying the same idempotency key violate the unique index right
-        # here just as easily, and so does a reference id that no longer
-        # exists. Unhandled, both surface as a 500 on an operation that is
-        # perfectly recoverable.
-        await db.rollback()
-        existing = await _get_by_idempotency_key(db, idempotency_key=idempotency_key)
-        if existing is not None:
-            return existing
-        raise
-
-    wallet = await db.get(Wallet, wallet_id)
-    assert wallet is not None  # just updated above by this same wallet_id
-    await audit_service.record(
-        db, organization_id=organization_id, actor_user_id=actor_user_id,
-        action="wallet.debited_for_purchase", entity_type="wallet_transaction", entity_id=str(txn.id),
-        new_value={
-            "from_wallet_id": str(wallet_id), "amount_cents": amount_cents,
-            "reference_symphonya_market_order_id": str(reference_symphonya_market_order_id),
-        },
-    )
-    await notifications_service.notify_user(
-        db, organization_id=organization_id, user_id=wallet.user_id, type_="ORDER_CREDIT_APPLIED",
-        entity_type="wallet_transaction", entity_id=txn.id,
-        title=f"{amount_cents / 100:.2f} EUR di credito usati per un tuo ordine",
-        body=note,
-    )
-    try:
-        await db.commit()
-    except IntegrityError:
-        await db.rollback()
-        existing = await _get_by_idempotency_key(db, idempotency_key=idempotency_key)
-        if existing is not None:
-            return existing
-        raise
-    await db.refresh(txn)
-    return txn
-
-
-async def debit_wallet_for_soleil_market_purchase(
-    db: AsyncSession,
-    *,
-    organization_id: uuid.UUID,
-    wallet_id: uuid.UUID,
-    amount_cents: int,
-    reference_soleil_market_order_id: uuid.UUID,
-    actor_user_id: uuid.UUID,
-    note: str | None = None,
-    idempotency_key: str,
-) -> WalletTransaction:
-    """Come le gemelle degli altri negozi, per gli ordini di «Marketplace SOLEIL»
-    («Market 7», Session 90) -- vedi soleil_market/models.py."""
-    existing = await _get_by_idempotency_key(db, idempotency_key=idempotency_key)
-    if existing is not None:
-        return existing
-
-    result = await db.execute(
-        update(Wallet)
-        .where(Wallet.id == wallet_id, Wallet.balance_cents >= amount_cents)
-        .values(balance_cents=Wallet.balance_cents - amount_cents)
-    )
-    if result.rowcount == 0:
-        raise InsufficientBalanceError("Insufficient balance")
-
-    txn = WalletTransaction(
-        organization_id=organization_id,
-        from_wallet_id=wallet_id,
-        to_wallet_id=None,
-        amount_cents=amount_cents,
-        type="PURCHASE_DEBIT",
-        reference_soleil_market_order_id=reference_soleil_market_order_id,
-        note=note,
-        actor_user_id=actor_user_id,
-        idempotency_key=idempotency_key,
-    )
-    db.add(txn)
-    try:
-        await db.flush()
-    except IntegrityError:
-        # Same recovery as the commit below: two concurrent requests
-        # carrying the same idempotency key violate the unique index right
-        # here just as easily, and so does a reference id that no longer
-        # exists. Unhandled, both surface as a 500 on an operation that is
-        # perfectly recoverable.
-        await db.rollback()
-        existing = await _get_by_idempotency_key(db, idempotency_key=idempotency_key)
-        if existing is not None:
-            return existing
-        raise
-
-    wallet = await db.get(Wallet, wallet_id)
-    assert wallet is not None  # just updated above by this same wallet_id
-    await audit_service.record(
-        db, organization_id=organization_id, actor_user_id=actor_user_id,
-        action="wallet.debited_for_purchase", entity_type="wallet_transaction", entity_id=str(txn.id),
-        new_value={
-            "from_wallet_id": str(wallet_id), "amount_cents": amount_cents,
-            "reference_soleil_market_order_id": str(reference_soleil_market_order_id),
-        },
-    )
-    await notifications_service.notify_user(
-        db, organization_id=organization_id, user_id=wallet.user_id, type_="ORDER_CREDIT_APPLIED",
-        entity_type="wallet_transaction", entity_id=txn.id,
-        title=f"{amount_cents / 100:.2f} EUR di credito usati per un tuo ordine",
-        body=note,
+        entity_type="wallet_transaction", entity_id=txn.id, title=notification_title, body=note,
     )
     try:
         await db.commit()
@@ -1400,12 +795,7 @@ def _to_transaction_dict(txn: WalletTransaction, wallets_by_id: dict[uuid.UUID, 
         "type": txn.type,
         "source": txn.source,
         "reference_contract_id": txn.reference_contract_id,
-        "reference_invoice_redemption_id": txn.reference_invoice_redemption_id,
         "reference_order_id": txn.reference_order_id,
-        "reference_imported_order_id": txn.reference_imported_order_id,
-        "reference_cj_order_id": txn.reference_cj_order_id,
-        "reference_shopify_order_id": txn.reference_shopify_order_id,
-        "reference_aliexpress_order_id": txn.reference_aliexpress_order_id,
         "reverses_transaction_id": txn.reverses_transaction_id,
         "note": txn.note,
         "actor_user_id": txn.actor_user_id,

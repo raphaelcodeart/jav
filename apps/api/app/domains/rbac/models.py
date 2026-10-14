@@ -18,6 +18,10 @@ SYSTEM_ROLES = [
     "PROMOTER",
     "CUSTOMER",
     "AUDITOR",
+    # Il club (docs/club-portal.md): corsi, presenze e cinture, nient'altro.
+    "INSTRUCTOR",
+    # La segreteria di un club: tutto il club, nient'altro della piattaforma.
+    "SECRETARY",
 ]
 
 # Granular permission codes. Kept as a flat list (not an enum) so new permissions can
@@ -36,15 +40,30 @@ PERMISSIONS = [
     "documents.upload", "documents.review",
     "documentation.manage",
     "wallet.manage",
-    "imported_products.manage",
+    "shop.manage",
+    "organization.manage",
+    "users.manage_lifecycle",
+    "wallet.credit",
+    # Il club (docs/club-portal.md). `club.family` è il genitore: vede e
+    # gestisce solo la propria famiglia, e lo verifica il servizio, non il
+    # permesso. `club.manage` è la segreteria, `club.instruct` gli istruttori.
+    "club.family", "club.manage", "club.instruct",
+    # Più club sulla stessa piattaforma: `clubs.manage` li crea e li modifica,
+    # `clubs.enter` lavora dentro un club qualsiasi scegliendolo (club/scope.py).
+    "clubs.manage", "clubs.enter",
 ]
+
+#: Permissions only a SUPER_ADMIN holds: deactivating/reactivating users and
+#: crediting a wallet by hand move accounts and money, and stay with the
+#: one role that answers for the whole platform.
+SUPER_ADMIN_ONLY_PERMISSIONS = {"users.manage_lifecycle", "wallet.credit"}
 
 # Default role -> permission grants for the demo/seed environment. Real deployments
 # should manage this via admin UI once settings.manage is exposed; this is the
 # bootstrap default, not a hardcoded ceiling.
 DEFAULT_ROLE_PERMISSIONS: dict[str, list[str]] = {
     "SUPER_ADMIN": PERMISSIONS,
-    "ORGANIZATION_ADMIN": PERMISSIONS,
+    "ORGANIZATION_ADMIN": [p for p in PERMISSIONS if p not in SUPER_ADMIN_ONLY_PERMISSIONS],
     "ADMIN": [
         "customers.read", "customers.create", "customers.update",
         "contracts.read", "contracts.create", "contracts.submit",
@@ -55,17 +74,17 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, list[str]] = {
         "reports.export", "reports.read", "audit.read", "settings.manage",
         "products.read", "products.manage", "tickets.respond", "tickets.delete",
         "documents.upload", "documents.review", "documentation.manage", "wallet.manage",
-        "imported_products.manage",
+        "shop.manage", "organization.manage", "club.manage", "club.instruct", "clubs.enter",
     ],
     "BACK_OFFICE_OPERATOR": [
         "customers.read", "customers.create", "customers.update",
         "contracts.read", "contracts.create", "contracts.submit", "contracts.review",
         "documents.download", "products.read", "tickets.respond",
-        "documents.upload", "documents.review",
+        "documents.upload", "documents.review", "club.manage",
     ],
     "ACCOUNTING_OPERATOR": [
         "contracts.read", "payments.manage", "commissions.read_branch",
-        "commission_adjustments.create", "reports.export", "reports.read",
+        "commission_adjustments.create", "reports.export", "reports.read", "club.manage",
     ],
     "SALES_MANAGER": [
         "customers.read", "contracts.read", "contracts.approve",
@@ -85,7 +104,7 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, list[str]] = {
         # Read-only preview of their own potential earnings -- never writes to
         # the ledger (see commissions/simulations/simulate.py), so safe to grant.
         "commissions.simulate", "products.read", "tickets.create",
-        # "Miei Clienti" CRM (Session 36): upload/view documents for a
+        # "Miei Clienti" CRM: upload/view documents for a
         # contract they're the producer of -- never any contract in the
         # org, enforced inside documents/router.py::
         # _assert_contract_document_access, not by this permission alone.
@@ -94,8 +113,13 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, list[str]] = {
     ],
     "CUSTOMER": [
         "contracts.read", "documents.download", "documents.upload", "products.read", "tickets.create",
+        "club.family",
     ],
     "AUDITOR": ["audit.read", "reports.export", "reports.read"],
+    "INSTRUCTOR": ["club.instruct", "tickets.create"],
+    # Il perimetro (solo il suo club) non lo dà il permesso ma users.club_id:
+    # vedi club/scope.py.
+    "SECRETARY": ["club.manage", "club.instruct", "tickets.create"],
 }
 
 

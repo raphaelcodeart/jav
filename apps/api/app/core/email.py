@@ -25,18 +25,31 @@ class EmailNotConfiguredError(Exception):
     pass
 
 
-def send_html_email(*, to: str, subject: str, html_body: str, text_body: str) -> None:
+def send_html_email(
+    *, to: str, subject: str, html_body: str, text_body: str,
+    from_address: str | None = None, reply_to: str | None = None, bcc: str | None = None,
+) -> None:
     """Same delivery mechanics as send_email(), but multipart/alternative: a
     plain-text fallback (required -- some clients/spam filters penalize
     HTML-only mail) alongside the real, branded HTML body built via
-    core/email_templates.py."""
+    core/email_templates.py.
+
+    `from_address`, `reply_to` e `bcc` servono alle email che non sono
+    notifiche del sistema ma lettere a terzi (l'ordine al fornitore, la
+    richiesta di trasporto al comune): partono da info@, la risposta torna a
+    chi le ha scritte e una copia resta nella casella che le manda. Il server
+    SMTP deve accettare `from_address` come mittente."""
     if not settings.smtp_host:
         raise EmailNotConfiguredError("SMTP is not configured (smtp_host is empty)")
 
     message = EmailMessage()
     message["Subject"] = subject
-    message["From"] = settings.smtp_from_address
+    message["From"] = from_address or settings.smtp_from_address
     message["To"] = to
+    if reply_to:
+        message["Reply-To"] = reply_to
+    if bcc:
+        message["Bcc"] = bcc
     message.set_content(text_body)
     message.add_alternative(html_body, subtype="html")
 
@@ -48,7 +61,10 @@ def send_html_email(*, to: str, subject: str, html_body: str, text_body: str) ->
         smtp.send_message(message)
 
 
-def send_html_email_best_effort(*, context: str, to: str, subject: str, html_body: str, text_body: str) -> bool:
+def send_html_email_best_effort(
+    *, context: str, to: str, subject: str, html_body: str, text_body: str,
+    from_address: str | None = None, reply_to: str | None = None, bcc: str | None = None,
+) -> bool:
     """For notification mail that is sent AFTER the work it announces is
     already committed -- an order marked paid, a wallet credited, a ticket
     opened, an account invited.
@@ -70,7 +86,10 @@ def send_html_email_best_effort(*, context: str, to: str, subject: str, html_bod
     Deliberately NOT used for password-reset links and OTP codes: there the
     email IS the deliverable, and failing loudly is the correct behaviour."""
     try:
-        send_html_email(to=to, subject=subject, html_body=html_body, text_body=text_body)
+        send_html_email(
+            to=to, subject=subject, html_body=html_body, text_body=text_body,
+            from_address=from_address, reply_to=reply_to, bcc=bcc,
+        )
         return True
     except EmailNotConfiguredError:
         logger.warning("%s: email to %s not sent (SMTP not configured)", context, to)

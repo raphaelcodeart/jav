@@ -1,200 +1,290 @@
 @import "tailwindcss";
 
-/* Manual theme toggle (not OS-preference-based): `light:` variant classes apply
-   only when <html data-theme="light">, set by ThemeProvider (lib/theme.tsx). */
-@custom-variant light (&:where([data-theme="light"], [data-theme="light"] *));
-
+/* Jav design tokens -- the ONE place the brand lives. Colors come from the
+   club logo (Judo Arte e Vida): red #E43F21, yellow #F9E40F, gray #6B696A,
+   black. Components use `brand-*` / `accent-*` / `ink-*`, never a raw hex,
+   so a rebrand is an edit to this block and nothing else. Status colors
+   (emerald = ok, amber = attention, rose = error, sky = info) stay Tailwind's
+   own: they mean the same thing in every brand. */
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-audiowide), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  --color-brand-50: #fff3f0;
+  --color-brand-100: #ffe3dc;
+  --color-brand-200: #ffc5b6;
+  --color-brand-300: #ff9b85;
+  --color-brand-400: #f6694e;
+  --color-brand-500: #e43f21;
+  --color-brand-600: #c8311a;
+  --color-brand-700: #a32715;
+  --color-brand-800: #852318;
+  --color-brand-900: #6d2219;
+  --color-brand-950: #3b0c07;
+
+  --color-accent-50: #fefce7;
+  --color-accent-100: #fef9c2;
+  --color-accent-200: #fdf18b;
+  --color-accent-300: #fbea4d;
+  --color-accent-400: #f9e40f;
+  --color-accent-500: #e3cc00;
+  --color-accent-600: #b49f00;
+  --color-accent-700: #857500;
+  --color-accent-800: #6b5d06;
+  --color-accent-900: #574c0b;
+  --color-accent-950: #312a02;
+
+  --color-ink-50: #f7f7f7;
+  --color-ink-100: #ededed;
+  --color-ink-200: #d9d8d8;
+  --color-ink-300: #bcbaba;
+  --color-ink-400: #969394;
+  --color-ink-500: #6b696a;
+  --color-ink-600: #565455;
+  --color-ink-700: #434142;
+  --color-ink-800: #2b2a2a;
+  --color-ink-900: #161515;
+  --color-ink-950: #0a0a0a;
+
+  --shadow-soft: 0 1px 2px rgb(17 17 17 / 0.04), 0 8px 24px -8px rgb(17 17 17 / 0.10);
+  --shadow-lift: 0 2px 4px rgb(17 17 17 / 0.04), 0 18px 40px -12px rgb(17 17 17 / 0.18);
+  --shadow-brand: 0 10px 30px -10px rgb(228 63 33 / 0.55);
+  --shadow-accent: 0 10px 30px -10px rgb(227 204 0 / 0.6);
+
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-shine: shine 2.8s ease-in-out infinite;
+  --animate-pop: pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+  --animate-wiggle: wiggle 0.6s ease-in-out;
+  --animate-pulse-ring: pulse-ring 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* I colori del club sulla sua pagina pubblica (/clubes/<slug>). Il tema lo
+   calcola l'API (apps/api/app/domains/club/brand.py) con il contrasto già
+   controllato, e la pagina lo mette in variabili CSS sul suo contenitore
+   (components/site/club-theme.tsx): `bg-club`, `text-club-ink`,
+   `bg-club-accent`... valgono lì dentro. Fuori, o senza tema, ricadono sui
+   colori di JudoArteVida. `inline` perché le classi leggano la variabile
+   del contenitore e non un valore fissato qui. */
+@theme inline {
+  --color-club: var(--club-primary, #e43f21);
+  --color-club-on: var(--club-on-primary, #ffffff);
+  --color-club-ink: var(--club-primary-text, #c8311a);
+  --color-club-2: var(--club-secondary, #f9e40f);
+  --color-club-accent: var(--club-accent, #f9e40f);
+  --color-club-on-accent: var(--club-on-accent, #0a0a0a);
+  --color-club-glow: var(--club-accent-on-dark, #fbea4d);
+  --color-club-cover-from: var(--club-cover-from, #c8311a);
+  --color-club-cover-to: var(--club-cover-to, #3b0c07);
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+@keyframes shine {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@keyframes pop {
+  0% { transform: scale(0.6); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes wiggle {
+  0%, 100% { transform: rotate(0); }
+  25% { transform: rotate(-12deg); }
+  50% { transform: rotate(10deg); }
+  75% { transform: rotate(-6deg); }
+}
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgb(228 63 33 / 0.45); }
+  80%, 100% { box-shadow: 0 0 0 10px rgb(228 63 33 / 0); }
 }
 
 :root {
-  --background: #090d16;
-  --foreground: #f8fafc;
-  --card-bg: rgba(17, 24, 39, 0.7);
-  --card-border: rgba(255, 255, 255, 0.08);
-  --input-bg: rgba(17, 24, 39, 0.6);
-  --input-border: rgba(255, 255, 255, 0.1);
-  --input-fg: #ffffff;
-  --scrollbar-track: rgba(9, 13, 22, 0.5);
-  --scrollbar-thumb: rgba(255, 255, 255, 0.1);
-  --grad-1: rgba(139, 92, 246, 0.07);
-  --grad-2: rgba(6, 182, 212, 0.07);
-  --primary: #8b5cf6;
-  --primary-hover: #7c3aed;
-  --primary-glow: rgba(139, 92, 246, 0.15);
-  --accent-cyan: #06b6d4;
-  --accent-cyan-glow: rgba(6, 182, 212, 0.15);
-  --accent-amber: #f59e0b;
-  --accent-emerald: #10b981;
-  --accent-rose: #f43f5e;
-}
-
-:root[data-theme="light"] {
-  --background: #f4f5f9;
-  --foreground: #0f172a;
-  --card-bg: rgba(255, 255, 255, 0.75);
-  --card-border: rgba(15, 23, 42, 0.08);
-  --input-bg: rgba(255, 255, 255, 0.9);
-  --input-border: rgba(15, 23, 42, 0.12);
-  --input-fg: #0f172a;
-  --scrollbar-track: rgba(226, 232, 240, 0.5);
-  --scrollbar-thumb: rgba(15, 23, 42, 0.12);
-  --grad-1: rgba(139, 92, 246, 0.08);
-  --grad-2: rgba(6, 182, 212, 0.08);
-  --primary-glow: rgba(139, 92, 246, 0.12);
-  --accent-cyan-glow: rgba(6, 182, 212, 0.12);
+  color-scheme: light;
+  --background: #ffffff;
+  --foreground: #161515;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
-  background-image:
-    radial-gradient(at 0% 0%, var(--grad-1) 0px, transparent 50%),
-    radial-gradient(at 100% 100%, var(--grad-2) 0px, transparent 50%);
-  background-attachment: fixed;
   overflow-x: hidden;
-  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-/* Glassmorphism utility classes -- theme-aware via CSS variables, so every
-   component already using these classes re-themes automatically. */
+/* The "dojo" backdrop: two soft brand blobs and a faint tatami grid, fixed
+   behind everything. Pure CSS, nothing to download, and it gives the white
+   pages depth without competing with the content. */
+.dojo-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(40rem 28rem at 105% -10%, rgb(249 228 15 / 0.16), transparent 60%),
+    radial-gradient(36rem 30rem at -10% 110%, rgb(228 63 33 / 0.10), transparent 60%),
+    #fff;
+}
+.dojo-backdrop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgb(17 17 17 / 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(17 17 17 / 0.035) 1px, transparent 1px);
+  background-size: 64px 128px, 128px 64px;
+  mask-image: radial-gradient(ellipse at 50% 0%, #000 0%, transparent 75%);
+}
+
+h1, h2, h3, .font-display {
+  font-family: var(--font-display);
+  letter-spacing: 0.01em;
+}
+
+/* Cards and inputs. The names are historical (they were dark glass); they
+   are kept because ~150 components use them, and what they render now is
+   the white, softly lifted card of the design system. */
 .glass-card {
-  background: var(--card-bg);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--card-border);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-  transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+  background: rgb(255 255 255 / 0.92);
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  border: 1px solid rgb(17 17 17 / 0.07);
+  box-shadow: var(--shadow-soft);
+  transition: box-shadow 0.25s ease, border-color 0.25s ease, transform 0.25s ease;
 }
-
-:root[data-theme="light"] .glass-card {
-  box-shadow: 0 8px 32px 0 rgba(15, 23, 42, 0.06);
-}
-
 .glass-card:hover {
-  border-color: rgba(255, 255, 255, 0.15);
-  box-shadow: 0 8px 32px 0 var(--primary-glow);
-}
-
-:root[data-theme="light"] .glass-card:hover {
-  border-color: rgba(15, 23, 42, 0.15);
-}
-
-.glass-card-cyan:hover {
-  box-shadow: 0 8px 32px 0 var(--accent-cyan-glow);
+  border-color: rgb(228 63 33 / 0.18);
+  box-shadow: var(--shadow-lift);
 }
 
 .glass-input {
-  background: var(--input-bg);
-  border: 1px solid var(--input-border);
-  color: var(--input-fg);
-  transition: all 0.2s ease-in-out;
+  background: #fff;
+  border: 1px solid rgb(17 17 17 / 0.12);
+  color: #161515;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
-
+.glass-input::placeholder {
+  color: #969394;
+}
 .glass-input:focus {
   outline: none;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px var(--primary-glow);
+  border-color: var(--color-brand-500);
+  box-shadow: 0 0 0 4px rgb(228 63 33 / 0.14);
 }
-
 .glass-input option {
-  background: var(--background);
-  color: var(--foreground);
+  background: #fff;
+  color: #161515;
 }
 
-/* Animations */
+/* Holographic sheen for "trading card" surfaces (athlete cards, badges). The
+   gradient follows the pointer through --shine-x / --shine-y, set by
+   components/ui/tilt-card.tsx. */
+.holo {
+  position: relative;
+  isolation: isolate;
+}
+.holo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  mix-blend-mode: soft-light;
+  opacity: var(--shine-opacity, 0);
+  background:
+    radial-gradient(circle at var(--shine-x, 50%) var(--shine-y, 50%), rgb(255 255 255 / 0.9), transparent 45%),
+    linear-gradient(115deg, transparent 20%, rgb(249 228 15 / 0.55) 38%, rgb(228 63 33 / 0.45) 50%, rgb(120 200 255 / 0.4) 62%, transparent 80%);
+  background-size: 100% 100%, 250% 250%;
+  background-position: center, var(--shine-x, 50%) var(--shine-y, 50%);
+  transition: opacity 0.3s ease;
+}
+
+.text-gradient-brand {
+  background: linear-gradient(100deg, var(--color-brand-600), var(--color-brand-500) 45%, var(--color-accent-500));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.shine-sweep {
+  background-image: linear-gradient(110deg, transparent 30%, rgb(255 255 255 / 0.55) 50%, transparent 70%);
+  background-size: 250% 100%;
+  animation: var(--animate-shine);
+}
+
+/* Entry animations used by existing components. Deliberately NOT `forwards`:
+   a frozen non-`none` transform turns the element into a containing block
+   for `position: fixed` descendants, and <main> is the ancestor of every
+   modal (an overlay sized to <main> instead of the viewport, seen for real
+   before). Without `forwards` the element returns to `transform: none`. */
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
 }
-
 @keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
 }
-
 @keyframes scaleUp {
-  from {
-    opacity: 0;
-    transform: scale(0.97);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
 }
-
 @keyframes shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
 }
+.animate-fade-in { animation: fadeIn 0.35s cubic-bezier(0.4, 0, 0.2, 1); }
+.animate-slide-up { animation: slideUp 0.45s cubic-bezier(0.22, 1, 0.36, 1); }
+.animate-scale-up { animation: scaleUp 0.35s cubic-bezier(0.22, 1, 0.36, 1); }
+.animate-shimmer { background-size: 200% 100%; animation: shimmer 2.5s ease-in-out infinite; }
 
-/* Deliberately NOT `forwards` on any of these three: `forwards` freezes the
-   keyframe's "to" state on the element FOREVER (not just visually -- the
-   computed `transform` stays e.g. `translateY(0)`/`scale(1)`, a non-`none`
-   value). Per the CSS spec, any non-`none` transform on an element makes it
-   a new containing block for `position: fixed` descendants. `.animate-slide-up`
-   is applied to <main> in app-shell.tsx, the ancestor of every single modal
-   in this app -- with `forwards`, EVERY modal's `fixed inset-0` overlay
-   silently stopped being viewport-fixed and instead sized itself to <main>'s
-   own (often much taller, scrolled) box, so the modal could render far
-   outside the visible viewport while its backdrop still visually darkened
-   the screen ("clicked edit, screen went dark, nothing opened" -- confirmed
-   live with a headless browser: the overlay's bounding rect was offset by
-   the sidebar/header size and 5000+px tall instead of matching the
-   viewport). Without `forwards`, the element reverts to its own cascaded
-   styles once the animation ends -- identical visually here (no transform,
-   opacity 1 is the natural rest state for all three), but no longer a
-   containing block. */
-.animate-fade-in {
-  animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgb(17 17 17 / 0.14); border-radius: 8px; border: 2px solid #fff; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-brand-500); }
+
+::selection { background: rgb(249 228 15 / 0.6); color: #161515; }
+
+:focus-visible {
+  outline: 3px solid rgb(228 63 33 / 0.55);
+  outline-offset: 2px;
 }
 
-.animate-slide-up {
-  animation: slideUp 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+/* Anyone who asked their OS for less motion gets none of it: no entry
+   animations, no floating, no sheen. The 3D hero, tilt and confetti check
+   the same preference in JS (lib/motion.ts). */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
-.animate-scale-up {
-  animation: scaleUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+/* --- Sito pubblico: effetti dell'header e del carosello video ----------- */
+@keyframes aurora {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1) rotate(0deg); }
+  33% { transform: translate3d(6%, -4%, 0) scale(1.15) rotate(8deg); }
+  66% { transform: translate3d(-5%, 5%, 0) scale(0.92) rotate(-6deg); }
 }
-
-.animate-shimmer {
-  background-size: 200% 100%;
-  animation: shimmer 2.5s ease-in-out infinite;
+@keyframes light-sweep {
+  0% { transform: translateX(-120%) skewX(-18deg); }
+  60%, 100% { transform: translateX(260%) skewX(-18deg); }
 }
-
-/* Scrollbar styles */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
 }
-
-::-webkit-scrollbar-track {
-  background: var(--scrollbar-track);
+@keyframes ring-pulse {
+  0% { transform: scale(0.6); opacity: 0.55; }
+  100% { transform: scale(1.6); opacity: 0; }
 }
-
-::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--primary);
-}
-
-/* Custom visual styles */
-.text-neon-purple {
-  text-shadow: 0 0 8px rgba(139, 92, 246, 0.5);
-}
-
-.text-neon-cyan {
-  text-shadow: 0 0 8px rgba(6, 182, 212, 0.5);
+.animate-aurora { animation: aurora 18s ease-in-out infinite; }
+.animate-light-sweep { animation: light-sweep 6s ease-in-out infinite; }
+.animate-marquee { animation: marquee 40s linear infinite; }
+.animate-ring-pulse { animation: ring-pulse 4s ease-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .animate-aurora, .animate-light-sweep, .animate-marquee, .animate-ring-pulse { animation: none; }
 }

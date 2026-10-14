@@ -1,13 +1,12 @@
 "use client";
 
-/** I pezzi che ogni checkout dei Marketplace ripete: il campo etichettato, il
+/** I pezzi che ogni checkout dello Shop ripete: il campo etichettato, il
  *  passo numerato, la formattazione del denaro e lo sconto bonifico.
  *
  *  Solo presentazione e aritmetica pura, niente stato e niente chiamate: è il
  *  motivo per cui stanno qui e non dentro una delle finestre. Le finestre --
- *  prodotto singolo e carrello, oggi AliExpress e domani CJ e Shopify --
- *  restano separate finché la prova sul campo non dice che si somigliano
- *  davvero abbastanza da fonderle.
+ *  prodotto singolo e carrello -- restano separate finché la prova sul campo
+ *  non dice che si somigliano davvero abbastanza da fonderle.
  */
 
 export type DeliveryAddress = {
@@ -20,7 +19,7 @@ export type DeliveryAddress = {
   postal_code: string;
 };
 
-export const inputClass = "w-full rounded-lg glass-input px-3 py-2 text-sm focus:border-orange-500";
+export const inputClass = "w-full rounded-lg glass-input px-3 py-2 text-sm focus:border-brand-500";
 
 export function euro(cents: number): string {
   return (cents / 100).toLocaleString("it-IT", { style: "currency", currency: "EUR" });
@@ -57,7 +56,7 @@ export function Field({
 }: { label: string; children: React.ReactNode; className?: string }) {
   return (
     <label className={`block ${className}`}>
-      <span className="block text-[10px] font-semibold text-slate-400 light:text-slate-500 uppercase tracking-wide mb-1">
+      <span className="block font-semibold text-slate-500 uppercase tracking-wide mb-1">
         {label}
       </span>
       {children}
@@ -69,16 +68,16 @@ export function Section({
   n, title, done, children,
 }: { n: number; title: string; done?: boolean; children: React.ReactNode }) {
   return (
-    <div className="p-4 rounded-xl border border-white/10 light:border-slate-200 space-y-3">
+    <div className="p-4 rounded-xl border border-slate-200 space-y-3">
       <div className="flex items-center gap-2.5">
         <span
           className={`flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold shrink-0 text-white ${
-            done ? "bg-emerald-500" : "bg-orange-600"
+            done ? "bg-emerald-500" : "bg-brand-600"
           }`}
         >
           {done ? "✓" : n}
         </span>
-        <p className="text-sm font-semibold text-white light:text-slate-900">{title}</p>
+        <p className="text-sm font-semibold text-slate-900">{title}</p>
       </div>
       {children}
     </div>

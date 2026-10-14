@@ -27,10 +27,10 @@ class AgentProfile(UUIDPKMixin, TimestampMixin, Base):
     first_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     last_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     promoter_code: Mapped[str] = mapped_column(String(32))
-    # ACTIVE / SUSPENDED / TERMINATED / PENDING_APPROVAL (added Session 17 --
-    # both the admin's "+ Nuovo Promoter" and a promoter's own "recruit" now
-    # only ever SUGGEST a new collaborator; a distinct network.approve-gated
-    # action (network/router.py) is what actually activates them. A
+    # ACTIVE / SUSPENDED / TERMINATED / PENDING_APPROVAL (both the admin's
+    # "+ Nuovo Promoter" and a promoter's own "recruit" only ever SUGGEST a
+    # new collaborator; a distinct network.approve-gated action
+    # (network/router.py) is what actually activates them. A
     # PENDING_APPROVAL agent already exists in the tree (visible as a
     # suggestion) but contracts/service.py::create_contract() already
     # rejects any non-ACTIVE producer, so they simply can't be attributed a

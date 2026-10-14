@@ -51,7 +51,7 @@ async def unfreeze_user(
     return UserRead.model_validate(user)
 
 
-# --- Sblocco dell'account (Session 88): stessa cerchia ristretta di
+# --- Sblocco dell'account: stessa cerchia ristretta di
 # congela/elimina, perché segna come fatte cose che di solito fa il cliente.
 
 

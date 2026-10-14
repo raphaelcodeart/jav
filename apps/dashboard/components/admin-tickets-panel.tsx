@@ -30,7 +30,7 @@ const OPENER_LABELS: Record<string, string> = {
 function statusColor(status: string): string {
   switch (status) {
     case "OPEN":
-      return "bg-amber-500/10 text-amber-400 border-amber-500/20";
+      return "bg-amber-500/10 text-amber-700 border-amber-500/20";
     case "IN_PROGRESS":
       return "bg-sky-500/10 text-sky-400 border-sky-500/20";
     case "RESOLVED":
@@ -165,19 +165,19 @@ export function AdminTicketsPanel() {
   }
 
   const deleteConfirmModal = deletingTicket && (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 light:bg-slate-900/40 backdrop-blur-sm animate-fade-in">
-      <div className="w-full max-w-md glass-card rounded-2xl p-6 border-white/10 light:border-slate-300 bg-slate-950 light:bg-white animate-scale-up">
-        <h3 className="text-lg font-bold text-white light:text-slate-900 mb-2">Elimina ticket</h3>
-        <p className="text-xs text-slate-400 light:text-slate-500 mb-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+      <div className="w-full max-w-md glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up">
+        <h3 className="text-lg font-bold text-slate-900 mb-2">Elimina ticket</h3>
+        <p className="text-xs text-slate-500 mb-4">
           Stai per eliminare definitivamente il ticket{" "}
-          <span className="font-semibold text-slate-300 light:text-slate-700">&quot;{deletingTicket.subject}&quot;</span> e
+          <span className="font-semibold text-slate-700">&quot;{deletingTicket.subject}&quot;</span> e
           tutti i suoi messaggi. L&apos;operazione non può essere annullata.
         </p>
         {deleteError && <p className="text-xs text-rose-400 mb-3">{deleteError}</p>}
         <div className="flex justify-end gap-3">
           <button
             onClick={() => { setDeletingTicket(null); setDeleteError(null); }}
-            className="px-4 py-2 rounded-xl bg-white/5 light:bg-slate-900/5 hover:bg-white/10 text-xs font-semibold text-slate-300 light:text-slate-600 border border-white/5 light:border-slate-200 transition cursor-pointer"
+            className="px-4 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 text-xs font-semibold text-slate-600 border border-slate-200 transition cursor-pointer"
           >
             Annulla
           </button>
@@ -198,15 +198,15 @@ export function AdminTicketsPanel() {
       <div className="space-y-4">
         <button
           onClick={() => setSelectedId(null)}
-          className="text-xs text-slate-400 hover:text-white light:hover:text-slate-900 transition cursor-pointer flex items-center gap-1"
+          className="text-xs text-slate-400 hover:text-slate-900 transition cursor-pointer flex items-center gap-1"
         >
           ← Torna a tutti i ticket
         </button>
 
-        <div className="glass-card rounded-2xl p-6 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70">
+        <div className="glass-card rounded-2xl p-6 border-slate-200 bg-white/70">
           <div className="flex items-start justify-between gap-4 mb-4">
             <div>
-              <h3 className="text-lg font-semibold text-white light:text-slate-900">{detail.subject}</h3>
+              <h3 className="text-lg font-semibold text-slate-900">{detail.subject}</h3>
               <p className="text-xs text-slate-500 mt-1">
                 {OPENER_LABELS[detail.opened_by_role] ?? detail.opened_by_role} · {detail.opened_by_name ?? "—"} ·{" "}
                 {CATEGORY_LABELS[detail.category] ?? detail.category}
@@ -217,7 +217,7 @@ export function AdminTicketsPanel() {
                 value={detail.status}
                 onChange={(e) => handleStatusChange(e.target.value)}
                 disabled={statusLoading}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold border bg-slate-900 light:bg-white cursor-pointer ${statusColor(detail.status)}`}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold border bg-white cursor-pointer ${statusColor(detail.status)}`}
               >
                 {Object.entries(STATUS_LABELS).map(([code, label]) => (
                   <option key={code} value={code}>{label}</option>
@@ -228,7 +228,7 @@ export function AdminTicketsPanel() {
                 onClick={() => { if (detail.status === "RESOLVED") setDeletingTicket(detail); }}
                 disabled={detail.status !== "RESOLVED"}
                 title={detail.status === "RESOLVED" ? "Elimina ticket" : "Solo i ticket risolti possono essere eliminati"}
-                className="p-2 rounded-xl border border-white/10 light:border-slate-300 text-slate-400 hover:text-rose-400 hover:border-rose-500/30 hover:bg-rose-500/10 transition cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-slate-400 disabled:hover:border-white/10 disabled:hover:bg-transparent"
+                className="p-2 rounded-xl border border-slate-300 text-slate-400 hover:text-rose-400 hover:border-rose-500/30 hover:bg-rose-500/10 transition cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-slate-400 disabled:hover:border-slate-300 disabled:hover:bg-transparent"
               >
                 <TrashIcon className="w-4 h-4" />
               </button>
@@ -243,8 +243,8 @@ export function AdminTicketsPanel() {
                   <div
                     className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm ${
                       isStaff
-                        ? "bg-orange-600/10 border border-orange-500/20 text-slate-200 light:text-slate-700"
-                        : "bg-white/5 light:bg-slate-900/5 border border-white/5 light:border-slate-200 text-slate-200 light:text-slate-700"
+                        ? "bg-brand-600/10 border border-brand-500/20 text-slate-700"
+                        : " bg-slate-900/5 border border-slate-200 text-slate-700"
                     }`}
                   >
                     <div className="flex items-center gap-2 mb-1">
@@ -266,12 +266,12 @@ export function AdminTicketsPanel() {
               value={reply}
               onChange={(e) => setReply(e.target.value)}
               placeholder="Rispondi..."
-              className="flex-1 rounded-xl glass-input px-3 py-2.5 text-sm focus:border-orange-500"
+              className="flex-1 rounded-xl glass-input px-3 py-2.5 text-sm focus:border-brand-500"
             />
             <button
               type="submit"
               disabled={replyLoading}
-              className="px-4 py-2 rounded-xl text-xs font-semibold bg-orange-600 hover:bg-orange-500 text-white transition cursor-pointer disabled:opacity-50"
+              className="px-4 py-2 rounded-xl text-xs font-semibold bg-brand-600 hover:bg-brand-500 text-white transition cursor-pointer disabled:opacity-50"
             >
               {replyLoading ? "Invio..." : "Rispondi"}
             </button>
@@ -287,7 +287,7 @@ export function AdminTicketsPanel() {
     <div className="space-y-6">
       <div className="flex flex-col gap-3">
         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-          <p className="text-sm text-slate-400 light:text-slate-500 flex-1">
+          <p className="text-sm text-slate-500 flex-1">
             Ticket aperti da clienti e promoter. {openCount} in attesa di risposta.
           </p>
           <input
@@ -295,14 +295,14 @@ export function AdminTicketsPanel() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Cerca per oggetto o nome..."
-            className="rounded-xl glass-input px-3 py-2 text-xs bg-slate-900 light:bg-white focus:border-orange-500 w-full sm:w-64"
+            className="rounded-xl glass-input px-3 py-2 text-xs bg-white focus:border-brand-500 w-full sm:w-64"
           />
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <select
             value={openerFilter}
             onChange={(e) => setOpenerFilter(e.target.value)}
-            className="rounded-xl glass-input px-3 py-2 text-xs bg-slate-900 light:bg-white focus:border-orange-500"
+            className="rounded-xl glass-input px-3 py-2 text-xs bg-white focus:border-brand-500"
           >
             <option value="ALL">Cliente e Promoter</option>
             <option value="CUSTOMER">Solo Clienti</option>
@@ -311,7 +311,7 @@ export function AdminTicketsPanel() {
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="rounded-xl glass-input px-3 py-2 text-xs bg-slate-900 light:bg-white focus:border-orange-500"
+            className="rounded-xl glass-input px-3 py-2 text-xs bg-white focus:border-brand-500"
           >
             <option value="ALL">Tutte le categorie</option>
             {Object.entries(CATEGORY_LABELS).map(([code, label]) => (
@@ -321,7 +321,7 @@ export function AdminTicketsPanel() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="rounded-xl glass-input px-3 py-2 text-xs bg-slate-900 light:bg-white focus:border-orange-500"
+            className="rounded-xl glass-input px-3 py-2 text-xs bg-white focus:border-brand-500"
           >
             <option value="ALL">Tutti gli stati</option>
             {Object.entries(STATUS_LABELS).map(([code, label]) => (
@@ -337,24 +337,24 @@ export function AdminTicketsPanel() {
         {tickets === undefined ? (
           <p className="text-sm text-slate-500 text-center py-8">Caricamento...</p>
         ) : filteredTickets.length === 0 ? (
-          <div className="glass-card rounded-2xl p-12 text-center border-white/5 light:border-slate-200">
+          <div className="glass-card rounded-2xl p-12 text-center border-slate-200">
             <p className="text-sm text-slate-500">Nessun ticket corrisponde ai filtri impostati.</p>
           </div>
         ) : (
           pagination.pageItems.map((t) => (
             <div
               key={t.id}
-              className="glass-card rounded-2xl p-4 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70 hover:bg-white/5 transition flex items-center justify-between gap-4"
+              className="glass-card rounded-2xl p-4 border-slate-200 bg-white/70 hover:bg-slate-100 transition flex items-center justify-between gap-4"
             >
               <button
                 onClick={() => setSelectedId(t.id)}
                 className="min-w-0 flex-1 text-left cursor-pointer"
               >
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-orange-400 shrink-0">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-brand-600 shrink-0">
                     {OPENER_LABELS[t.opened_by_role] ?? t.opened_by_role}
                   </span>
-                  <p className="text-sm font-semibold text-white light:text-slate-900 truncate">{t.subject}</p>
+                  <p className="text-sm font-semibold text-slate-900 truncate">{t.subject}</p>
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border shrink-0 ${statusColor(t.status)}`}>
                     {STATUS_LABELS[t.status] ?? t.status}
                   </span>

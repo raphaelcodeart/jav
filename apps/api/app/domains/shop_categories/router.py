@@ -52,7 +52,7 @@ async def list_shop_categories(
     return [
         ShopCategoryRead(
             id=category.id, shop=category.shop, name=category.name, position=category.position,
-            active=category.active, product_count=count,
+            active=category.active, producer_id=category.producer_id, product_count=count,
         )
         for category, count in rows
     ]
@@ -103,13 +103,14 @@ async def create_shop_category(
     try:
         category = await service.create_category(
             db, organization_id=current_user.organization_id, shop=payload.shop, name=payload.name,
-            position=payload.position, actor_user_id=current_user.user_id,
+            position=payload.position, producer_id=payload.producer_id,
+            actor_user_id=current_user.user_id,
         )
     except service.ShopCategoryError as exc:
         raise _http(exc) from exc
     return ShopCategoryRead(
         id=category.id, shop=category.shop, name=category.name, position=category.position,
-        active=category.active, product_count=0,
+        active=category.active, producer_id=category.producer_id, product_count=0,
     )
 
 
@@ -124,13 +125,17 @@ async def update_shop_category(
         category = await service.update_category(
             db, organization_id=current_user.organization_id, category_id=category_id,
             name=payload.name, position=payload.position, active=payload.active,
+            # Mandato a null toglie il fornitore; non mandato lo lascia com'è.
+            producer_id=(
+                payload.producer_id if "producer_id" in payload.model_fields_set else service.UNCHANGED
+            ),
             actor_user_id=current_user.user_id,
         )
     except service.ShopCategoryError as exc:
         raise _http(exc) from exc
     return ShopCategoryRead(
         id=category.id, shop=category.shop, name=category.name, position=category.position,
-        active=category.active,
+        active=category.active, producer_id=category.producer_id,
         # Nothing about the products changed, but the screen re-renders the
         # chip from this answer and the count has to still be there.
         product_count=await service.product_count(db, category_id=category.id),

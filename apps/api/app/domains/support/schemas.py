@@ -54,7 +54,7 @@ class TicketCreate(BaseModel):
 
 
 class AccountClosureRequest(BaseModel):
-    """«Richiedi chiusura account» (Session 89): il motivo è facoltativo."""
+    """«Richiedi chiusura account»: il motivo è facoltativo."""
 
     reason: str | None = Field(default=None, max_length=1000)
 

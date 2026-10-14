@@ -37,7 +37,7 @@ All real and in active use (not skeletons -- verified against a live server, see
   then one per week to 5 weeks, then one per month to 6 months** (~17 copies × ~20 MB);
   plus a copy of `.env` in `./backups/env/` (root-only, saved only when it changes).
   A dump smaller than 100 KB counts as a failure. Any failure notifies the staff in the
-  app (`scripts/notify-staff.sh`). Session 89, user's choice: only the essentials, on
+  app (`scripts/notify-staff.sh`). By choice, only the essentials, on
   the server — **not** the MinIO uploads and **no** off-server copy (a lost disk takes
   the backups with it). See `server-migration-guide.md §4.8` for the separate
   `mc mirror` procedure for the uploads.
@@ -63,29 +63,21 @@ All real and in active use (not skeletons -- verified against a live server, see
 `development` (this repo's default), `staging`, `production` — see `network-model.md`
 for the topology differences. Production additionally requires: real S3-compatible
 storage credentials, SMTP credentials (or leave unset and every email falls back to
-being logged instead of delivered -- functional, just not delivered), TLS certificates
-(Let's Encrypt via certbot, wired at the nginx layer, see
-`server-migration-guide.md §4.6`), and real Stripe keys entered from the admin
-dashboard if card payments are wanted (not an env var -- see below).
+being logged instead of delivered -- functional, just not delivered), and Caddy on the
+host for HTTPS (see `server-migration-guide.md §4.6`).
 
-**Payments are real, not a mock**: Stripe (card) and bank transfer are both fully
-implemented for product orders and the partner-invoice cashback redemption fee,
-self-checkout included -- see `business-rules.md` and
-`cashback-partner-invoices-plan.md`. There is no `MockPaymentProvider` in this
-codebase; that term only appears in early planning documents describing a design
-since superseded by the real Stripe integration. Card payments simply do nothing
-(the button never renders) until a `SUPER_ADMIN` pastes real Stripe keys into
-Impostazioni Azienda → Pagamenti; bank transfer needs only an IBAN in the same
-settings screen.
+**Payments**: bank transfer (an IBAN in Impostazioni organizzazione is all it needs;
+an admin confirms each transfer) and JavCash credit. Club fees are paid by the parent
+uploading a proof, which marks them paid at once (see `club-portal.md`). There is no
+card payment provider.
 
 ## What is NOT yet production-ready (be explicit, don't overclaim)
 CI/CD pipeline (no automated lint/test/build-on-push -- run them by hand, see
 `README.md`), off-server backup copies and a backup of the MinIO uploads (today's
-backups stay on the same disk as the database -- user's choice, Session 89), monitoring stack
+backups stay on the same disk as the database), monitoring stack
 (Prometheus/Grafana/Loki), MFA enforcement, antivirus scanning of uploaded
-documents (pluggable interface exists, no scanner wired in), OCR on cashback-
-redemption invoices, and the AI/pgvector layer (`docs/ai-architecture.md` is a
+documents (pluggable interface exists, no scanner wired in), and the AI/pgvector layer (`docs/ai-architecture.md` is a
 design document only, no code). See `implementation-progress.md` and
-`server-migration-guide.md §9` for the full, currently-accurate list -- payments,
-notifications (in-app and email), the internal wallet/cashback system, and contract
-document uploads are all real and live, not on this list.
+`server-migration-guide.md §9` for the full, currently-accurate list -- bank-transfer
+payments, notifications (in-app and email), the internal wallet/cashback system, the
+club portal backend and document uploads are real, not on this list.

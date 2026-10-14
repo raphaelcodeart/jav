@@ -11,6 +11,7 @@ from app.domains.auth.schemas import (
     ForgotPasswordRequest,
     LoginRequest,
     MeRead,
+    RegisterFamilyRequest,
     RegisterRequest,
     ResetPasswordRequest,
     SpendPinDisableRequest,
@@ -19,6 +20,7 @@ from app.domains.auth.schemas import (
     TokenResponse,
     VerifyEmailRequest,
 )
+from app.domains.organizations import service as organizations_service
 from app.domains.users import service as users_service
 from app.domains.users.models import User
 from app.domains.users.schemas import ProfileRead, ProfileUpdate
@@ -26,6 +28,13 @@ from app.domains.users.schemas import ProfileRead, ProfileUpdate
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 REFRESH_COOKIE_NAME = "jav_refresh_token"
+
+
+async def _organization_id(db: AsyncSession, raw: str | None) -> uuid.UUID:
+    try:
+        return await organizations_service.resolve_organization_id(db, raw)
+    except organizations_service.OrganizationNotResolvedError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
 
 @router.get("/me", response_model=MeRead)
@@ -40,19 +49,23 @@ async def get_me(current_user: CurrentUser = Depends(get_current_user), db: Asyn
     token to naturally expire and refresh. Also carries the account-gate flags
     (email_verified/profile_complete/privacy_accepted) the dashboard shell
     uses to decide whether to show a blocking popup."""
+    from app.domains.club.models import Club
     from app.domains.rbac.service import get_roles_for_user
 
     roles = await get_roles_for_user(db, user_id=current_user.user_id, organization_id=current_user.organization_id)
     user = await db.get(User, current_user.user_id)
+    club = await db.get(Club, user.club_id) if user is not None and user.club_id else None
     return MeRead(
         roles=roles,
         email_verified=user is not None and user.email_verified_at is not None,
         profile_complete=user is not None and users_service.is_profile_complete(user),
         privacy_accepted=user is not None and user.privacy_accepted_at is not None,
+        club_id=str(club.id) if club else None,
+        club_name=club.name if club else None,
     )
 
 
-# --- PIN dei JavCash (Session 87) ---
+# --- PIN dei JavCash ---
 
 
 @router.get("/me/spend-pin", response_model=SpendPinStatusRead)
@@ -193,7 +206,7 @@ async def login(
     try:
         access_token, refresh_token = await auth_service.authenticate(
             db,
-            organization_id=uuid.UUID(payload.organization_id),
+            organization_id=await _organization_id(db, payload.organization_id),
             email=payload.email,
             password=payload.password,
             ip_address=request.client.host if request.client else None,
@@ -222,8 +235,23 @@ async def register(
     account in this system."""
     try:
         await auth_service.register_with_referral(
-            db, organization_id=uuid.UUID(payload.organization_id), payload=payload
+            db, organization_id=await _organization_id(db, payload.organization_id), payload=payload
         )
+    except auth_service.RegistrationError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    return {"ok": True}
+
+
+@router.post(
+    "/register-family",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit("register-family", max_requests=5, window_seconds=60))],
+)
+async def register_family(payload: RegisterFamilyRequest, db: AsyncSession = Depends(get_db)) -> dict:
+    """Pubblica: il genitore si registra dal link del suo club (/c/<slug>).
+    Come /register non fa il login da sola: si entra da /login."""
+    try:
+        await auth_service.register_family(db, payload=payload)
     except auth_service.RegistrationError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     return {"ok": True}
@@ -270,7 +298,7 @@ async def forgot_password(
     auth_service.request_password_reset for why."""
     await auth_service.request_password_reset(
         db,
-        organization_id=uuid.UUID(payload.organization_id),
+        organization_id=await _organization_id(db, payload.organization_id),
         email=payload.email,
         ip_address=request.client.host if request.client else None,
         user_agent=request.headers.get("user-agent"),

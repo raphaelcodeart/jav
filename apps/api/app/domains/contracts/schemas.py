@@ -4,8 +4,6 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-from app.domains.customers.schemas import SupplyPointCreate
-
 IBAN_PATTERN = re.compile(r"^[A-Z]{2}[0-9A-Z]{13,32}$")
 # Deliberately simple (not RFC 5322): good enough to catch typos in a form
 # field without pulling in a dedicated email-validation dependency, same
@@ -36,11 +34,10 @@ class ContractRead(BaseModel):
 
     id: uuid.UUID
     customer_id: uuid.UUID
-    supply_point_id: uuid.UUID
     #: None only while the contract is a draft point of a pratica whose
     #: package has not been chosen yet.
     product_version_id: uuid.UUID | None = None
-    #: The pratica it was filled in and paid with (Session 52).
+    #: The pratica it was filled in and paid with.
     contract_request_id: uuid.UUID | None = None
     status: str
     notes: str | None = None
@@ -57,10 +54,6 @@ class ContractRead(BaseModel):
     # UUID, so the service populates these instead of every caller doing its
     # own N+1 lookup. None only if the referenced row was hard-deleted.
     product_name: str | None = None
-    supply_point_label: str | None = None
-    pod_code: str | None = None
-    pdr_code: str | None = None
-    energy_type: str | None = None
 
     # --- Who built it ------------------------------------------------------
     #: CUSTOMER / PROMOTER / ADMIN. None on contracts created before this
@@ -82,7 +75,7 @@ class ContractRead(BaseModel):
     vat_rate: float | None = None
     vat_amount_cents: int | None = None
     gross_amount_cents: int | None = None
-    #: Session 84: the same contract paid in rate (3 or 12, same total).
+    #: The same contract paid in rate (3 or 12, same total).
     #: Null: the rate split the one-go price above.
     instalments_net_amount_cents: int | None = None
     instalments_vat_amount_cents: int | None = None
@@ -90,18 +83,14 @@ class ContractRead(BaseModel):
 
     # --- Payment -----------------------------------------------------------
     payment_plan: str | None = None
-    #: Session 64: taken off a single payment (0 otherwise).
-    payment_discount_cents: int = 0
     payment_method: str | None = None
     paid_at: datetime | None = None
-    billing_stopped_at: datetime | None = None
     terms_accepted_at: datetime | None = None
     terms_version: str | None = None
 
 
 class ContractCreate(BaseModel):
     customer_id: uuid.UUID
-    supply_point_id: uuid.UUID
     product_version_id: uuid.UUID
     producer_agent_id: uuid.UUID
     notes: str | None = None
@@ -129,10 +118,9 @@ class ContractSelfServiceCreate(BaseModel):
     the login email (see contracts/models.py::Contract.email)."""
 
     product_version_id: uuid.UUID
-    supply_point: SupplyPointCreate
     email: str
 
-    # Intestatario (migration 0040). Name required, PEC and IBAN optional:
+    # Intestatario. Name required, PEC and IBAN optional:
     # not everyone has a PEC, and an IBAN can still be added later from
     # "I miei Contratti" -- the wizard asks for it up front, but a contract
     # must never be blocked on a bank detail someone does not have at hand.
@@ -183,10 +171,9 @@ class ContractForCustomerCreate(BaseModel):
 
     customer_id: uuid.UUID
     product_version_id: uuid.UUID
-    supply_point: SupplyPointCreate
     email: str
 
-    # Intestatario (migration 0040). Name required, PEC and IBAN optional:
+    # Intestatario. Name required, PEC and IBAN optional:
     # not everyone has a PEC, and an IBAN can still be added later from
     # "I miei Contratti" -- the wizard asks for it up front, but a contract
     # must never be blocked on a bank detail someone does not have at hand.
@@ -259,54 +246,3 @@ class ContractStatusHistoryRead(BaseModel):
     reason: str | None
     notes: str | None
     created_at: datetime
-
-
-class ContractPaymentOptionRead(BaseModel):
-    """One way to pay THIS contract, already priced. Computed server-side
-    from the amount frozen on the contract -- the browser never proposes an
-    amount, it only picks a key."""
-
-    key: str
-    label: str
-    description: str
-    instalments: int
-    instalment_cents: int
-    total_cents: int
-    #: Difference between this plan's total and the contract's own amount,
-    #: caused by rounding an instalment to the cent. Shown to the customer
-    #: rather than hidden; 0 for every price currently in the catalog.
-    rounding_difference_cents: int
-    #: Session 64: taken off a single payment only.
-    discount_percentage: int = 0
-    discount_cents: int = 0
-
-
-class ContractPaymentOptionsRead(BaseModel):
-    contract_id: uuid.UUID
-    #: False when the contract is not at the payment step yet (or is already
-    #: paid) -- the dashboard uses this to explain rather than to hide.
-    payable: bool
-    status: str
-    #: True for a contract that IS at the payment step but carries no frozen
-    #: amount, i.e. one created before the price snapshot existed. A distinct
-    #: flag rather than lumping it in with "not payable": telling somebody
-    #: their contract is not awaiting payment when it plainly is would send
-    #: them looking for a problem that is on our side, not theirs.
-    missing_amount: bool = False
-    gross_amount_cents: int | None = None
-    card_available: bool = False
-    options: list[ContractPaymentOptionRead] = []
-    #: Set once Stripe has confirmed the (first) payment -- possibly while
-    #: the documents are still waiting for approval.
-    paid_at: datetime | None = None
-    payment_plan: str | None = None
-    #: The product's automatic JavCash percentage, and what it comes to on
-    #: the whole contract. On an instalment plan it is credited one
-    #: instalment at a time, adding up to this same total.
-    cashback_percentage: int = 0
-    cashback_total_cents: int = 0
-
-
-class ContractCheckoutRequest(BaseModel):
-    #: FULL / INSTALMENTS_3 / MONTHLY_12 -- see contracts/payment_plans.py.
-    payment_plan: str

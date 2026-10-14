@@ -11,13 +11,13 @@ from app.core.db import utcnow
 from app.domains.catalog.models import Product, ProductVersion
 from app.domains.contracts import service as contract_service
 from app.domains.contracts.service import InvalidProducerAgentError
-from app.domains.customers.models import Address, Customer, SupplyPoint
+from app.domains.customers.models import Address, Customer
 from app.domains.network import service as network_service
 from app.domains.organizations.models import Organization
 from tests.test_commission_engine_integration import _make_actor
 
 
-async def _make_customer_and_supply_point(db, organization_id):
+async def _make_customer(db, organization_id):
     customer = Customer(organization_id=organization_id, kind="PRIVATE", email="test@example.com")
     db.add(customer)
     await db.flush()
@@ -27,17 +27,10 @@ async def _make_customer_and_supply_point(db, organization_id):
     )
     db.add(address)
     await db.flush()
-    supply_point = SupplyPoint(
-        organization_id=organization_id, customer_id=customer.id, energy_type="ELECTRICITY",
-        supply_address_id=address.id,
-    )
-    db.add(supply_point)
     await db.commit()
-    return customer, supply_point
-
-
+    return customer
 async def _make_product_version(db, organization_id):
-    product = Product(organization_id=organization_id, code="TEST-PROD", energy_type="ELECTRICITY", customer_type="PRIVATE")
+    product = Product(organization_id=organization_id, code="TEST-PROD", customer_type="PRIVATE")
     db.add(product)
     await db.flush()
     product_version = ProductVersion(
@@ -52,13 +45,12 @@ async def _make_product_version(db, organization_id):
 @pytest.mark.asyncio
 async def test_create_contract_rejects_unknown_producer_agent(db, organization_id):
     actor_user_id = await _make_actor(db, organization_id)
-    customer, supply_point = await _make_customer_and_supply_point(db, organization_id)
+    customer = await _make_customer(db, organization_id)
     product_version = await _make_product_version(db, organization_id)
 
     with pytest.raises(InvalidProducerAgentError):
         await contract_service.create_contract(
-            db, organization_id=organization_id, customer_id=customer.id, supply_point_id=supply_point.id,
-            product_version_id=product_version.id, producer_agent_id=uuid.uuid4(),
+            db, organization_id=organization_id, customer_id=customer.id, product_version_id=product_version.id, producer_agent_id=uuid.uuid4(),
             actor_user_id=actor_user_id, correlation_id=str(uuid.uuid4()),
         )
 
@@ -76,13 +68,12 @@ async def test_create_contract_rejects_producer_from_another_organization(db, or
     )
 
     actor_user_id = await _make_actor(db, organization_id)
-    customer, supply_point = await _make_customer_and_supply_point(db, organization_id)
+    customer = await _make_customer(db, organization_id)
     product_version = await _make_product_version(db, organization_id)
 
     with pytest.raises(InvalidProducerAgentError):
         await contract_service.create_contract(
-            db, organization_id=organization_id, customer_id=customer.id, supply_point_id=supply_point.id,
-            product_version_id=product_version.id, producer_agent_id=foreign_agent.id,
+            db, organization_id=organization_id, customer_id=customer.id, product_version_id=product_version.id, producer_agent_id=foreign_agent.id,
             actor_user_id=actor_user_id, correlation_id=str(uuid.uuid4()),
         )
 
@@ -90,7 +81,7 @@ async def test_create_contract_rejects_producer_from_another_organization(db, or
 @pytest.mark.asyncio
 async def test_create_contract_rejects_non_active_producer(db, organization_id):
     actor_user_id = await _make_actor(db, organization_id)
-    customer, supply_point = await _make_customer_and_supply_point(db, organization_id)
+    customer = await _make_customer(db, organization_id)
     product_version = await _make_product_version(db, organization_id)
 
     agent = await network_service.create_agent(
@@ -102,8 +93,7 @@ async def test_create_contract_rejects_non_active_producer(db, organization_id):
 
     with pytest.raises(InvalidProducerAgentError):
         await contract_service.create_contract(
-            db, organization_id=organization_id, customer_id=customer.id, supply_point_id=supply_point.id,
-            product_version_id=product_version.id, producer_agent_id=agent.id,
+            db, organization_id=organization_id, customer_id=customer.id, product_version_id=product_version.id, producer_agent_id=agent.id,
             actor_user_id=actor_user_id, correlation_id=str(uuid.uuid4()),
         )
 
@@ -111,7 +101,7 @@ async def test_create_contract_rejects_non_active_producer(db, organization_id):
 @pytest.mark.asyncio
 async def test_create_contract_accepts_valid_active_producer(db, organization_id):
     actor_user_id = await _make_actor(db, organization_id)
-    customer, supply_point = await _make_customer_and_supply_point(db, organization_id)
+    customer = await _make_customer(db, organization_id)
     product_version = await _make_product_version(db, organization_id)
 
     agent = await network_service.create_agent(
@@ -120,8 +110,7 @@ async def test_create_contract_accepts_valid_active_producer(db, organization_id
     )
 
     contract = await contract_service.create_contract(
-        db, organization_id=organization_id, customer_id=customer.id, supply_point_id=supply_point.id,
-        product_version_id=product_version.id, producer_agent_id=agent.id,
+        db, organization_id=organization_id, customer_id=customer.id, product_version_id=product_version.id, producer_agent_id=agent.id,
         actor_user_id=actor_user_id, correlation_id=str(uuid.uuid4()),
     )
     assert contract.status == "DRAFT"

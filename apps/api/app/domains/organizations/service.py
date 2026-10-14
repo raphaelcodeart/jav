@@ -1,24 +1,24 @@
 import uuid
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.organizations.models import Organization
-from app.domains.organizations.schemas import OrganizationSettingsUpdate, PaymentSettingsUpdate
+from app.domains.organizations.schemas import OrganizationSettingsUpdate
 
 SETTINGS_KEYS = (
     "bank_iban", "bank_account_holder", "bank_transfer_instructions", "admin_notification_email",
-    "contract_instalment_cashback_mode", "contract_full_payment_discount_percentage",
+    "contract_instalment_cashback_mode",
 )
-PAYMENT_SETTINGS_KEYS = ("stripe_publishable_key", "stripe_secret_key", "stripe_webhook_secret")
 
 # Placeholder until the administrator sets the real mailbox in Impostazioni
 # (Organization.settings["admin_notification_email"]).
 DEFAULT_ADMIN_NOTIFICATION_EMAIL = "admin@example.com"
 
 #: How a contract paid in 3 or 12 instalments earns its JavCash cashback
-#: (Session 59), chosen by the administrator in Impostazioni:
+#:, chosen by the administrator in Impostazioni:
 #:   PER_INSTALMENT -- a slice with every instalment actually collected
-#:                     (the rule since Session 49, and the default);
+#:                     (the default);
 #:   UPFRONT        -- the whole contract's cashback at once, as soon as the
 #:                     first instalment is paid.
 CASHBACK_PER_INSTALMENT = "PER_INSTALMENT"
@@ -30,22 +30,6 @@ async def get_contract_instalment_cashback_mode(db: AsyncSession, *, organizatio
     org = await db.get(Organization, organization_id)
     mode = (org.settings or {}).get("contract_instalment_cashback_mode") if org is not None else None
     return mode if mode in CONTRACT_INSTALMENT_CASHBACK_MODES else CASHBACK_PER_INSTALMENT
-
-
-#: Discount on a contract paid in one go (Session 64), percent of the price;
-#: 3 and 12 instalments are never discounted. 0 switches it off.
-DEFAULT_FULL_PAYMENT_DISCOUNT_PERCENTAGE = 32
-
-
-async def get_contract_full_payment_discount_percentage(db: AsyncSession, *, organization_id: uuid.UUID) -> int:
-    org = await db.get(Organization, organization_id)
-    value = (org.settings or {}).get("contract_full_payment_discount_percentage") if org is not None else None
-    if value is None:
-        return DEFAULT_FULL_PAYMENT_DISCOUNT_PERCENTAGE
-    try:
-        return max(0, min(90, int(value)))
-    except (TypeError, ValueError):
-        return DEFAULT_FULL_PAYMENT_DISCOUNT_PERCENTAGE
 
 
 async def get_settings(db: AsyncSession, *, organization_id: uuid.UUID) -> dict:
@@ -76,16 +60,6 @@ async def update_settings(
     return {key: org.settings.get(key) for key in SETTINGS_KEYS}
 
 
-async def get_stripe_secret_key(db: AsyncSession, *, organization_id: uuid.UUID) -> str | None:
-    """Internal use only (checkout-session creation) -- the raw secret,
-    never returned by any endpoint. See get_payment_settings() for the
-    masked, dashboard-facing view."""
-    org = await db.get(Organization, organization_id)
-    if org is None:
-        return None
-    return org.settings.get("stripe_secret_key") or None
-
-
 async def is_bank_transfer_configured(db: AsyncSession, *, organization_id: uuid.UUID) -> bool:
     """Gates whether "Paga con bonifico" is even offered as an option --
     see orders/service.py::get_available_payment_methods(). An IBAN is the
@@ -97,17 +71,41 @@ async def is_bank_transfer_configured(db: AsyncSession, *, organization_id: uuid
     return bool(org.settings.get("bank_iban"))
 
 
-async def is_stripe_configured(db: AsyncSession, *, organization_id: uuid.UUID) -> bool:
-    """Gates whether "Paga con carta" is even offered -- see
-    orders/service.py::get_available_payment_methods() and
-    payments/service.py. Requires both keys: the secret key creates the
-    Checkout Session server-side, the publishable key is what the (not yet
-    built) client-side redirect would need -- either missing means Stripe
-    isn't usable end-to-end yet."""
+class OrganizationNotResolvedError(LookupError):
+    """Un messaggio per l'utente (CLAUDE.md §6)."""
+
+
+async def resolve_organization_id(db: AsyncSession, raw: str | None) -> uuid.UUID:
+    """The organization a public request (login, password reset, invite
+    link) is for. An installation serves one club: when the caller doesn't
+    say which organization, it is the only one there is, resolved here
+    rather than baked into the frontend -- a hardcoded id silently breaks
+    login the moment the database is recreated. With more than one
+    organization the caller must name it."""
+    if raw:
+        try:
+            return uuid.UUID(raw)
+        except ValueError as exc:
+            raise OrganizationNotResolvedError("Organizzazione non valida.") from exc
+    ids = (await db.execute(select(Organization.id).limit(2))).scalars().all()
+    if len(ids) != 1:
+        raise OrganizationNotResolvedError("Indica l'organizzazione a cui accedere.")
+    return ids[0]
+
+
+async def get_payment_info(db: AsyncSession, *, organization_id: uuid.UUID) -> dict:
+    """The bank details a customer needs to actually make a transfer --
+    every "paga con bonifico" screen (cart, catalog and Shop checkout, "I
+    miei Ordini", club fees) reads them. Only these three fields, never the
+    rest of the settings: what an admin configures for the organization is
+    not a customer's business, the IBAN they must pay into is."""
     org = await db.get(Organization, organization_id)
-    if org is None:
-        return False
-    return bool(org.settings.get("stripe_secret_key")) and bool(org.settings.get("stripe_publishable_key"))
+    settings = (org.settings or {}) if org is not None else {}
+    return {
+        "iban": settings.get("bank_iban") or None,
+        "holder": settings.get("bank_account_holder") or None,
+        "instructions": settings.get("bank_transfer_instructions") or None,
+    }
 
 
 async def get_admin_notification_email(db: AsyncSession, *, organization_id: uuid.UUID) -> str:
@@ -117,40 +115,3 @@ async def get_admin_notification_email(db: AsyncSession, *, organization_id: uui
     if org is None:
         return DEFAULT_ADMIN_NOTIFICATION_EMAIL
     return org.settings.get("admin_notification_email") or DEFAULT_ADMIN_NOTIFICATION_EMAIL
-
-
-async def get_stripe_webhook_secret(db: AsyncSession, *, organization_id: uuid.UUID) -> str | None:
-    org = await db.get(Organization, organization_id)
-    if org is None:
-        return None
-    return org.settings.get("stripe_webhook_secret") or None
-
-
-async def get_payment_settings(db: AsyncSession, *, organization_id: uuid.UUID) -> dict:
-    org = await db.get(Organization, organization_id)
-    settings = org.settings if org else {}
-    secret_key = settings.get("stripe_secret_key") or None
-    return {
-        "stripe_publishable_key": settings.get("stripe_publishable_key") or None,
-        "stripe_secret_key_configured": secret_key is not None,
-        "stripe_secret_key_last4": secret_key[-4:] if secret_key else None,
-        "stripe_webhook_secret_configured": bool(settings.get("stripe_webhook_secret")),
-    }
-
-
-async def update_payment_settings(
-    db: AsyncSession, *, organization_id: uuid.UUID, payload: PaymentSettingsUpdate
-) -> dict:
-    """Same merge-not-replace discipline as update_settings(). A field
-    omitted from the PATCH (as opposed to explicitly sent empty) leaves the
-    stored secret untouched -- the dashboard form never has to re-paste an
-    unchanged secret key just to update the publishable key next to it."""
-    org = await db.get(Organization, organization_id)
-    if org is None:
-        raise ValueError("Organization not found")
-
-    updates = payload.model_dump(exclude_unset=True)
-    org.settings = {**org.settings, **updates}
-    await db.commit()
-    await db.refresh(org)
-    return await get_payment_settings(db, organization_id=organization_id)

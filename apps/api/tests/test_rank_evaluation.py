@@ -18,7 +18,7 @@ from app.domains.commissions.services.rank_evaluation import (
     run_monthly_rank_evaluation,
 )
 from app.domains.contracts import service as contract_service
-from app.domains.customers.models import Address, Customer, SupplyPoint
+from app.domains.customers.models import Address, Customer
 from app.domains.network import service as network_service
 from app.domains.users.models import User
 
@@ -54,7 +54,7 @@ async def _make_ladder(db, organization_id, *, rule_version):
 
 
 async def _make_active_contract(db, organization_id, *, producer_agent_id, actor_user_id, price_cents, activated_at):
-    product = Product(organization_id=organization_id, code=f"RE-{uuid.uuid4().hex[:6]}", energy_type="ELECTRICITY", customer_type="PRIVATE")
+    product = Product(organization_id=organization_id, code=f"RE-{uuid.uuid4().hex[:6]}", customer_type="PRIVATE")
     db.add(product)
     await db.flush()
     product_version = ProductVersion(
@@ -73,16 +73,10 @@ async def _make_active_contract(db, organization_id, *, producer_agent_id, actor
     )
     db.add(address)
     await db.flush()
-    supply_point = SupplyPoint(
-        organization_id=organization_id, customer_id=customer.id, energy_type="ELECTRICITY",
-        supply_address_id=address.id,
-    )
-    db.add(supply_point)
     await db.commit()
 
     contract = await contract_service.create_contract(
-        db, organization_id=organization_id, customer_id=customer.id, supply_point_id=supply_point.id,
-        product_version_id=product_version.id, producer_agent_id=producer_agent_id,
+        db, organization_id=organization_id, customer_id=customer.id, product_version_id=product_version.id, producer_agent_id=producer_agent_id,
         actor_user_id=actor_user_id, correlation_id=str(uuid.uuid4()),
     )
     for step in ["SUBMITTED", "UNDER_REVIEW", "APPROVED", "PAID"]:  # APPROVED auto-cascades into PAYMENT_PENDING, PAID auto-cascades through ACTIVATION_PENDING into ACTIVE (see contracts/service.py::AUTO_CASCADE_AFTER)

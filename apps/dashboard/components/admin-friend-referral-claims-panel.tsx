@@ -14,7 +14,7 @@ const STATUS_TABS: { key: string; label: string }[] = [
 ];
 
 const STATUS_COLORS: Record<string, string> = {
-  REQUESTED: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+  REQUESTED: "bg-amber-500/10 text-amber-700 border-amber-500/20",
   FULFILLED: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
   REJECTED: "bg-rose-500/10 text-rose-400 border-rose-500/20",
 };
@@ -80,8 +80,8 @@ export function AdminFriendReferralClaimsPanel() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-lg font-semibold text-white light:text-slate-900">Omaggi Invita un amico</h3>
-        <p className="text-xs text-slate-400 light:text-slate-500 mt-1">
+        <h3 className="text-lg font-semibold text-slate-900">Omaggi Invita un amico</h3>
+        <p className="text-xs text-slate-500 mt-1">
           Richieste inviate da chi ha raggiunto 5, 10, 15… amici invitati con un contratto
           <strong> attivo</strong>. Il premio previsto è una <strong>gift card da 25 euro</strong>, e si
           ripete a ogni multiplo di 5 &mdash; non solo per i primi 5. Non viene accreditato in
@@ -97,8 +97,8 @@ export function AdminFriendReferralClaimsPanel() {
             onClick={() => setStatusFilter(tab.key)}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer border ${
               statusFilter === tab.key
-                ? "bg-orange-600 text-white border-orange-500"
-                : "bg-white/5 light:bg-slate-900/5 text-slate-300 light:text-slate-600 border-white/10 light:border-slate-300 hover:bg-white/10"
+                ? "bg-brand-600 text-white border-brand-500"
+                : " bg-slate-900/5 text-slate-600 border-slate-300 hover:bg-slate-100"
             }`}
           >
             {tab.label}
@@ -113,7 +113,7 @@ export function AdminFriendReferralClaimsPanel() {
         </div>
       )}
 
-      <div className="glass-card rounded-2xl border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70 divide-y divide-white/5 light:divide-slate-200 overflow-hidden">
+      <div className="glass-card rounded-2xl border-slate-200 bg-white/70 divide-y divide-slate-200 overflow-hidden">
         {claims === undefined ? (
           <p className="text-center py-8 text-slate-500 text-sm">Caricamento...</p>
         ) : claims.length === 0 ? (
@@ -124,11 +124,11 @@ export function AdminFriendReferralClaimsPanel() {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap mb-1">
-                    <span className="font-medium text-white light:text-slate-900">{c.referrer_name}</span>
+                    <span className="font-medium text-slate-900">{c.referrer_name}</span>
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${STATUS_COLORS[c.status]}`}>
                       {STATUS_LABELS[c.status] ?? c.status}
                     </span>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-orange-500/10 text-orange-400 border-orange-500/20">
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-brand-500/10 text-brand-600 border-brand-500/20">
                       {c.milestone} amici attivi
                     </span>
                   </div>
@@ -136,7 +136,7 @@ export function AdminFriendReferralClaimsPanel() {
                     {c.referrer_email} · richiesto il {formatDate(c.requested_at)}
                     {c.handled_at ? ` · gestito il ${formatDate(c.handled_at)}` : ""}
                   </p>
-                  {c.note && <p className="text-xs text-slate-400 light:text-slate-500 mt-1">Nota: {c.note}</p>}
+                  {c.note && <p className="text-xs text-slate-500 mt-1">Nota: {c.note}</p>}
                 </div>
                 {c.status === "REQUESTED" && handlingId !== c.id && (
                   <button
@@ -145,7 +145,7 @@ export function AdminFriendReferralClaimsPanel() {
                       setNote("");
                       setActionError(null);
                     }}
-                    className="shrink-0 px-4 py-2 rounded-xl bg-orange-600/10 hover:bg-orange-600/20 border border-orange-500/20 text-orange-400 text-xs font-semibold transition cursor-pointer"
+                    className="shrink-0 px-4 py-2 rounded-xl bg-brand-600/10 hover:bg-brand-600/20 border border-brand-500/20 text-brand-600 text-xs font-semibold transition cursor-pointer"
                   >
                     Gestisci
                   </button>
@@ -153,9 +153,9 @@ export function AdminFriendReferralClaimsPanel() {
               </div>
 
               {handlingId === c.id && (
-                <div className="mt-4 pt-4 border-t border-white/5 light:border-slate-200 space-y-3">
+                <div className="mt-4 pt-4 border-t border-slate-200 space-y-3">
                   <div className="space-y-1">
-                    <label className="text-[10px] font-semibold text-slate-300 light:text-slate-600 uppercase block">
+                    <label className=" font-semibold text-slate-600 uppercase block">
                       Nota per il cliente (opzionale)
                     </label>
                     <input
@@ -163,7 +163,7 @@ export function AdminFriendReferralClaimsPanel() {
                       onChange={(e) => setNote(e.target.value)}
                       maxLength={500}
                       placeholder="Es. Gift card da 25 euro inviata via email"
-                      className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500"
+                      className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500"
                     />
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -183,7 +183,7 @@ export function AdminFriendReferralClaimsPanel() {
                     </button>
                     <button
                       onClick={() => setHandlingId(null)}
-                      className="px-4 py-1.5 rounded-lg bg-white/5 light:bg-slate-900/5 hover:bg-white/10 border border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 text-xs font-semibold transition cursor-pointer"
+                      className="px-4 py-1.5 rounded-lg bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 text-xs font-semibold transition cursor-pointer"
                     >
                       Annulla
                     </button>

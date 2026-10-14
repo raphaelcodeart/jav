@@ -11,7 +11,6 @@ import { Pagination, usePagination } from "@/components/pagination";
 import { friendlyApiError } from "@/lib/api-error";
 import {
   CONTRACT_STATUS_LABELS,
-  ENERGY_POINT_LABELS,
   PAYMENT_PLAN_LABELS,
   contractStatusBadge,
   formatDate,
@@ -27,14 +26,13 @@ import type {
   ContractRequestSummaryRead,
 } from "@/lib/types";
 
-type Filter = "ALL" | "TO_REVIEW" | "BANK_TRANSFER" | "TO_PAY" | "DOCUMENTS" | "FAILED" | "DRAFT";
+type Filter = "ALL" | "TO_REVIEW" | "BANK_TRANSFER" | "TO_PAY" | "DOCUMENTS" | "DRAFT";
 
 const FILTERS: { key: Filter; label: string; match: (r: ContractRequestSummaryRead) => boolean }[] = [
   { key: "TO_REVIEW", label: "Da verificare", match: (r) => r.points_to_review > 0 },
   { key: "BANK_TRANSFER", label: "Bonifici da confermare", match: (r) => r.bank_transfer_pending },
   { key: "DOCUMENTS", label: "Documenti mancanti", match: (r) => r.points_documents_pending > 0 },
   { key: "TO_PAY", label: "Non pagate", match: (r) => r.status === "SUBMITTED" && r.points_payable > 0 },
-  { key: "FAILED", label: "Rate non riscosse", match: (r) => r.instalments_failed > 0 },
   { key: "DRAFT", label: "In compilazione", match: (r) => r.status === "DRAFT" },
   { key: "ALL", label: "Tutte", match: (r) => r.status !== "CANCELLED" },
 ];
@@ -109,11 +107,11 @@ export function AdminContractRequestsPanel({
               key={f.key}
               onClick={() => setFilter(f.key)}
               className={`glass-card rounded-2xl p-4 text-left border transition cursor-pointer ${
-                filter === f.key ? "border-orange-500/50 bg-orange-500/5" : "border-white/5 light:border-slate-200 bg-slate-950/20 light:bg-slate-50"
+                filter === f.key ? "border-brand-500/50 bg-brand-500/5" : " border-slate-200 bg-slate-50"
               }`}
             >
               <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">{f.label}</span>
-              <span className={`text-2xl font-bold ${count > 0 && f.key !== "TO_PAY" ? "text-orange-400" : "text-white light:text-slate-900"}`}>
+              <span className={`text-2xl font-bold ${count > 0 && f.key !== "TO_PAY" ? "text-brand-600" : " text-slate-900"}`}>
                 {count}
               </span>
             </button>
@@ -121,12 +119,12 @@ export function AdminContractRequestsPanel({
         })}
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between p-4 rounded-2xl bg-slate-900/40 light:bg-slate-50 border border-white/5 light:border-slate-200">
+      <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between p-4 rounded-2xl bg-slate-50 border border-slate-200">
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Cerca per pratica, cliente, intestatario o promoter..."
-          className="w-full sm:max-w-sm rounded-xl glass-input px-3 py-2 text-xs focus:border-orange-500"
+          className="w-full sm:max-w-sm rounded-xl glass-input px-3 py-2 text-xs focus:border-brand-500"
         />
         <div className="flex gap-1.5 flex-wrap">
           {FILTERS.map((f) => (
@@ -134,7 +132,7 @@ export function AdminContractRequestsPanel({
               key={f.key}
               onClick={() => setFilter(f.key)}
               className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition cursor-pointer ${
-                filter === f.key ? "bg-orange-600 text-white" : "bg-white/5 light:bg-slate-900/5 text-slate-400 light:text-slate-600 hover:bg-white/10"
+                filter === f.key ? "bg-brand-600 text-white" : " bg-slate-900/5 text-slate-600 hover:bg-slate-100"
               }`}
             >
               {f.label}
@@ -143,11 +141,11 @@ export function AdminContractRequestsPanel({
         </div>
       </div>
 
-      <div className="glass-card rounded-2xl border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70 overflow-hidden">
+      <div className="glass-card rounded-2xl border-slate-200 bg-white/70 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-white/5 light:border-slate-200 text-slate-400 light:text-slate-500 font-semibold">
+              <tr className="border-b border-slate-200 text-slate-500 font-semibold">
                 <th className="py-3 px-5">Pratica</th>
                 <th className="py-3 px-5">Cliente</th>
                 <th className="py-3 px-5">Punti</th>
@@ -156,7 +154,7 @@ export function AdminContractRequestsPanel({
                 <th className="py-3 px-5 text-right" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5 light:divide-slate-200">
+            <tbody className="divide-y divide-slate-200">
               {isLoading && (
                 <tr><td colSpan={6} className="py-8 text-center text-slate-500">Caricamento...</td></tr>
               )}
@@ -164,16 +162,16 @@ export function AdminContractRequestsPanel({
                 <tr><td colSpan={6} className="py-8 text-center text-rose-400">{(error as Error).message}</td></tr>
               )}
               {pagination.pageItems.map((r) => (
-                <tr key={r.id} className="text-slate-300 light:text-slate-600 hover:bg-white/5 cursor-pointer" onClick={() => onOpenRequest(r.id)}>
+                <tr key={r.id} className=" text-slate-600 hover:bg-slate-100 cursor-pointer" onClick={() => onOpenRequest(r.id)}>
                   <td className="py-3 px-5">
-                    <div className="text-sm font-semibold text-white light:text-slate-900">#{r.code}</div>
+                    <div className="text-sm font-semibold text-slate-900">#{r.code}</div>
                     <div className="text-[10px] text-slate-500">
                       {r.status === "DRAFT" ? "Bozza · " : ""}
                       {formatDate(r.submitted_at ?? r.created_at)}
                     </div>
                   </td>
                   <td className="py-3 px-5">
-                    <div className="text-sm font-semibold text-white light:text-slate-900">{r.customer_name ?? "—"}</div>
+                    <div className="text-sm font-semibold text-slate-900">{r.customer_name ?? "—"}</div>
                     <div className="text-[10px] text-slate-500">
                       {ORIGIN_LABELS[r.created_by_role ?? ""] ?? "—"}
                       {r.activated_by_promoter_name ? ` · ${r.activated_by_promoter_name}` : ""}
@@ -181,7 +179,7 @@ export function AdminContractRequestsPanel({
                     {r.notes && (
                       <div
                         title={r.notes}
-                        className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold border bg-orange-500/10 text-orange-400 border-orange-500/25 max-w-[220px]"
+                        className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold border bg-brand-500/10 text-brand-600 border-brand-500/25 max-w-[220px]"
                       >
                         <span className="shrink-0">Note:</span>
                         <span className="truncate font-medium">{r.notes}</span>
@@ -189,7 +187,7 @@ export function AdminContractRequestsPanel({
                     )}
                   </td>
                   <td className="py-3 px-5">
-                    <div className="text-xs font-semibold text-white light:text-slate-900">
+                    <div className="text-xs font-semibold text-slate-900">
                       {r.points_active}/{r.points_total} attivi
                     </div>
                     <div className="text-[10px] text-slate-500">
@@ -200,24 +198,23 @@ export function AdminContractRequestsPanel({
                       ].filter(Boolean).join(" · ") || "—"}
                     </div>
                   </td>
-                  <td className="py-3 px-5 text-right text-sm font-semibold text-white light:text-slate-900 tabular-nums">
+                  <td className="py-3 px-5 text-right text-sm font-semibold text-slate-900 tabular-nums">
                     {r.total_gross_cents > 0 ? euro(r.total_gross_cents) : "—"}
                   </td>
                   <td className="py-3 px-5">
                     <div className="text-xs">
                       {r.bank_transfer_pending ? (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-amber-500/10 border-amber-500/30 text-amber-400">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-amber-500/10 border-amber-500/30 text-amber-700">
                           Bonifico da confermare{r.bank_transfer_total_cents ? ` · ${euro(r.bank_transfer_total_cents)}` : ""}
                         </span>
                       ) : r.points_paid > 0 ? `Pagati ${r.points_paid}/${r.points_total}` : r.status === "DRAFT" ? "—" : "Non pagata"}
                     </div>
                     <div className="text-[10px] text-slate-500">
                       {r.payment_plans.map((p) => PAYMENT_PLAN_LABELS[p] ?? p).join(", ")}
-                      {r.instalments_failed > 0 && <span className="text-rose-400"> · {r.instalments_failed} rate non riscosse</span>}
                     </div>
                   </td>
                   <td className="py-3 px-5 text-right">
-                    <span className="px-3 py-1 rounded-lg bg-orange-600/10 border border-orange-500/20 text-orange-400 text-xs font-semibold">
+                    <span className="px-3 py-1 rounded-lg bg-brand-600/10 border border-brand-500/20 text-brand-600 text-xs font-semibold">
                       Apri
                     </span>
                   </td>
@@ -271,7 +268,6 @@ function RequestDetail({
   });
   const [openPoint, setOpenPoint] = useState<string | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
-  const [stopping, setStopping] = useState<string | null>(null);
   const [repackaging, setRepackaging] = useState<ContractRequestPointRead | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -282,31 +278,10 @@ function RequestDetail({
     ]);
   }
 
-  async function stopBilling(point: ContractRequestPointRead) {
-    if (
-      !window.confirm(
-        `Interrompere gli addebiti mensili di ${pointCode(point)}? Gli altri contratti della pratica continuano a essere addebitati. Eventuali rimborsi si fanno dal pannello Stripe.`
-      )
-    ) {
-      return;
-    }
-    setStopping(point.id);
-    setActionError(null);
-    try {
-      const res = await fetch(`/api/proxy/contracts/${point.id}/stop-billing`, { method: "POST" });
-      if (!res.ok) throw new Error(await friendlyApiError(res));
-      await refresh();
-    } catch (err: any) {
-      setActionError(err.message || "Impossibile interrompere gli addebiti.");
-    } finally {
-      setStopping(null);
-    }
-  }
-
   const toReview = (request?.points ?? []).filter((p) => p.status === "UNDER_REVIEW");
 
-  // Session 89: «Sblocca pratica» -- sent, nothing paid, no instalments
-  // being charged, no bank transfer receipt. The server checks it all again.
+  // Session 89: «Sblocca pratica» -- sent, nothing paid, no bank transfer
+  // receipt. The server checks it all again.
   const [unlocking, setUnlocking] = useState(false);
   const [editing, setEditing] = useState(false);
   const alivePoints = (request?.points ?? []).filter((p) => p.status !== "CANCELLED" && p.status !== "REJECTED");
@@ -314,7 +289,7 @@ function RequestDetail({
     request?.status === "SUBMITTED" &&
     !request.payment_proof_uploaded_at &&
     alivePoints.length > 0 &&
-    (request.points ?? []).every((p) => !p.paid_at && !p.billing_active) &&
+    (request.points ?? []).every((p) => !p.paid_at) &&
     alivePoints.every((p) => UNLOCKABLE_STATUSES.includes(p.status));
 
   async function unlock() {
@@ -351,26 +326,26 @@ function RequestDetail({
       onClose={onClose}
       subtitle={
         request && (
-          <p className="text-[11px] text-slate-400 light:text-slate-500">
+          <p className=" text-slate-500">
             {ORIGIN_LABELS[request.created_by_role ?? ""] ?? "—"}
             {request.activated_by_promoter_name ? ` (${request.activated_by_promoter_name})` : ""} ·{" "}
             {request.status === "DRAFT" ? "in compilazione" : `inviata il ${formatDate(request.submitted_at)}`} ·{" "}
             {request.points_total} punti · {request.points_active} attivi · totale{" "}
-            <strong className="text-orange-400">{euro(request.total_gross_cents)}</strong>
+            <strong className="text-brand-600">{euro(request.total_gross_cents)}</strong>
           </p>
         )
       }
     >
       {error && <p className="text-sm text-rose-400">{(error as Error).message}</p>}
       {!request ? (
-        <div className="h-40 rounded-2xl bg-white/5 light:bg-slate-900/5 animate-pulse" />
+        <div className="h-40 rounded-2xl bg-slate-900/5 animate-pulse" />
       ) : (
         <div className="space-y-6">
           {actionError && (
             <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs">{actionError}</div>
           )}
 
-          <section className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 rounded-2xl bg-white/5 light:bg-slate-900/5 border border-white/10 light:border-slate-200 text-xs">
+          <section className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 rounded-2xl bg-slate-900/5 border border-slate-200 text-xs">
             {request.company_name ? (
               <>
                 <Fact label="Azienda" value={request.company_name} />
@@ -400,29 +375,29 @@ function RequestDetail({
           </section>
 
           {request.notes && (
-            <section className="p-4 rounded-2xl bg-orange-500/10 border border-orange-500/25">
+            <section className="p-4 rounded-2xl bg-brand-500/10 border border-brand-500/25">
               <div className="flex items-center justify-between gap-3 flex-wrap mb-1.5">
-                <h3 className="text-xs font-bold text-orange-300 light:text-orange-700 uppercase tracking-wider">
+                <h3 className="text-xs font-bold text-brand-700 uppercase tracking-wider">
                   Note per l&apos;amministrazione
                 </h3>
                 {(request.notes_author || request.notes_updated_at) && (
-                  <span className="text-[10px] text-slate-400 light:text-slate-500">
+                  <span className=" text-slate-500">
                     {request.notes_author ?? ""}
                     {request.notes_updated_at ? ` · ${formatDate(request.notes_updated_at)}` : ""}
                   </span>
                 )}
               </div>
-              <p className="text-sm text-slate-100 light:text-slate-800 whitespace-pre-wrap break-words">{request.notes}</p>
+              <p className="text-sm text-slate-800 whitespace-pre-wrap break-words">{request.notes}</p>
             </section>
           )}
 
           <section className="space-y-3">
             <div className="flex items-center justify-between gap-3 flex-wrap">
-              <h3 className="text-sm font-bold text-white light:text-slate-900">Contratti della pratica</h3>
+              <h3 className="text-sm font-bold text-slate-900">Contratti della pratica</h3>
               {request.status === "DRAFT" && (
                 <button
                   onClick={() => setEditing(true)}
-                  className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-xs font-bold text-white transition cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-bold text-white transition cursor-pointer"
                 >
                   Modifica la pratica
                 </button>
@@ -448,27 +423,23 @@ function RequestDetail({
             </div>
             <div className="space-y-2">
               {request.points.map((point) => (
-                <div key={point.id} className="rounded-2xl border border-white/10 light:border-slate-200 bg-slate-950/40 light:bg-white/70">
+                <div key={point.id} className="rounded-2xl border border-slate-200 bg-white/70">
                   <div className="p-3.5 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_auto] items-start gap-x-4 gap-y-3">
                     <div className="min-w-0">
                       <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">
-                        {ENERGY_POINT_LABELS[point.energy_type ?? ""] ?? "Fornitura"} · contratto {point.id.slice(0, 8).toUpperCase()}
+                        Contratto {point.id.slice(0, 8).toUpperCase()}
                       </p>
-                      <p className="text-sm font-bold text-white light:text-slate-900 font-mono break-all">{pointCode(point)}</p>
-                      <p className="text-[11px] text-slate-400 light:text-slate-500 break-words">
-                        {[point.street, point.postal_code, point.city, point.province].filter(Boolean).join(", ")}
-                        {point.meter_number ? ` · contatore ${point.meter_number}` : ""}
-                      </p>
+                      <p className="text-sm font-bold text-slate-900 font-mono break-all">{pointCode(point)}</p>
                     </div>
                     <div className="min-w-0">
                       <p
                         className={`text-xs font-semibold break-words ${
-                          point.product_name ? "text-white light:text-slate-900" : "text-amber-400"
+                          point.product_name ? " text-slate-900" : "text-amber-700"
                         }`}
                       >
                         {point.product_name ?? "Senza pacchetto"}
                       </p>
-                      <p className="text-[11px] text-slate-400 light:text-slate-500 tabular-nums">
+                      <p className=" text-slate-500 tabular-nums">
                         {point.gross_amount_cents != null ? euro(point.gross_amount_cents) : "—"}
                         {point.vat_amount_cents ? ` (IVA ${point.vat_rate}%)` : ""}
                       </p>
@@ -492,10 +463,8 @@ function RequestDetail({
                         {point.instalments_total && point.instalments_total > 1
                           ? ` · rate ${point.instalments_paid}/${point.instalments_total}`
                           : ""}
-                        {point.instalments_failed > 0 && <span className="text-rose-400"> · {point.instalments_failed} non riscosse</span>}
-                        {point.billing_stopped_at && <span className="text-rose-400"> · addebiti interrotti</span>}
                       </p>
-                      <p className={`text-[10px] ${point.documents_missing > 0 || point.documents_rejected > 0 ? "text-amber-400" : "text-slate-500"}`}>
+                      <p className={`text-[10px] ${point.documents_missing > 0 || point.documents_rejected > 0 ? "text-amber-700" : "text-slate-500"}`}>
                         {point.documents_missing > 0
                           ? `${point.documents_missing} documenti mancanti`
                           : point.documents_rejected > 0
@@ -506,7 +475,7 @@ function RequestDetail({
                     <div className="min-w-0 flex flex-wrap items-center gap-1.5 sm:col-span-2 xl:col-span-1 xl:justify-end">
                       <button
                         onClick={() => setOpenPoint(openPoint === point.id ? null : point.id)}
-                        className="px-2.5 py-1 rounded-lg bg-white/5 light:bg-slate-900/5 hover:bg-white/10 border border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 text-[11px] font-semibold cursor-pointer"
+                        className="px-2.5 py-1 rounded-lg bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 font-semibold cursor-pointer"
                       >
                         {openPoint === point.id ? "Chiudi" : "Documenti"}
                       </button>
@@ -515,8 +484,8 @@ function RequestDetail({
                           onClick={() => setRepackaging(point)}
                           className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold cursor-pointer border ${
                             point.product_version_id
-                              ? "bg-white/5 light:bg-slate-900/5 hover:bg-white/10 border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600"
-                              : "bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30 text-amber-400"
+                              ? " bg-slate-900/5 hover:bg-slate-100 border-slate-300 text-slate-600"
+                              : "bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30 text-amber-700"
                           }`}
                         >
                           {point.product_version_id ? "Cambia pacchetto" : "Scegli pacchetto"}
@@ -525,7 +494,7 @@ function RequestDetail({
                       {point.product_version_id && (
                         <button
                           onClick={() => onCommissions(point.id)}
-                          className="px-2.5 py-1 rounded-lg bg-white/5 light:bg-slate-900/5 hover:bg-white/10 border border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 text-[11px] font-semibold cursor-pointer"
+                          className="px-2.5 py-1 rounded-lg bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 font-semibold cursor-pointer"
                         >
                           Provvigioni
                         </button>
@@ -533,24 +502,15 @@ function RequestDetail({
                       {point.status !== "DRAFT" && (
                         <button
                           onClick={() => onReview(point)}
-                          className="px-2.5 py-1 rounded-lg bg-orange-600/10 hover:bg-orange-600/20 border border-orange-500/20 text-orange-400 text-[11px] font-semibold cursor-pointer"
+                          className="px-2.5 py-1 rounded-lg bg-brand-600/10 hover:bg-brand-600/20 border border-brand-500/20 text-brand-600 text-[11px] font-semibold cursor-pointer"
                         >
                           Recensisci
-                        </button>
-                      )}
-                      {point.billing_active && (
-                        <button
-                          onClick={() => stopBilling(point)}
-                          disabled={stopping === point.id}
-                          className="px-2.5 py-1 rounded-lg bg-rose-600/10 hover:bg-rose-600/20 border border-rose-500/20 text-rose-400 text-[11px] font-semibold cursor-pointer disabled:opacity-50"
-                        >
-                          {stopping === point.id ? "..." : "Interrompi addebiti"}
                         </button>
                       )}
                     </div>
                   </div>
                   {openPoint === point.id && (
-                    <div className="border-t border-white/5 light:border-slate-200 p-4 space-y-4">
+                    <div className="border-t border-slate-200 p-4 space-y-4">
                       <ContractDocumentsPanel contractId={point.id} isStaff />
                       <ContractDossierActions contractId={point.id} />
                     </div>
@@ -561,8 +521,8 @@ function RequestDetail({
           </section>
 
           <section className="space-y-3">
-            <h3 className="text-sm font-bold text-white light:text-slate-900">Documenti dell&apos;intestatario</h3>
-            <p className="text-xs text-slate-400 light:text-slate-500">
+            <h3 className="text-sm font-bold text-slate-900">Documenti dell&apos;intestatario</h3>
+            <p className="text-xs text-slate-500">
               Caricati una volta sulla pratica: valgono per ogni contratto qui sopra, e compaiono anche nel fascicolo di
               ciascuno.
             </p>
@@ -572,39 +532,6 @@ function RequestDetail({
           {request.bank_transfer_pending && (
             <BankTransferConfirm request={request} onDone={async () => { await refresh(); onContractsChanged(); }} />
           )}
-
-          <section className="space-y-3">
-            <h3 className="text-sm font-bold text-white light:text-slate-900">Tentativi di pagamento</h3>
-            {request.checkouts.length === 0 ? (
-              <p className="text-xs text-slate-500">
-                Nessun pagamento con carta avviato per questa pratica
-                {request.points_paid > 0 ? " (i contratti pagati lo sono stati singolarmente o con bonifico confermato)." : "."}
-              </p>
-            ) : (
-              <div className="rounded-2xl border border-white/10 light:border-slate-200 divide-y divide-white/5 light:divide-slate-200 text-xs">
-                {request.checkouts.map((c) => (
-                  <div key={c.id} className="px-4 py-3 flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p className="font-semibold text-white light:text-slate-900">
-                        {PAYMENT_PLAN_LABELS[c.payment_plan] ?? c.payment_plan} · {c.contracts} contratti ·{" "}
-                        {c.payment_plan === "FULL" ? euro(c.total_cents) : `${euro(c.instalment_cents)}/mese (${euro(c.total_cents)})`}
-                      </p>
-                      <p className="text-[10px] text-slate-500 font-mono">
-                        {c.stripe_checkout_session_id}
-                        {c.stripe_subscription_id ? ` · ${c.stripe_subscription_id}` : ""}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className={c.completed_at ? "text-emerald-400 font-semibold" : "text-slate-500"}>
-                        {c.completed_at ? `Completato il ${formatDate(c.completed_at)}` : `Aperto il ${formatDate(c.created_at)}, non completato`}
-                      </p>
-                      {c.outcome && <p className="text-[10px] text-slate-500">{c.outcome}</p>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
         </div>
       )}
 
@@ -653,22 +580,21 @@ function RequestDetail({
   );
 }
 
-/** Fino a quando l'amministratore può correggere il pacchetto di un POD:
-    finché quel contratto non è pagato, non è in addebito e non è già
-    attivo (il backend applica la stessa regola, requests.py). */
+/** Fino a quando l'amministratore può correggere il pacchetto di un contratto:
+    finché quel contratto non è pagato e non è già attivo (il backend
+    applica la stessa regola, requests.py). */
 /** A pratica can be unlocked while every live contract is still before payment. */
 const UNLOCKABLE_STATUSES = ["SUBMITTED", "DOCUMENTS_PENDING", "UNDER_REVIEW", "APPROVED", "PAYMENT_PENDING"];
 
 const REPACKAGEABLE_STATUSES = ["DRAFT", "SUBMITTED", "DOCUMENTS_PENDING", "UNDER_REVIEW", "APPROVED", "PAYMENT_PENDING"];
 
 function canRepackage(point: ContractRequestPointRead): boolean {
-  return !point.paid_at && !point.billing_active && REPACKAGEABLE_STATUSES.includes(point.status);
+  return !point.paid_at && REPACKAGEABLE_STATUSES.includes(point.status);
 }
 
-/** Scelta (o correzione) del pacchetto di un POD o PDR dal pannello
+/** Scelta (o correzione) del pacchetto di un contratto dal pannello
     Pratiche: stessi pacchetti che vedrebbe il cliente, filtrati per la sua
-    tipologia e per il tipo di punto -- luce su un POD, gas su un PDR (il
-    backend applica la stessa regola). */
+    tipologia (il backend applica la stessa regola). */
 function PackagePicker({
   point,
   customerKind,
@@ -691,8 +617,7 @@ function PackagePicker({
       p.category === "INTERNAL" &&
       p.status === "ACTIVE" &&
       p.current_version?.status === "ACTIVE" &&
-      productAllowsCustomerKind(p.customer_type, customerKind) &&
-      (!point.energy_type || p.energy_type === point.energy_type)
+      productAllowsCustomerKind(p.customer_type, customerKind)
   );
 
   async function choose(versionId: string) {
@@ -710,10 +635,10 @@ function PackagePicker({
   return (
     <FullScreenPanel title={`Pacchetto di ${pointCode(point)}`} onClose={onClose}>
       <div className="space-y-3">
-        <p className="text-xs text-slate-400 light:text-slate-500">
+        <p className="text-xs text-slate-500">
           {point.product_name
             ? `Ora è attivo “${point.product_name}”. Scegliendone un altro il prezzo del contratto viene ricalcolato subito.`
-            : `Questo ${point.point_kind} non ha ancora un pacchetto: sceglilo qui per poter proseguire con la pratica.`}
+            : "Questo contratto non ha ancora un pacchetto: sceglilo qui per poter proseguire con la pratica."}
         </p>
         {error && <p className="text-xs text-rose-400">{error}</p>}
         {packages.length === 0 && <p className="text-xs text-slate-500">Nessun pacchetto disponibile per questo cliente.</p>}
@@ -728,17 +653,17 @@ function PackagePicker({
               className={`w-full text-left p-3.5 rounded-2xl border transition cursor-pointer disabled:cursor-default ${
                 current
                   ? "border-emerald-500/40 bg-emerald-500/5"
-                  : "border-white/10 light:border-slate-200 bg-slate-950/40 light:bg-white/70 hover:border-orange-500/40"
+                  : " border-slate-200 bg-white/70 hover:border-brand-500/40"
               }`}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-sm font-bold text-white light:text-slate-900 break-words">{version.name}</p>
-                  <p className="text-[11px] text-slate-400 light:text-slate-500 break-words">
-                    {ENERGY_POINT_LABELS[product.energy_type ?? ""] ?? "Fornitura"} · {product.code}
+                  <p className="text-sm font-bold text-slate-900 break-words">{version.name}</p>
+                  <p className=" text-slate-500 break-words">
+                    {product.code}
                   </p>
                 </div>
-                <p className="text-xs font-semibold text-slate-200 light:text-slate-700 tabular-nums whitespace-nowrap">
+                <p className="text-xs font-semibold text-slate-700 tabular-nums whitespace-nowrap">
                   {euro(version.contract_net_amount_cents || version.base_price_cents)}
                   {version.contract_instalments_net_amount_cents != null
                     ? ` · a rate ${euro(version.contract_instalments_net_amount_cents)}`
@@ -758,7 +683,7 @@ function Fact({ label, value, mono = false }: { label: string; value: string; mo
   return (
     <div className="min-w-0">
       <p className="text-[10px] text-slate-500 uppercase tracking-wide">{label}</p>
-      <p className={`text-slate-200 light:text-slate-800 font-semibold break-words ${mono ? "font-mono" : ""}`}>{value}</p>
+      <p className={` text-slate-800 font-semibold break-words ${mono ? "font-mono" : ""}`}>{value}</p>
     </div>
   );
 }
@@ -836,13 +761,13 @@ function BulkApproveModal({
   const total = previews ? Object.values(previews).reduce((sum, p) => sum + p.total_commission_cents, 0) : 0;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70 light:bg-slate-900/40 backdrop-blur-sm">
-      <div className="w-full max-w-3xl max-h-[88vh] overflow-y-auto glass-card rounded-2xl p-6 border-white/10 light:border-slate-300 bg-slate-950 light:bg-white space-y-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+      <div className="w-full max-w-3xl max-h-[88vh] overflow-y-auto glass-card rounded-2xl p-6 border-slate-300 bg-white space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-bold text-white light:text-slate-900">
+          <h3 className="text-lg font-bold text-slate-900">
             Approva {points.length} {points.length === 1 ? "contratto" : "contratti"}
           </h3>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-white/5 text-slate-400 cursor-pointer">✕</button>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 cursor-pointer">✕</button>
         </div>
 
         {results ? (
@@ -854,73 +779,73 @@ function BulkApproveModal({
                 </p>
               ))}
             </div>
-            <button onClick={onClose} className="w-full rounded-xl bg-white/10 hover:bg-white/20 py-2.5 text-sm font-semibold text-white light:text-slate-700 cursor-pointer">
+            <button onClick={onClose} className="w-full rounded-xl bg-slate-50 hover:bg-white/20 py-2.5 text-sm font-semibold text-slate-700 cursor-pointer">
               Chiudi
             </button>
           </>
         ) : (
           <>
-            <p className="text-xs text-slate-400 light:text-slate-500">
+            <p className="text-xs text-slate-500">
               Approvare un contratto fa partire le sue provvigioni (subito se già pagato, a ogni rata se a rate). Controlla le
               anteprime: ognuna viene accettata e salvata nel registro del suo contratto.
             </p>
             {error && <p className="text-xs text-rose-400">{(error as Error).message}</p>}
             {!previews ? (
-              <div className="h-32 rounded-xl bg-white/5 light:bg-slate-900/5 animate-pulse" />
+              <div className="h-32 rounded-xl bg-slate-900/5 animate-pulse" />
             ) : (
               <div className="space-y-2">
                 {points.map((point) => {
                   const preview = previews[point.id];
                   if (!preview) return null;
                   return (
-                    <div key={point.id} className="rounded-xl border border-white/10 light:border-slate-200">
+                    <div key={point.id} className="rounded-xl border border-slate-200">
                       <button
                         onClick={() => setExpanded(expanded === point.id ? null : point.id)}
                         className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left cursor-pointer"
                       >
                         <span className="min-w-0">
-                          <span className="block text-sm font-semibold text-white light:text-slate-900 font-mono">{pointCode(point)}</span>
+                          <span className="block text-sm font-semibold text-slate-900 font-mono">{pointCode(point)}</span>
                           <span className="block text-[11px] text-slate-400">
                             {point.product_name} · {preview.beneficiaries.filter((b) => b.total_cents > 0).length} beneficiari
-                            {preview.warnings.length > 0 && <span className="text-amber-400"> · {preview.warnings.length} avvisi</span>}
+                            {preview.warnings.length > 0 && <span className="text-amber-700"> · {preview.warnings.length} avvisi</span>}
                             {preview.already_accepted && " · anteprima già accettata"}
                           </span>
                         </span>
-                        <span className="text-sm font-bold text-orange-400 tabular-nums shrink-0">
+                        <span className="text-sm font-bold text-brand-600 tabular-nums shrink-0">
                           {euro(preview.total_commission_cents)} {expanded === point.id ? "▾" : "▸"}
                         </span>
                       </button>
                       {expanded === point.id && (
-                        <div className="border-t border-white/5 light:border-slate-200 p-4">
+                        <div className="border-t border-slate-200 p-4">
                           <CommissionPreviewView preview={preview} />
                         </div>
                       )}
                     </div>
                   );
                 })}
-                <p className="text-xs text-slate-300 light:text-slate-700 text-right">
-                  Provvigioni totali: <strong className="text-orange-400">{euro(total)}</strong>
+                <p className="text-xs text-slate-700 text-right">
+                  Provvigioni totali: <strong className="text-brand-600">{euro(total)}</strong>
                 </p>
               </div>
             )}
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-300 light:text-slate-600 block">Motivazione</label>
+              <label className="text-xs font-semibold text-slate-600 block">Motivazione</label>
               <input
                 required
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500"
+                className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500"
               />
             </div>
             <label className="flex items-start gap-2 cursor-pointer">
-              <input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} className="mt-0.5 accent-orange-500" />
-              <span className="text-xs text-slate-300 light:text-slate-700">
+              <input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} className="mt-0.5 accent-brand-500" />
+              <span className="text-xs text-slate-700">
                 Ho verificato i documenti e controllato le anteprime: accetto che le provvigioni di ogni contratto partano
                 come indicato.
               </span>
             </label>
             <div className="flex justify-end gap-2">
-              <button onClick={onClose} className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-semibold text-slate-300 light:text-slate-600 cursor-pointer">
+              <button onClick={onClose} className="px-4 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-xs font-semibold text-slate-600 cursor-pointer">
                 Annulla
               </button>
               <button
@@ -940,8 +865,8 @@ function BulkApproveModal({
 
 
 /** Session 65: the customer chose to pay the pratica by bank transfer. The
-    contracts are paid, at the discounted amount frozen when they chose it,
-    only when an administrator confirms the money arrived. */
+    contracts are paid only when an administrator confirms the money
+    arrived. */
 function BankTransferConfirm({ request, onDone }: { request: ContractRequestDetailRead; onDone: () => Promise<void> }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -978,9 +903,9 @@ function BankTransferConfirm({ request, onDone }: { request: ContractRequestDeta
     <section className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-5 space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-wider text-amber-400">Bonifico da confermare</p>
-          <p className="text-2xl font-extrabold text-white light:text-slate-900 tabular-nums">{euro(request.bank_transfer_total_cents ?? 0)}</p>
-          <p className="text-xs text-slate-400 light:text-slate-500">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-amber-700">Bonifico da confermare</p>
+          <p className="text-2xl font-extrabold text-slate-900 tabular-nums">{euro(request.bank_transfer_total_cents ?? 0)}</p>
+          <p className="text-xs text-slate-500">
             {toPay.length} {toPay.length === 1 ? "contratto" : "contratti"} · scelto il {formatDate(request.bank_transfer_requested_at)} ·
             causale “Pratica {request.code}”
           </p>
@@ -998,11 +923,10 @@ function BankTransferConfirm({ request, onDone }: { request: ContractRequestDeta
           </button>
         </div>
       </div>
-      <div className="text-[11px] text-slate-400 light:text-slate-500 space-y-0.5">
+      <div className=" text-slate-500 space-y-0.5">
         {toPay.map((p) => (
           <p key={p.id}>
-            {pointCode(p)} · {p.product_name ?? "—"} · {euro((p.gross_amount_cents ?? 0) - (p.payment_discount_cents ?? 0))}
-            {p.payment_discount_cents ? <span className="text-emerald-400"> (listino {euro(p.gross_amount_cents ?? 0)}, sconto pagamento unico)</span> : null}
+            {pointCode(p)} · {p.product_name ?? "—"} · {euro(p.gross_amount_cents ?? 0)}
           </p>
         ))}
       </div>

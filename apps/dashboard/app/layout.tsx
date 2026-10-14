@@ -1,32 +1,34 @@
-import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Audiowide, Inter } from "next/font/google";
 import "./globals.css";
 import { AppProviders } from "@/app/providers";
-import { themeInitScript } from "@/lib/theme";
+import { getLocale } from "@/lib/i18n/server";
+import { makeTranslator } from "@/lib/i18n/translate";
 
-// Inter over the previous Outfit: a standard, professional typeface built for
-// admin/dashboard UIs (used by GitHub, Linear, Vercel), instead of Outfit's
-// more decorative/geometric look.
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-sans",
-});
+// Inter for everything you read; Audiowide -- rounded, techno, the same family
+// of shapes as the club's logo lettering -- for titles and the big numbers.
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+const audiowide = Audiowide({ subsets: ["latin"], weight: "400", variable: "--font-audiowide" });
 
-export const metadata: Metadata = {
-  title: "Jav Platform",
-  description: "Gestionale Jav",
+export async function generateMetadata(): Promise<Metadata> {
+  const t = makeTranslator(await getLocale());
+  return {
+    title: "Jav · Judo Arte e Vida",
+    description: t("meta.description"),
+  };
+}
+
+export const viewport: Viewport = {
+  themeColor: "#e43f21",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const locale = await getLocale();
   return (
-    <html lang="it" className={`${inter.variable}`} data-theme="light" suppressHydrationWarning>
-      <head>
-        {/* Runs before hydration so the stored/system theme applies on first
-            paint -- prevents a flash of the wrong theme. */}
-        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
-      </head>
-      <body className="min-h-screen antialiased">
-        <AppProviders>{children}</AppProviders>
+    <html lang={locale} className={`${inter.variable} ${audiowide.variable}`}>
+      <body className="min-h-screen antialiased text-ink-900">
+        <div className="dojo-backdrop" aria-hidden="true" />
+        <AppProviders locale={locale}>{children}</AppProviders>
       </body>
     </html>
   );

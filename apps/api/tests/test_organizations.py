@@ -1,6 +1,5 @@
 """Organization.settings (JSONB) exposed through a typed subset -- starting
-with the bank IBAN customers wire bonifico payments to (see
-docs/cashback-partner-invoices-plan.md). Covers that an update merges rather
+with the bank IBAN customers wire bonifico payments to. Covers that an update merges rather
 than replaces the dict, so an unrelated key already living there (or a field
 simply omitted from this PATCH) survives untouched."""
 
@@ -8,7 +7,7 @@ import pytest
 
 from app.domains.organizations import service as organizations_service
 from app.domains.organizations.models import Organization
-from app.domains.organizations.schemas import OrganizationSettingsUpdate, PaymentSettingsUpdate
+from app.domains.organizations.schemas import OrganizationSettingsUpdate
 
 
 @pytest.mark.asyncio
@@ -20,7 +19,6 @@ async def test_get_settings_defaults_to_none_when_nothing_set(db, organization_i
         "bank_transfer_instructions": None,
         "admin_notification_email": None,
         "contract_instalment_cashback_mode": None,
-        "contract_full_payment_discount_percentage": None,
     }
 
 
@@ -42,7 +40,6 @@ async def test_update_settings_merges_and_partial_update_preserves_the_rest(db, 
         "bank_transfer_instructions": None,
         "admin_notification_email": None,
         "contract_instalment_cashback_mode": None,
-        "contract_full_payment_discount_percentage": None,
     }
 
     # Omitting a field (exclude_unset) leaves it exactly as it was.
@@ -84,36 +81,33 @@ async def test_admin_notification_email_defaults_and_can_be_overridden(db, organ
 
 
 @pytest.mark.asyncio
-async def test_payment_settings_never_echo_the_secret_and_merge_correctly(db, organization_id):
-    empty = await organizations_service.get_payment_settings(db, organization_id=organization_id)
-    assert empty == {
-        "stripe_publishable_key": None,
-        "stripe_secret_key_configured": False,
-        "stripe_secret_key_last4": None,
-        "stripe_webhook_secret_configured": False,
+async def test_payment_info_exposes_only_the_bank_details(db, organization_id):
+    assert await organizations_service.get_payment_info(db, organization_id=organization_id) == {
+        "iban": None, "holder": None, "instructions": None,
     }
 
-    updated = await organizations_service.update_payment_settings(
+    await organizations_service.update_settings(
         db, organization_id=organization_id,
-        payload=PaymentSettingsUpdate(
-            stripe_publishable_key="pk_test_abc123",
-            stripe_secret_key="sk_test_verysecretkey9999",
-            stripe_webhook_secret="whsec_testsecret",
+        payload=OrganizationSettingsUpdate(
+            bank_iban="IT60X0542811101000000123456", bank_account_holder="Jav Srl",
+            admin_notification_email="segreteria@example.com",
         ),
     )
-    assert updated["stripe_publishable_key"] == "pk_test_abc123"  # safe to echo whole
-    assert updated["stripe_secret_key_configured"] is True
-    assert updated["stripe_secret_key_last4"] == "9999"  # never the full secret
-    assert updated["stripe_webhook_secret_configured"] is True
+    info = await organizations_service.get_payment_info(db, organization_id=organization_id)
+    assert info == {"iban": "IT60X0542811101000000123456", "holder": "Jav Srl", "instructions": None}
 
-    # Omitting the secret on a later PATCH leaves it untouched (no re-paste
-    # needed just to change the publishable key).
-    updated2 = await organizations_service.update_payment_settings(
-        db, organization_id=organization_id, payload=PaymentSettingsUpdate(stripe_publishable_key="pk_test_new"),
-    )
-    assert updated2["stripe_publishable_key"] == "pk_test_new"
-    assert updated2["stripe_secret_key_configured"] is True
-    assert updated2["stripe_secret_key_last4"] == "9999"
 
-    raw_secret = await organizations_service.get_stripe_secret_key(db, organization_id=organization_id)
-    assert raw_secret == "sk_test_verysecretkey9999"
+@pytest.mark.asyncio
+async def test_a_missing_organization_resolves_to_the_only_one(db, organization_id):
+    """Login, password reset and invite links don't carry the organization:
+    with one club per installation the API finds it, so the frontend never
+    hardcodes an id that breaks when the database is recreated."""
+    assert await organizations_service.resolve_organization_id(db, None) == organization_id
+    assert await organizations_service.resolve_organization_id(db, str(organization_id)) == organization_id
+
+    db.add(Organization(name="Secondo club", legal_name="Secondo club"))
+    await db.commit()
+    with pytest.raises(organizations_service.OrganizationNotResolvedError):
+        await organizations_service.resolve_organization_id(db, None)
+    with pytest.raises(organizations_service.OrganizationNotResolvedError):
+        await organizations_service.resolve_organization_id(db, "non-un-uuid")

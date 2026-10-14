@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AccountingPanel } from "@/components/accounting-panel";
 import { AppShell, type NavItem } from "@/components/app-shell";
@@ -19,56 +19,14 @@ import { SupportTicketsPanel } from "@/components/support-tickets-panel";
 import { CustomerProductRequestsPanel } from "@/components/product-requests";
 import { WalletPanel } from "@/components/wallet-panel";
 import { CustomerSettingsPanel } from "@/components/customer-settings-panel";
-import { InvoiceRedemptionPanel } from "@/components/invoice-redemption-panel";
+import { CompetitionsPanel } from "@/components/club/competitions-panel";
+import { CoursesPanel } from "@/components/club/courses-panel";
+import { FamilyAccounting } from "@/components/club/family-accounting";
+import { FamilyHome } from "@/components/club/family-home";
+import { RankingPanel } from "@/components/club/ranking-panel";
+import { useClubFeatures } from "@/components/club/jav-courses";
+import { useI18n } from "@/lib/i18n/provider";
 import type { ContractRead, CustomerRead } from "@/lib/types";
-
-/** Shared "you just came back from Stripe Checkout" banner -- used by both
-    the "I miei Ordini" and "Riscatta Cashback" tabs (see the useEffect in
-    CustomerClientPage that reads ?payment=success|cancelled&tab=... and sets
-    paymentBanner), just with different body copy for what's actually being
-    confirmed. */
-function PaymentReturnBanner({
-  state, onDismiss, successBody, cancelledBody,
-}: {
-  state: "success" | "cancelled" | null;
-  onDismiss: () => void;
-  successBody: string;
-  cancelledBody: string;
-}) {
-  if (state === null) return null;
-  const isSuccess = state === "success";
-  return (
-    <div
-      className={`flex items-start gap-3 p-4 rounded-xl border text-sm animate-fade-in ${
-        isSuccess
-          ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-          : "bg-amber-500/10 border-amber-500/20 text-amber-400"
-      }`}
-    >
-      <svg className="w-5 h-5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        {isSuccess ? (
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-        ) : (
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        )}
-      </svg>
-      <div className="flex-1">
-        <p className="font-semibold">{isSuccess ? "Pagamento completato con successo!" : "Pagamento non completato"}</p>
-        <p className={`text-xs mt-0.5 ${isSuccess ? "text-emerald-400/80" : "text-amber-400/80"}`}>
-          {isSuccess ? successBody : cancelledBody}
-        </p>
-      </div>
-      <button
-        onClick={onDismiss}
-        className={`p-1 rounded-lg cursor-pointer shrink-0 ${isSuccess ? "hover:bg-emerald-500/10" : "hover:bg-amber-500/10"}`}
-      >
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </button>
-    </div>
-  );
-}
 
 async function fetchMyCustomerRecord(): Promise<CustomerRead | null> {
   const res = await fetch("/api/proxy/customers/me");
@@ -88,6 +46,63 @@ interface CustomerClientPageProps {
   organizationId?: string;
 }
 
+// The club comes first (docs/club-portal.md): for a parent the home IS the
+// family's club page -- athletes, fees, competitions. Everything that came
+// before (wallet, contracts, shop orders...) stays, one tap further away.
+const CLUB_NAV_ITEMS: NavItem[] = [
+  {
+    key: "club",
+    label: "Il mio club",
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1h3a1 1 0 001-1V10" />
+      </svg>
+    ),
+  },
+  {
+    key: "club-competitions",
+    label: "Gare",
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      </svg>
+    ),
+  },
+  {
+    key: "club-ranking",
+    label: "Ranking",
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 21h8m-4-4v4m-5-17h10v5a5 5 0 01-10 0V4zm10 1h3v2a3 3 0 01-3 3M7 5H4v2a3 3 0 003 3" />
+      </svg>
+    ),
+  },
+];
+
+const CLUB_COURSES_ITEM: NavItem = {
+  key: "club-courses",
+  label: "Corsi",
+  icon: (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  ),
+};
+
+// "I miei conti": quanto si è pagato, quanto resta, sconti e wallet
+// (family-accounting.tsx). Uno per account, persona per persona se ci sono figli.
+const CLUB_ACCOUNTING_ITEM: NavItem = {
+  key: "club-accounting",
+  label: "I miei conti",
+  icon: (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+    </svg>
+  ),
+};
+
+const CLUB_TABS = ["club", "club-competitions", "club-ranking", "club-courses", "club-accounting"] as const;
+
 const NAV_ITEMS: NavItem[] = [
   {
     key: "jav-contracts",
@@ -97,7 +112,7 @@ const NAV_ITEMS: NavItem[] = [
     // THEN the contracts list), so the label and icon were updated to
     // match what a customer actually lands on -- "Home" reads clearer to
     // a non-technical user on a mobile tab bar than "Dashboard" would.
-    label: "Home",
+    label: "Wallet e bonus",
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1h3a1 1 0 001-1V10" />
@@ -190,16 +205,6 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
-    key: "cashback",
-    label: "Riscatta Cashback",
-    notificationTypes: ["INVOICE_REDEMPTION_VERIFIED", "INVOICE_REDEMPTION_REJECTED"],
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    ),
-  },
-  {
     key: "accounting",
     label: "Contabilità",
     icon: (
@@ -226,11 +231,26 @@ const NAV_ITEMS: NavItem[] = [
     sections a customer actually returns to often, instead of only
     reachable via the sidebar. Same pattern as the promoter home and the
     admin Panoramica. */
+// Club first, then the Shop (4th tab on phones: ordering a judogi is the
+// other thing parents do here), then everything that came before.
+// Della vecchia applicazione restano solo le voci che servono a una
+// famiglia del club: contratti, pratiche, rete promoter, documentazione e
+// contabilità non c'entrano più e non si mostrano.
+const FAMILY_KEYS = new Set(["orders", "wallet", "support", "settings"]);
+const [, SHOP_ITEM, ...OTHER_ITEMS] = NAV_ITEMS;
+const FAMILY_NAV_ITEMS: NavItem[] = [
+  ...CLUB_NAV_ITEMS,
+  ...(SHOP_ITEM ? [SHOP_ITEM] : []),
+  CLUB_COURSES_ITEM,
+  CLUB_ACCOUNTING_ITEM,
+  ...OTHER_ITEMS.filter((item) => FAMILY_KEYS.has(item.key)),
+];
+
 const HOME_QUICK_LINKS: { key: string; label: string; description: string; icon: React.ReactNode }[] = [
   {
     key: "contracts",
     label: "Contratti",
-    description: "Attiva luce e gas",
+    description: "Iscrizioni e abbonamenti",
     icon: (
       <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -254,16 +274,6 @@ const HOME_QUICK_LINKS: { key: string; label: string; description: string; icon:
     icon: (
       <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 2l1 4H4a1 1 0 00-1 1v1a1 1 0 001 1h16a1 1 0 001-1V7a1 1 0 00-1-1h-6l1-4M5 9v9a2 2 0 002 2h10a2 2 0 002-2V9M10 13h4" />
-      </svg>
-    ),
-  },
-  {
-    key: "cashback",
-    label: "Riscatta Cashback",
-    description: "Da fattura a JavCash",
-    icon: (
-      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 14l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
       </svg>
     ),
   },
@@ -309,30 +319,22 @@ export function CustomerClientPage({ email, organizationId }: CustomerClientPage
   // la pratica (/customer?pratica=<id>) apre direttamente il suo pagamento.
   // Letto all'avvio, non in un effetto: la pratica si apre al primo disegno.
   const linkedPratica = /^[0-9a-f-]{36}$/i.test(searchParams.get("pratica") ?? "") ? searchParams.get("pratica") : null;
-  const [activeTab, setActiveTab] = useState<"jav-contracts" | "contracts" | "products" | "orders" | "product-requests" | "support" | "promoter-application" | "friend-referrals" | "documentation" | "wallet" | "cashback" | "accounting" | "settings">(linkedPratica ? "contracts" : "jav-contracts");
+  const [activeTab, setActiveTab] = useState<(typeof CLUB_TABS)[number] | "jav-contracts" | "contracts" | "products" | "orders" | "product-requests" | "support" | "promoter-application" | "friend-referrals" | "documentation" | "wallet" | "accounting" | "settings">(linkedPratica ? "contracts" : "club");
   // "Attiva nuovo contratto" / "Riprendi" / "Paga": the pratica wizard,
   // opened over whichever tab the customer is on.
   const [wizard, setWizard] = useState<WizardTarget | "new" | null>(
     linkedPratica ? { requestId: linkedPratica, step: "summary" } : null
   );
-  const queryClient = useQueryClient();
-  const [paymentBanner, setPaymentBanner] = useState<"success" | "cancelled" | null>(null);
 
-  // Landing back here from Stripe Checkout (success_url/cancel_url set by
-  // customer-orders-panel.tsx's "Paga con carta" or invoice-redemption-
-  // panel.tsx's "Paga con carta" for a cashback redemption fee) -- switch to
-  // the right tab, show a banner, and refetch so the order/redemption's
-  // status (still AWAITING_PAYMENT/PAYMENT_PENDING until the webhook lands,
-  // usually within a couple of seconds) updates without a manual reload. The
-  // query params are stripped right after reading them so a page refresh
-  // doesn't re-trigger the banner.
+  // A deep-link from an email ("Vai al wallet" etc, ?tab=wallet) switches to
+  // that tab. The query params are stripped right after reading them so a
+  // page refresh lands on the home again.
   const VALID_TABS = [
-    "jav-contracts", "activate-contract", "contracts", "products", "orders", "product-requests", "support",
-    "promoter-application", "friend-referrals", "documentation", "wallet", "cashback", "accounting", "settings",
+    ...CLUB_TABS, "jav-contracts", "activate-contract", "contracts", "products", "orders", "product-requests", "support",
+    "promoter-application", "friend-referrals", "documentation", "wallet", "accounting", "settings",
   ] as const;
 
   useEffect(() => {
-    const payment = searchParams.get("payment");
     const tab = searchParams.get("tab");
     if (searchParams.get("pratica")) {
       // Già aperta dallo stato iniziale: qui si toglie solo il parametro,
@@ -341,38 +343,13 @@ export function CustomerClientPage({ email, organizationId }: CustomerClientPage
       return;
     }
     const isValidTab = (VALID_TABS as readonly string[]).includes(tab ?? "");
-    if (!payment && !isValidTab) return;
+    if (!isValidTab) return;
 
-    // A plain deep-link from an email ("Vai al wallet" etc, ?tab=wallet, no
-    // ?payment=) just switches tab -- only a Stripe Checkout return
-    // (?payment=success|cancelled, always paired with tab=orders|cashback)
-    // also shows the payment banner and refetches.
     // "activate-contract" was its own tab until Session 52; old links and
     // emails still point at it.
     if (tab === "activate-contract") setActiveTab("contracts");
-    else if (isValidTab) setActiveTab(tab as typeof activeTab);
-    const queryKey =
-      tab === "cashback"
-        ? ["invoice-redemptions", "mine"]
-        : tab === "contracts"
-          ? ["contract-requests"]
-          : ["customer", "orders"];
-    if (payment === "success" || payment === "cancelled") {
-      setPaymentBanner(payment);
-      queryClient.invalidateQueries({ queryKey });
-    }
+    else setActiveTab(tab as typeof activeTab);
     router.replace("/customer", { scroll: false });
-
-    if (payment === "success") {
-      // The webhook is usually near-instant but not guaranteed to have
-      // landed by the time Stripe redirects back -- one extra refetch a
-      // couple seconds later catches the status flipping to PAID/CREDITED
-      // without requiring the customer to refresh manually.
-      const timer = setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey });
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const { data: myCustomer } = useQuery({
@@ -380,43 +357,48 @@ export function CustomerClientPage({ email, organizationId }: CustomerClientPage
     queryFn: fetchMyCustomerRecord,
   });
 
+  const isClubTab = (CLUB_TABS as readonly string[]).includes(activeTab);
+  const { t } = useI18n();
+  // The labels above stay as the Italian source; the menu shows them in the
+  // chosen language, falling back to them for a key not translated yet.
+  // Nei corsi JAV nelle scuole non ci sono gare né ranking: le voci spariscono.
+  const features = useClubFeatures();
+  const navItems = useMemo(() => FAMILY_NAV_ITEMS
+    .filter((item) => (item.key !== "club-competitions" || features.competitions) && (item.key !== "club-ranking" || features.ranking))
+    .map((item) => ({ ...item, label: t.dyn(`nav.${item.key}`, item.label) })), [t, features.competitions, features.ranking]);
+
   return (
     <AppShell
-      roleLabel="Area Cliente"
+      roleLabel={t("customer.roleLabel")}
       email={email}
-      navItems={NAV_ITEMS}
+      navItems={navItems}
       activeKey={activeTab}
       onNavigate={(key) => setActiveTab(key as typeof activeTab)}
-      headerTitle="La mia Area Cliente"
+      // The club pages carry their own hero/headers.
+      headerTitle={isClubTab ? undefined : t("customer.headerTitle")}
       showCart
       // Not on Contabilità (Session 54): the page has its own heading, and the
       // space goes to the totals.
       headerSubtitle={
-        activeTab === "accounting"
+        activeTab === "accounting" || isClubTab
           ? undefined
-          : "Visualizza lo stato dei tuoi contratti di fornitura luce/gas e richiedi assistenza."
+          : t("customer.headerSubtitle")
       }
     >
       {activeTab === "contracts" && (
         <div className="space-y-6">
           <SectionBanner image="contracts" alt="I miei Contratti" />
-          <PaymentReturnBanner
-            state={paymentBanner}
-            onDismiss={() => setPaymentBanner(null)}
-            successBody="La pratica si aggiorna a “Pagato” appena Stripe conferma, di solito in pochi secondi. Ogni contratto si attiva quando i suoi documenti sono approvati."
-            cancelledBody="Nessun addebito. Puoi pagare quando vuoi con il pulsante “Paga” della pratica."
-          />
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl border border-orange-500/25 bg-gradient-to-br from-orange-500/10 to-transparent">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl border border-brand-500/25 bg-gradient-to-br from-brand-500/10 to-transparent">
             <div>
-              <h3 className="text-base font-bold text-white light:text-slate-900">Le tue pratiche di attivazione</h3>
-              <p className="text-xs text-slate-400 light:text-slate-500 mt-1">
-                Una pratica può contenere uno o più punti di fornitura (POD luce, PDR gas): ogni punto è un contratto a sé,
-                con il suo pacchetto. Dati, documenti e pagamento li gestisci una volta sola.
+              <h3 className="text-base font-bold text-slate-900">Le tue pratiche di attivazione</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Una pratica può contenere uno o più contratti, ognuno con il suo pacchetto. Dati, documenti e
+                pagamento li gestisci una volta sola.
               </p>
             </div>
             <button
               onClick={() => setWizard("new")}
-              className="shrink-0 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-orange-600 to-amber-500 hover:from-orange-500 hover:to-amber-400 text-white text-sm font-bold shadow-lg shadow-orange-500/20 transition cursor-pointer"
+              className="shrink-0 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-brand-600 to-brand-400 hover:from-brand-500 hover:to-brand-400 text-white text-sm font-bold shadow-lg shadow-brand-500/20 transition cursor-pointer"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
@@ -425,18 +407,23 @@ export function CustomerClientPage({ email, organizationId }: CustomerClientPage
             </button>
           </div>
           {/* I pacchetti non si sfogliano più qui (Session 83): si scelgono,
-              con i loro dettagli, solo nel passo «Contratti» della pratica,
-              già filtrati per POD (luce) e PDR (gas). */}
+              con i loro dettagli, solo nel passo «Contratti» della pratica. */}
           <ContractRequestsList mode="customer" onOpenWizard={(target) => setWizard(target)} />
         </div>
       )}
+
+      {activeTab === "club" && <FamilyHome onNavigate={(key) => setActiveTab(key as typeof activeTab)} />}
+      {activeTab === "club-competitions" && features.competitions && <CompetitionsPanel />}
+      {activeTab === "club-ranking" && features.ranking && <RankingPanel />}
+      {activeTab === "club-courses" && <CoursesPanel />}
+      {activeTab === "club-accounting" && <FamilyAccounting onNavigate={(key) => setActiveTab(key as typeof activeTab)} />}
 
       {activeTab === "jav-contracts" && (
         <div className="space-y-6">
           <SectionBanner image="contracts" alt="Area Cliente" compact>
             <div>
-              <p className="text-[11px] font-semibold text-orange-300 uppercase tracking-wider">Bentornato</p>
-              <h2 className="text-lg sm:text-xl font-bold text-white truncate max-w-[70vw] sm:max-w-none">{email}</h2>
+              <p className="text-[11px] font-semibold text-brand-600 uppercase tracking-wider">Bentornato</p>
+              <h2 className="text-lg sm:text-xl font-bold text-slate-900 truncate max-w-[70vw] sm:max-w-none">{email}</h2>
             </div>
           </SectionBanner>
 
@@ -452,13 +439,13 @@ export function CustomerClientPage({ email, organizationId }: CustomerClientPage
                 <button
                   key={link.key}
                   onClick={() => setActiveTab(link.key as typeof activeTab)}
-                  className="group flex flex-col items-start gap-3 p-4 rounded-2xl border border-white/5 light:border-slate-200 bg-gradient-to-br from-slate-900/60 to-slate-900/20 light:from-white light:to-slate-50 hover:border-orange-500/40 hover:shadow-lg hover:shadow-orange-500/10 transition-all duration-200 cursor-pointer text-left"
+                  className="group flex flex-col items-start gap-3 p-4 rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 hover:border-brand-500/40 hover:shadow-lg hover:shadow-brand-500/10 transition-all duration-200 cursor-pointer text-left"
                 >
-                  <span className="p-2.5 rounded-xl bg-orange-500/10 text-orange-400 group-hover:bg-orange-500 group-hover:text-white transition-colors">
+                  <span className="p-2.5 rounded-xl bg-brand-500/10 text-brand-600 group-hover:bg-brand-500 group-hover:text-white transition-colors">
                     {link.icon}
                   </span>
                   <span className="min-w-0">
-                    <span className="block text-sm font-semibold text-white light:text-slate-900 truncate">
+                    <span className="block text-sm font-semibold text-slate-900 truncate">
                       {link.label}
                     </span>
                     <span className="block text-[11px] text-slate-500 truncate">{link.description}</span>
@@ -477,7 +464,7 @@ export function CustomerClientPage({ email, organizationId }: CustomerClientPage
           <SectionBanner image="products" alt="Shop" />
           <CustomerProductsPanel
             visibleCategories={["PARTNER", "DROPSHIPPING"]}
-            showImportedTab
+            showShopTab
             onOpenProductRequests={() => setActiveTab("product-requests")}
           />
         </div>
@@ -493,12 +480,6 @@ export function CustomerClientPage({ email, organizationId }: CustomerClientPage
       {activeTab === "orders" && (
         <div className="space-y-6">
           <SectionBanner image="products" alt="I miei Ordini" />
-          <PaymentReturnBanner
-            state={paymentBanner}
-            onDismiss={() => setPaymentBanner(null)}
-            successBody="L'ordine si aggiorna automaticamente a “Pagato” non appena Stripe conferma -- di solito pochi secondi."
-            cancelledBody="Puoi riprovare quando vuoi dal tuo ordine qui sotto."
-          />
           <CustomerOrdersPanel />
         </div>
       )}
@@ -534,19 +515,6 @@ export function CustomerClientPage({ email, organizationId }: CustomerClientPage
         <div className="space-y-6">
           <SectionBanner image="wallets" alt="Wallet" />
           <WalletPanel />
-        </div>
-      )}
-
-      {activeTab === "cashback" && (
-        <div className="space-y-6">
-          <SectionBanner image="wallets" alt="Riscatta Cashback" />
-          <PaymentReturnBanner
-            state={paymentBanner}
-            onDismiss={() => setPaymentBanner(null)}
-            successBody="La richiesta si aggiorna automaticamente ad “Accreditata” non appena Stripe conferma -- di solito pochi secondi."
-            cancelledBody="Puoi riprovare quando vuoi dalla tua richiesta qui sotto."
-          />
-          <InvoiceRedemptionPanel />
         </div>
       )}
 

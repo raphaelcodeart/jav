@@ -1,27 +1,22 @@
-"""La pratica di attivazione (Session 52): N punti, N contratti indipendenti,
-documenti comuni una volta, un pagamento solo.
+"""La pratica: N contratti indipendenti, documenti comuni una
+volta, un pagamento solo.
 
 What these pin down, in the order a pratica lives it:
 
-- every point is its own contract, with its own package and frozen price,
-  and nothing past DRAFT may lack a package;
-- a POD/PDR is validated and cannot be contracted twice at once;
+- every contract has its own package and frozen price, and nothing past
+  DRAFT may lack a package;
 - documents uploaded on the pratica fill every contract's slots;
-- one Checkout pays every contract, each exactly as if paid alone;
-- one monthly invoice of the pratica's subscription reaches each contract
-  through its own line, once;
+- one bank transfer pays every contract, each exactly as if paid alone, and
+  only once an administrator confirms it arrived;
+- on an instalment plan each later month is confirmed contract by contract,
+  once;
 - a contract created outside a pratica still belongs to one.
 """
 
-import hashlib
-import hmac
-import json
-import time
 import uuid
 from datetime import UTC, date, datetime
 
 import pytest
-import stripe
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
@@ -36,20 +31,17 @@ from app.domains.contracts.models import (
     ContractAttribution,
     ContractInstalment,
     ContractRequest,
-    ContractRequestCheckout,
 )
 from app.domains.customers.models import Customer
 from app.domains.documents import service as documents_service
 from app.domains.network import service as network_service
 from app.domains.notifications.models import Notification
-from app.domains.payments import service as payments_service
 from app.domains.rbac.models import Role, UserRole
-from app.domains.users.models import User
 from app.domains.referral import service as referral_service
+from app.domains.users.models import User
 from app.domains.wallets.models import WalletTransaction
 
 NOW = datetime(2026, 1, 1, tzinfo=UTC)
-WEBHOOK_SECRET = "whsec_test_requests"
 
 
 # --- Preparazione --------------------------------------------------------------
@@ -76,9 +68,9 @@ async def _customer(db, organization_id, *, email: str | None = None):
     return user, customer
 
 
-async def _package(db, organization_id, *, name: str, energy_type: str, price_cents: int, cashback: int = 0):
+async def _package(db, organization_id, *, name: str, price_cents: int, cashback: int = 0):
     product = Product(
-        organization_id=organization_id, code=f"P-{uuid.uuid4().hex[:6]}", energy_type=energy_type,
+        organization_id=organization_id, code=f"P-{uuid.uuid4().hex[:6]}",
         customer_type="BOTH", category="INTERNAL",
     )
     db.add(product)
@@ -94,14 +86,14 @@ async def _package(db, organization_id, *, name: str, energy_type: str, price_ce
 
 
 ADDRESS = requests_service.AddressData(street="Via Roma 1", city="Roma", province="RM", postal_code="00100")
-#: Session 89: whoever signs gives birth date and place, and the fiscal code
+#: Whoever signs gives birth date and place, and the fiscal code
 #: must match them -- Mario Rossi, born in Roma on 1 January 1980.
 MARIO = dict(fiscal_code="RSSMRA80A01H501U", birth_date=date(1980, 1, 1), birth_place_code="H501")
 CARLA = dict(fiscal_code="CLNCRL85C55F205X", birth_date=date(1985, 3, 15), birth_place_code="F205")
 
 
 async def _open(
-    db, organization_id, user, customer, *, points: int = 1, pdr: int = 0, product_version_id=None
+    db, organization_id, user, customer, *, points: int = 1, product_version_id=None
 ) -> ContractRequest:
     return await requests_service.create_request(
         db, organization_id=organization_id, customer_id=customer.id,
@@ -110,15 +102,15 @@ async def _open(
             iban="IT60X0542811101000000123456", address=ADDRESS, **MARIO,
         ),
         actor_user_id=user.id, actor_role="CUSTOMER", promoter_agent_id=None,
-        points_count=points, pdr_count=pdr, product_version_id=product_version_id,
+        points_count=points, product_version_id=product_version_id,
     )
 
 
 async def _minimum_documents(db, organization_id, user, request) -> None:
-    """What a pratica cannot be sent without (Session 82): one page of the
-    identity document and one of a bill. Not the fiscal code -- that one
-    still only holds each contract back from review, not the pratica."""
-    for document_type in ("IDENTITY", "UTILITY_BILL"):
+    """What a pratica cannot be sent without: one page of the
+    identity document. Not the fiscal code -- that one still only holds each
+    contract back from review, not the pratica."""
+    for document_type in ("IDENTITY",):
         await documents_service.upload_document(
             db, organization_id=organization_id, contract_request_id=request.id,
             document_type=document_type, file_bytes=b"%PDF-1.4\nfake", content_type="application/pdf",
@@ -128,23 +120,23 @@ async def _minimum_documents(db, organization_id, user, request) -> None:
 
 async def _pratica_with_three_points(db, organization_id):
     user, customer = await _customer(db, organization_id)
-    luce_a = await _package(db, organization_id, name="Luce A", energy_type="ELECTRICITY", price_cents=120_00, cashback=100)
-    luce_b = await _package(db, organization_id, name="Luce B", energy_type="ELECTRICITY", price_cents=240_00)
-    gas = await _package(db, organization_id, name="Gas", energy_type="GAS", price_cents=60_00)
-    request = await _open(db, organization_id, user, customer, points=2, pdr=1)
+    pkg_a = await _package(db, organization_id, name="Pacchetto A", price_cents=120_00, cashback=100)
+    pkg_b = await _package(db, organization_id, name="Pacchetto B", price_cents=240_00)
+    pkg_c = await _package(db, organization_id, name="Pacchetto C", price_cents=60_00)
+    request = await _open(db, organization_id, user, customer, points=3)
     c1, c2, c3 = await requests_service.list_points(db, request=request)
-    for contract, version in ((c1, luce_a), (c2, luce_b), (c3, gas)):
+    for contract, version in ((c1, pkg_a), (c2, pkg_b), (c3, pkg_c)):
         await requests_service.set_point_product(
             db, request=request, contract=contract, product_version_id=version.id, actor_user_id=user.id
         )
     return user, customer, request, [c1, c2, c3]
 
 
-# --- POD e contratti -----------------------------------------------------------
+# --- I contratti della pratica ------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_quanti_pod_creates_that_many_contracts_each_with_its_own_package_and_price(db, organization_id):
+async def test_a_pratica_creates_that_many_contracts_each_with_its_own_package_and_price(db, organization_id):
     user, customer, request, (c1, c2, c3) = await _pratica_with_three_points(db, organization_id)
 
     for contract in (c1, c2, c3):
@@ -156,12 +148,6 @@ async def test_quanti_pod_creates_that_many_contracts_each_with_its_own_package_
         assert contract.iban == "IT60X0542811101000000123456"
     assert (c1.gross_amount_cents, c2.gross_amount_cents, c3.gross_amount_cents) == (120_00, 240_00, 60_00)
 
-    rows = await contracts_service.to_read_dicts(db, [c1, c3])
-    # No POD code asked: the package decides luce or gas, the pratica the address.
-    assert [r["energy_type"] for r in rows] == ["ELECTRICITY", "GAS"]
-    assert rows[0]["pod_code"] is None
-    assert rows[0]["supply_point_label"] == "Energia elettrica - Via Roma 1, Roma"
-
     await _minimum_documents(db, organization_id, user, request)
     request = await requests_service.submit_request(db, request=request, actor_user_id=user.id)
     assert request.status == "SUBMITTED"
@@ -171,98 +157,49 @@ async def test_quanti_pod_creates_that_many_contracts_each_with_its_own_package_
 
 
 @pytest.mark.asyncio
-async def test_changing_quanti_pod_adds_or_drops_empty_points_first(db, organization_id):
+async def test_changing_the_count_adds_or_drops_empty_contracts_first(db, organization_id):
     user, customer = await _customer(db, organization_id)
-    luce = await _package(db, organization_id, name="Luce", energy_type="ELECTRICITY", price_cents=100_00)
+    pkg = await _package(db, organization_id, name="Pacchetto", price_cents=100_00)
     request = await _open(db, organization_id, user, customer, points=2)
     first, second = await requests_service.list_points(db, request=request)
     await requests_service.set_point_product(
-        db, request=request, contract=first, product_version_id=luce.id, actor_user_id=user.id
+        db, request=request, contract=first, product_version_id=pkg.id, actor_user_id=user.id
     )
 
-    points = await requests_service.set_points_count(
-        db, request=request, pod_count=4, pdr_count=None, actor_user_id=user.id
-    )
+    points = await requests_service.set_points_count(db, request=request, count=4, actor_user_id=user.id)
     assert len(points) == 4
-    points = await requests_service.set_points_count(
-        db, request=request, pod_count=1, pdr_count=None, actor_user_id=user.id
-    )
-    assert [p.id for p in points] == [first.id], "si tolgono prima i POD senza contratto scelto"
-    with pytest.raises(requests_service.ContractRequestError, match="almeno un POD o un PDR"):
-        await requests_service.set_points_count(db, request=request, pod_count=0, pdr_count=0, actor_user_id=user.id)
-
-
-async def _kinds(db, points):
-    from app.domains.customers.models import SupplyPoint
-
-    return [(await db.get(SupplyPoint, p.supply_point_id)).energy_type for p in points]
+    points = await requests_service.set_points_count(db, request=request, count=1, actor_user_id=user.id)
+    assert [p.id for p in points] == [first.id], "si tolgono prima i contratti senza pacchetto scelto"
+    with pytest.raises(requests_service.ContractRequestError, match="almeno un contratto"):
+        await requests_service.set_points_count(db, request=request, count=0, actor_user_id=user.id)
 
 
 @pytest.mark.asyncio
-async def test_quanti_pdr_creates_gas_points_and_each_kind_takes_only_its_own_offers(db, organization_id):
+async def test_the_same_package_for_all_lands_on_every_draft_contract(db, organization_id):
     user, customer = await _customer(db, organization_id)
-    luce = await _package(db, organization_id, name="Luce", energy_type="ELECTRICITY", price_cents=100_00)
-    gas = await _package(db, organization_id, name="Gas", energy_type="GAS", price_cents=50_00)
-    request = await _open(db, organization_id, user, customer, points=1, pdr=2)
-    points = await requests_service.list_points(db, request=request)
-    assert sorted(await _kinds(db, points)) == ["ELECTRICITY", "GAS", "GAS"]
-    pod = next(p for p, k in zip(points, await _kinds(db, points)) if k == "ELECTRICITY")
-    pdr = next(p for p, k in zip(points, await _kinds(db, points)) if k == "GAS")
-
-    with pytest.raises(requests_service.ContractRequestError, match="su un POD vanno solo offerte luce"):
-        await requests_service.set_point_product(
-            db, request=request, contract=pod, product_version_id=gas.id, actor_user_id=user.id
-        )
-    with pytest.raises(requests_service.ContractRequestError, match="su un PDR vanno solo offerte gas"):
-        await requests_service.set_point_product(
-            db, request=request, contract=pdr, product_version_id=luce.id, actor_user_id=user.id
-        )
-
-    # "Stessa offerta per tutti": il gas va solo sui PDR, la luce solo sul POD.
+    pkg = await _package(db, organization_id, name="Pacchetto", price_cents=50_00)
+    request = await _open(db, organization_id, user, customer, points=3)
     assert await requests_service.set_product_for_all(
-        db, request=request, product_version_id=gas.id, actor_user_id=user.id
-    ) == 2
-    assert await requests_service.set_product_for_all(
-        db, request=request, product_version_id=luce.id, actor_user_id=user.id
-    ) == 1
-    detail = await requests_service.detail(db, request=request, include_checkouts=False)
-    assert [(p["point_kind"], p["position"]) for p in detail["points"]] == [("POD", 1), ("PDR", 1), ("PDR", 2)]
-    assert [p["product_version_id"] for p in detail["points"]] == [luce.id, gas.id, gas.id]
+        db, request=request, product_version_id=pkg.id, actor_user_id=user.id
+    ) == 3
+    detail = await requests_service.detail(db, request=request)
+    assert [p["position"] for p in detail["points"]] == [1, 2, 3]
+    assert [p["product_version_id"] for p in detail["points"]] == [pkg.id, pkg.id, pkg.id]
 
 
 @pytest.mark.asyncio
-async def test_a_pratica_can_have_only_pdr_and_the_pdr_count_changes_on_its_own(db, organization_id):
+async def test_starting_from_a_package_chooses_it_for_every_contract(db, organization_id):
     user, customer = await _customer(db, organization_id)
-    luce = await _package(db, organization_id, name="Luce", energy_type="ELECTRICITY", price_cents=100_00)
-    # Partito da un'offerta luce ma senza POD: non si sceglie da nessuna parte, e non e' un errore.
-    request = await _open(db, organization_id, user, customer, points=0, pdr=1, product_version_id=luce.id)
-    points = await requests_service.list_points(db, request=request)
-    assert await _kinds(db, points) == ["GAS"]
-    assert points[0].product_version_id is None
-
-    points = await requests_service.set_points_count(
-        db, request=request, pod_count=None, pdr_count=3, actor_user_id=user.id
-    )
-    assert await _kinds(db, points) == ["GAS", "GAS", "GAS"]
-    with pytest.raises(requests_service.ContractRequestError, match="non ci sono POD"):
-        await requests_service.set_product_for_all(
-            db, request=request, product_version_id=luce.id, actor_user_id=user.id
-        )
+    pkg = await _package(db, organization_id, name="Pacchetto", price_cents=100_00)
+    request = await _open(db, organization_id, user, customer, points=3, product_version_id=pkg.id)
+    assert {p.product_version_id for p in await requests_service.list_points(db, request=request)} == {pkg.id}
 
 
 @pytest.mark.asyncio
-async def test_starting_from_a_package_chooses_it_for_every_pod(db, organization_id):
-    user, customer = await _customer(db, organization_id)
-    luce = await _package(db, organization_id, name="Luce", energy_type="ELECTRICITY", price_cents=100_00)
-    request = await _open(db, organization_id, user, customer, points=3, product_version_id=luce.id)
-    assert {p.product_version_id for p in await requests_service.list_points(db, request=request)} == {luce.id}
-
-
-@pytest.mark.asyncio
-async def test_a_pratica_cannot_be_sent_while_a_pod_has_no_contract(db, organization_id):
+async def test_a_pratica_cannot_be_sent_while_a_contract_has_no_package(db, organization_id):
     user, customer = await _customer(db, organization_id)
     request = await _open(db, organization_id, user, customer)
-    with pytest.raises(requests_service.ContractRequestError, match="contratto da attivare"):
+    with pytest.raises(requests_service.ContractRequestError, match="Scegli il pacchetto"):
         await _minimum_documents(db, organization_id, user, request)
         await requests_service.submit_request(db, request=request, actor_user_id=user.id)
 
@@ -276,33 +213,6 @@ async def test_the_database_refuses_a_contract_past_draft_without_a_package(db, 
     with pytest.raises(IntegrityError):
         await db.commit()
     await db.rollback()
-
-
-@pytest.mark.asyncio
-async def test_a_pod_can_move_to_its_own_address_and_keeps_it_when_the_pratica_address_changes(db, organization_id):
-    from app.domains.customers.models import Address, SupplyPoint
-
-    user, customer, request, (c1, c2, _c3) = await _pratica_with_three_points(db, organization_id)
-    await requests_service.update_point_address(
-        db, request=request, contract=c2,
-        address_data=requests_service.AddressData(street="Via Po 4", city="Torino", province="TO", postal_code="10100"),
-        actor_user_id=user.id,
-    )
-    await requests_service.update_holder(
-        db, request=request, actor_user_id=user.id,
-        holder=requests_service.HolderData(
-            first_name="Mario", last_name="Rossi", email="mario@example.demo", pec=None, iban=None,
-            address=requests_service.AddressData(street="Via Nuova 9", city="Roma", province="RM", postal_code="00100"),
-            **MARIO,
-        ),
-    )
-
-    async def street(contract):
-        sp = await db.get(SupplyPoint, contract.supply_point_id)
-        return (await db.get(Address, sp.supply_address_id)).street
-
-    assert await street(c1) == "Via Nuova 9"
-    assert await street(c2) == "Via Po 4"
 
 
 @pytest.mark.asyncio
@@ -330,11 +240,11 @@ async def test_a_sent_pratica_cannot_be_changed(db, organization_id):
 
 @pytest.mark.asyncio
 async def test_staff_fix_the_package_of_a_sent_pratica_but_never_of_a_paid_contract(db, organization_id):
-    """Session 71: the customer chose the wrong package (or none) and the
+    """The customer chose the wrong package (or none) and the
     pratica is already sent -- an administrator corrects it, and the price
     follows. Once that contract is paid, nobody moves it any more."""
     user, customer, request, (c1, c2, _c3) = await _pratica_with_three_points(db, organization_id)
-    other = await _package(db, organization_id, name="Luce C", energy_type="ELECTRICITY", price_cents=300_00)
+    other = await _package(db, organization_id, name="Pacchetto D", price_cents=300_00)
     await _minimum_documents(db, organization_id, user, request)
     await requests_service.submit_request(db, request=request, actor_user_id=user.id)
 
@@ -372,14 +282,14 @@ async def _upload(db, organization_id, user, *, document_type: str, contract_id=
 @pytest.mark.asyncio
 async def test_documents_uploaded_once_on_the_pratica_fill_every_contract(db, organization_id):
     user, customer, request, contracts = await _pratica_with_three_points(db, organization_id)
-    for document_type in ("IDENTITY", "FISCAL_CODE", "UTILITY_BILL"):
+    for document_type in ("IDENTITY", "FISCAL_CODE"):
         await _upload(db, organization_id, user, document_type=document_type, contract_request_id=request.id)
 
     await _minimum_documents(db, organization_id, user, request)
     await requests_service.submit_request(db, request=request, actor_user_id=user.id)
     for contract in contracts:
         await db.refresh(contract)
-        assert contract.status == "UNDER_REVIEW", "i documenti della pratica valgono per ogni punto"
+        assert contract.status == "UNDER_REVIEW", "i documenti della pratica valgono per ogni contratto"
         slots = await documents_service.get_contract_documents_status(
             db, organization_id=organization_id, contract=contract, customer_kind="PRIVATE"
         )
@@ -387,18 +297,18 @@ async def test_documents_uploaded_once_on_the_pratica_fill_every_contract(db, or
 
 
 @pytest.mark.asyncio
-async def test_a_point_own_bill_wins_over_the_shared_one(db, organization_id):
+async def test_a_contract_own_document_wins_over_the_shared_one(db, organization_id):
     user, customer, request, (c1, c2, _c3) = await _pratica_with_three_points(db, organization_id)
-    shared = await _upload(db, organization_id, user, document_type="UTILITY_BILL", contract_request_id=request.id)
-    own = await _upload(db, organization_id, user, document_type="UTILITY_BILL", contract_id=c1.id)
+    shared = await _upload(db, organization_id, user, document_type="IDENTITY", contract_request_id=request.id)
+    own = await _upload(db, organization_id, user, document_type="IDENTITY", contract_id=c1.id)
 
-    def bill(slots):
-        return next(s["document"] for s in slots if s["document_type"] == "UTILITY_BILL")
+    def identity(slots):
+        return next(s["document"] for s in slots if s["document_type"] == "IDENTITY")
 
-    assert bill(await documents_service.get_contract_documents_status(
+    assert identity(await documents_service.get_contract_documents_status(
         db, organization_id=organization_id, contract=c1, customer_kind="PRIVATE"
     )).id == own.id
-    assert bill(await documents_service.get_contract_documents_status(
+    assert identity(await documents_service.get_contract_documents_status(
         db, organization_id=organization_id, contract=c2, customer_kind="PRIVATE"
     )).id == shared.id
 
@@ -422,101 +332,47 @@ def test_the_monthly_figure_is_each_contract_split_on_its_own_then_added_up():
     assert by_key[payment_plans.PLAN_FULL].total_cents == 349_00
 
 
-def test_only_the_single_payment_is_discounted():
+def test_no_plan_is_discounted():
+    """Paying by bank transfer never carries a discount: one go is the list
+    price, the rate split the same total."""
     contracts = [Contract(gross_amount_cents=cents, status="UNDER_REVIEW") for cents in (180_00, 249_00)]
-    by_key = {o.plan.key: o for o in requests_service.plan_options(contracts, discount_percentage=32)}
-    full = by_key[payment_plans.PLAN_FULL]
-    assert full.list_total_cents == 429_00
-    assert full.discount_percentage == 32
-    assert full.total_cents == 122_40 + 169_32  # 180 - 57,60 ; 249 - 79,68
-    assert full.discount_cents == 57_60 + 79_68
-    for key in (payment_plans.PLAN_INSTALMENTS_3, payment_plans.PLAN_MONTHLY_12):
-        assert by_key[key].discount_cents == 0 and by_key[key].discount_percentage == 0
-        assert by_key[key].total_cents == 429_00 + by_key[key].rounding_difference_cents
-    # Switched off in Impostazioni (0): nothing changes.
-    plain = {o.plan.key: o for o in requests_service.plan_options(contracts, discount_percentage=0)}
-    assert plain[payment_plans.PLAN_FULL].total_cents == 429_00 and plain[payment_plans.PLAN_FULL].discount_cents == 0
-
-
-def test_too_many_contracts_for_one_subscription_leaves_only_the_single_payment():
-    contracts = [
-        Contract(gross_amount_cents=120_00, status="UNDER_REVIEW")
-        for _ in range(requests_service.MAX_SUBSCRIPTION_LINES + 1)
-    ]
     by_key = {o.plan.key: o for o in requests_service.plan_options(contracts)}
-    assert by_key[payment_plans.PLAN_FULL].available
-    assert not by_key[payment_plans.PLAN_MONTHLY_12].available
-    assert "al massimo" in by_key[payment_plans.PLAN_MONTHLY_12].unavailable_reason
+    assert by_key[payment_plans.PLAN_FULL].total_cents == 429_00
+    for key in (payment_plans.PLAN_INSTALMENTS_3, payment_plans.PLAN_MONTHLY_12):
+        assert by_key[key].total_cents == 429_00 + by_key[key].rounding_difference_cents
 
 
-async def _configure_stripe(db, organization_id) -> None:
+def test_many_contracts_can_still_be_paid_in_instalments():
+    """There is no ceiling on how many contracts a pratica pays in rate."""
+    contracts = [Contract(gross_amount_cents=120_00, status="UNDER_REVIEW") for _ in range(30)]
+    by_key = {o.plan.key: o for o in requests_service.plan_options(contracts)}
+    assert all(o.available for o in by_key.values())
+
+
+async def _configure_bank(db, organization_id) -> None:
     from app.domains.organizations.models import Organization
 
     org = await db.get(Organization, organization_id)
-    org.settings = {
-        **(org.settings or {}),
-        "stripe_secret_key": "sk_test_fake",
-        "stripe_publishable_key": "pk_test_fake",
-        "stripe_webhook_secret": WEBHOOK_SECRET,
-    }
+    org.settings = {**(org.settings or {}), "bank_iban": "IT60X0542811101000000123456", "bank_account_holder": "Jav"}
     await db.commit()
 
 
-def _signed(payload: dict) -> tuple[bytes, str]:
-    body = json.dumps(payload).encode()
-    timestamp = int(time.time())
-    signature = hmac.new(WEBHOOK_SECRET.encode(), f"{timestamp}.".encode() + body, hashlib.sha256).hexdigest()
-    return body, f"t={timestamp},v1={signature}"
+async def _pay_by_transfer(db, organization_id, request, user, *, plan_key: str) -> list[Contract]:
+    """The customer announces the transfer with `plan_key`; an administrator
+    confirms the (first) transfer arrived."""
+    await _configure_bank(db, organization_id)
+    await requests_service.request_bank_transfer(db, request=request, actor_user_id=user.id, plan_key=plan_key)
+    return await requests_service.confirm_bank_transfer(db, request=request, actor_user_id=user.id)
 
 
-async def _webhook(db, organization_id, payload: dict) -> None:
-    body, sig = _signed(payload)
-    await payments_service.handle_webhook_event(db, organization_id=organization_id, payload=body, sig_header=sig)
+async def _confirm_month(db, organization_id, user, contract, number: int) -> None:
+    """What POST /contracts/{id}/instalments/{n}/confirm does."""
+    from app.domains.contracts import instalments as instalments_service
 
-
-class _FakeSession:
-    def __init__(self, session_id: str):
-        self.id = session_id
-        self.url = f"https://checkout.stripe.test/{session_id}"
-
-
-def _fake_stripe(monkeypatch, *, created: list, item_ids: dict[str, str] | None = None, lines: list | None = None):
-    counter = iter(range(1, 100))
-
-    def create_session(**params):
-        created.append(params)
-        return _FakeSession(f"cs_pratica_{next(counter)}")
-
-    def retrieve_subscription(subscription_id, **_):
-        return stripe.StripeObject.construct_from(
-            {
-                "id": subscription_id,
-                "billing_cycle_anchor": int(time.time()),
-                "items": {
-                    "data": [
-                        {"id": item_id, "price": {"product": {"id": f"prod_{item_id}", "metadata": {"contract_id": cid}}}}
-                        for cid, item_id in (item_ids or {}).items()
-                    ]
-                },
-            },
-            "sk_test_fake",
-        )
-
-    class _Lines:
-        def __init__(self, data):
-            self._data = data
-
-        def auto_paging_iter(self):
-            return iter(self._data)
-
-    def list_lines(invoice_id, **_):
-        return _Lines([stripe.StripeObject.construct_from(line, "sk_test_fake") for line in (lines or [])])
-
-    monkeypatch.setattr(stripe.checkout.Session, "create", staticmethod(create_session))
-    monkeypatch.setattr(stripe.checkout.Session, "expire", staticmethod(lambda *a, **k: None))
-    monkeypatch.setattr(stripe.Subscription, "retrieve", staticmethod(retrieve_subscription))
-    monkeypatch.setattr(stripe.Subscription, "modify", staticmethod(lambda *a, **k: None))
-    monkeypatch.setattr(stripe.Invoice, "list_lines", staticmethod(list_lines))
+    await instalments_service.confirm_manually(db, contract=contract, number=number, actor_user_id=user.id)
+    await contracts_service.credit_contract_instalment_cashback(
+        db, organization_id=organization_id, contract=contract, instalment_number=number
+    )
 
 
 async def _sent_pratica(db, organization_id):
@@ -529,33 +385,11 @@ async def _sent_pratica(db, organization_id):
 
 
 @pytest.mark.asyncio
-async def test_one_checkout_pays_every_contract_of_the_pratica_each_as_if_alone(db, organization_id, monkeypatch):
-    await _configure_stripe(db, organization_id)
+async def test_one_transfer_pays_every_contract_of_the_pratica_each_as_if_alone(db, organization_id):
     user, customer, request, contracts = await _sent_pratica(db, organization_id)
-    created: list = []
-    _fake_stripe(monkeypatch, created=created)
 
-    await payments_service.create_checkout_session_for_request(
-        db, organization_id=organization_id, request=request, plan_key=payment_plans.PLAN_FULL,
-        actor_user_id=user.id, success_url="https://x/ok", cancel_url="https://x/ko",
-    )
-    [params] = created
-    assert params["mode"] == "payment"
-    # Paid in one go: 32% off by default (Session 64). 120 -> 81,60 ...
-    assert [li["price_data"]["unit_amount"] for li in params["line_items"]] == [81_60, 163_20, 40_80]
-    assert "sconto 32%" in params["line_items"][0]["price_data"]["product_data"]["description"]
-    assert "sconto del 32%" in params["custom_text"]["submit"]["message"]
-    assert {li["price_data"]["product_data"]["metadata"]["contract_id"] for li in params["line_items"]} == {
-        str(c.id) for c in contracts
-    }
-
-    await _webhook(db, organization_id, {
-        "id": "evt_pratica_full",
-        "type": "checkout.session.completed",
-        "data": {"object": {
-            "id": "cs_pratica_1", "metadata": {"kind": "contract_request", "contract_request_id": str(request.id)},
-        }},
-    })
+    paid = await _pay_by_transfer(db, organization_id, request, user, plan_key=payment_plans.PLAN_FULL)
+    assert len(paid) == 3
     for contract in contracts:
         await db.refresh(contract)
         assert contract.paid_at is not None
@@ -565,67 +399,30 @@ async def test_one_checkout_pays_every_contract_of_the_pratica_each_as_if_alone(
         rows = list((await db.execute(
             select(ContractInstalment).where(ContractInstalment.contract_id == contract.id)
         )).scalars())
-        # The discount is frozen on the contract: the list price stays the contract's value.
-        assert contract.payment_discount_cents == contract.gross_amount_cents * 32 // 100
-        assert [(r.number, r.status, r.amount_cents) for r in rows] == [
-            (1, "PAID", contract.gross_amount_cents - contract.payment_discount_cents)
-        ]
+        assert [(r.number, r.status, r.amount_cents) for r in rows] == [(1, "PAID", contract.gross_amount_cents)]
 
-    # Only Luce A earns cashback (100%), on what was paid.
+    # Only Pacchetto A earns cashback (100%), on what was paid.
     credits = list((await db.execute(
         select(WalletTransaction).where(WalletTransaction.reference_contract_id.in_([c.id for c in contracts]))
     )).scalars())
-    assert [(t.reference_contract_id, t.amount_cents) for t in credits] == [(contracts[0].id, 81_60)]
+    assert [(t.reference_contract_id, t.amount_cents) for t in credits] == [(contracts[0].id, 120_00)]
 
 
 @pytest.mark.asyncio
-async def test_a_monthly_invoice_reaches_each_contract_through_its_own_line_once(db, organization_id, monkeypatch):
-    await _configure_stripe(db, organization_id)
+async def test_on_twelve_instalments_each_month_reaches_each_contract_once(db, organization_id):
     user, customer, request, contracts = await _sent_pratica(db, organization_id)
-    items = {str(c.id): f"si_{i}" for i, c in enumerate(contracts)}
-    created: list = []
-    # 120 / 12 = 10,00 ; 240 / 12 = 20,00 ; 60 / 12 = 5,00
-    lines = [
-        {"id": f"il_{i}", "amount": amount, "parent": {"subscription_item_details": {"subscription_item": f"si_{i}"}}}
-        for i, amount in enumerate((10_00, 20_00, 5_00))
-    ]
-    _fake_stripe(monkeypatch, created=created, item_ids=items, lines=lines)
 
-    await payments_service.create_checkout_session_for_request(
-        db, organization_id=organization_id, request=request, plan_key=payment_plans.PLAN_MONTHLY_12,
-        actor_user_id=user.id, success_url="https://x/ok", cancel_url="https://x/ko",
+    await _configure_bank(db, organization_id)
+    request = await requests_service.request_bank_transfer(
+        db, request=request, actor_user_id=user.id, plan_key=payment_plans.PLAN_MONTHLY_12
     )
-    assert created[0]["mode"] == "subscription"
-    assert [li["price_data"]["unit_amount"] for li in created[0]["line_items"]] == [10_00, 20_00, 5_00]
-    # Stripe only shows "35,00 € al mese": the plan is spelled out next to it.
-    assert "12 rate mensili da 35,00 €, per un totale di 420,00 €" in created[0]["custom_text"]["submit"]["message"]
-    assert "dopo la 12ª rata" in created[0]["custom_text"]["submit"]["message"]
-    assert created[0]["line_items"][1]["price_data"]["product_data"]["description"] == (
-        "12 rate mensili da 20,00 € · totale 240,00 €"
-    )
+    # 120 / 12 = 10,00 ; 240 / 12 = 20,00 ; 60 / 12 = 5,00: the first transfer.
+    assert request.bank_transfer_total_cents == 35_00
+    await requests_service.confirm_bank_transfer(db, request=request, actor_user_id=user.id)
 
-    await _webhook(db, organization_id, {
-        "id": "evt_pratica_sub",
-        "type": "checkout.session.completed",
-        "data": {"object": {
-            "id": "cs_pratica_1", "subscription": "sub_pratica", "customer": "cus_x", "invoice": "in_first",
-            "metadata": {"kind": "contract_request"},
-        }},
-    })
     for contract in contracts:
         await db.refresh(contract)
-        assert contract.stripe_subscription_id == "sub_pratica"
-        assert contract.stripe_subscription_item_id == items[str(contract.id)]
-
-    invoice = {
-        "id": "in_month_2", "billing_reason": "subscription_cycle", "amount_paid": 35_00,
-        "parent": {"subscription_details": {"subscription": "sub_pratica"}},
-    }
-    # Delivered twice under two event ids (a manual resend from the dashboard).
-    for event_id in ("evt_month_2", "evt_month_2_resend"):
-        await _webhook(db, organization_id, {"id": event_id, "type": "invoice.paid", "data": {"object": invoice}})
-
-    for contract in contracts:
+        await _confirm_month(db, organization_id, user, contract, 2)
         rows = list((await db.execute(
             select(ContractInstalment)
             .where(ContractInstalment.contract_id == contract.id)
@@ -633,64 +430,16 @@ async def test_a_monthly_invoice_reaches_each_contract_through_its_own_line_once
         )).scalars())
         assert len(rows) == 12
         assert [r.status for r in rows[:3]] == ["PAID", "PAID", "SCHEDULED"]
-        assert rows[0].stripe_invoice_id == "in_first"
-        assert rows[1].stripe_invoice_id == "in_month_2"
+        assert {r.payment_source for r in rows[:2]} == {"ADMIN"}
 
-    # Luce A: 100% cashback on each 10,00 instalment -- first month and second, never twice.
+    # Pacchetto A: 100% cashback on each 10,00 instalment -- first month and second, never twice.
+    await contracts_service.credit_contract_instalment_cashback(
+        db, organization_id=organization_id, contract=contracts[0], instalment_number=2
+    )
     credits = list((await db.execute(
         select(WalletTransaction.amount_cents).where(WalletTransaction.reference_contract_id == contracts[0].id)
     )).scalars())
     assert sorted(credits) == [10_00, 10_00]
-
-
-@pytest.mark.asyncio
-async def test_a_contract_paid_twice_is_reported_not_paid_again(db, organization_id, monkeypatch):
-    await _configure_stripe(db, organization_id)
-    user, customer, request, contracts = await _sent_pratica(db, organization_id)
-    created: list = []
-    _fake_stripe(monkeypatch, created=created)
-    for _ in range(2):
-        await payments_service.create_checkout_session_for_request(
-            db, organization_id=organization_id, request=request, plan_key=payment_plans.PLAN_FULL,
-            actor_user_id=user.id, success_url="https://x/ok", cancel_url="https://x/ko",
-        )
-    for n in (1, 2):
-        await _webhook(db, organization_id, {
-            "id": f"evt_twice_{n}", "type": "checkout.session.completed",
-            "data": {"object": {"id": f"cs_pratica_{n}", "metadata": {"kind": "contract_request"}}},
-        })
-
-    second = (await db.execute(
-        select(ContractRequestCheckout).where(ContractRequestCheckout.stripe_checkout_session_id == "cs_pratica_2")
-    )).scalar_one()
-    assert "0 contratti pagati" in second.outcome
-    assert "3 già pagati" in second.outcome
-    credits = list((await db.execute(
-        select(WalletTransaction).where(WalletTransaction.reference_contract_id == contracts[0].id)
-    )).scalars())
-    assert len(credits) == 1
-
-
-@pytest.mark.asyncio
-async def test_stopping_billing_removes_only_that_contract_line(db, organization_id, monkeypatch):
-    await _configure_stripe(db, organization_id)
-    user, customer, request, contracts = await _sent_pratica(db, organization_id)
-    for i, contract in enumerate(contracts):
-        contract.stripe_subscription_id = "sub_stop"
-        contract.stripe_subscription_item_id = f"si_stop_{i}"
-    await db.commit()
-    calls: list = []
-    monkeypatch.setattr(stripe.SubscriptionItem, "delete", staticmethod(lambda item, **k: calls.append(("item", item))))
-    monkeypatch.setattr(stripe.Subscription, "cancel", staticmethod(lambda sub, **k: calls.append(("sub", sub))))
-
-    await payments_service.stop_contract_billing(
-        db, organization_id=organization_id, contract=contracts[1], actor_user_id=user.id
-    )
-    assert calls == [("item", "si_stop_1")]
-    await db.refresh(contracts[1])
-    assert contracts[1].billing_stopped_at is not None
-    await db.refresh(contracts[0])
-    assert contracts[0].billing_stopped_at is None
 
 
 # --- Contratti fuori da una pratica ------------------------------------------------
@@ -699,15 +448,10 @@ async def test_stopping_billing_removes_only_that_contract_line(db, organization
 @pytest.mark.asyncio
 async def test_a_contract_created_on_its_own_gets_a_pratica_of_one(db, organization_id):
     user, customer = await _customer(db, organization_id)
-    luce = await _package(db, organization_id, name="Luce", energy_type="ELECTRICITY", price_cents=100_00)
-    from app.domains.customers.schemas import SupplyPointCreate
+    pkg = await _package(db, organization_id, name="Pacchetto", price_cents=100_00)
 
     contract = await contracts_service.create_contract_self_service(
-        db, organization_id=organization_id, customer_user_id=user.id, product_version_id=luce.id,
-        supply_point_payload=SupplyPointCreate(
-            energy_type="ELECTRICITY", pod_code="IT001E00000001", street="Via Roma 1", city="Roma", province="RM",
-            postal_code="00100",
-        ),
+        db, organization_id=organization_id, customer_user_id=user.id, product_version_id=pkg.id,
         email="mario@example.demo", holder_first_name="Mario", holder_last_name="Rossi",
     )
     request = await db.get(ContractRequest, contract.contract_request_id)
@@ -746,8 +490,8 @@ def _client(db, user_id, organization_id, roles):
 @pytest.mark.asyncio
 async def test_the_pratica_routes_work_end_to_end_for_the_customer(db, organization_id):
     user, customer = await _customer(db, organization_id)
-    luce = await _package(db, organization_id, name="Luce", energy_type="ELECTRICITY", price_cents=120_00)
-    gas = await _package(db, organization_id, name="Gas", energy_type="GAS", price_cents=60_00)
+    pkg = await _package(db, organization_id, name="Pacchetto", price_cents=120_00)
+    pkg_c = await _package(db, organization_id, name="Pacchetto C", price_cents=60_00)
     app, client = _client(db, user.id, organization_id, ["CUSTOMER"])
     try:
         async with client:
@@ -757,18 +501,18 @@ async def test_the_pratica_routes_work_end_to_end_for_the_customer(db, organizat
                 "street": "Via Roma 1", "city": "Roma", "province": "rm", "postal_code": "00100",
                 "holder_fiscal_code": "rssmra 80a01 h501u", "holder_birth_date": "1980-01-01",
                 "holder_birth_place_code": "H501",
-                "pod_count": 1, "pdr_count": 1,
+                "points_count": 2,
             })
             assert res.status_code == 201, res.text
             request_id = res.json()["id"]
             assert res.json()["iban"] == "IT60X0542811101000000123456"
             points = res.json()["points"]
-            assert [(p["point_kind"], p["position"]) for p in points] == [("POD", 1), ("PDR", 1)]
+            assert [p["position"] for p in points] == [1, 2]
 
             res = await client.post(f"/contract-requests/{request_id}/submit")
-            assert res.status_code == 400, "un POD senza contratto blocca l'invio"
+            assert res.status_code == 400, "un contratto senza pacchetto blocca l'invio"
 
-            for point, version in zip(points, (luce, gas), strict=True):
+            for point, version in zip(points, (pkg, pkg_c), strict=True):
                 res = await client.put(
                     f"/contract-requests/{request_id}/points/{point['id']}/product",
                     json={"product_version_id": str(version.id)},
@@ -776,9 +520,9 @@ async def test_the_pratica_routes_work_end_to_end_for_the_customer(db, organizat
                 assert res.status_code == 200, res.text
 
             res = await client.put(
-                f"/contract-requests/{request_id}/points-count", json={"pod_count": 0, "pdr_count": 0}
+                f"/contract-requests/{request_id}/points-count", json={"count": 0}
             )
-            assert res.status_code == 400
+            assert res.status_code == 422
 
             res = await client.post(f"/contract-requests/{request_id}/submit")
             assert res.status_code == 400 and "Documento d'identità" in res.text, "senza documenti non si invia"
@@ -796,7 +540,6 @@ async def test_the_pratica_routes_work_end_to_end_for_the_customer(db, organizat
             assert detail["status"] == "SUBMITTED"
             assert detail["points_total"] == 2
             assert detail["total_gross_cents"] == 180_00
-            assert detail["checkouts"] == [], "i tentativi di pagamento li vede solo lo staff"
 
             res = await client.get(f"/contract-requests/{request_id}/payment-options")
             assert res.status_code == 200, res.text
@@ -846,34 +589,23 @@ async def _customer_without_role(db, organization_id):
 
 
 @pytest.mark.asyncio
-async def test_a_paid_contract_shows_in_accounting_with_its_instalments(db, organization_id, monkeypatch):
-    """Session 54: paying a contract used to leave no real-money trace in
+async def test_a_paid_contract_shows_in_accounting_with_its_instalments(db, organization_id):
+    """Paying a contract used to leave no real-money trace in
     "Contabilità" -- only its cashback. Every paid instalment is now a row,
     counted in the totals and opening the contract's own detail."""
     from app.domains.accounting import details as accounting_details
     from app.domains.accounting import service as accounting_service
 
-    await _configure_stripe(db, organization_id)
     user, customer, request, contracts = await _sent_pratica(db, organization_id)
-    _fake_stripe(monkeypatch, created=[], item_ids={str(c.id): f"si_acc_{i}" for i, c in enumerate(contracts)})
-    await payments_service.create_checkout_session_for_request(
-        db, organization_id=organization_id, request=request, plan_key=payment_plans.PLAN_MONTHLY_12,
-        actor_user_id=user.id, success_url="https://x/ok", cancel_url="https://x/ko",
-    )
-    await _webhook(db, organization_id, {
-        "id": "evt_acc", "type": "checkout.session.completed",
-        "data": {"object": {"id": "cs_pratica_1", "subscription": "sub_acc", "invoice": "in_acc",
-                            "metadata": {"kind": "contract_request"}}},
-    })
+    await _pay_by_transfer(db, organization_id, request, user, plan_key=payment_plans.PLAN_MONTHLY_12)
 
     movements = await accounting_service.list_my_movements(db, organization_id=organization_id, user_id=user.id)
     payments = [m for m in movements if m["kind"] == "CONTRACT_PAYMENT"]
     assert sorted(m["amount_cents"] for m in payments) == [5_00, 10_00, 20_00]
-    assert all(m["payment_method"] == "CARD" and m["contract_request_id"] == request.id for m in payments)
+    assert all(m["payment_method"] == "BANK_TRANSFER" and m["contract_request_id"] == request.id for m in payments)
 
     summary = await accounting_service.my_summary(db, organization_id=organization_id, user_id=user.id)
     assert summary["spent_contracts_cents"] == 35_00
-    assert summary["spent_card_cents"] == 35_00
     assert summary["next_instalment_cents"] == 35_00, "la prossima rata di tutti i contratti insieme"
 
     detail = await accounting_details.build_detail(
@@ -886,7 +618,7 @@ async def test_a_paid_contract_shows_in_accounting_with_its_instalments(db, orga
     assert any(e["label"].startswith("Prossima rata 2/12") for e in detail["timeline"])
 
 
-# --- Session 55: il promoter compila per il cliente ----------------------------------
+# --- Il promoter compila per il cliente ----------------------------------
 
 
 async def _promoter_and_customer(db, organization_id):
@@ -931,7 +663,7 @@ async def test_a_promoter_who_is_also_a_customer_can_handle_their_customers_docu
     from app.domains.documents.router import _assert_contract_document_access
 
     promoter_user, agent, customer_user, customer = await _promoter_and_customer(db, organization_id)
-    luce = await _package(db, organization_id, name="Luce", energy_type="ELECTRICITY", price_cents=100_00)
+    pkg = await _package(db, organization_id, name="Pacchetto", price_cents=100_00)
     request = await requests_service.create_request(
         db, organization_id=organization_id, customer_id=customer.id,
         holder=requests_service.HolderData(
@@ -939,7 +671,7 @@ async def test_a_promoter_who_is_also_a_customer_can_handle_their_customers_docu
             **CARLA,
         ),
         actor_user_id=promoter_user.id, actor_role="PROMOTER", promoter_agent_id=agent.id,
-        points_count=2, product_version_id=luce.id,
+        points_count=2, product_version_id=pkg.id,
     )
     contract, _ = await requests_service.list_points(db, request=request)
     assert contract.activated_by_promoter_id == agent.id
@@ -964,7 +696,7 @@ async def test_the_customer_is_told_when_their_promoter_sends_a_pratica(db, orga
     from app.domains.notifications.models import Notification
 
     promoter_user, agent, customer_user, customer = await _promoter_and_customer(db, organization_id)
-    luce = await _package(db, organization_id, name="Luce", energy_type="ELECTRICITY", price_cents=100_00)
+    pkg = await _package(db, organization_id, name="Pacchetto", price_cents=100_00)
     request = await requests_service.create_request(
         db, organization_id=organization_id, customer_id=customer.id,
         holder=requests_service.HolderData(
@@ -972,7 +704,7 @@ async def test_the_customer_is_told_when_their_promoter_sends_a_pratica(db, orga
             **CARLA,
         ),
         actor_user_id=promoter_user.id, actor_role="PROMOTER", promoter_agent_id=agent.id,
-        points_count=1, product_version_id=luce.id,
+        points_count=1, product_version_id=pkg.id,
     )
     await _minimum_documents(db, organization_id, promoter_user, request)
     await requests_service.submit_request(db, request=request, actor_user_id=promoter_user.id)
@@ -986,7 +718,7 @@ async def test_the_customer_is_told_when_their_promoter_sends_a_pratica(db, orga
     assert summary["customer_id"] == customer.id
 
 
-# --- Session 59: cashback dei contratti a rate, intero in anticipo o rata per rata ---------
+# --- Cashback dei contratti a rate, intero in anticipo o rata per rata ---------
 
 
 async def _set_cashback_mode(db, organization_id, mode: str) -> None:
@@ -997,31 +729,17 @@ async def _set_cashback_mode(db, organization_id, mode: str) -> None:
     await db.commit()
 
 
-async def _pay_first_instalment_of_12(db, organization_id, monkeypatch):
+async def _pay_first_instalment_of_12(db, organization_id):
     user, customer, request, contracts = await _sent_pratica(db, organization_id)
-    items = {str(c.id): f"si_cb_{i}" for i, c in enumerate(contracts)}
-    lines = [
-        {"id": f"il_{i}", "amount": amount, "parent": {"subscription_item_details": {"subscription_item": f"si_cb_{i}"}}}
-        for i, amount in enumerate((10_00, 20_00, 5_00))
-    ]
-    _fake_stripe(monkeypatch, created=[], item_ids=items, lines=lines)
-    await payments_service.create_checkout_session_for_request(
-        db, organization_id=organization_id, request=request, plan_key=payment_plans.PLAN_MONTHLY_12,
-        actor_user_id=user.id, success_url="https://x/ok", cancel_url="https://x/ko",
-    )
-    await _webhook(db, organization_id, {
-        "id": "evt_cb_first", "type": "checkout.session.completed",
-        "data": {"object": {"id": "cs_pratica_1", "subscription": "sub_cb", "invoice": "in_cb_1",
-                            "metadata": {"kind": "contract_request"}}},
-    })
+    await _pay_by_transfer(db, organization_id, request, user, plan_key=payment_plans.PLAN_MONTHLY_12)
+    for contract in contracts:
+        await db.refresh(contract)
     return user, contracts
 
 
-async def _second_month(db, organization_id, event_id="evt_cb_2"):
-    await _webhook(db, organization_id, {"id": event_id, "type": "invoice.paid", "data": {"object": {
-        "id": "in_cb_2", "billing_reason": "subscription_cycle", "amount_paid": 35_00,
-        "parent": {"subscription_details": {"subscription": "sub_cb"}},
-    }}})
+async def _second_month(db, organization_id, user, contracts):
+    for contract in contracts:
+        await _confirm_month(db, organization_id, user, contract, 2)
 
 
 async def _credits(db, contract):
@@ -1031,65 +749,38 @@ async def _credits(db, contract):
 
 
 @pytest.mark.asyncio
-async def test_upfront_mode_credits_the_whole_cashback_at_the_first_instalment_and_nothing_after(
-    db, organization_id, monkeypatch
-):
-    await _configure_stripe(db, organization_id)
+async def test_upfront_mode_credits_the_whole_cashback_at_the_first_instalment_and_nothing_after(db, organization_id):
     await _set_cashback_mode(db, organization_id, "UPFRONT")
-    _user, contracts = await _pay_first_instalment_of_12(db, organization_id, monkeypatch)
-    # Luce A: 120,00 with 100% cashback -- all of it, at once.
+    user, contracts = await _pay_first_instalment_of_12(db, organization_id)
+    # Pacchetto A: 120,00 with 100% cashback -- all of it, at once.
     assert await _credits(db, contracts[0]) == [120_00]
 
-    await _second_month(db, organization_id)
+    await _second_month(db, organization_id, user, contracts)
     assert await _credits(db, contracts[0]) == [120_00], "nessun altro accredito sulle rate successive"
 
 
 @pytest.mark.asyncio
-async def test_a_contract_credited_in_advance_is_not_credited_again_if_the_setting_changes(
-    db, organization_id, monkeypatch
-):
-    await _configure_stripe(db, organization_id)
+async def test_a_contract_credited_in_advance_is_not_credited_again_if_the_setting_changes(db, organization_id):
     await _set_cashback_mode(db, organization_id, "UPFRONT")
-    _user, contracts = await _pay_first_instalment_of_12(db, organization_id, monkeypatch)
+    user, contracts = await _pay_first_instalment_of_12(db, organization_id)
     await _set_cashback_mode(db, organization_id, "PER_INSTALMENT")
-    await _second_month(db, organization_id)
+    await _second_month(db, organization_id, user, contracts)
     assert await _credits(db, contracts[0]) == [120_00]
 
 
 @pytest.mark.asyncio
-async def test_a_month_confirmed_by_hand_and_then_collected_by_stripe_earns_cashback_once(
-    db, organization_id, monkeypatch
-):
-    from app.domains.contracts import instalments as instalments_service
-
-    await _configure_stripe(db, organization_id)
-    user, contracts = await _pay_first_instalment_of_12(db, organization_id, monkeypatch)
+async def test_a_month_credited_twice_earns_cashback_once(db, organization_id):
+    user, contracts = await _pay_first_instalment_of_12(db, organization_id)
     assert await _credits(db, contracts[0]) == [10_00], "per rata è il comportamento predefinito"
 
-    # Stripe fails month 2, the customer pays it by transfer and an
-    # administrator confirms it; then Stripe's own retry of that same invoice
-    # goes through too.
-    await _webhook(db, organization_id, {"id": "evt_cb_2_failed", "type": "invoice.payment_failed", "data": {"object": {
-        "id": "in_cb_2", "billing_reason": "subscription_cycle", "amount_due": 35_00,
-        "parent": {"subscription_details": {"subscription": "sub_cb"}},
-    }}})
-    await instalments_service.confirm_manually(db, contract=contracts[0], number=2, actor_user_id=user.id)
+    await _second_month(db, organization_id, user, contracts)
     await contracts_service.credit_contract_instalment_cashback(
         db, organization_id=organization_id, contract=contracts[0], instalment_number=2
     )
-    await _second_month(db, organization_id)
     assert await _credits(db, contracts[0]) == [10_00, 10_00]
 
 
-# --- Bonifico (Session 65) -----------------------------------------------------------
-
-
-async def _configure_bank(db, organization_id) -> None:
-    from app.domains.organizations.models import Organization
-
-    org = await db.get(Organization, organization_id)
-    org.settings = {**(org.settings or {}), "bank_iban": "IT60X0542811101000000123456", "bank_account_holder": "Jav"}
-    await db.commit()
+# --- Bonifico -----------------------------------------------------------
 
 
 @pytest.mark.asyncio
@@ -1098,14 +789,12 @@ async def test_a_pratica_paid_by_bank_transfer_is_paid_only_when_an_admin_confir
     user, customer, request, contracts = await _sent_pratica(db, organization_id)
 
     request = await requests_service.request_bank_transfer(db, request=request, actor_user_id=user.id)
-    # Session 86: no discount for paying by bank transfer -- the one-go card
-    # discount (32%) no longer applies to a transfer, the full price is due.
+    # No discount for paying by bank transfer: the full price is due.
     assert request.bank_transfer_total_cents == 120_00 + 240_00 + 60_00
     for contract in contracts:
         await db.refresh(contract)
         assert contract.paid_at is None
         assert (contract.payment_plan, contract.payment_method) == (payment_plans.PLAN_FULL, "BANK_TRANSFER")
-        assert contract.payment_discount_cents == 0
     [summary] = await requests_service.summaries(db, [request])
     assert summary["bank_transfer_pending"] is True and summary["points_payable"] == 3
 
@@ -1115,17 +804,16 @@ async def test_a_pratica_paid_by_bank_transfer_is_paid_only_when_an_admin_confir
     for contract in contracts:
         await db.refresh(contract)
         assert contract.paid_at is not None and contract.payment_method == "BANK_TRANSFER"
-        assert contract.payment_discount_cents == 0
         rows = list((await db.execute(
             select(ContractInstalment).where(ContractInstalment.contract_id == contract.id)
         )).scalars())
         assert [(r.status, r.amount_cents, r.payment_source) for r in rows] == [
-            ("PAID", contract.gross_amount_cents - contract.payment_discount_cents, "ADMIN")
+            ("PAID", contract.gross_amount_cents, "ADMIN")
         ]
     credits = list((await db.execute(
         select(WalletTransaction).where(WalletTransaction.reference_contract_id.in_([c.id for c in contracts]))
     )).scalars())
-    assert [t.amount_cents for t in credits] == [120_00]  # Luce A, 100% of what was paid (full price, Session 86)
+    assert [t.amount_cents for t in credits] == [120_00]  # Pacchetto A, 100% of what was paid
     [summary] = await requests_service.summaries(db, [request])
     assert summary["bank_transfer_pending"] is False and summary["points_paid"] == 3
     with pytest.raises(requests_service.BankTransferError):
@@ -1139,7 +827,7 @@ async def test_bank_transfer_needs_an_iban_configured(db, organization_id):
         await requests_service.request_bank_transfer(db, request=request, actor_user_id=user.id)
 
 
-# --- Pratiche compilate dall'amministrazione (Session 66) ------------------------------
+# --- Pratiche compilate dall'amministrazione ------------------------------
 
 
 @pytest.mark.asyncio
@@ -1147,7 +835,7 @@ async def test_an_admin_can_open_a_pratica_for_a_customer_and_attribute_it_to_a_
     """Same pratica as the customer's and the promoter's, only filled in by
     staff: the promoter chosen earns, the customer pays."""
     user, customer = await _customer(db, organization_id)
-    package = await _package(db, organization_id, name="Luce Admin", energy_type="ELECTRICITY", price_cents=180_00)
+    package = await _package(db, organization_id, name="Pacchetto Admin", price_cents=180_00)
     agent = await network_service.create_agent(
         db, organization_id=organization_id, first_name="Ada", last_name="Venditrice",
         promoter_code=f"PR-{uuid.uuid4().hex[:8]}", parent_agent_id=None,
@@ -1183,15 +871,15 @@ async def test_an_admin_can_open_a_pratica_for_a_customer_and_attribute_it_to_a_
         select(Notification).where(Notification.recipient_user_id == user.id, Notification.type == "CONTRACT_CREATED")
     )).scalars())
     assert any("pronti da pagare" in n.title for n in notes)
-    # And it is payable by the customer, with the one-go discount.
+    # And it is payable by the customer, at the list price.
     payable = requests_service.payable_points(await requests_service.list_points(db, request=request))
     assert len(payable) == 2
-    by_key = {o.plan.key: o for o in requests_service.plan_options(payable, discount_percentage=32)}
-    assert by_key[payment_plans.PLAN_FULL].total_cents == 2 * (180_00 - 57_60)
+    by_key = {o.plan.key: o for o in requests_service.plan_options(payable)}
+    assert by_key[payment_plans.PLAN_FULL].total_cents == 2 * 180_00
 
 
 
-# --- PEC per le aziende e note della pratica (Session 83) --------------------
+# --- PEC per le aziende e note della pratica --------------------
 
 
 @pytest.mark.asyncio
@@ -1227,7 +915,7 @@ async def test_notes_are_kept_signed_and_reach_the_staff_notification(db, organi
     await requests_service.set_notes(
         db, request=request, notes="  Chiamare dopo le 18, il contatore è in cantina.  ", actor_user_id=user.id
     )
-    detail = await requests_service.detail(db, request=request, include_checkouts=True)
+    detail = await requests_service.detail(db, request=request)
     assert detail["notes"] == "Chiamare dopo le 18, il contatore è in cantina."
     assert detail["notes_author"].startswith("Cliente")
 
@@ -1255,16 +943,15 @@ async def test_notes_are_kept_signed_and_reach_the_staff_notification(db, organi
         await requests_service.set_notes(db, request=request, notes="dopo", actor_user_id=user.id)
 
 
-# --- Prezzo annuale e prezzo mensile (Session 84) -------------------------------
+# --- Prezzo annuale e prezzo mensile -------------------------------
 
 
 @pytest.mark.asyncio
-async def test_rate_charge_the_monthly_price_and_one_go_the_yearly_price(db, organization_id, monkeypatch):
-    """«Energia circolare» privati: 149 € in unica soluzione, 12 rate da 18,30 €
+async def test_rate_charge_the_monthly_price_and_one_go_the_yearly_price(db, organization_id):
+    """«Abbonamento annuale» privati: 149 € in unica soluzione, 12 rate da 18,30 €
     (219,60 €), 3 rate da 73,20 € -- not 149 / 12."""
-    await _configure_stripe(db, organization_id)
     user, customer = await _customer(db, organization_id)
-    version = await _package(db, organization_id, name="Circolare", energy_type="ELECTRICITY", price_cents=149_00, cashback=100)
+    version = await _package(db, organization_id, name="Circolare", price_cents=149_00, cashback=100)
     version.billing_period = "MONTHLY"
     version.monthly_price_cents = 18_30
     await db.commit()
@@ -1279,19 +966,9 @@ async def test_rate_charge_the_monthly_price_and_one_go_the_yearly_price(db, org
     assert (options["MONTHLY_12"].total_cents, options["MONTHLY_12"].instalment_cents) == (219_60, 18_30)
     assert (options["INSTALMENTS_3"].total_cents, options["INSTALMENTS_3"].instalment_cents) == (219_60, 73_20)
 
-    created: list = []
-    _fake_stripe(monkeypatch, created=created, item_ids={str(contract.id): "si_circ"})
-    await payments_service.create_checkout_session_for_request(
-        db, organization_id=organization_id, request=request, plan_key=payment_plans.PLAN_MONTHLY_12,
-        actor_user_id=user.id, success_url="https://x/ok", cancel_url="https://x/ko",
-    )
-    [params] = created
-    assert [li["price_data"]["unit_amount"] for li in params["line_items"]] == [18_30]
-    await _webhook(db, organization_id, {
-        "id": "evt_circ_first", "type": "checkout.session.completed",
-        "data": {"object": {"id": "cs_pratica_1", "subscription": "sub_circ", "invoice": "in_circ_1",
-                            "metadata": {"kind": "contract_request"}}},
-    })
+    await _pay_by_transfer(db, organization_id, request, user, plan_key=payment_plans.PLAN_MONTHLY_12)
+    await db.refresh(request)
+    assert request.bank_transfer_total_cents == 18_30, "il primo bonifico è la prima rata"
     await db.refresh(contract)
     rows = list((await db.execute(
         select(ContractInstalment).where(ContractInstalment.contract_id == contract.id).order_by(ContractInstalment.number)
@@ -1301,7 +978,7 @@ async def test_rate_charge_the_monthly_price_and_one_go_the_yearly_price(db, org
     assert await _credits(db, contract) == [18_30]
 
 
-# --- Pratica da privato o da azienda (Session 85) ---------------------------------
+# --- Pratica da privato o da azienda ---------------------------------
 
 
 def _holder(**overrides) -> requests_service.HolderData:
@@ -1341,7 +1018,7 @@ async def test_the_pratica_kind_not_the_customer_decides_vat_and_changing_it_rep
     that pratica's contracts. Switched back to privato while still a draft,
     the chosen package is priced again without VAT."""
     user, customer = await _customer(db, organization_id)
-    version = await _package(db, organization_id, name="Luce", energy_type="ELECTRICITY", price_cents=249_00)
+    version = await _package(db, organization_id, name="Pacchetto", price_cents=249_00)
     version.tax_configuration = {"vat_percentage": 22.0}
     await db.commit()
     business = _holder(
@@ -1362,7 +1039,7 @@ async def test_the_pratica_kind_not_the_customer_decides_vat_and_changing_it_rep
     assert request.company_name is None
 
 
-# --- Data e luogo di nascita, codice fiscale controllato (Session 89) --------------
+# --- Data e luogo di nascita, codice fiscale controllato --------------
 
 
 @pytest.mark.asyncio
@@ -1432,7 +1109,7 @@ async def test_a_business_pratica_checks_the_legal_reps_fiscal_code_and_a_foreig
 @pytest.mark.asyncio
 async def test_a_draft_from_before_cannot_be_sent_without_birth_data(db, organization_id):
     user, customer = await _customer(db, organization_id)
-    version = await _package(db, organization_id, name="Luce", energy_type="ELECTRICITY", price_cents=99_00)
+    version = await _package(db, organization_id, name="Pacchetto", price_cents=99_00)
     request = await _open(db, organization_id, user, customer, product_version_id=version.id)
     await _minimum_documents(db, organization_id, user, request)
     request.holder_birth_date = None
@@ -1461,27 +1138,19 @@ async def test_the_birthplace_search_finds_comuni_suppressed_ones_and_states(db,
         app.dependency_overrides.clear()
 
 
-# --- Sblocca pratica (Session 89) -----------------------------------------------------
+# --- Sblocca pratica -----------------------------------------------------
 
 
 @pytest.mark.asyncio
 async def test_an_unpaid_sent_pratica_can_be_unlocked_repackaged_and_sent_again(db, organization_id):
-    from app.domains.contracts.models import ContractRequestCheckout
-
     user, customer = await _customer(db, organization_id)
-    luce = await _package(db, organization_id, name="Luce", energy_type="ELECTRICITY", price_cents=149_00)
-    luce_219 = await _package(db, organization_id, name="Luce 219", energy_type="ELECTRICITY", price_cents=219_00)
-    request = await _open(db, organization_id, user, customer, product_version_id=luce.id)
+    pkg = await _package(db, organization_id, name="Pacchetto", price_cents=149_00)
+    pkg_219 = await _package(db, organization_id, name="Pacchetto 219", price_cents=219_00)
+    request = await _open(db, organization_id, user, customer, product_version_id=pkg.id)
     await _minimum_documents(db, organization_id, user, request)
     request = await requests_service.submit_request(db, request=request, actor_user_id=user.id)
     [point] = await requests_service.list_points(db, request=request)
-    # The customer had opened a card payment page at the old price.
-    checkout = ContractRequestCheckout(
-        organization_id=organization_id, contract_request_id=request.id, stripe_checkout_session_id=f"cs_{uuid.uuid4().hex}",
-        payment_plan="FULL", lines=[{"contract_id": str(point.id), "amount_cents": 149_00}],
-        total_cents=149_00, instalment_cents=149_00,
-    )
-    db.add(checkout)
+    # The customer had announced a transfer at the old price.
     request.bank_transfer_requested_at = datetime.now(UTC)
     await db.commit()
 
@@ -1489,21 +1158,12 @@ async def test_an_unpaid_sent_pratica_can_be_unlocked_repackaged_and_sent_again(
         draft = await _open(db, organization_id, user, customer)
         await requests_service.unlock_request(db, request=draft, actor_user_id=user.id)
 
-    request, open_sessions = await requests_service.unlock_request(db, request=request, actor_user_id=user.id)
+    request = await requests_service.unlock_request(db, request=request, actor_user_id=user.id)
     await db.refresh(point)
     assert (request.status, point.status, request.bank_transfer_requested_at) == ("DRAFT", "DRAFT", None)
-    assert open_sessions == [checkout.stripe_checkout_session_id]
-
-    # Paid from the old tab after the unlock: nothing is paid with it.
-    outcome = await requests_service.apply_checkout(
-        db, checkout=checkout, stripe_invoice_id=None, stripe_subscription_id=None, stripe_customer_id=None,
-        subscription_items={},
-    )
-    await db.refresh(point)
-    assert "da rimborsare" in outcome and point.paid_at is None
 
     await requests_service.set_point_product(
-        db, request=request, contract=point, product_version_id=luce_219.id, actor_user_id=user.id
+        db, request=request, contract=point, product_version_id=pkg_219.id, actor_user_id=user.id
     )
     request = await requests_service.submit_request(db, request=request, actor_user_id=user.id)
     await db.refresh(point)
@@ -1514,8 +1174,8 @@ async def test_an_unpaid_sent_pratica_can_be_unlocked_repackaged_and_sent_again(
 @pytest.mark.asyncio
 async def test_a_paid_pratica_cannot_be_unlocked(db, organization_id):
     user, customer = await _customer(db, organization_id)
-    luce = await _package(db, organization_id, name="Luce", energy_type="ELECTRICITY", price_cents=149_00)
-    request = await _open(db, organization_id, user, customer, product_version_id=luce.id)
+    pkg = await _package(db, organization_id, name="Pacchetto", price_cents=149_00)
+    request = await _open(db, organization_id, user, customer, product_version_id=pkg.id)
     await _minimum_documents(db, organization_id, user, request)
     request = await requests_service.submit_request(db, request=request, actor_user_id=user.id)
     [point] = await requests_service.list_points(db, request=request)

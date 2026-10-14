@@ -1,12 +1,13 @@
-"""Anteprima provvigioni, e provvigioni rilasciate rata per rata (Session 50).
+"""Anteprima provvigioni, e provvigioni rilasciate rata per rata.
 
 Business rules pinned here:
 
 - approving a contract (the act that sets commissions going) requires the
   administrator to accept a preview of them, which is stored as a log;
 - paid in one go: one commission; paid in N instalments: N slices of 1/N,
-  each released when that instalment is really paid -- by Stripe, or by an
-  administrator by hand -- and never before the contract is ACTIVE;
+  each released when that instalment is really paid -- i.e. when an
+  administrator confirms its bank transfer -- and never before the contract
+  is ACTIVE;
 - however many confirmations arrive for the same instalment, it pays once,
   and the slices add up to exactly the whole commission.
 """
@@ -24,9 +25,7 @@ from app.domains.contracts import instalments as instalments_service
 from app.domains.contracts import payment_plans
 from app.domains.contracts import service as contract_service
 from app.domains.contracts.models import ContractCommissionPlan
-from app.domains.payments import service as payments_service
 from tests.test_commission_engine_integration import _make_actor, _setup_contract_ready_to_activate
-from tests.test_contract_payment_plans import _configure_stripe, _signed
 
 
 def test_instalment_slices_add_up_to_exactly_the_commission():
@@ -48,28 +47,15 @@ async def _under_review(db, organization_id):
     return contract, actor
 
 
-async def _pay_by_card(db, organization_id, contract, *, plan_key: str, subscription: str | None = None):
-    session_id = f"cs_{uuid.uuid4().hex[:10]}"
-    await contract_service.attach_stripe_checkout_session(
-        db, contract=contract, session_id=session_id, plan_key=plan_key
+async def _pay_by_transfer(db, organization_id, contract, actor, *, plan_key: str):
+    """The customer chose `plan_key` paying by transfer; an administrator
+    confirms the first transfer arrived."""
+    contract.payment_plan = plan_key
+    contract.payment_method = "BANK_TRANSFER"
+    await db.commit()
+    await contract_service.record_transfer_payment(
+        db, organization_id=organization_id, contract=contract, confirmed_by_user_id=actor
     )
-    session = {"id": session_id, "metadata": {"kind": "contract"}}
-    if subscription:
-        session["subscription"] = subscription
-        session["invoice"] = f"in_first_{subscription}"
-    body, sig = _signed({
-        "id": f"evt_{uuid.uuid4().hex[:10]}", "type": "checkout.session.completed", "data": {"object": session},
-    })
-    original = payments_service._stop_subscription_after_last_instalment
-
-    async def _noop(**_kwargs):
-        return None
-
-    payments_service._stop_subscription_after_last_instalment = _noop
-    try:
-        await payments_service.handle_webhook_event(db, organization_id=organization_id, payload=body, sig_header=sig)
-    finally:
-        payments_service._stop_subscription_after_last_instalment = original
     await db.refresh(contract)
 
 
@@ -123,9 +109,8 @@ async def test_accepting_a_preview_that_changed_is_refused(db, organization_id):
 
 @pytest.mark.asyncio
 async def test_a_single_payment_pays_the_whole_commission_once(db, organization_id):
-    await _configure_stripe(db, organization_id)
     contract, actor = await _under_review(db, organization_id)
-    await _pay_by_card(db, organization_id, contract, plan_key=payment_plans.PLAN_FULL)
+    await _pay_by_transfer(db, organization_id, contract, actor, plan_key=payment_plans.PLAN_FULL)
     assert await _amounts(db, contract) == [], "nessuna provvigione prima dell'approvazione"
 
     contract, _preview = await _accept_and_approve(db, organization_id, contract, actor)
@@ -143,62 +128,41 @@ async def test_a_single_payment_pays_the_whole_commission_once(db, organization_
 
 @pytest.mark.asyncio
 async def test_three_instalments_release_three_slices_one_payment_at_a_time(db, organization_id):
-    await _configure_stripe(db, organization_id)
     contract, actor = await _under_review(db, organization_id)
-    await _pay_by_card(db, organization_id, contract, plan_key=payment_plans.PLAN_INSTALMENTS_3, subscription="sub_c3")
+    await _pay_by_transfer(db, organization_id, contract, actor, plan_key=payment_plans.PLAN_INSTALMENTS_3)
 
     contract, preview = await _accept_and_approve(db, organization_id, contract, actor)
     assert [row["commission_cents"] for row in preview["payment"]["schedule"]] == [1499, 1499, 1502]
     assert await _amounts(db, contract) == [166, 1333], "solo la prima quota"
 
-    # The first invoice's own invoice.paid is the payment already counted.
-    await contract_service.record_subscription_invoice(
-        db, organization_id=organization_id, subscription_id="sub_c3", paid=True, amount_cents=333,
-        invoice_id="in_first_sub_c3", billing_reason="subscription_create",
-    )
-    # Month two, delivered twice.
-    for _ in range(2):
-        await contract_service.record_subscription_invoice(
-            db, organization_id=organization_id, subscription_id="sub_c3", paid=True, amount_cents=333,
-            invoice_id="in_month_2", billing_reason="subscription_cycle",
-        )
-        await process_pending_outbox_events(db)
+    # Month two: confirmed once; a second confirmation of the same month is refused.
+    await instalments_service.confirm_manually(db, contract=contract, number=2, actor_user_id=actor)
+    with pytest.raises(instalments_service.InstalmentError):
+        await instalments_service.confirm_manually(db, contract=contract, number=2, actor_user_id=actor)
+    await process_pending_outbox_events(db)
     assert await _amounts(db, contract) == [166, 166, 1333, 1333]
 
-    # Month three fails at Stripe; an administrator confirms it by hand.
-    await contract_service.record_subscription_invoice(
-        db, organization_id=organization_id, subscription_id="sub_c3", paid=False, amount_cents=334,
-        invoice_id="in_month_3", billing_reason="subscription_cycle",
-    )
-    await process_pending_outbox_events(db)
-    assert len(await _amounts(db, contract)) == 4, "una rata non incassata non libera niente"
+    # Month three. A repeated recording of it (two administrators at once)
+    # pays nothing more.
     await instalments_service.confirm_manually(db, contract=contract, number=3, actor_user_id=actor)
-    await process_pending_outbox_events(db)
-
-    # Stripe's own retry of that same invoice then succeeds: nothing more.
-    await contract_service.record_subscription_invoice(
-        db, organization_id=organization_id, subscription_id="sub_c3", paid=True, amount_cents=334,
-        invoice_id="in_month_3", billing_reason="subscription_cycle",
-    )
+    assert await instalments_service.record_payment(
+        db, contract=contract, source=instalments_service.SOURCE_ADMIN, number=3, actor_user_id=actor
+    ) is None
     await process_pending_outbox_events(db)
 
     amounts = await _amounts(db, contract)
     assert len(amounts) == 6
     assert sum(amounts) == 4500, "le quote sommano esattamente la provvigione intera"
     rows = await instalments_service.list_instalments(db, contract_id=contract.id)
-    assert [r.payment_source for r in rows] == ["STRIPE_CHECKOUT", "STRIPE_INVOICE", "ADMIN"]
+    assert [r.payment_source for r in rows] == ["ADMIN", "ADMIN", "ADMIN"]
     assert all(r.commission_released_at is not None for r in rows)
 
 
 @pytest.mark.asyncio
 async def test_instalments_paid_before_approval_are_released_together_at_activation(db, organization_id):
-    await _configure_stripe(db, organization_id)
     contract, actor = await _under_review(db, organization_id)
-    await _pay_by_card(db, organization_id, contract, plan_key=payment_plans.PLAN_INSTALMENTS_3, subscription="sub_late")
-    await contract_service.record_subscription_invoice(
-        db, organization_id=organization_id, subscription_id="sub_late", paid=True, amount_cents=333,
-        invoice_id="in_late_2", billing_reason="subscription_cycle",
-    )
+    await _pay_by_transfer(db, organization_id, contract, actor, plan_key=payment_plans.PLAN_INSTALMENTS_3)
+    await instalments_service.confirm_manually(db, contract=contract, number=2, actor_user_id=actor)
     await process_pending_outbox_events(db)
     assert await _amounts(db, contract) == []
 
@@ -208,7 +172,6 @@ async def test_instalments_paid_before_approval_are_released_together_at_activat
 
 @pytest.mark.asyncio
 async def test_an_approved_contract_without_an_accepted_preview_does_not_activate_on_payment(db, organization_id):
-    await _configure_stripe(db, organization_id)
     contract, actor = await _under_review(db, organization_id)
     contract = await contract_service.transition_contract(
         db, organization_id=organization_id, contract=contract, to_status="APPROVED",
@@ -216,7 +179,7 @@ async def test_an_approved_contract_without_an_accepted_preview_does_not_activat
     )
     assert contract.status == "PAYMENT_PENDING"
 
-    await _pay_by_card(db, organization_id, contract, plan_key=payment_plans.PLAN_FULL)
+    await _pay_by_transfer(db, organization_id, contract, actor, plan_key=payment_plans.PLAN_FULL)
     assert contract.status == "PAYMENT_PENDING"
     assert contract.paid_at is not None
     assert await _amounts(db, contract) == []

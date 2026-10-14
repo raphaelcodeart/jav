@@ -4,17 +4,24 @@ Status: Living document. Updated at the end of every implementation phase (see `
 
 ## 1. Context
 
-Jav is building a management platform for an energy reseller business: public
-marketing site + marketplace, electricity/gas offers and subscriptions, a multilevel
-commercial network of promoters/collaborators, contract lifecycle management, document
-storage, payments, a multilevel commission engine, dashboards for customers/promoters/
-admins, reporting, notifications, full audit, and AI-assisted document search.
+Jav is a management portal for gyms and judo clubs (JAV = Judo Arte e Vida):
+families manage their athletes, monthly fees, payment proofs, medical
+certificates and competition entries; the club office manages plans,
+competitions and results; instructors take attendance and award belts. The
+club domain is specified in `club-portal.md`.
 
-The repository was empty at the start of this effort (no existing stack, no
-`docs/Allegato_A_Piano_Carriera_Regolamento_Provvigionale.pdf`). This is therefore a
-greenfield build. Every commission/career-plan rule that would normally come from that
-document is treated as **configurable and provisional** until the real document is
-supplied — see `open-questions.md`.
+It is built on a generic base inherited from an earlier management platform:
+a multilevel commercial network of promoters with a deterministic commission
+engine, contracts and "pratiche" (customer data once, N contracts, one bank
+transfer), a catalog with orders, an internal Shop (`jav_market`) whose
+catalog the admin writes, an internal credit wallet (JavCash), documents,
+support tickets, notifications, a documentation feed, accounting views and
+full audit. Payments are bank transfers (confirmed by an admin, or — for club
+fees — declared by the parent with an uploaded proof) and JavCash credit;
+there is no card payment provider.
+
+Commission/career-plan rules are **configurable and provisional** — see
+`open-questions.md`.
 
 ## 2. Style: modular monolith, not microservices
 
@@ -31,6 +38,9 @@ independent scaling or independent deploy cadence — see `adr/0001-modular-mono
 Browser
    │
    ▼
+Caddy (host, HTTPS) → nginx (127.0.0.1:8081, internal router)
+   │
+   ▼
 Next.js BFF (apps/dashboard)  ── same-origin cookie session, proxies to API
    │
    ▼
@@ -43,7 +53,7 @@ PostgreSQL 16+ ── relational data, commercial network, commission ledger, au
 Celery + Redis (apps/worker) ── async jobs: notifications, document processing,
    │                             commission batch runs, embeddings
    ▼
-S3-compatible storage (MinIO in dev) ── documents
+S3-compatible storage (MinIO) ── documents, payment proofs, certificates, photos
 ```
 
 ## 3. Domain boundaries (module map)
@@ -65,17 +75,18 @@ domain's ORM internals directly from a router.
 | `referral` | promoter codes, referral events/sessions, attribution | C |
 | `customers` | customer profiles, companies, addresses | D |
 | `catalog` | products, product versions, pricing. **`pricing.py` is the single place VAT, who-may-buy-what, and where-a-JavCash-credit-comes-from are decided** — every money figure in the app derives from it, server-side only (see `business-rules.md#contract-economics`) | D |
-| `imported_products` | the "Acquisti Jav" plugin: a deliberately PARALLEL catalog + order table for externally-imported (dropshipping API) products, so they never mix with the hand-curated ones. Merged with `orders` only at the presentation layer (see `database-model.md §15`) | D (built) |
-| `supply_points` | POD/PDR | D |
-| `contracts` | contract state machine, events | D |
+| `contracts` | contract state machine, events, pratiche (N contracts, one bank transfer), payment plans and instalments confirmed by an admin | D |
 | `documents` | document metadata, versions, permissions | D |
-| `payments` | Stripe checkout-session creation (orders, imported orders, invoice redemptions) + the per-organization webhook. Contract payment (unico / abbonamento 12 mesi / finanziaria Stripe) is **not built yet** — see `server-migration-guide.md §9` | D |
 | `ranks` | qualifications / career plan, versioned thresholds | E |
 | `commissions` | plan versions, calculators, ledger, simulator | E |
 | `renewals` / `reversals` | renewal & storno events | E |
 | `notifications` | in-app notifications (approvals, rank changes, tickets) | E (built) |
 | `documentation` | admin-authored news/training posts for customers & promoters | E (built) |
-| `wallets` | internal EUR wallet per user, admin cashback, peer transfers | E (built) |
+| `wallets` | internal EUR wallet per user (JavCash), admin cashback, peer transfers | E (built) |
+| `jav_market` / `carts` / `marketplaces` / `shop_categories` | the internal Shop (equipment, judogi, ...): admin-written catalog with variants, cart, orders paid by bank transfer and/or JavCash, shared rules in `marketplaces/rules.py` | built |
+| `orders` | orders of catalog products, bank transfer + JavCash | built |
+| `accounting` | per-customer and org-wide money movements and details | built |
+| `club` | athletes (children managed by a parent account), age-based plans, monthly/enrolment/competition fees, payment proofs (auto-accepted), medical certificates, belts, courses and attendance, competitions and results, Jav Ranking, achievements, scheduled jobs | built (backend) |
 | `reports` | aggregate reporting endpoints | F |
 | `ai` | pgvector ingestion, hybrid search, assistant | G |
 

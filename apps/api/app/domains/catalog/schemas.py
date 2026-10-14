@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.domains.catalog import pricing
 
-PRODUCT_TYPES = {"ENERGY_CONTRACT", "DIGITAL", "PHYSICAL", "SUBSCRIPTION"}
+PRODUCT_TYPES = {"SERVICE", "DIGITAL", "PHYSICAL", "SUBSCRIPTION"}
 # INTERNAL is the safe default: never discountable in wallet credits, bank
 # transfer only. DROPSHIPPING/PARTNER may accept a configurable credit
 # discount -- see catalog/service.py for the enforcement that INTERNAL always
@@ -22,7 +22,7 @@ class ProductVersionRead(BaseModel):
     description: str
     image_url: str | None
     base_price_cents: int
-    #: Session 84: the monthly rata of a contract paid in rate, net of VAT.
+    #: The monthly rata of a contract paid in rate, net of VAT.
     monthly_price_cents: int | None = None
     initial_fee_cents: int
     recurring_fee_cents: int
@@ -49,7 +49,7 @@ class ProductVersionRead(BaseModel):
     #: the arithmetic in the browser.
     contract_billing_periods: int = 1
     contract_net_amount_cents: int = 0
-    #: Session 84: the same contract paid in rate (3 or 12, same total), net
+    #: The same contract paid in rate (3 or 12, same total), net
     #: of VAT -- monthly price x months. None: the rate split the one-go price.
     contract_instalments_net_amount_cents: int | None = None
     valid_from: datetime
@@ -103,7 +103,6 @@ class ProductRead(BaseModel):
     organization_id: uuid.UUID
     code: str
     product_type: str
-    energy_type: str | None
     customer_type: str
     status: str
     category: str
@@ -122,7 +121,7 @@ class ProductCatalogRead(ProductRead):
 
     current_version: ProductVersionRead | None = None
     #: The Shop categories this product carries inside its own section
-    #: (shop_categories, Session 73) -- carried on the card so the grid can
+    #: (shop_categories) -- carried on the card so the grid can
     #: filter without asking once per product. Empty for a product nobody
     #: has categorised. Unrelated to `category` above, which says WHICH
     #: section the product is in.
@@ -131,10 +130,9 @@ class ProductCatalogRead(ProductRead):
 
 class ProductCreate(BaseModel):
     code: str
-    product_type: str = "ENERGY_CONTRACT"  # ENERGY_CONTRACT / DIGITAL / PHYSICAL / SUBSCRIPTION
-    energy_type: str | None = None  # ELECTRICITY / GAS / DUAL_FUEL -- only for ENERGY_CONTRACT
+    product_type: str = "SERVICE"  # SERVICE / DIGITAL / PHYSICAL / SUBSCRIPTION
     # PRIVATE / BUSINESS / BOTH -- who this product may be sold to. Legacy
-    # values (SOLE_PROPRIETOR, PMI, CONDOMINIUM, ENERGY_INTENSIVE) still parse
+    # values (SOLE_PROPRIETOR, PMI, CONDOMINIUM) still parse
     # and collapse onto BUSINESS; see catalog/pricing.py.
     customer_type: str = pricing.BOTH_PRODUCT_CUSTOMER_TYPES
     category: str = "INTERNAL"  # INTERNAL / DROPSHIPPING / PARTNER -- see PRODUCT_CATEGORIES
@@ -145,7 +143,7 @@ class ProductCreate(BaseModel):
     description: str = ""
     image_url: str | None = None
     base_price_cents: int
-    #: Session 84: see ProductVersionRead.monthly_price_cents.
+    #: See ProductVersionRead.monthly_price_cents.
     monthly_price_cents: int | None = Field(default=None, ge=0)
     initial_fee_cents: int = 0
     recurring_fee_cents: int = 0
@@ -190,7 +188,7 @@ class ProductVersionCreate(BaseModel):
     description: str = ""
     image_url: str | None = None
     base_price_cents: int
-    #: Session 84: see ProductVersionRead.monthly_price_cents.
+    #: See ProductVersionRead.monthly_price_cents.
     monthly_price_cents: int | None = Field(default=None, ge=0)
     initial_fee_cents: int = 0
     recurring_fee_cents: int = 0
@@ -226,12 +224,11 @@ class ProductVersionUpdate(BaseModel):
 
 
 class ProductUpdate(BaseModel):
-    #: Session 89: the internal code («LUCE-COPY-COPY» after two duplicates)
+    #: The internal code («ANNUALE-COPY-COPY» after two duplicates)
     #: can be renamed. Unique per organization, checked in catalog/service.py.
     code: str | None = Field(default=None, max_length=64)
     status: str | None = None
     product_type: str | None = None
-    energy_type: str | None = None
     category: str | None = None
     # Previously missing entirely, which meant a product's audience could be
     # set at creation and never corrected again.

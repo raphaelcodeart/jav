@@ -14,10 +14,10 @@ from app.core.db import Base, TimestampMixin, UUIDPKMixin
 #: supply: without it an admin would open a review queue full of rows that
 #: all read "Altro documento".
 DOCUMENT_TYPE_OTHER = "OTHER"
-DOCUMENT_TYPES = {"IDENTITY", "FISCAL_CODE", "UTILITY_BILL", "CHAMBER_OF_COMMERCE", DOCUMENT_TYPE_OTHER}
+DOCUMENT_TYPES = {"IDENTITY", "FISCAL_CODE", "CHAMBER_OF_COMMERCE", DOCUMENT_TYPE_OTHER}
 DOCUMENT_STATUSES = {"PENDING_REVIEW", "APPROVED", "REJECTED"}
 ALLOWED_DOCUMENT_CONTENT_TYPES = {"application/pdf", "image/jpeg", "image/png"}
-MAX_DOCUMENT_BYTES = 15 * 1024 * 1024  # 15 MB -- a phone photo of a bill/ID, not a video
+MAX_DOCUMENT_BYTES = 15 * 1024 * 1024  # 15 MB -- a phone photo of a document, not a video
 MIN_DOCUMENT_DESCRIPTION_LENGTH = 3
 #: Long enough for "Visura camerale aggiornata a settembre 2026", short
 #: enough to stay on one line in the admin's review list.
@@ -26,7 +26,7 @@ MAX_DOCUMENT_DESCRIPTION_LENGTH = 120
 
 class Document(UUIDPKMixin, TimestampMixin, Base):
     """A sensitive customer document attached to a contract (identity, fiscal
-    code, utility bill, for companies the chamber of commerce registration,
+    code, for companies the chamber of commerce registration,
     or any extra attachment the uploader labels themselves -- see
     DOCUMENT_TYPE_OTHER). Stored in the PRIVATE "jav-documents" bucket, never the
     public "jav-media" one used for profile/product photos -- see
@@ -41,10 +41,9 @@ class Document(UUIDPKMixin, TimestampMixin, Base):
         UUID(as_uuid=True), ForeignKey("organizations.id"), index=True
     )
     #: Exactly one of these two is set. A document of the pratica (Session
-    #: 52) -- identity, fiscal code, visura, or one bill listing every point
-    #: -- is uploaded once and counts for every contract in it; a document of
-    #: a contract belongs to that supply point alone (its own bill, a photo of
-    #: its meter). See documents/service.py::get_contract_documents_status.
+    #: 52) -- identity, fiscal code, visura -- is uploaded once and counts for
+    #: every contract in it; a document of a contract belongs to that
+    #: contract alone. See documents/service.py::get_contract_documents_status.
     contract_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("contracts.id"), index=True, nullable=True
     )

@@ -121,16 +121,16 @@ export function CommissionSimulator({ agentId }: { agentId: string }) {
   };
 
   return (
-    <div className="glass-card rounded-2xl p-6 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70">
+    <div className="glass-card rounded-2xl p-6 border-slate-200 bg-white/70">
       <div className="flex items-center gap-3 mb-6">
-        <div className="p-2 bg-amber-500/10 rounded-xl border border-amber-500/20 text-amber-400">
+        <div className="p-2 bg-amber-500/10 rounded-xl border border-amber-500/20 text-amber-700">
           <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
           </svg>
         </div>
         <div>
-          <h3 className="text-lg font-semibold text-white light:text-slate-900">Simulatore Provvigioni</h3>
-          <p className="text-xs text-slate-400 light:text-slate-500">
+          <h3 className="text-lg font-semibold text-slate-900">Simulatore Provvigioni</h3>
+          <p className="text-xs text-slate-500">
             Scegli un contratto della tua rete e scopri come si dividerebbe la provvigione tra te e la tua filiera.
           </p>
         </div>
@@ -140,7 +140,7 @@ export function CommissionSimulator({ agentId }: { agentId: string }) {
         {/* Left column: Configuration */}
         <div className="space-y-4">
           <div>
-            <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase tracking-wider block mb-2">
+            <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider block mb-2">
               1. Scegli un contratto
             </label>
             <div className="flex flex-col gap-3">
@@ -148,11 +148,11 @@ export function CommissionSimulator({ agentId }: { agentId: string }) {
                 <select
                   value={contractId}
                   onChange={(e) => setContractId(e.target.value)}
-                  className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-slate-900 light:bg-white focus:border-orange-500"
+                  className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-white focus:border-brand-500"
                 >
                   <option value="">— Seleziona un contratto della tua rete —</option>
                   {(branchContracts ?? []).map((c) => (
-                    <option key={c.contract_id} value={c.contract_id} className="bg-slate-950 light:bg-white">
+                    <option key={c.contract_id} value={c.contract_id} className=" bg-white">
                       {c.customer_name} · {c.product_name} ({STATUS_LABELS[c.status] ?? c.status}) · venduto da {c.producer_name}
                     </option>
                   ))}
@@ -163,13 +163,13 @@ export function CommissionSimulator({ agentId }: { agentId: string }) {
                   placeholder="Incolla l'ID del contratto"
                   value={customContractId}
                   onChange={(e) => setCustomContractId(e.target.value)}
-                  className="w-full rounded-xl glass-input px-3 py-2.5 text-sm focus:border-orange-500"
+                  className="w-full rounded-xl glass-input px-3 py-2.5 text-sm focus:border-brand-500"
                 />
               )}
               <button
                 type="button"
                 onClick={() => setUseCustom((v) => !v)}
-                className="self-start text-[11px] text-orange-400 hover:text-orange-300 transition cursor-pointer"
+                className="self-start text-[11px] text-brand-600 hover:text-brand-600 transition cursor-pointer"
               >
                 {useCustom ? "← Torna alla lista dei tuoi contratti" : "Ho già l'ID di un altro contratto →"}
               </button>
@@ -177,11 +177,11 @@ export function CommissionSimulator({ agentId }: { agentId: string }) {
           </div>
 
           {/* Rank Overrides Section */}
-          <div className="border-t border-white/5 light:border-slate-200 pt-4">
-            <h4 className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase tracking-wider mb-2">
+          <div className="border-t border-slate-200 pt-4">
+            <h4 className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
               2. Ipotesi (opzionale): cosa succederebbe se...
             </h4>
-            <p className="text-[11px] text-slate-400 light:text-slate-500 mb-3">
+            <p className=" text-slate-500 mb-3">
               Es: &quot;e se Mario fosse già Team Leader invece di Seller quando questo contratto si attiva?&quot;. Scegli
               una persona della tua rete e la qualifica ipotetica, poi premi Aggiungi. Puoi aggiungerne più di una. Se non
               aggiungi nulla, la simulazione usa la qualifica reale e attuale di ciascuno.
@@ -191,13 +191,13 @@ export function CommissionSimulator({ agentId }: { agentId: string }) {
               <select
                 value={overrideAgentId}
                 onChange={(e) => setOverrideAgentId(e.target.value)}
-                className="flex-1 rounded-xl glass-input px-3 py-2 text-xs bg-slate-900 light:bg-white focus:border-orange-500"
+                className="flex-1 rounded-xl glass-input px-3 py-2 text-xs bg-white focus:border-brand-500"
               >
                 <option value="">— Scegli una persona della tua rete —</option>
                 {(branch ?? [])
                   .filter((m) => m.depth > 0)
                   .map((m) => (
-                    <option key={m.agent_id} value={m.agent_id} className="bg-slate-950 light:bg-white">
+                    <option key={m.agent_id} value={m.agent_id} className=" bg-white">
                       {m.display_name} ({m.promoter_code}) — oggi {m.rank_code ?? "—"}
                     </option>
                   ))}
@@ -206,17 +206,17 @@ export function CommissionSimulator({ agentId }: { agentId: string }) {
                 <select
                   value={overrideRank}
                   onChange={(e) => setOverrideRank(e.target.value)}
-                  className="w-24 rounded-xl glass-input px-2 py-2 text-xs bg-slate-900 light:bg-white focus:border-orange-500"
+                  className="w-24 rounded-xl glass-input px-2 py-2 text-xs bg-white focus:border-brand-500"
                 >
                   {RANKS.map((r) => (
-                    <option key={r} value={r} className="bg-slate-950 light:bg-white">{r}</option>
+                    <option key={r} value={r} className=" bg-white">{r}</option>
                   ))}
                 </select>
                 <button
                   type="button"
                   onClick={addOverride}
                   disabled={!overrideAgentId}
-                  className="px-3 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50"
+                  className="px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50"
                 >
                   Aggiungi
                 </button>
@@ -225,15 +225,15 @@ export function CommissionSimulator({ agentId }: { agentId: string }) {
 
             {/* List of current overrides */}
             {Object.keys(overrides).length > 0 && (
-              <div className="flex flex-wrap gap-2 p-3 rounded-xl bg-white/5 light:bg-slate-900/5 border border-white/5 light:border-slate-200 max-h-32 overflow-y-auto">
+              <div className="flex flex-wrap gap-2 p-3 rounded-xl bg-slate-900/5 border border-slate-200 max-h-32 overflow-y-auto">
                 {Object.entries(overrides).map(([agent, rank]) => (
                   <span
                     key={agent}
-                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-800 light:bg-slate-100 border border-slate-700 light:border-slate-300 text-xs text-slate-200 light:text-slate-700"
+                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-100 border border-slate-300 text-xs text-slate-700"
                   >
-                    <span className="text-slate-300 light:text-slate-600">{nameByAgentId.get(agent) ?? agent}</span>
+                    <span className=" text-slate-600">{nameByAgentId.get(agent) ?? agent}</span>
                     <span className="text-slate-500">→</span>
-                    <span className="font-bold text-orange-400">{rank}</span>
+                    <span className="font-bold text-brand-600">{rank}</span>
                     <button
                       type="button"
                       onClick={() => removeOverride(agent)}
@@ -251,17 +251,17 @@ export function CommissionSimulator({ agentId }: { agentId: string }) {
             type="button"
             onClick={runSimulation}
             disabled={loading}
-            className="w-full mt-4 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 py-3 text-sm font-semibold text-white shadow-lg hover:shadow-orange-600/20 transition-all duration-300 disabled:opacity-50 cursor-pointer"
+            className="w-full mt-4 rounded-xl bg-gradient-to-r from-accent-400 to-brand-600 hover:from-accent-400 hover:to-brand-500 py-3 text-sm font-semibold text-white shadow-lg hover:shadow-brand-600/20 transition-all duration-300 disabled:opacity-50 cursor-pointer"
           >
             {loading ? "Calcolo provvigioni in corso..." : "Esegui Simulazione"}
           </button>
         </div>
 
         {/* Right column: Results */}
-        <div className="rounded-xl bg-slate-950/60 light:bg-white/60 border border-white/5 light:border-slate-200 p-4 flex flex-col justify-between min-h-[300px]">
+        <div className="rounded-xl bg-white/60 border border-slate-200 p-4 flex flex-col justify-between min-h-[300px]">
           {loading && (
-            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 light:text-slate-500">
-              <svg className="animate-spin h-8 w-8 text-amber-500 mb-3" fill="none" viewBox="0 0 24 24">
+            <div className="flex-1 flex flex-col items-center justify-center text-slate-500">
+              <svg className="animate-spin h-8 w-8 text-amber-700 mb-3" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
               </svg>
@@ -275,7 +275,7 @@ export function CommissionSimulator({ agentId }: { agentId: string }) {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               <p className="text-sm font-semibold">Errore simulatore</p>
-              <p className="text-xs text-slate-400 light:text-slate-500 mt-1">{error}</p>
+              <p className="text-xs text-slate-500 mt-1">{error}</p>
             </div>
           )}
 
@@ -291,25 +291,25 @@ export function CommissionSimulator({ agentId }: { agentId: string }) {
 
           {!loading && !error && results && (
             <div className="flex-1 space-y-4">
-              <h4 className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase tracking-wider">
+              <h4 className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
                 Distribuzione Provvigioni Calcolata:
               </h4>
 
               {results.length === 0 ? (
-                <p className="text-xs text-slate-400 light:text-slate-500 italic">Nessuna provvigione maturata da questa transizione contrattuale (es: contratto non attivabile o stornato).</p>
+                <p className="text-xs text-slate-500 italic">Nessuna provvigione maturata da questa transizione contrattuale (es: contratto non attivabile o stornato).</p>
               ) : (
                 <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
                   {results.map((step, idx) => (
                     <div
                       key={idx}
-                      className="p-3 rounded-xl bg-white/5 light:bg-slate-900/5 border border-white/5 light:border-slate-200 hover:bg-white/10 transition-all"
+                      className="p-3 rounded-xl bg-slate-900/5 border border-slate-200 hover:bg-slate-100 transition-all"
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs text-slate-300 light:text-slate-600">
+                          <span className="text-xs text-slate-600">
                             {nameByAgentId.get(step.beneficiary_agent_id) ?? `Agente ${step.beneficiary_agent_id.substring(0, 6)}...`}
                           </span>
-                          <span className="px-1.5 py-0.5 text-[9px] font-bold bg-orange-500/10 text-orange-400 border border-orange-500/20 rounded">
+                          <span className="px-1.5 py-0.5 text-[9px] font-bold bg-brand-500/10 text-brand-600 border border-brand-500/20 rounded">
                             {step.rank_code}
                           </span>
                         </div>
@@ -317,7 +317,7 @@ export function CommissionSimulator({ agentId }: { agentId: string }) {
                           +{(step.gross_amount_cents / 100).toFixed(2)} EUR
                         </span>
                       </div>
-                      <p className="text-[11px] text-slate-400 light:text-slate-500 mt-1 font-medium">
+                      <p className=" text-slate-500 mt-1 font-medium">
                         {MOVEMENT_LABELS[step.movement_type] || step.movement_type}
                       </p>
                       <p className="text-[10px] text-slate-500 mt-0.5 italic">
@@ -329,8 +329,8 @@ export function CommissionSimulator({ agentId }: { agentId: string }) {
               )}
 
               {results.length > 0 && (
-                <div className="border-t border-white/5 light:border-slate-200 pt-3 flex items-center justify-between text-sm">
-                  <span className="text-slate-400 light:text-slate-500 font-medium">Totale Simulato:</span>
+                <div className="border-t border-slate-200 pt-3 flex items-center justify-between text-sm">
+                  <span className=" text-slate-500 font-medium">Totale Simulato:</span>
                   <span className="font-bold text-emerald-400 text-base">
                     {(results.reduce((sum, r) => sum + r.gross_amount_cents, 0) / 100).toFixed(2)} EUR
                   </span>

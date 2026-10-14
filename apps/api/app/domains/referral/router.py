@@ -92,16 +92,20 @@ async def resolve_promoter_link(
     code: str,
     request: Request,
     response: Response,
-    organization_id: str,
+    organization_id: str | None = None,
     db: AsyncSession = Depends(get_db),
 ) -> PromoterCodeRead:
     """Called when a visitor opens https://dominio.it/r/CODICE-PROMOTER. Validates
     the code, records the click, and sets a signed attribution cookie the customer
     registration flow reads later (within ATTRIBUTION_WINDOW_DAYS)."""
-    import uuid as _uuid
+    from app.domains.organizations import service as organizations_service
 
+    try:
+        org_id = await organizations_service.resolve_organization_id(db, organization_id)
+    except organizations_service.OrganizationNotResolvedError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     promoter_code = await referral_service.get_active_promoter_code(
-        db, organization_id=_uuid.UUID(organization_id), code=code
+        db, organization_id=org_id, code=code
     )
     if promoter_code is None:
         # Not a promoter code -- it may be an ordinary customer's "invita un
@@ -111,11 +115,11 @@ async def resolve_promoter_link(
         # commercial attribution for this registration is decided at signup
         # from the referrer's OWN promoter, not from a cookie. See
         # friend_referrals/models.py.
-        return await _resolve_friend_link(db, organization_id=_uuid.UUID(organization_id), code=code)
+        return await _resolve_friend_link(db, organization_id=org_id, code=code)
 
     _, raw_token = await referral_service.record_referral_click(
         db,
-        organization_id=_uuid.UUID(organization_id),
+        organization_id=org_id,
         promoter_code=promoter_code,
         ip_address=request.client.host if request.client else None,
         user_agent=request.headers.get("user-agent"),

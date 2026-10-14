@@ -1,5 +1,5 @@
 """GET /accounting/mine -- the customer's own unified JavCash + real-money
-movement feed (Session 29+). Exercises accounting/service.py::list_my_movements
+movement feed. Exercises accounting/service.py::list_my_movements
 directly: a WALLET row for a wallet-only ADMIN_CREDIT, a WALLET row (negative,
 outgoing) plus an ORDER_PAYMENT row for a partial-credit bank-transfer order,
 and confirms a fully-credit-covered order produces no ORDER_PAYMENT row (no
@@ -177,57 +177,6 @@ async def test_movements_are_sorted_newest_first_and_scoped_to_the_caller(db, or
 
 
 @pytest.mark.asyncio
-async def test_invoice_redemption_credit_rows_carry_the_redemption_id_and_partner_name(db, organization_id):
-    """Bonus/base cashback credited from a partner-invoice redemption must be
-    traceable back to that redemption -- distinct from order_id, a
-    different domain entirely -- with the partner name filling the same
-    "what is this about" slot product_name does for an order (see
-    accounting/service.py::list_my_movements)."""
-    from app.domains.invoice_redemptions import service as redemptions_service
-    from app.domains.partners import service as partners_service
-    from app.domains.partners.schemas import PartnerCreate
-
-    admin = await _make_user_with_role(db, organization_id, role_code="ADMIN")
-    customer = await _make_user_with_role(db, organization_id)
-    partner = await partners_service.create_partner(
-        db, organization_id=organization_id, payload=PartnerCreate(name=f"Partner {uuid.uuid4().hex[:6]}")
-    )
-
-    redemption = await redemptions_service.submit_redemption(
-        db, organization_id=organization_id, customer_user_id=customer.id, partner_id=partner.id,
-        declared_amount_cents=10000, file_bytes=b"%PDF-1.4", content_type="application/pdf",
-        original_filename="x.pdf",
-    )
-    redemption = await redemptions_service.verify(
-        db, organization_id=organization_id, redemption_id=redemption.id, confirmed_amount_cents=10000,
-        actor_user_id=admin.id,
-    )
-    await redemptions_service.confirm_payment(
-        db, organization_id=organization_id, redemption_id=redemption.id, actor_user_id=admin.id
-    )
-
-    movements = await accounting_service.list_my_movements(db, organization_id=organization_id, user_id=customer.id)
-
-    base_row = next(m for m in movements if m["source"] == "INVOICE_REDEMPTION_BASE")
-    bonus_row = next(m for m in movements if m["source"] == "INVOICE_REDEMPTION_BONUS")
-    for row in (base_row, bonus_row):
-        assert row["invoice_redemption_id"] == redemption.id
-        assert row["order_id"] is None
-        assert row["product_name"] == partner.name
-
-    # The real-money leg -- the 5% fee actually paid (bank transfer here) to
-    # unlock the two JavCash credit rows above. Must be linked to the exact
-    # same redemption id, in EUR, never confused with the JavCash rows.
-    payment_row = next(m for m in movements if m["kind"] == "REDEMPTION_PAYMENT")
-    assert payment_row["invoice_redemption_id"] == redemption.id
-    assert payment_row["currency"] == "EUR"
-    assert payment_row["amount_cents"] == 500  # 5% of 10000
-    assert payment_row["payment_method"] == "BANK_TRANSFER"
-    assert payment_row["product_name"] == partner.name
-    assert payment_row["amount_cents"] > 0  # a payment is never negative
-
-
-@pytest.mark.asyncio
 async def test_admin_can_see_and_filter_every_customers_movements(db, organization_id):
     """GET /accounting/admin (list_all_movements) -- the whole org's ledger
     in one call, and scoped down to a single customer via customer_user_id."""
@@ -262,60 +211,7 @@ async def test_admin_can_see_and_filter_every_customers_movements(db, organizati
     assert filtered[0]["customer_user_id"] == customer_a.id
 
 
-@pytest.mark.asyncio
-async def test_imported_product_order_is_unified_with_regular_orders(db, organization_id):
-    """A PURCHASE_DEBIT/ORDER_PAYMENT pair for the parallel "Acquisti
-    Jav" imported-products plugin (Session 34) must show up
-    identically to a regular order -- same order_id field (populated from
-    reference_imported_order_id, not a separate one), same kinds -- since
-    the two tables are meant to be indistinguishable everywhere except the
-    product-catalog admin screen (see imported_products/models.py)."""
-    from app.domains.imported_products import service as imported_products_service
-
-    await _configure_bank_transfer(db, organization_id)
-    admin = await _make_user_with_role(db, organization_id, role_code="ADMIN")
-    customer = await _make_user_with_role(db, organization_id)
-    provider = await imported_products_service.create_provider(
-        db, organization_id=organization_id, actor_user_id=admin.id,
-        provider_type="ALIEXPRESS", name="Test Provider", base_url=None, api_key=None, enabled=True,
-    )
-    product = await imported_products_service.create_imported_product(
-        db, organization_id=organization_id, actor_user_id=admin.id, provider_id=provider.id,
-        external_id=None, external_url=None, name="Gadget Importato", description="",
-        image_url=None, price_cents=5000, credit_discount_percentage=20, status="ACTIVE",
-    )
-
-    wallet = await wallet_service.get_or_create_wallet(db, organization_id=organization_id, user_id=customer.id)
-    await wallet_service.credit_wallet(
-        db, organization_id=organization_id, wallet_id=wallet.id, amount_cents=1000, type_="ADMIN_CREDIT",
-        actor_user_id=admin.id, idempotency_key=str(uuid.uuid4()),
-    )
-    order = await imported_products_service.create_order(
-        db, organization_id=organization_id, customer_user_id=customer.id, imported_product_id=product.id,
-        credit_applied_cents=1000, actor_user_id=admin.id, require_otp_for_credit_spend=False,
-    )
-    await imported_products_service.confirm_payment(
-        db, organization_id=organization_id, order_id=order.id, actor_user_id=admin.id
-    )
-
-    movements = await accounting_service.list_my_movements(db, organization_id=organization_id, user_id=customer.id)
-
-    debit_row = next(m for m in movements if m["kind"] == "WALLET" and m["amount_cents"] < 0)
-    assert debit_row["order_id"] == order.id
-    assert debit_row["product_name"] == product.name
-
-    payment_row = next(m for m in movements if m["kind"] == "ORDER_PAYMENT")
-    assert payment_row["order_id"] == order.id
-    # Bank transfer (the default): 5% off the 40.00 left after JavCash.
-    # Session 78: il totale porta l'IVA aggiunta, quindi il pagato non e' piu'
-    # una cifra fissa: e' il residuo dell'ordine.
-    assert payment_row["amount_cents"] == (
-        order.amount_cents - order.credit_applied_cents - (order.bank_transfer_discount_cents or 0)
-    )
-    assert payment_row["product_name"] == product.name
-
-
-# --- Session 54: totali, pagamenti dei contratti, dettaglio ----------------------------
+# --- Totali, pagamenti dei contratti, dettaglio ----------------------------
 
 
 @pytest.mark.asyncio
@@ -373,7 +269,6 @@ async def test_summary_adds_up_what_was_paid_and_the_javcash(db, organization_id
     summary = await accounting_service.my_summary(db, organization_id=organization_id, user_id=customer.id)
     assert summary["spent_total_cents"] == 4000
     assert summary["spent_bank_transfer_cents"] == 4000
-    assert summary["spent_card_cents"] == 0
     assert summary["spent_orders_cents"] == 4000
     assert summary["payments_count"] == 1
     assert summary["javcash_received_cents"] == 1000

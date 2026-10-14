@@ -10,9 +10,9 @@ from app.core.db import Base, TimestampMixin, UUIDPKMixin
 # (from_wallet_id is NULL -- money originates outside the wallet system, e.g.
 # an admin crediting cashback after a product purchase). TRANSFER = peer-to-peer,
 # both wallet ids set. PURCHASE_DEBIT = the mirror image of ADMIN_CREDIT --
-# to_wallet_id is NULL, money leaves a wallet to pay (part of) an order for a
-# DROPSHIPPING/PARTNER product and simply ceases to exist, same as an
-# ADMIN_CREDIT simply appears (see orders/service.py). REVERSAL = a
+# to_wallet_id is NULL, money leaves a wallet to pay (part of) an order and
+# simply ceases to exist, same as an ADMIN_CREDIT simply appears (see
+# orders/service.py). REVERSAL = a
 # correction that links back to the original row via reverses_transaction_id,
 # mirroring CommissionReversal's "never mutate a settled row, insert a new
 # linked row instead" pattern (see commissions/models.py CommissionReversal).
@@ -71,7 +71,7 @@ class WalletTransaction(UUIDPKMixin, TimestampMixin, Base):
     At least one side must be set (ck_wallet_transactions_has_a_side below) --
     a row with neither would mean nothing happened. idempotency_key mirrors
     commission_movements.idempotency_key's UniqueConstraint exactly
-    (client-generated UUID per submit, Stripe-style)."""
+    (client-generated UUID per submit)."""
 
     __tablename__ = "wallet_transactions"
     __table_args__ = (
@@ -102,65 +102,30 @@ class WalletTransaction(UUIDPKMixin, TimestampMixin, Base):
         UUID(as_uuid=True), ForeignKey("contracts.id"), nullable=True
     )
     # WHY this ADMIN_CREDIT row exists, as a structured tag rather than free
-    # text -- MANUAL_ADMIN (a plain top-up/correction) / INVOICE_REDEMPTION_BASE
-    # / INVOICE_REDEMPTION_BONUS (the two lines a confirmed partner-invoice
-    # redemption always writes together, see invoice_redemptions/service.py).
-    # NULL for TRANSFER/REVERSAL rows, where `type` alone already says enough.
-    # See docs/cashback-partner-invoices-plan.md.
+    # text -- MANUAL_ADMIN (a plain top-up/correction) and the cashback
+    # sources. NULL for TRANSFER/REVERSAL rows, where `type` alone already
+    # says enough.
     source: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    reference_invoice_redemption_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("invoice_redemptions.id"), nullable=True
-    )
     # Set on a PURCHASE_DEBIT row (and on the REVERSAL that refunds one) --
     # which order this debit paid (part of). NULL for every other type.
     reference_order_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("orders.id"), nullable=True
     )
-    # Same purpose as reference_order_id, for the parallel "Acquisti
-    # Jav" imported-products plugin (Session 34) -- set on a
-    # PURCHASE_DEBIT row that paid (part of) an ImportedProductOrder instead
-    # of a regular Order. Never both set on the same row.
-    reference_imported_order_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("imported_product_orders.id"), nullable=True
-    )
-    # Session 60's Shop Jav Partner (CJ Dropshipping) -- set on a
-    # PURCHASE_DEBIT row that paid (part of) a CjOrder, the third order table.
-    reference_cj_order_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("cj_orders.id"), nullable=True
-    )
-    # Session 68's Marketplace 2 (Shopify) -- same, for a ShopifyOrder.
-    reference_shopify_order_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("shopify_orders.id"), nullable=True
-    )
-    # Session 71's Marketplace 3 (AliExpress DS API) -- same, for an
-    # AliexpressOrder. Not the same thing as reference_imported_order_id:
-    # that one belongs to the older hand-kept AliExpress plugin, which is
-    # still in use and still has a table of its own.
-    reference_aliexpress_order_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("aliexpress_orders.id"), nullable=True
-    )
-    # Session 79: come le precedenti, per gli ordini di «Fai la Spesa con
-    # Jav» (Marketplace 4). Una colonna per negozio e non un id generico:
-    # la chiave esterna è ciò che impedisce a un rimborso di puntare a un
-    # ordine che non esiste.
+    # Lo stesso per gli ordini dello Shop (jav_market). Una colonna per
+    # tabella d'ordine e non un id generico: la chiave esterna è ciò che
+    # impedisce a un rimborso di puntare a un ordine che non esiste.
     reference_jav_market_order_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("jav_market_orders.id"), nullable=True, index=True
     )
-    # Session 87: lo stesso per «Market Kappa» (Marketplace 5).
-    reference_kappa_market_order_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("kappa_market_orders.id"), nullable=True, index=True
+    # E per le quote del club pagate (in parte) con il credito: la prova di
+    # pagamento che il credito ha coperto.
+    reference_club_proof_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("club_payment_proofs.id"), nullable=True, index=True
     )
-    # Session 88: e per «Marketplace VAITTO» (Marketplace 6).
-    reference_vaitto_market_order_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("vaitto_market_orders.id"), nullable=True, index=True
-    )
-    # Session 89: e per «Marketplace SYMPHONYA» (Marketplace 6 per il cliente).
-    reference_symphonya_market_order_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("symphonya_market_orders.id"), nullable=True, index=True
-    )
-    # Session 90: e per «Marketplace SOLEIL» («Market 7» per il cliente).
-    reference_soleil_market_order_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("soleil_market_orders.id"), nullable=True, index=True
+    # L'atleta su cui il club ha investito (ricarica del superadmin): il
+    # wallet è del genitore, l'investimento è per quell'atleta.
+    reference_club_athlete_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("club_athletes.id"), nullable=True, index=True
     )
     # Self-FK: set only on a REVERSAL row, pointing back at the
     # ADMIN_CREDIT/TRANSFER row it corrects. The original row is never

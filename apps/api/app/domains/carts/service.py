@@ -2,10 +2,9 @@
 
 Questo dominio non conosce i prezzi. Sa quali righe ha un cliente e a quale
 negozio appartengono; per sapere quanto costano chiede al negozio, che è
-l'unico posto dove quel calcolo esiste (`aliexpress_dropshipping.get_quote`
-e i suoi gemelli). È la stessa separazione che c'è già fra i tre Marketplace
-e `marketplaces/rules.py`: le regole comuni in un posto, il listino di
-ciascuno a casa propria.
+l'unico posto dove quel calcolo esiste (`jav_market.get_quote`). È la stessa
+separazione che c'è fra i negozi e `marketplaces/rules.py`: le regole comuni
+in un posto, il listino di ciascuno a casa propria.
 
 Il registro `SHOPS` in fondo è l'unico punto da toccare per dare il
 carrello a un negozio in più: la colonna che la riga usa, la funzione che
@@ -26,15 +25,8 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domains.aliexpress_dropshipping import service as aliexpress_service
 from app.domains.carts.models import CART_SHOPS, MAX_ITEM_QUANTITY, Cart, CartItem
-from app.domains.cj_dropshipping import service as cj_service
-from app.domains.kappa_market import service as kappa_market_service
 from app.domains.jav_market import service as jav_market_service
-from app.domains.shopify_dropshipping import service as shopify_service
-from app.domains.vaitto_market import service as vaitto_market_service
-from app.domains.symphonya_market import service as symphonya_market_service
-from app.domains.soleil_market import service as soleil_market_service
 
 
 class CartValidationError(ValueError):
@@ -58,45 +50,10 @@ class ShopBinding:
 
 
 SHOPS: dict[str, ShopBinding] = {
-    "aliexpress": ShopBinding(
-        column="aliexpress_variant_id",
-        quote=aliexpress_service.get_quote,
-        errors=(aliexpress_service.AliexpressValidationError, aliexpress_service.AliexpressNotFoundError),
-    ),
-    "cj": ShopBinding(
-        column="cj_variant_id",
-        quote=cj_service.get_quote,
-        errors=(cj_service.CjValidationError, cj_service.CjNotFoundError),
-    ),
-    "kappa_market": ShopBinding(
-        column="kappa_market_variant_id",
-        quote=kappa_market_service.get_quote,
-        errors=(kappa_market_service.KappaMarketValidationError, kappa_market_service.KappaMarketNotFoundError),
-    ),
     "jav_market": ShopBinding(
         column="jav_market_variant_id",
         quote=jav_market_service.get_quote,
         errors=(jav_market_service.JavMarketValidationError, jav_market_service.JavMarketNotFoundError),
-    ),
-    "vaitto_market": ShopBinding(
-        column="vaitto_market_variant_id",
-        quote=vaitto_market_service.get_quote,
-        errors=(vaitto_market_service.VaittoMarketValidationError, vaitto_market_service.VaittoMarketNotFoundError),
-    ),
-    "symphonya_market": ShopBinding(
-        column="symphonya_market_variant_id",
-        quote=symphonya_market_service.get_quote,
-        errors=(symphonya_market_service.SymphonyaMarketValidationError, symphonya_market_service.SymphonyaMarketNotFoundError),
-    ),
-    "soleil_market": ShopBinding(
-        column="soleil_market_variant_id",
-        quote=soleil_market_service.get_quote,
-        errors=(soleil_market_service.SoleilMarketValidationError, soleil_market_service.SoleilMarketNotFoundError),
-    ),
-    "shopify": ShopBinding(
-        column="shopify_variant_id",
-        quote=shopify_service.get_quote,
-        errors=(shopify_service.ShopifyValidationError, shopify_service.ShopifyNotFoundError),
     ),
 }
 

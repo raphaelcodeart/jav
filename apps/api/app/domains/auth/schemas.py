@@ -17,7 +17,7 @@ def _strip(v: object) -> object:
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
-    organization_id: str
+    organization_id: str | None = None
 
     @field_validator("email", mode="before")
     @classmethod
@@ -45,10 +45,14 @@ class MeRead(BaseModel):
     email_verified: bool
     profile_complete: bool
     privacy_accepted: bool
+    #: Il club dell'account (genitore, segreteria, istruttore); None per lo
+    #: staff della piattaforma, che nei club entra scegliendoli.
+    club_id: str | None = None
+    club_name: str | None = None
 
 
 class RegisterRequest(BaseModel):
-    organization_id: str
+    organization_id: str | None = None
     # Closed circuit: registration is invite-only, every new customer must come
     # through a promoter's referral link (docs/business-rules.md intent --
     # "nessuno può stare senza promoter che lo invita").
@@ -95,6 +99,52 @@ class RegisterRequest(BaseModel):
         return v
 
 
+class RegisterFamilyRequest(BaseModel):
+    """Registrazione di un genitore (o di un atleta adulto) dal link del suo
+    club, /c/<slug>: il club lo dice il link, non un promoter. Il resto
+    (figli, certificati) lo aggiunge dal portale dopo il primo accesso."""
+
+    club_slug: str = Field(max_length=80)
+    email: EmailStr
+    password: str
+    first_name: str = Field(min_length=1, max_length=80)
+    last_name: str = Field(min_length=1, max_length=80)
+    phone: str | None = Field(default=None, max_length=32)
+    accept_privacy: bool = False
+    #: Il codice del link d'invito di un'altra famiglia del club
+    #: (/c/<slug>?invito=<codice>), se c'è.
+    invite_code: str | None = Field(default=None, max_length=32)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email_field(cls, v: object) -> object:
+        return normalize_email(v) if isinstance(v, str) else v
+
+    @field_validator("first_name", "last_name", mode="before")
+    @classmethod
+    def normalize_name_fields(cls, v: object) -> object:
+        return normalize_person_name(v) if isinstance(v, str) else v
+
+    @field_validator("password", "phone", mode="before")
+    @classmethod
+    def strip_whitespace(cls, v: object) -> object:
+        return _strip(v)
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("La password deve avere almeno 8 caratteri.")
+        return v
+
+    @field_validator("accept_privacy")
+    @classmethod
+    def validate_accept_privacy(cls, v: bool) -> bool:
+        if not v:
+            raise ValueError("Per registrarti devi accettare l'informativa sulla privacy.")
+        return v
+
+
 class VerifyEmailRequest(BaseModel):
     token: str
 
@@ -104,7 +154,7 @@ class ResendVerificationRequest(BaseModel):
 
 
 class ForgotPasswordRequest(BaseModel):
-    organization_id: str
+    organization_id: str | None = None
     email: EmailStr
 
     @field_validator("email", mode="before")
@@ -131,7 +181,7 @@ class ResetPasswordRequest(BaseModel):
 
 
 class SpendPinStatusRead(BaseModel):
-    """Session 87: come il cliente conferma i JavCash. `method` è quello che
+    """Come il cliente conferma i JavCash. `method` è quello che
     il checkout userà adesso (EMAIL anche con il PIN acceso, se è bloccato)."""
 
     enabled: bool

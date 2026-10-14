@@ -1,21 +1,24 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
+import { AnimatePresence, motion } from "motion/react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { AuthLayout } from "@/components/auth/auth-layout";
 import { PasswordInput } from "@/components/password-input";
-import { ThemeToggle } from "@/components/theme-toggle";
-import { DEFAULT_ORGANIZATION_ID } from "@/lib/config";
+import { Button } from "@/components/ui/button";
+import { Field, Input } from "@/components/ui/field";
+import { useI18n } from "@/lib/i18n/provider";
 
 /** Sent here by app/providers.tsx::SessionExpiryGuard (Session 85): says
  *  why, so a login page appearing mid-task is not a mystery. */
 function ExpiredNotice() {
   const params = useSearchParams();
+  const { t } = useI18n();
   if (params.get("sessione") !== "scaduta") return null;
   return (
-    <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 light:text-amber-700 text-sm">
-      La sessione è scaduta: accedi di nuovo per continuare.
+    <div className="p-3 rounded-xl bg-amber-50 ring-1 ring-amber-200 text-amber-800 text-sm">
+      {t("login.expired")}
     </div>
   );
 }
@@ -28,6 +31,8 @@ function safeNext(next: string | null, roles: string[], adminRoles: string[]): s
   if (next.startsWith("/customer")) return roles.includes("CUSTOMER") ? next : null;
   if (next.startsWith("/promoter")) return roles.includes("PROMOTER") ? next : null;
   if (next.startsWith("/admin")) return roles.some((r) => adminRoles.includes(r)) ? next : null;
+  if (next.startsWith("/staff")) return roles.includes("INSTRUCTOR") ? next : null;
+  if (next.startsWith("/club")) return roles.includes("SECRETARY") ? next : null;
   return null;
 }
 
@@ -37,6 +42,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const { t } = useI18n();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -46,11 +52,11 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, organizationId: DEFAULT_ORGANIZATION_ID }),
+        body: JSON.stringify({ email, password }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(body.error ?? "Login fallito");
+        setError(body.code ? t.dyn(`login.error.${body.code}`, body.error ?? t("login.failed")) : (body.error ?? t("login.failed")));
         return;
       }
       // Redirect based on the roles the API actually granted this user (see
@@ -69,112 +75,81 @@ export default function LoginPage() {
         router.push(next);
       } else if (roles.some((r) => ADMIN_ROLES.includes(r))) {
         router.push("/admin");
+      } else if (roles.includes("SECRETARY")) {
+        router.push("/club");
       } else if (roles.includes("CUSTOMER")) {
         router.push("/customer");
+      } else if (roles.includes("INSTRUCTOR")) {
+        router.push("/staff");
       } else {
         router.push("/promoter");
       }
       router.refresh();
     } catch (err: any) {
-      setError("Errore di connessione al server");
+      setError(t("login.connectionError"));
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center px-4 relative">
-      <div className="absolute top-4 right-4">
-        <ThemeToggle />
-      </div>
+    <AuthLayout title={t("login.title")} subtitle={t("login.subtitle")}>
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <Field label="Email" htmlFor="email">
+          <Input
+            id="email"
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder={t("login.emailPlaceholder")}
+            required
+          />
+        </Field>
 
-      {/* Background decorations */}
-      <div className="absolute top-1/4 left-1/4 w-72 h-72 bg-orange-600/10 rounded-full blur-3xl -z-10 animate-fade-in" />
-      <div className="absolute bottom-1/4 right-1/4 w-72 h-72 bg-amber-600/10 rounded-full blur-3xl -z-10 animate-fade-in" />
-
-      <div className="w-full max-w-md animate-scale-up">
-        {/* Logo / Branding */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center p-3 rounded-2xl bg-white shadow-lg shadow-orange-500/20 mb-4">
-            <Image src="/logo.png" alt="Jav" width={72} height={65} priority />
+        <Field label="Password" htmlFor="password">
+          <PasswordInput
+            id="password"
+            autoComplete="current-password"
+            className="glass-input w-full rounded-xl h-11 px-3.5 text-sm"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            required
+          />
+          <div className="text-right pt-1">
+            <Link href="/forgot-password" className="text-xs font-semibold text-ink-500 hover:text-brand-600">
+              {t("login.forgot")}
+            </Link>
           </div>
-          <p className="text-slate-400 light:text-slate-500 text-sm mt-2">Piattaforma di Gestione Commerciale & Rete</p>
-        </div>
+        </Field>
 
-        {/* Login Form Card */}
-        <form
-          onSubmit={handleSubmit}
-          className="glass-card rounded-2xl p-8 space-y-5"
-        >
-          <h2 className="text-xl font-semibold text-white/90 light:text-slate-800">Accedi alla tua area riservata</h2>
+        <Suspense fallback={null}>
+          <ExpiredNotice />
+        </Suspense>
 
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase tracking-wider" htmlFor="email">
-              Indirizzo Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              className="w-full rounded-xl glass-input px-4 py-3 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="nome@jav.demo"
-              required
-            />
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase tracking-wider" htmlFor="password">
-              Password
-            </label>
-            <PasswordInput
-              id="password"
-              autoComplete="current-password"
-              className="w-full rounded-xl glass-input px-4 py-3 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              required
-            />
-            <div className="text-right">
-              <Link href="/forgot-password" className="text-xs text-slate-400 hover:text-orange-400 transition">
-                Password dimenticata?
-              </Link>
-            </div>
-          </div>
-
-          <Suspense fallback={null}>
-            <ExpiredNotice />
-          </Suspense>
-
+        <AnimatePresence>
           {error && (
-            <div className="flex items-start gap-2.5 p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm animate-fade-in">
+            <motion.div
+              initial={{ opacity: 0, height: 0, x: 0 }}
+              animate={{ opacity: 1, height: "auto", x: [0, -8, 8, -5, 5, 0] }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.4 }}
+              className="flex items-start gap-2.5 p-3 rounded-xl bg-rose-50 ring-1 ring-rose-200 text-rose-700 text-sm overflow-hidden"
+              role="alert"
+            >
               <svg className="w-5 h-5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
               <span>{error}</span>
-            </div>
+            </motion.div>
           )}
+        </AnimatePresence>
 
-          <button
-            type="submit"
-            disabled={submitting}
-            className="w-full rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 py-3 text-sm font-semibold text-white shadow-lg hover:shadow-orange-600/30 transition-all duration-300 disabled:opacity-50 disabled:pointer-events-none cursor-pointer mt-2"
-          >
-            {submitting ? (
-              <span className="flex items-center justify-center gap-2">
-                <svg className="animate-spin h-5 w-5 text-white light:text-slate-900" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-                Verifica credenziali...
-              </span>
-            ) : (
-              "Accedi al sistema"
-            )}
-          </button>
-        </form>
-      </div>
-    </main>
+        <Button type="submit" size="lg" loading={submitting} className="w-full">
+          {submitting ? t("login.checking") : t("login.submit")}
+        </Button>
+      </form>
+    </AuthLayout>
   );
 }

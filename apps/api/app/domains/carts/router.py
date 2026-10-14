@@ -8,7 +8,7 @@ da cui si passa sempre.
 
 Il pagamento **non** è qui: trasformare il carrello in un ordine è affare
 del negozio, che conosce indirizzo, spedizione, IVA e metodi di pagamento
-suoi (`POST /aliexpress/orders/mine/cart`). Qui si riempie e si svuota.
+suoi (`POST /jav-market/orders/mine/cart`). Qui si riempie e si svuota.
 """
 
 import uuid

@@ -20,36 +20,30 @@ from app.core.config import get_settings
 # main.py's own noqa import block for the API process -- discovered when
 # process_outbox_task (which runs every minute) turned out to have always
 # crashed on its first flush for exactly this reason.
-from app.domains.aliexpress_dropshipping import models as _aliexpress_models  # noqa: F401
 from app.domains.audit import models as _audit_models  # noqa: F401
 from app.domains.auth import models as _auth_models  # noqa: F401
 from app.domains.catalog import models as _catalog_models  # noqa: F401
-from app.domains.cj_dropshipping import models as _cj_models  # noqa: F401
+from app.domains.club import contact_models as _club_contact_models  # noqa: F401
+from app.domains.club import models as _club_models  # noqa: F401
+from app.domains.club import site_models as _club_site_models  # noqa: F401
 from app.domains.commissions import models as _commissions_models  # noqa: F401
 from app.domains.contracts import models as _contracts_models  # noqa: F401
 from app.domains.customers import models as _customers_models  # noqa: F401
 from app.domains.documentation import models as _documentation_models  # noqa: F401
 from app.domains.documents import models as _documents_models  # noqa: F401
 from app.domains.friend_referrals import models as _friend_referrals_models  # noqa: F401
-from app.domains.imported_products import models as _imported_products_models  # noqa: F401
-from app.domains.invoice_redemptions import models as _invoice_redemptions_models  # noqa: F401
 from app.domains.network import models as _network_models  # noqa: F401
 from app.domains.notifications import models as _notifications_models  # noqa: F401
 from app.domains.orders import models as _orders_models  # noqa: F401
 from app.domains.organizations import models as _organizations_models  # noqa: F401
 from app.domains.outbox import models as _outbox_models  # noqa: F401
-from app.domains.partners import models as _partners_models  # noqa: F401
-from app.domains.payments import models as _payments_models  # noqa: F401
 from app.domains.rbac import models as _rbac_models  # noqa: F401
 from app.domains.referral import models as _referral_models  # noqa: F401
-from app.domains.shopify_dropshipping import models as _shopify_models  # noqa: F401
 from app.domains.support import models as _support_models  # noqa: F401
 from app.domains.users import models as _users_models  # noqa: F401
-from app.domains.vaitto_market import models as _vaitto_market_models  # noqa: F401
-from app.domains.symphonya_market import models as _symphonya_market_models  # noqa: F401
-from app.domains.soleil_market import models as _soleil_market_models  # noqa: F401
 from app.domains.wallets import models as _wallets_models  # noqa: F401
 
+logger = logging.getLogger(__name__)
 settings = get_settings()
 
 celery_app = Celery("jav", broker=settings.redis_url, backend=settings.redis_url)
@@ -72,87 +66,35 @@ celery_app.conf.update(
             # evaluates the month that just closed (see previous_calendar_month()).
             "schedule": crontab(day_of_month=1, hour=2, minute=0),
         },
-        "cj-sync-orders": {
-            # Shop Jav Partner: status and tracking of the orders on CJ.
-            "task": "app.celery_app.cj_sync_orders_task",
-            "schedule": crontab(minute="*/30"),
+        # Il club si gestisce da solo (docs/club-portal.md, "Automatismi").
+        # Ogni job è idempotente: girare due volte non crea doppioni.
+        "club-monthly-fees": {
+            "task": "app.celery_app.club_monthly_fees_task",
+            "schedule": crontab(day_of_month=1, hour=3, minute=0),
         },
-        "cj-retry-orders": {
-            # Shop Jav Partner: orders not sent, temporary failures, orders
-            # waiting for CJ balance (paid as soon as the balance covers them).
-            "task": "app.celery_app.cj_retry_orders_task",
-            "schedule": crontab(minute="*/10"),
+        "club-new-season": {
+            "task": "app.celery_app.club_new_season_task",
+            "schedule": crontab(month_of_year=9, day_of_month=1, hour=3, minute=30),
         },
-        "cj-sync-products": {
-            # Cost, stock and availability of the imported CJ products. Every
-            # three hours since Session 88 (was nightly), like AliExpress; the
-            # live checks on the product card and at checkout cover the rest.
-            "task": "app.celery_app.cj_sync_products_task",
-            "schedule": crontab(hour="*/3", minute=22),
+        # L'iscrizione segue l'anno solare: il 1° gennaio, dopo le mensilità.
+        "club-new-year": {
+            "task": "app.celery_app.club_new_year_task",
+            "schedule": crontab(month_of_year=1, day_of_month=1, hour=3, minute=30),
         },
-        "shopify-sync-orders": {
-            # Marketplace 3: fulfilment and tracking of the orders in the Shopify store.
-            "task": "app.celery_app.shopify_sync_orders_task",
-            "schedule": crontab(minute="*/30"),
+        "club-reminders": {
+            "task": "app.celery_app.club_reminders_task",
+            "schedule": crontab(hour=8, minute=0),
         },
-        "shopify-retry-orders": {
-            # Marketplace 3: paid orders not sent yet, temporary failures.
-            "task": "app.celery_app.shopify_retry_orders_task",
-            "schedule": crontab(minute="*/10"),
+        "club-close-competitions": {
+            "task": "app.celery_app.club_close_competitions_task",
+            "schedule": crontab(hour=1, minute=0),
         },
-        "shopify-sync-products": {
-            # Cost, price and stock of the imported Shopify products.
-            "task": "app.celery_app.shopify_sync_products_task",
-            "schedule": crontab(hour=3, minute=45),
-        },
-        "aliexpress-sync-orders": {
-            # Marketplace 3: shipping and tracking of the orders on AliExpress.
-            "task": "app.celery_app.aliexpress_sync_orders_task",
-            "schedule": crontab(minute="*/30"),
-        },
-        "aliexpress-retry-orders": {
-            # Marketplace 3: paid orders not sent yet, temporary failures.
-            # Never the ones whose answer was lost -- see the domain's
-            # service.py: a human decides those.
-            "task": "app.celery_app.aliexpress_retry_orders_task",
-            "schedule": crontab(minute="*/10"),
-        },
-        "vaitto-import-feed": {
-            # Session 88: il catalogo del Marketplace VAITTO dal feed
-            # «universal.csv» di Vaitto -- costi, scorte, disponibilità.
-            "task": "app.celery_app.vaitto_import_feed_all_task",
-            "schedule": crontab(hour="*/3", minute=37),
-        },
-        "soleil-import-api": {
-            # 13/10/2026: il catalogo di «Market 7» dall'API affiliati di
-            # SoleilDrop (solo dove c'è la chiave e l'import automatico).
-            "task": "app.celery_app.soleil_import_api_all_task",
-            "schedule": crontab(hour="*/3", minute=17),
-        },
-        "soleil-sync-orders": {
-            # Stato e tracking degli ordini su SoleilDrop: la riserva dei webhook.
-            "task": "app.celery_app.soleil_sync_orders_task",
-            "schedule": crontab(minute="*/30"),
-        },
-        "soleil-retry-orders": {
-            # Ordini pagati non ancora partiti (errori temporanei; quelli mai
-            # inviati solo con l'invio automatico acceso).
-            "task": "app.celery_app.soleil_retry_orders_task",
-            "schedule": crontab(minute="*/10"),
-        },
-        "symphonya-import-feed": {
-            # Session 89: il catalogo del Marketplace SYMPHONYA dall'API di
-            # Symphonya -- costi, listino, scorte.
-            "task": "app.celery_app.symphonya_import_feed_all_task",
-            "schedule": crontab(hour="*/3", minute=52),
-        },
-        "aliexpress-sync-products": {
-            # Cost, price and stock of the imported AliExpress products.
-            # Every three hours since Session 87 (was nightly): the full run
-            # takes ~5 minutes for 300 products, and the live checks on the
-            # product card and at checkout cover what happens in between.
-            "task": "app.celery_app.aliexpress_sync_products_task",
-            "schedule": crontab(hour="*/3", minute=7),
+        # I costi fissi del club diventano spese del mese. Ogni giorno e non
+        # solo il 1°: un giorno saltato si recupera il giorno dopo, e il
+        # vincolo UNIQUE (costo fisso, mese) impedisce i doppioni.
+        "club-recurring-expenses": {
+            "task": "app.celery_app.club_recurring_expenses_task",
+            "schedule": crontab(hour=3, minute=10),
         },
     },
 )
@@ -207,493 +149,67 @@ def run_monthly_rank_evaluation_task() -> int:
     return asyncio.run(_run())
 
 
-def _cj_run(job, name: str | None = None):
-    """Runs a CJ job for every organization that has a CJ key. A job that
-    raises is reported to staff once a day (Session 88, as for AliExpress)."""
+def _club_run(job_name: str) -> int:
+    """Lancia un job del club (club/tasks.py) per ogni club attivo. Un club
+    che fallisce non ferma gli altri: l'errore va nel log e il giro
+    successivo riprova, perché ogni job è idempotente. Un club sospeso non
+    riceve quote né promemoria: le sue famiglie non possono nemmeno entrare."""
     import asyncio
 
     from sqlalchemy import select
 
     from app.core.db import AsyncSessionLocal
-    from app.domains.cj_dropshipping import client as cj_client
-    from app.domains.cj_dropshipping.models import CjSettings
+    from app.domains.club import tasks as club_tasks
+    from app.domains.club.models import Club
+    from app.domains.club.scope import ClubScope
+
+    job = getattr(club_tasks, job_name)
 
     async def _run() -> int:
-        cj_client.reset_redis()
         total = 0
         async with AsyncSessionLocal() as db:
-            org_ids = list(
-                (await db.execute(select(CjSettings.organization_id).where(CjSettings.api_key.is_not(None)))).scalars()
-            )
-            for org_id in org_ids:
+            scopes = [
+                ClubScope(organization_id=org_id, club_id=club_id)
+                for club_id, org_id in (
+                    await db.execute(select(Club.id, Club.organization_id).where(Club.status == "ACTIVE"))
+                ).all()
+            ]
+        for scope in scopes:
+            async with AsyncSessionLocal() as db:
                 try:
-                    total += await job(db, org_id)
-                except Exception as exc:
-                    logging.getLogger(__name__).exception("CJ job failed for organization %s", org_id)
-                    await db.rollback()
-                    if name:
-                        from app.domains.cj_dropshipping import service as cj_service
-
-                        try:
-                            await cj_service.alert_sync_failure(
-                                db, organization_id=org_id, job=name, error=f"Errore tecnico: {exc}"[:500]
-                            )
-                        except Exception:
-                            logging.getLogger(__name__).exception("Could not alert staff about CJ job")
-                            await db.rollback()
+                    total += await job(db, scope=scope)
+                except Exception:
+                    logger.exception("Club job %s failed for club %s", job_name, scope.club_id)
         return total
 
     return asyncio.run(_run())
 
 
-@celery_app.task(name="app.celery_app.cj_sync_orders_task")
-def cj_sync_orders_task() -> int:
-    from app.domains.cj_dropshipping import service as cj_service
+@celery_app.task(name="app.celery_app.club_monthly_fees_task")
+def club_monthly_fees_task() -> int:
+    return _club_run("run_monthly_fees")
 
-    return _cj_run(lambda db, org_id: cj_service.sync_orders(db, organization_id=org_id), "orders")
 
+@celery_app.task(name="app.celery_app.club_new_year_task")
+def club_new_year_task() -> int:
+    return _club_run("run_new_year")
 
-@celery_app.task(name="app.celery_app.cj_retry_orders_task")
-def cj_retry_orders_task() -> int:
-    from app.domains.cj_dropshipping import service as cj_service
 
-    return _cj_run(lambda db, org_id: cj_service.retry_due_orders(db, organization_id=org_id), "retry")
+@celery_app.task(name="app.celery_app.club_new_season_task")
+def club_new_season_task() -> int:
+    return _club_run("run_new_season")
 
 
-@celery_app.task(name="app.celery_app.cj_sync_products_task")
-def cj_sync_products_task() -> int:
-    from app.domains.cj_dropshipping import service as cj_service
+@celery_app.task(name="app.celery_app.club_reminders_task")
+def club_reminders_task() -> int:
+    return _club_run("send_reminders")
 
-    return _cj_run(lambda db, org_id: cj_service.sync_all_products(db, organization_id=org_id), "products")
 
+@celery_app.task(name="app.celery_app.club_close_competitions_task")
+def club_close_competitions_task() -> int:
+    return _club_run("close_expired_competitions")
 
-@celery_app.task(name="app.celery_app.cj_forward_order_task")
-def cj_forward_order_task(order_id: str) -> str:
-    """Automatic "Invia a CJ" right after payment, when enabled."""
-    import asyncio
-    import uuid
 
-    from app.core.db import AsyncSessionLocal
-    from app.domains.cj_dropshipping import client as cj_client
-    from app.domains.cj_dropshipping import service as cj_service
-    from app.domains.cj_dropshipping.models import CjOrder
-
-    async def _run() -> str:
-        cj_client.reset_redis()
-        async with AsyncSessionLocal() as db:
-            order = await db.get(CjOrder, uuid.UUID(order_id))
-            if order is None:
-                return "missing"
-            try:
-                order = await cj_service.forward_order(
-                    db, organization_id=order.organization_id, order_id=order.id, actor_user_id=None
-                )
-            except cj_service.CjError as exc:
-                return f"skipped: {exc}"
-            return order.fulfillment_status
-
-    return asyncio.run(_run())
-
-
-def _shopify_run(job):
-    """Runs a Shopify job for every organization that has a store configured."""
-    import asyncio
-
-    from sqlalchemy import select
-
-    from app.core.db import AsyncSessionLocal
-    from app.domains.shopify_dropshipping.models import ShopifySettings
-
-    async def _run() -> int:
-        total = 0
-        async with AsyncSessionLocal() as db:
-            org_ids = list(
-                (
-                    await db.execute(
-                        select(ShopifySettings.organization_id).where(
-                            ShopifySettings.access_token.is_not(None), ShopifySettings.shop_domain.is_not(None)
-                        )
-                    )
-                ).scalars()
-            )
-            for org_id in org_ids:
-                try:
-                    total += await job(db, org_id)
-                except Exception:
-                    logging.getLogger(__name__).exception("Shopify job failed for organization %s", org_id)
-                    await db.rollback()
-        return total
-
-    return asyncio.run(_run())
-
-
-@celery_app.task(name="app.celery_app.shopify_sync_orders_task")
-def shopify_sync_orders_task() -> int:
-    from app.domains.shopify_dropshipping import service as shopify_service
-
-    return _shopify_run(lambda db, org_id: shopify_service.sync_orders(db, organization_id=org_id))
-
-
-@celery_app.task(name="app.celery_app.shopify_retry_orders_task")
-def shopify_retry_orders_task() -> int:
-    from app.domains.shopify_dropshipping import service as shopify_service
-
-    return _shopify_run(lambda db, org_id: shopify_service.retry_due_orders(db, organization_id=org_id))
-
-
-@celery_app.task(name="app.celery_app.shopify_sync_products_task")
-def shopify_sync_products_task() -> int:
-    from app.domains.shopify_dropshipping import service as shopify_service
-
-    return _shopify_run(lambda db, org_id: shopify_service.sync_all_products(db, organization_id=org_id))
-
-
-@celery_app.task(name="app.celery_app.shopify_forward_order_task")
-def shopify_forward_order_task(order_id: str) -> str:
-    """Automatic "Invia a Shopify" right after payment, when enabled."""
-    import asyncio
-    import uuid
-
-    from app.core.db import AsyncSessionLocal
-    from app.domains.shopify_dropshipping import service as shopify_service
-    from app.domains.shopify_dropshipping.models import ShopifyOrder
-
-    async def _run() -> str:
-        async with AsyncSessionLocal() as db:
-            order = await db.get(ShopifyOrder, uuid.UUID(order_id))
-            if order is None:
-                return "missing"
-            try:
-                order = await shopify_service.forward_order(
-                    db, organization_id=order.organization_id, order_id=order.id, actor_user_id=None
-                )
-            except shopify_service.ShopifyError as exc:
-                return f"skipped: {exc}"
-            return order.fulfillment_status
-
-    return asyncio.run(_run())
-
-
-def _aliexpress_run(job, name: str | None = None):
-    """Runs an AliExpress job for every organization whose account is linked.
-
-    A job that raises is reported to staff (once a day, see
-    aliexpress_dropshipping.service.alert_sync_failure): in Session 87 the
-    product sync failed silently for a week on stale worker code, and a
-    customer found out before anyone else did."""
-    import asyncio
-
-    from sqlalchemy import select
-
-    from app.core.db import AsyncSessionLocal
-    from app.domains.aliexpress_dropshipping.models import AliexpressSettings
-
-    async def _run() -> int:
-        total = 0
-        async with AsyncSessionLocal() as db:
-            org_ids = list(
-                (
-                    await db.execute(
-                        select(AliexpressSettings.organization_id).where(
-                            AliexpressSettings.access_token.is_not(None),
-                            AliexpressSettings.app_key.is_not(None),
-                        )
-                    )
-                ).scalars()
-            )
-            for org_id in org_ids:
-                try:
-                    total += await job(db, org_id)
-                except Exception as exc:
-                    logging.getLogger(__name__).exception("AliExpress job failed for organization %s", org_id)
-                    await db.rollback()
-                    if name:
-                        from app.domains.aliexpress_dropshipping import (
-                            service as aliexpress_service,
-                        )
-
-                        try:
-                            await aliexpress_service.alert_sync_failure(
-                                db, organization_id=org_id, job=name, error=f"Errore tecnico: {exc}"[:500]
-                            )
-                        except Exception:
-                            logging.getLogger(__name__).exception("Could not alert staff about AliExpress job")
-                            await db.rollback()
-        return total
-
-    return asyncio.run(_run())
-
-
-@celery_app.task(name="app.celery_app.aliexpress_sync_orders_task")
-def aliexpress_sync_orders_task() -> int:
-    from app.domains.aliexpress_dropshipping import service as aliexpress_service
-
-    return _aliexpress_run(
-        lambda db, org_id: aliexpress_service.sync_orders(db, organization_id=org_id), "orders"
-    )
-
-
-@celery_app.task(name="app.celery_app.aliexpress_retry_orders_task")
-def aliexpress_retry_orders_task() -> int:
-    from app.domains.aliexpress_dropshipping import service as aliexpress_service
-
-    return _aliexpress_run(
-        lambda db, org_id: aliexpress_service.retry_due_orders(db, organization_id=org_id), "retry"
-    )
-
-
-@celery_app.task(name="app.celery_app.aliexpress_sync_products_task")
-def aliexpress_sync_products_task() -> int:
-    from app.domains.aliexpress_dropshipping import service as aliexpress_service
-
-    return _aliexpress_run(
-        lambda db, org_id: aliexpress_service.sync_all_products(db, organization_id=org_id), "products"
-    )
-
-
-@celery_app.task(name="app.celery_app.aliexpress_forward_order_task")
-def aliexpress_forward_order_task(order_id: str) -> str:
-    """Automatic "Invia ad AliExpress" right after payment, when enabled."""
-    import asyncio
-    import uuid
-
-    from app.core.db import AsyncSessionLocal
-    from app.domains.aliexpress_dropshipping import service as aliexpress_service
-    from app.domains.aliexpress_dropshipping.models import AliexpressOrder
-
-    async def _run() -> str:
-        async with AsyncSessionLocal() as db:
-            order = await db.get(AliexpressOrder, uuid.UUID(order_id))
-            if order is None:
-                return "missing"
-            try:
-                order = await aliexpress_service.forward_order(
-                    db, organization_id=order.organization_id, order_id=order.id, actor_user_id=None
-                )
-            except aliexpress_service.AliexpressError as exc:
-                return f"skipped: {exc}"
-            return order.fulfillment_status
-
-    return asyncio.run(_run())
-
-
-@celery_app.task(name="app.celery_app.vaitto_import_feed_task")
-def vaitto_import_feed_task(organization_id: str, actor_user_id: str | None, stash_key: str | None) -> str:
-    """Un import del Marketplace VAITTO: dal feed (stash_key None) o dal CSV
-    caricato a mano e parcheggiato nel bucket privato, che si cancella dopo."""
-    import asyncio
-    import uuid
-
-    from app.core.db import AsyncSessionLocal
-    from app.core.storage import delete_document_object, download_document
-    from app.domains.vaitto_market import feed
-
-    async def _run() -> str:
-        content = download_document(storage_key=stash_key) if stash_key else None
-        try:
-            async with AsyncSessionLocal() as db:
-                summary = await feed.import_feed(
-                    db, organization_id=uuid.UUID(organization_id),
-                    actor_user_id=uuid.UUID(actor_user_id) if actor_user_id else None, content=content,
-                )
-                return summary["text"]
-        except feed.VaittoFeedError as exc:
-            return f"errore: {exc}"
-        finally:
-            if stash_key:
-                delete_document_object(storage_key=stash_key)
-
-    return asyncio.run(_run())
-
-
-@celery_app.task(name="app.celery_app.vaitto_import_feed_all_task")
-def vaitto_import_feed_all_task() -> int:
-    """L'import periodico, per ogni organizzazione con un feed e l'import
-    automatico acceso. Un feed che fallisce lascia l'errore sulle impostazioni
-    (last_import_error), che il pannello mostra."""
-    import asyncio
-
-    from sqlalchemy import select
-
-    from app.core.db import AsyncSessionLocal
-    from app.domains.vaitto_market import feed
-    from app.domains.vaitto_market.models import VaittoMarketSettings
-
-    async def _run() -> int:
-        done = 0
-        async with AsyncSessionLocal() as db:
-            org_ids = list((await db.execute(
-                select(VaittoMarketSettings.organization_id).where(
-                    VaittoMarketSettings.feed_url.is_not(None), VaittoMarketSettings.auto_import.is_(True),
-                )
-            )).scalars())
-            for org_id in org_ids:
-                try:
-                    await feed.import_feed(db, organization_id=org_id)
-                    done += 1
-                except feed.VaittoFeedError:
-                    logging.getLogger(__name__).warning("Vaitto feed import failed for %s", org_id)
-                except Exception:
-                    logging.getLogger(__name__).exception("Vaitto feed import crashed for %s", org_id)
-                    await db.rollback()
-        return done
-
-    return asyncio.run(_run())
-
-
-@celery_app.task(name="app.celery_app.symphonya_import_feed_task")
-def symphonya_import_feed_task(organization_id: str, actor_user_id: str | None, stash_key: str | None) -> str:
-    """Un import del Marketplace SYMPHONYA: dal feed (stash_key None) o dal CSV
-    caricato a mano e parcheggiato nel bucket privato, che si cancella dopo."""
-    import asyncio
-    import uuid
-
-    from app.core.db import AsyncSessionLocal
-    from app.core.storage import delete_document_object, download_document
-    from app.domains.symphonya_market import feed
-
-    async def _run() -> str:
-        content = download_document(storage_key=stash_key) if stash_key else None
-        try:
-            async with AsyncSessionLocal() as db:
-                summary = await feed.import_feed(
-                    db, organization_id=uuid.UUID(organization_id),
-                    actor_user_id=uuid.UUID(actor_user_id) if actor_user_id else None, content=content,
-                )
-                return summary["text"]
-        except feed.SymphonyaFeedError as exc:
-            return f"errore: {exc}"
-        finally:
-            if stash_key:
-                delete_document_object(storage_key=stash_key)
-
-    return asyncio.run(_run())
-
-
-@celery_app.task(name="app.celery_app.soleil_import_feed_task")
-def soleil_import_feed_task(organization_id: str, actor_user_id: str | None, stash_key: str | None) -> str:
-    """Un import del Marketplace SOLEIL: dall'Excel di SoleilDrop caricato a
-    mano e parcheggiato nel bucket privato, che si cancella dopo (Session 90),
-    oppure -- stash_key None -- dall'API affiliati (13/10/2026)."""
-    import asyncio
-    import uuid
-
-    from app.core.db import AsyncSessionLocal
-    from app.core.storage import delete_document_object, download_document
-    from app.domains.soleil_market import api_sync, feed
-
-    async def _run() -> str:
-        actor = uuid.UUID(actor_user_id) if actor_user_id else None
-        try:
-            async with AsyncSessionLocal() as db:
-                if stash_key is None:
-                    summary = await api_sync.import_catalog(
-                        db, organization_id=uuid.UUID(organization_id), actor_user_id=actor,
-                    )
-                else:
-                    summary = await feed.import_feed(
-                        db, organization_id=uuid.UUID(organization_id), actor_user_id=actor,
-                        content=download_document(storage_key=stash_key),
-                    )
-                return summary["text"]
-        except feed.SoleilFeedError as exc:
-            return f"errore: {exc}"
-        finally:
-            if stash_key:
-                delete_document_object(storage_key=stash_key)
-
-    return asyncio.run(_run())
-
-
-def _soleil_run(job, *, needs_auto_import: bool = False) -> int:
-    """Un lavoro SoleilDrop per ogni organizzazione con la chiave API. Un
-    errore di un'organizzazione non ferma le altre e resta nei log; l'esito
-    dell'import resta anche sulle impostazioni (last_import_error)."""
-    import asyncio
-
-    from sqlalchemy import select
-
-    from app.core.db import AsyncSessionLocal
-    from app.domains.soleil_market.models import SoleilMarketSettings
-
-    async def _run() -> int:
-        done = 0
-        async with AsyncSessionLocal() as db:
-            query = select(SoleilMarketSettings.organization_id).where(SoleilMarketSettings.api_key.is_not(None))
-            if needs_auto_import:
-                query = query.where(SoleilMarketSettings.auto_import.is_(True))
-            for org_id in list((await db.execute(query)).scalars()):
-                try:
-                    await job(db, org_id)
-                    done += 1
-                except Exception:
-                    logging.getLogger(__name__).exception("SoleilDrop job %s failed for %s", job.__name__, org_id)
-                    await db.rollback()
-        return done
-
-    return asyncio.run(_run())
-
-
-@celery_app.task(name="app.celery_app.soleil_import_api_all_task")
-def soleil_import_api_all_task() -> int:
-    from app.domains.soleil_market import api_sync
-
-    async def job(db, org_id):
-        await api_sync.import_catalog(db, organization_id=org_id)
-
-    return _soleil_run(job, needs_auto_import=True)
-
-
-@celery_app.task(name="app.celery_app.soleil_sync_orders_task")
-def soleil_sync_orders_task() -> int:
-    from app.domains.soleil_market import api_sync
-
-    async def job(db, org_id):
-        await api_sync.sync_orders(db, organization_id=org_id)
-
-    return _soleil_run(job)
-
-
-@celery_app.task(name="app.celery_app.soleil_retry_orders_task")
-def soleil_retry_orders_task() -> int:
-    from app.domains.soleil_market import api_sync
-
-    async def job(db, org_id):
-        await api_sync.retry_orders(db, organization_id=org_id)
-
-    return _soleil_run(job)
-
-
-@celery_app.task(name="app.celery_app.symphonya_import_feed_all_task")
-def symphonya_import_feed_all_task() -> int:
-    """L'import periodico, per ogni organizzazione con un feed e l'import
-    automatico acceso. Un feed che fallisce lascia l'errore sulle impostazioni
-    (last_import_error), che il pannello mostra."""
-    import asyncio
-
-    from sqlalchemy import select
-
-    from app.core.db import AsyncSessionLocal
-    from app.domains.symphonya_market import feed
-    from app.domains.symphonya_market.models import SymphonyaMarketSettings
-
-    async def _run() -> int:
-        done = 0
-        async with AsyncSessionLocal() as db:
-            org_ids = list((await db.execute(
-                select(SymphonyaMarketSettings.organization_id).where(
-                    SymphonyaMarketSettings.api_key.is_not(None), SymphonyaMarketSettings.auto_import.is_(True),
-                )
-            )).scalars())
-            for org_id in org_ids:
-                try:
-                    await feed.import_feed(db, organization_id=org_id)
-                    done += 1
-                except feed.SymphonyaFeedError:
-                    logging.getLogger(__name__).warning("Symphonya feed import failed for %s", org_id)
-                except Exception:
-                    logging.getLogger(__name__).exception("Symphonya feed import crashed for %s", org_id)
-                    await db.rollback()
-        return done
-
-    return asyncio.run(_run())
+@celery_app.task(name="app.celery_app.club_recurring_expenses_task")
+def club_recurring_expenses_task() -> int:
+    return _club_run("run_recurring_expenses")

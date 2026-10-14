@@ -8,26 +8,23 @@ from app.core.deps import CurrentUser, get_current_user, require_permission
 from app.core.rate_limit import rate_limit
 from app.domains.orders import service as orders_service
 from app.domains.orders.schemas import (
-    CheckoutSessionRead,
     OrderCancelRequest,
     OrderCreateRequest,
     OrderCreditOtpRequest,
-    OrderPaymentMethodUpdate,
     OrderQuoteRead,
     OrderRead,
     OrderSelfCreateRequest,
     PaymentProofUrlRead,
 )
-from app.domains.payments import service as payments_service
 from app.domains.wallets import service as wallets_service
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 
 # Two ways in: an admin creating/managing any order (wallet.manage-gated --
 # same sensitivity tier as the rest of the wallet-adjacent surface, since
-# this can debit a customer's wallet) and self-checkout (added Session 26,
-# "/mine" routes) where a customer only ever touches their own wallet/orders,
-# the same authorization principle as POST /wallets/transfer.
+# this can debit a customer's wallet) and self-checkout ("/mine" routes)
+# where a customer only ever touches their own wallet/orders, the same
+# authorization principle as POST /wallets/transfer.
 
 
 def _order_error_to_http(exc: orders_service.OrderError) -> HTTPException:
@@ -186,58 +183,6 @@ async def list_my_orders(
         db, organization_id=current_user.organization_id, customer_user_id=current_user.user_id
     )
     return [OrderRead(**d) for d in await orders_service.hydrate(db, orders)]
-
-
-@router.post("/mine/{order_id}/checkout-session", response_model=CheckoutSessionRead)
-async def create_my_order_checkout_session(
-    order_id: uuid.UUID,
-    success_url: str,
-    cancel_url: str,
-    current_user: CurrentUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> CheckoutSessionRead:
-    """Only the order's own customer may request a checkout session for it
-    -- 404 (not 403) for someone else's order, same information-hiding
-    reasoning as the rest of this codebase's ownership checks."""
-    order = await orders_service.get_org_scoped(db, organization_id=current_user.organization_id, order_id=order_id)
-    if order is None or order.customer_user_id != current_user.user_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Order not found")
-    if order.status != "AWAITING_PAYMENT":
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Cannot pay an order in status {order.status}")
-    try:
-        checkout_url = await payments_service.create_checkout_session_for_order(
-            db, organization_id=current_user.organization_id, order=order,
-            success_url=success_url, cancel_url=cancel_url,
-        )
-    except payments_service.StripeNotConfiguredError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
-    return CheckoutSessionRead(checkout_url=checkout_url)
-
-
-@router.patch("/mine/{order_id}/payment-method", response_model=OrderRead)
-async def change_my_order_payment_method(
-    order_id: uuid.UUID,
-    payload: OrderPaymentMethodUpdate,
-    current_user: CurrentUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> OrderRead:
-    """"Paga con carta invece" / "Paga con bonifico invece" on an order the
-    customer already placed -- only their own, only while still
-    AWAITING_PAYMENT (see orders/service.py::change_payment_method)."""
-    order = await orders_service.get_owned(
-        db, organization_id=current_user.organization_id, customer_user_id=current_user.user_id, order_id=order_id
-    )
-    if order is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Order not found")
-    try:
-        order = await orders_service.change_payment_method(
-            db, organization_id=current_user.organization_id, order=order,
-            new_payment_method=payload.payment_method,
-        )
-    except (orders_service.InvalidOrderStateError, orders_service.InvalidPaymentMethodError,
-            orders_service.PaymentMethodNotAvailableError) as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
-    return OrderRead(**(await orders_service.to_read_dict(db, order)))
 
 
 @router.post(

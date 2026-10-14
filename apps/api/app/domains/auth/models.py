@@ -17,7 +17,7 @@ class Session(UUIDPKMixin, TimestampMixin, Base):
     ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True)
     expires_at: Mapped[datetime] = mapped_column()
     revoked_at: Mapped[datetime | None] = mapped_column(nullable=True)
-    #: Session 85: set when this session was revoked by ROTATION (a refresh),
+    #: Set when this session was revoked by ROTATION (a refresh),
     #: pointing at the session that replaced it -- as opposed to a logout,
     #: which leaves it null. It is what lets a refresh that raced another one
     #: be told apart from a stolen token (auth/service.py::rotate_refresh_token).
@@ -70,7 +70,7 @@ class OtpCode(UUIDPKMixin, TimestampMixin, Base):
 
 class SpendPin(UUIDPKMixin, TimestampMixin, Base):
     """Il PIN che il cliente sceglie per confermare l'uso dei JavCash, al
-    posto del codice via email (Session 87). Una riga per utente.
+    posto del codice via email. Una riga per utente.
 
     Un PIN di quattro cifre si indovina in diecimila tentativi, quindi non
     vive senza il suo blocco: dopo `SPEND_PIN_MAX_ATTEMPTS` errori resta

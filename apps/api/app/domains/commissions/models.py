@@ -19,7 +19,6 @@ class Rank(UUIDPKMixin, TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(128))
     level: Mapped[int] = mapped_column(Integer)
     personal_token_cents: Mapped[int] = mapped_column(BigInteger)
-    energy_share_percentage: Mapped[float] = mapped_column(Numeric(5, 2), default=0)
     personal_volume_threshold_cents: Mapped[int] = mapped_column(BigInteger, default=0)
     group_volume_threshold_cents: Mapped[int] = mapped_column(BigInteger, default=0)
     evaluation_window_months: Mapped[int] = mapped_column(Integer, default=3)

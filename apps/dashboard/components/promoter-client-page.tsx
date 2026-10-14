@@ -20,7 +20,6 @@ import { RecruitForm } from "@/components/recruit-form";
 import { SectionBanner } from "@/components/section-banner";
 import { SupportTicketsPanel } from "@/components/support-tickets-panel";
 import { WalletPanel } from "@/components/wallet-panel";
-import { InvoiceRedemptionPanel } from "@/components/invoice-redemption-panel";
 import type { AgentProfileRead, BranchMemberRead, PromoterCodeRead, RankRead } from "@/lib/types";
 
 interface PromoterClientPageProps {
@@ -131,16 +130,6 @@ const NAV_ITEMS: NavItem[] = [
       </svg>
     ),
   },
-  {
-    key: "cashback",
-    label: "Riscatta Cashback",
-    notificationTypes: ["INVOICE_REDEMPTION_VERIFIED", "INVOICE_REDEMPTION_REJECTED"],
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    ),
-  },
 ];
 
 const QUICK_LINKS: { key: string; label: string; description: string; icon: React.ReactNode }[] = [
@@ -194,24 +183,14 @@ const QUICK_LINKS: { key: string; label: string; description: string; icon: Reac
       </svg>
     ),
   },
-  {
-    key: "cashback",
-    label: "Riscatta Cashback",
-    description: "Da fattura a JavCash",
-    icon: (
-      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 14l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    ),
-  },
 ];
 
 const PROMOTER_VALID_TABS = [
-  "azienda", "network", "invita-amici", "customers", "commissions", "simulator", "support", "documentation", "wallet", "cashback",
+  "azienda", "network", "invita-amici", "customers", "commissions", "simulator", "support", "documentation", "wallet",
 ] as const;
 
 export function PromoterClientPage({ me, branch, email, organizationId }: PromoterClientPageProps) {
-  const [activeTab, setActiveTab] = useState<"azienda" | "network" | "invita-amici" | "customers" | "commissions" | "simulator" | "support" | "documentation" | "wallet" | "cashback">("azienda");
+  const [activeTab, setActiveTab] = useState<"azienda" | "network" | "invita-amici" | "customers" | "commissions" | "simulator" | "support" | "documentation" | "wallet">("azienda");
   // «Inserisci un nuovo cliente» dalla home: apre «Miei Clienti» gia' sul
   // form del nuovo cliente. Qualsiasi altra navigazione lo spegne, cosi'
   // chi apre «Miei Clienti» dal menu trova la lista come sempre.
@@ -220,11 +199,8 @@ export function PromoterClientPage({ me, branch, email, organizationId }: Promot
   const searchParams = useSearchParams();
   const maxDepth = branch.reduce((max, m) => Math.max(max, m.depth), 0);
 
-  // Deep-link into a specific tab, e.g. "Vedi riscatto" from a wallet
-  // transaction's reference chip (wallet-panel.tsx) -- same pattern as
-  // customer-client-page.tsx's own tab-from-URL effect, without the
-  // Stripe-return-banner logic that page also handles (promoters don't
-  // self-checkout Shop orders).
+  // Deep-link into a specific tab, e.g. "Vai al wallet" from an email --
+  // same pattern as customer-client-page.tsx's own tab-from-URL effect.
   useEffect(() => {
     // "pratiche" was a tab of its own in Session 66; now part of "Miei Clienti".
     const requested = searchParams.get("tab");
@@ -268,16 +244,16 @@ export function PromoterClientPage({ me, branch, email, organizationId }: Promot
       centerHeaderActions
       headerActions={
         me ? (
-          <div className="w-full flex flex-wrap items-center justify-between gap-4 bg-slate-900/60 light:bg-slate-50 border border-white/5 light:border-slate-200 rounded-2xl px-5 py-3 glass-card">
+          <div className="w-full flex flex-wrap items-center justify-between gap-4 bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3 glass-card">
             <div className="flex flex-wrap items-center gap-4">
               <div>
-                <p className="text-[10px] font-bold text-slate-400 light:text-slate-500 uppercase tracking-wider">Codice Promoter</p>
-                <p className="font-mono text-base text-amber-400 font-semibold">{me.promoter_code}</p>
+                <p className=" font-bold text-slate-500 uppercase tracking-wider">Codice Promoter</p>
+                <p className="font-mono text-base text-amber-700 font-semibold">{me.promoter_code}</p>
               </div>
-              <div className="h-8 w-px bg-white/10 light:bg-slate-200" />
+              <div className="h-8 w-px bg-slate-200" />
               <div>
-                <p className="text-[10px] font-bold text-slate-400 light:text-slate-500 uppercase tracking-wider">Qualifica Attuale</p>
-                <p className="text-2xl text-orange-400 font-bold leading-tight">{me.rank_code || "Nessuna"}</p>
+                <p className=" font-bold text-slate-500 uppercase tracking-wider">Qualifica Attuale</p>
+                <p className="text-2xl text-brand-600 font-bold leading-tight">{me.rank_code || "Nessuna"}</p>
                 {rankName && <p className="text-[10px] text-slate-500 mt-0.5">{rankName}</p>}
               </div>
             </div>
@@ -287,7 +263,7 @@ export function PromoterClientPage({ me, branch, email, organizationId }: Promot
                 is on every page of the promoter dashboard, and six labelled
                 pills would wrap onto three lines and push the page down. */}
             <div className="flex flex-col items-start sm:items-end gap-1.5">
-              <p className="text-[10px] font-bold text-slate-400 light:text-slate-500 uppercase tracking-wider">
+              <p className=" font-bold text-slate-500 uppercase tracking-wider">
                 Condividi il tuo link
               </p>
               <ShareButtons
@@ -305,8 +281,8 @@ export function PromoterClientPage({ me, branch, email, organizationId }: Promot
           <svg className="w-12 h-12 text-rose-400 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <h3 className="text-lg font-semibold text-white light:text-slate-900">Nessun profilo agente</h3>
-          <p className="text-sm text-slate-400 light:text-slate-500 mt-2">
+          <h3 className="text-lg font-semibold text-slate-900">Nessun profilo agente</h3>
+          <p className="text-sm text-slate-500 mt-2">
             Non è stato trovato alcun profilo promoter collegato a questo account. Contatta l&apos;amministratore del sistema per l&apos;assegnazione.
           </p>
         </div>
@@ -316,8 +292,8 @@ export function PromoterClientPage({ me, branch, email, organizationId }: Promot
             <div className="space-y-6">
               <SectionBanner image="contracts" alt="La mia Azienda" compact>
                 <div>
-                  <p className="text-[11px] font-semibold text-orange-300 uppercase tracking-wider">Bentornato</p>
-                  <h2 className="text-lg sm:text-xl font-bold text-white truncate max-w-[70vw] sm:max-w-none">{me.display_name}</h2>
+                  <p className="text-[11px] font-semibold text-brand-600 uppercase tracking-wider">Bentornato</p>
+                  <h2 className="text-lg sm:text-xl font-bold text-slate-900 truncate max-w-[70vw] sm:max-w-none">{me.display_name}</h2>
                 </div>
               </SectionBanner>
 
@@ -346,13 +322,13 @@ export function PromoterClientPage({ me, branch, email, organizationId }: Promot
                       setOpenNewCustomer(false);
                       setActiveTab(link.key as typeof activeTab);
                     }}
-                    className="group flex flex-col items-start gap-3 p-4 rounded-2xl border border-white/5 light:border-slate-200 bg-gradient-to-br from-slate-900/60 to-slate-900/20 light:from-white light:to-slate-50 hover:border-orange-500/40 hover:shadow-lg hover:shadow-orange-500/10 transition-all duration-200 cursor-pointer text-left"
+                    className="group flex flex-col items-start gap-3 p-4 rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 hover:border-brand-500/40 hover:shadow-lg hover:shadow-brand-500/10 transition-all duration-200 cursor-pointer text-left"
                   >
-                    <span className="p-2.5 rounded-xl bg-orange-500/10 text-orange-400 group-hover:bg-orange-500 group-hover:text-white transition-colors">
+                    <span className="p-2.5 rounded-xl bg-brand-500/10 text-brand-600 group-hover:bg-brand-500 group-hover:text-white transition-colors">
                       {link.icon}
                     </span>
                     <span className="min-w-0">
-                      <span className="block text-sm font-semibold text-white light:text-slate-900 truncate">
+                      <span className="block text-sm font-semibold text-slate-900 truncate">
                         {link.label}
                       </span>
                       <span className="block text-[11px] text-slate-500 truncate">{link.description}</span>
@@ -386,10 +362,10 @@ export function PromoterClientPage({ me, branch, email, organizationId }: Promot
               <SectionBanner image="network" alt="Rete Commerciale" />
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div className="flex items-center gap-3 text-xs">
-                  <span className="px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-semibold">
+                  <span className="px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-700 border border-amber-500/20 font-semibold">
                     {branch.length} agenti nel ramo
                   </span>
-                  <span className="px-2.5 py-1 rounded-full bg-orange-500/10 text-orange-400 border border-orange-500/20 font-semibold">
+                  <span className="px-2.5 py-1 rounded-full bg-brand-500/10 text-brand-600 border border-brand-500/20 font-semibold">
                     Profondità massima: {maxDepth} / 12 livelli
                   </span>
                 </div>
@@ -400,9 +376,9 @@ export function PromoterClientPage({ me, branch, email, organizationId }: Promot
                 <div className="lg:col-span-2">
                   <BranchVisualizer members={branch} />
                 </div>
-                <div className="glass-card rounded-2xl p-6 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70">
-                  <h3 className="text-lg font-semibold text-white light:text-slate-900 mb-2">Dettaglio Ramo</h3>
-                  <p className="text-xs text-slate-400 light:text-slate-500 mb-6">
+                <div className="glass-card rounded-2xl p-6 border-slate-200 bg-white/70">
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">Dettaglio Ramo</h3>
+                  <p className="text-xs text-slate-500 mb-6">
                     Elenco tabellare di tutti i collaboratori diretti e indiretti, fino a 12 livelli di profondità.
                   </p>
                   <div className="overflow-x-auto">
@@ -416,9 +392,9 @@ export function PromoterClientPage({ me, branch, email, organizationId }: Promot
           {activeTab === "commissions" && (
             <div className="max-w-4xl mx-auto space-y-6">
               <SectionBanner image="commissions" alt="Movimenti Provvigioni" />
-              <div className="glass-card rounded-2xl p-6 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70">
-                <h3 className="text-lg font-semibold text-white light:text-slate-900 mb-2">Estratto Conto Provvigioni</h3>
-                <p className="text-xs text-slate-400 light:text-slate-500 mb-6">
+              <div className="glass-card rounded-2xl p-6 border-slate-200 bg-white/70">
+                <h3 className="text-lg font-semibold text-slate-900 mb-2">Estratto Conto Provvigioni</h3>
+                <p className="text-xs text-slate-500 mb-6">
                   Storico dei gettoni personali e delle differenze imprenditoriali maturate sui contratti attivi.
                 </p>
                 <MyCommissions />
@@ -454,13 +430,6 @@ export function PromoterClientPage({ me, branch, email, organizationId }: Promot
             <div className="space-y-6">
               <SectionBanner image="wallets" alt="Wallet" />
               <WalletPanel />
-            </div>
-          )}
-
-          {activeTab === "cashback" && (
-            <div className="space-y-6">
-              <SectionBanner image="wallets" alt="Riscatta Cashback" />
-              <InvoiceRedemptionPanel />
             </div>
           )}
         </div>

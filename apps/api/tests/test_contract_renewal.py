@@ -1,4 +1,4 @@
-"""Covers the contract renewal/expiry engineering fix: energy contracts have a
+"""Covers the contract renewal/expiry engineering fix: contracts have a
 12/24-month term and must be renewable every year, not just once. Before this
 fix RENEWED was a dead end in the state machine (see state_machine.py) -- a
 contract renewed once could never be renewed again, suspended, cancelled, or
@@ -12,12 +12,12 @@ import pytest
 from app.core.db import utcnow
 from app.domains.catalog.models import Product, ProductVersion
 from app.domains.contracts import service as contract_service
-from app.domains.customers.models import Address, Customer, SupplyPoint
+from app.domains.customers.models import Address, Customer
 from app.domains.network import service as network_service
 from tests.test_commission_engine_integration import _make_actor
 
 
-async def _make_customer_and_supply_point(db, organization_id):
+async def _make_customer(db, organization_id):
     customer = Customer(organization_id=organization_id, kind="PRIVATE", email="renew@example.com")
     db.add(customer)
     await db.flush()
@@ -27,17 +27,10 @@ async def _make_customer_and_supply_point(db, organization_id):
     )
     db.add(address)
     await db.flush()
-    supply_point = SupplyPoint(
-        organization_id=organization_id, customer_id=customer.id, energy_type="ELECTRICITY",
-        supply_address_id=address.id,
-    )
-    db.add(supply_point)
     await db.commit()
-    return customer, supply_point
-
-
+    return customer
 async def _make_product_version(db, organization_id, *, duration_months=12):
-    product = Product(organization_id=organization_id, code="TEST-RENEW", energy_type="ELECTRICITY", customer_type="PRIVATE")
+    product = Product(organization_id=organization_id, code="TEST-RENEW", customer_type="PRIVATE")
     db.add(product)
     await db.flush()
     product_version = ProductVersion(
@@ -51,15 +44,14 @@ async def _make_product_version(db, organization_id, *, duration_months=12):
 
 async def _make_contract_to_active(db, organization_id, *, duration_months=12):
     actor_user_id = await _make_actor(db, organization_id)
-    customer, supply_point = await _make_customer_and_supply_point(db, organization_id)
+    customer = await _make_customer(db, organization_id)
     product_version = await _make_product_version(db, organization_id, duration_months=duration_months)
     agent = await network_service.create_agent(
         db, organization_id=organization_id, first_name="Renewal", last_name="Agent",
         promoter_code=f"RA-{uuid.uuid4().hex[:8]}", parent_agent_id=None,
     )
     contract = await contract_service.create_contract(
-        db, organization_id=organization_id, customer_id=customer.id, supply_point_id=supply_point.id,
-        product_version_id=product_version.id, producer_agent_id=agent.id,
+        db, organization_id=organization_id, customer_id=customer.id, product_version_id=product_version.id, producer_agent_id=agent.id,
         actor_user_id=actor_user_id, correlation_id=str(uuid.uuid4()),
     )
     for to_status in ["SUBMITTED", "UNDER_REVIEW", "APPROVED", "PAID"]:  # APPROVED auto-cascades into PAYMENT_PENDING, PAID auto-cascades through ACTIVATION_PENDING into ACTIVE (see contracts/service.py::AUTO_CASCADE_AFTER)

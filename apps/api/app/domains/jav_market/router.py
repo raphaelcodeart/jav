@@ -1,10 +1,9 @@
-"""Marketplace 4 -- «Fai la Spesa con Jav»: API.
+"""Lo Shop -- «Fai la Spesa con Jav»: API.
 
-Stessi permessi degli altri negozi di prodotti importati, così chi può
-gestirne uno li gestisce tutti: `imported_products.manage` per il catalogo,
-`wallet.manage` per gli ordini. Le rotte del cliente sotto
-`/jav-market/orders/mine` ricalcano una per una quelle di AliExpress, ed è
-il motivo per cui «I miei Ordini» tratta i quattro negozi allo stesso modo.
+`shop.manage` per il catalogo, `wallet.manage` per gli ordini e per le email
+ai fornitori (`/supplier-queue`, `/supplier-dispatches`: mandare un ordine a
+chi lo prepara è evaderlo). Le rotte del cliente stanno sotto
+`/jav-market/orders/mine`.
 """
 
 import uuid
@@ -12,7 +11,6 @@ import uuid
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import get_settings
 from app.core.db import get_db
 from app.core.deps import CurrentUser, get_current_user, require_permission
 from app.core.rate_limit import rate_limit
@@ -20,12 +18,10 @@ from app.core.storage import UploadValidationError, upload_media
 from app.domains.carts import service as carts_service
 from app.domains.jav_market import service
 from app.domains.jav_market.schemas import (
-    CheckoutSessionRead,
     JavMarketCartCreditOtpRequest,
     JavMarketCartOrderRequest,
     JavMarketOrderCancelRequest,
     JavMarketOrderCreditOtpRequest,
-    JavMarketOrderPaymentMethodUpdate,
     JavMarketOrderSelfCreateRequest,
     JavMarketSettingsRead,
     JavMarketSettingsUpdate,
@@ -34,15 +30,15 @@ from app.domains.jav_market.schemas import (
     ProducerWrite,
     ProductUpdate,
     ProductWrite,
+    SupplierDispatchSendRequest,
     VariantUpdate,
     VariantWrite,
 )
 from app.domains.marketplaces import paging
-from app.domains.payments import service as payments_service
 
 router = APIRouter(prefix="/jav-market", tags=["jav-market"])
 
-CATALOG = "imported_products.manage"
+CATALOG = "shop.manage"
 ORDERS = "wallet.manage"
 ERRORS = service.ERRORS
 
@@ -50,6 +46,8 @@ ERRORS = service.ERRORS
 def _http(exc: Exception) -> HTTPException:
     if isinstance(exc, service.JavMarketNotFoundError):
         return HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
+    if isinstance(exc, service.JavMarketConflictError):
+        return HTTPException(status.HTTP_409_CONFLICT, str(exc))
     return HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
 
 
@@ -132,8 +130,7 @@ async def update_jav_market_producer(
 async def list_jav_market_products(
     current_user: CurrentUser = Depends(require_permission(CATALOG)), db: AsyncSession = Depends(get_db)
 ) -> list[dict]:
-    rows = await service.list_products(db, organization_id=current_user.organization_id)
-    return [await service.product_read_dict(db, p, admin=True) for p in rows]
+    return await service.admin_products_read(db, organization_id=current_user.organization_id)
 
 
 @router.post(
@@ -241,7 +238,7 @@ async def list_my_jav_market_products(
 ) -> list[dict]:
     """La griglia del cliente. Vuota quando il negozio è spento: la scheda
     sparisce da sola dallo Shop, senza che nessuno la nasconda a mano.
-    Session 89: solo la prima pagina -- la vetrina usa /products/mine/page;
+    Solo la prima pagina -- la vetrina usa /products/mine/page;
     questa resta per una pagina del browser ancora alla versione di prima."""
     page = await service.customer_products_page(db, organization_id=current_user.organization_id)
     return page["items"]
@@ -385,6 +382,7 @@ async def create_my_jav_market_order(
         order = await service.create_order(
             db, organization_id=current_user.organization_id, customer_user_id=current_user.user_id,
             variant_id=payload.variant_id, quantity=payload.quantity, address=payload.address.model_dump(),
+            athlete_id=payload.athlete_id,
             credit_applied_cents=payload.credit_applied_cents, payment_method=payload.payment_method,
             actor_user_id=current_user.user_id, otp_code=payload.otp_code, note=payload.note,
         )
@@ -404,7 +402,7 @@ async def create_my_jav_market_order_from_cart(
     try:
         order = await service.create_order(
             db, organization_id=current_user.organization_id, customer_user_id=current_user.user_id,
-            lines=lines, address=payload.address.model_dump(),
+            lines=lines, address=payload.address.model_dump(), athlete_id=payload.athlete_id,
             credit_applied_cents=payload.credit_applied_cents, payment_method=payload.payment_method,
             actor_user_id=current_user.user_id, otp_code=payload.otp_code, note=payload.note,
         )
@@ -433,43 +431,39 @@ async def _owned(db: AsyncSession, current_user: CurrentUser, order_id: uuid.UUI
     return order
 
 
-@router.patch("/orders/mine/{order_id}/payment-method")
-async def change_my_jav_market_payment_method(
+@router.post(
+    "/orders/mine/{order_id}/payment-proof",
+    dependencies=[Depends(rate_limit("jav-market-payment-proof", max_requests=20, window_seconds=300))],
+)
+async def upload_my_jav_market_payment_proof(
     order_id: uuid.UUID,
-    payload: JavMarketOrderPaymentMethodUpdate,
+    file: UploadFile = File(...),
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
+    """La foto del bonifico di un ordine: la vede chi conferma il pagamento
+    (service.upload_payment_proof)."""
     order = await _owned(db, current_user, order_id)
     try:
-        order = await service.change_payment_method(
-            db, organization_id=current_user.organization_id, order=order,
-            new_payment_method=payload.payment_method,
+        order = await service.upload_payment_proof(
+            db, order=order, file_bytes=await file.read(), content_type=file.content_type or "",
+            original_filename=file.filename or "bonifico", actor_user_id=current_user.user_id,
         )
     except ERRORS as exc:
         raise _http(exc) from exc
     return await service.order_read_dict(db, order, admin=False)
 
 
-@router.post("/orders/mine/{order_id}/checkout-session", response_model=CheckoutSessionRead)
-async def create_my_jav_market_checkout_session(
+@router.get("/orders/mine/{order_id}/payment-proof-url")
+async def get_my_jav_market_payment_proof_url(
     order_id: uuid.UUID,
-    success_url: str | None = None,
-    cancel_url: str | None = None,
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> CheckoutSessionRead:
+) -> dict:
     order = await _owned(db, current_user, order_id)
-    base = get_settings().public_app_base_url
-    try:
-        url = await payments_service.create_checkout_session_for_jav_market_order(
-            db, organization_id=current_user.organization_id, order=order,
-            success_url=success_url or f"{base}/customer?tab=orders",
-            cancel_url=cancel_url or f"{base}/customer?tab=orders",
-        )
-    except payments_service.StripeNotConfiguredError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
-    return CheckoutSessionRead(checkout_url=url)
+    if order.payment_proof_storage_key is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Prova di pagamento non trovata.")
+    return {"url": service.presigned_payment_proof_url(order)}
 
 
 # --- Admin: ordini --------------------------------------------------------------------------------
@@ -481,6 +475,18 @@ async def list_jav_market_orders(
 ) -> list[dict]:
     orders = await service.list_orders(db, organization_id=current_user.organization_id)
     return [await service.order_read_dict(db, o, admin=True) for o in orders]
+
+
+@router.get("/orders/{order_id}/payment-proof-url")
+async def get_jav_market_payment_proof_url(
+    order_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_permission(ORDERS)),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    order = await service.get_org_scoped(db, organization_id=current_user.organization_id, order_id=order_id)
+    if order is None or order.payment_proof_storage_key is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Prova di pagamento non trovata.")
+    return {"url": service.presigned_payment_proof_url(order)}
 
 
 @router.post("/orders/{order_id}/confirm-payment")
@@ -508,9 +514,10 @@ async def forward_jav_market_order(
     """Manda l'ordine alle aziende che devono preparare la merce: una email
     per azienda, con le sue righe e l'indirizzo di consegna.
 
-    Si può ripetere. Qui, a differenza di AliExpress, un secondo invio non
-    crea un secondo acquisto: è solo una email in più, e serve quando la
-    prima si perde."""
+    Manda solo le righe non ancora mandate (anche dalla coda «Fornitori da
+    avvisare»): ripremerlo dopo un invio riuscito non fa partire doppioni,
+    e completa quello che era mancato -- un'azienda senza email, nel
+    frattempo compilata."""
     try:
         order = await service.forward_order(
             db, organization_id=current_user.organization_id, order_id=order_id,
@@ -519,6 +526,61 @@ async def forward_jav_market_order(
     except ERRORS as exc:
         raise _http(exc) from exc
     return await service.order_read_dict(db, order, admin=True)
+
+
+# --- Admin: email ai fornitori ---------------------------------------------------------------------
+
+
+@router.get("/supplier-queue")
+async def get_jav_market_supplier_queue(
+    current_user: CurrentUser = Depends(require_permission(ORDERS)), db: AsyncSession = Depends(get_db)
+) -> dict:
+    """«Fornitori da avvisare»: per ogni fornitore gli ordini pagati che
+    non ha ancora ricevuto, più le righe che non hanno un fornitore."""
+    return await service.supplier_queue(db, organization_id=current_user.organization_id)
+
+
+@router.get("/supplier-queue/{producer_id}/draft")
+async def get_jav_market_supplier_draft(
+    producer_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_permission(ORDERS)),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """L'email pronta, da rileggere e correggere prima dell'invio."""
+    try:
+        return await service.supplier_draft(
+            db, organization_id=current_user.organization_id, producer_id=producer_id
+        )
+    except ERRORS as exc:
+        raise _http(exc) from exc
+
+
+@router.post("/supplier-queue/{producer_id}/send", status_code=status.HTTP_201_CREATED)
+async def send_jav_market_supplier_dispatch(
+    producer_id: uuid.UUID,
+    payload: SupplierDispatchSendRequest,
+    current_user: CurrentUser = Depends(require_permission(ORDERS)),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Manda l'email e segna gli ordini come mandati -- in quest'ordine: se
+    l'email non parte non si segna niente. 409 se nel frattempo quegli
+    ordini sono già partiti."""
+    try:
+        dispatch = await service.send_supplier_dispatch(
+            db, organization_id=current_user.organization_id, producer_id=producer_id,
+            to_email=payload.to_email, subject=payload.subject, body_text=payload.body_text,
+            item_ids=payload.item_ids, actor_user_id=current_user.user_id,
+        )
+    except ERRORS as exc:
+        raise _http(exc) from exc
+    return {"id": dispatch.id, "to_email": dispatch.to_email, "sent_at": dispatch.sent_at}
+
+
+@router.get("/supplier-dispatches")
+async def list_jav_market_supplier_dispatches(
+    current_user: CurrentUser = Depends(require_permission(ORDERS)), db: AsyncSession = Depends(get_db)
+) -> list[dict]:
+    return await service.list_supplier_dispatches(db, organization_id=current_user.organization_id)
 
 
 @router.post("/orders/{order_id}/ship")

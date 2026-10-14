@@ -88,15 +88,15 @@ export function ShopCartButton({ onOpen }: { onOpen: () => void }) {
     <button
       onClick={onOpen}
       aria-label={count > 0 ? `Carrello, ${count} articoli` : "Carrello, vuoto"}
-      className="relative flex items-center gap-2 px-2.5 py-2 rounded-xl border border-white/10 light:border-slate-200 bg-white/5 light:bg-slate-900/5 hover:bg-white/10 light:hover:bg-slate-900/10 transition cursor-pointer"
+      className="relative flex items-center gap-2 px-2.5 py-2 rounded-xl border border-slate-200 bg-slate-900/5 hover:bg-slate-900/10 transition cursor-pointer"
     >
-      <svg className="w-5 h-5 text-slate-300 light:text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <svg className="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M3 3h2l.4 2M7 13h10l3-8H5.4M7 13L5.4 5M7 13l-2 5h13" />
         <circle cx="9" cy="20" r="1.5" />
         <circle cx="17" cy="20" r="1.5" />
       </svg>
       {count > 0 && (
-        <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-orange-600 text-white text-[10px] font-bold flex items-center justify-center">
+        <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-brand-600 text-white text-[10px] font-bold flex items-center justify-center">
           {count > 99 ? "99+" : count}
         </span>
       )}
@@ -104,7 +104,7 @@ export function ShopCartButton({ onOpen }: { onOpen: () => void }) {
           campanella, tema e menu non ci sta, e l'icona con il contatore basta
           a dire che c'e' qualcosa dentro. */}
       {cart && cart.total_cents > 0 && (
-        <span className="hidden sm:inline text-xs font-semibold text-white light:text-slate-900 tabular-nums">
+        <span className="hidden sm:inline text-xs font-semibold text-slate-900 tabular-nums">
           {euro(cart.total_cents)}
         </span>
       )}
@@ -116,21 +116,21 @@ function QuantityStepper({
   value, disabled, onChange,
 }: { value: number; disabled: boolean; onChange: (next: number) => void }) {
   return (
-    <div className="flex items-center rounded-lg border border-white/10 light:border-slate-200 overflow-hidden">
+    <div className="flex items-center rounded-lg border border-slate-200 overflow-hidden">
       <button
         onClick={() => onChange(value - 1)}
         disabled={disabled}
         aria-label="Diminuisci"
-        className="px-2 py-1 text-sm text-slate-300 light:text-slate-600 hover:bg-white/10 light:hover:bg-slate-900/10 disabled:opacity-40 cursor-pointer"
+        className="px-2 py-1 text-sm text-slate-600 hover:bg-slate-900/10 disabled:opacity-40 cursor-pointer"
       >
         −
       </button>
-      <span className="px-2.5 text-xs font-semibold text-white light:text-slate-900 tabular-nums">{value}</span>
+      <span className="px-2.5 text-xs font-semibold text-slate-900 tabular-nums">{value}</span>
       <button
         onClick={() => onChange(value + 1)}
         disabled={disabled}
         aria-label="Aumenta"
-        className="px-2 py-1 text-sm text-slate-300 light:text-slate-600 hover:bg-white/10 light:hover:bg-slate-900/10 disabled:opacity-40 cursor-pointer"
+        className="px-2 py-1 text-sm text-slate-600 hover:bg-slate-900/10 disabled:opacity-40 cursor-pointer"
       >
         +
       </button>
@@ -145,9 +145,9 @@ function CartSection({
   const busy = setQuantity.isPending || remove.isPending || clear.isPending;
 
   return (
-    <div className="rounded-xl border border-white/10 light:border-slate-200 overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-2 bg-white/5 light:bg-slate-900/5">
-        <p className="text-xs font-bold text-white light:text-slate-900">{label}</p>
+    <div className="rounded-xl border border-slate-200 overflow-hidden">
+      <div className="flex items-center justify-between px-3 py-2 bg-slate-900/5">
+        <p className="text-xs font-bold text-slate-900">{label}</p>
         <button
           onClick={() => clear.mutate({ shop: section.shop })}
           disabled={busy}
@@ -157,12 +157,12 @@ function CartSection({
         </button>
       </div>
 
-      <div className="divide-y divide-white/5 light:divide-slate-200">
+      <div className="divide-y divide-slate-200">
         {section.items.map((line) => (
           <div key={line.cart_item_id} className="flex gap-3 p-3">
             <ProductThumbnail imageUrl={line.image_url} alt={line.product_name} className="w-14 h-14 rounded-lg shrink-0" />
             <div className="flex-1 min-w-0 space-y-1">
-              <p className={`text-xs font-semibold truncate ${line.available ? "text-white light:text-slate-900" : "text-slate-500 line-through"}`}>
+              <p className={`text-xs font-semibold truncate ${line.available ? " text-slate-900" : "text-slate-500 line-through"}`}>
                 {line.product_name}
               </p>
               {line.variant_label && <p className="text-[11px] text-slate-500 truncate">{line.variant_label}</p>}
@@ -186,19 +186,19 @@ function CartSection({
                 </button>
               </div>
             </div>
-            <p className="text-xs font-bold text-white light:text-slate-900 tabular-nums shrink-0">
+            <p className="text-xs font-bold text-slate-900 tabular-nums shrink-0">
               {line.available ? euro(line.line_total_cents) : "—"}
             </p>
           </div>
         ))}
       </div>
 
-      <div className="p-3 space-y-1.5 bg-gradient-to-br from-orange-600/10 to-amber-500/5 border-t border-orange-500/20">
-        <div className="flex justify-between text-[11px] text-slate-400 light:text-slate-500">
+      <div className="p-3 space-y-1.5 bg-gradient-to-br from-brand-600/10 to-brand-400/5 border-t border-brand-500/20">
+        <div className="flex justify-between text-slate-500">
           <span>Articoli</span>
           <span className="tabular-nums">{euro(section.items_cents ?? 0)}</span>
         </div>
-        <div className="flex justify-between text-[11px] text-slate-400 light:text-slate-500">
+        <div className="flex justify-between text-slate-500">
           <span>Spedizione</span>
           <span className="tabular-nums">
             {section.free_shipping ? "Gratis" : section.shipping_included || !section.shipping_cents ? "Inclusa" : euro(section.shipping_cents)}
@@ -209,14 +209,14 @@ function CartSection({
             Ancora {euro(section.free_shipping_missing_cents ?? 0)} di prodotti e la spedizione è gratis.
           </p>
         )}
-        <div className="flex justify-between items-center pt-1 border-t border-white/10 light:border-slate-300">
-          <span className="text-xs font-bold text-white light:text-slate-900">Totale</span>
-          <span className="text-base font-extrabold text-orange-400 tabular-nums">{euro(section.amount_cents ?? 0)}</span>
+        <div className="flex justify-between items-center pt-1 border-t border-slate-300">
+          <span className="text-xs font-bold text-slate-900">Totale</span>
+          <span className="text-base font-extrabold text-brand-600 tabular-nums">{euro(section.amount_cents ?? 0)}</span>
         </div>
         {section.purchasable ? (
           <button
             onClick={() => onCheckout(section.shop)}
-            className="w-full mt-1 px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-xs font-semibold text-white transition cursor-pointer"
+            className="w-full mt-1 px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer"
           >
             Vai al checkout
           </button>
@@ -240,14 +240,7 @@ export function ShopCartPanel({
   const { data: cart, isLoading, error } = useCart(open);
   const { data: config } = useMarketplaceConfig();
   const labels: Record<CartShop, string> = {
-    aliexpress: config?.labels?.aliexpress ?? "Marketplace 3",
-    cj: config?.labels?.cj ?? "Marketplace 1",
-    shopify: config?.labels?.shopify ?? "Marketplace 2",
     jav_market: config?.labels?.jav_market ?? "Fai la Spesa con Jav",
-    kappa_market: config?.labels?.kappa_market ?? "Market Kappa",
-    vaitto_market: config?.labels?.vaitto_market ?? "Marketplace 5",
-    symphonya_market: config?.labels?.symphonya_market ?? "Shop Beauty",
-    soleil_market: config?.labels?.soleil_market ?? "Market 7",
     catalog: config?.sections?.partner?.label ?? "Prodotti Partner",
   };
   if (!open) return null;
@@ -255,10 +248,10 @@ export function ShopCartPanel({
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} aria-hidden />
-      <div className="relative w-full max-w-md h-full overflow-y-auto bg-slate-950 light:bg-white border-l border-white/10 light:border-slate-200 p-4 space-y-4">
+      <div className="relative w-full max-w-md h-full overflow-y-auto bg-white border-l border-slate-200 p-4 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold text-white light:text-slate-900">Il tuo carrello</h2>
-          <button onClick={onClose} aria-label="Chiudi" className="text-slate-500 hover:text-white light:hover:text-slate-900 cursor-pointer">
+          <h2 className="text-sm font-bold text-slate-900">Il tuo carrello</h2>
+          <button onClick={onClose} aria-label="Chiudi" className="text-slate-500 hover:text-slate-900 cursor-pointer">
             ✕
           </button>
         </div>
@@ -268,7 +261,7 @@ export function ShopCartPanel({
 
         {cart && cart.sections.length === 0 && (
           <div className="py-16 text-center space-y-2">
-            <p className="text-sm text-slate-400 light:text-slate-500">Il carrello è vuoto.</p>
+            <p className="text-sm text-slate-500">Il carrello è vuoto.</p>
             <p className="text-xs text-slate-500">Aggiungi un prodotto dallo Shop per iniziare.</p>
           </div>
         )}
@@ -293,9 +286,9 @@ export function ShopCartPanel({
                 />
               ))}
             </div>
-            <div className="flex justify-between items-center pt-2 border-t border-white/10 light:border-slate-200">
-              <span className="text-xs text-slate-400 light:text-slate-500">Totale carrello</span>
-              <span className="text-lg font-extrabold text-white light:text-slate-900 tabular-nums">
+            <div className="flex justify-between items-center pt-2 border-t border-slate-200">
+              <span className="text-xs text-slate-500">Totale carrello</span>
+              <span className="text-lg font-extrabold text-slate-900 tabular-nums">
                 {euro(cart.total_cents)}
               </span>
             </div>

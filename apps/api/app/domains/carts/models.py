@@ -1,4 +1,4 @@
-"""Il carrello dello Shop (Session 75).
+"""Il carrello dello Shop.
 
 Fino a qui ogni acquisto dello Shop nasceva e moriva dentro una finestra:
 si apriva il prodotto, si sceglieva la variante e si pagava, un prodotto
@@ -39,12 +39,12 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base, TimestampMixin, UUIDPKMixin
 
-#: I negozi che hanno un carrello. I tre Marketplace sono domini distinti;
-#: CATALOG è il catalogo interno, dove "Prodotti Partner" e "Offerte Jav"
+#: I negozi che hanno un carrello. JAV_MARKET è lo Shop con catalogo scritto
+#: dall'amministratore; CATALOG è il catalogo interno, dove "Prodotti Partner" e "Offerte Jav"
 #: sono due schede della stessa tabella (catalog.products, categorie PARTNER
 #: e DROPSHIPPING) e quindi un carrello solo: stesso ordine, stesso
 #: pagamento, nessun motivo per farli pagare due volte.
-CART_SHOPS = ("aliexpress", "cj", "shopify", "jav_market", "kappa_market", "vaitto_market", "symphonya_market", "soleil_market", "catalog")
+CART_SHOPS = ("jav_market", "catalog")
 
 #: Quante unità della stessa variante una riga può portare. Non è una regola
 #: di magazzino -- quella la dà il fornitore al checkout -- ma il limite che
@@ -63,7 +63,7 @@ class Cart(UUIDPKMixin, TimestampMixin, Base):
     __table_args__ = (
         UniqueConstraint("customer_user_id", "shop", name="uq_carts_customer_shop"),
         CheckConstraint(
-            "shop IN ('aliexpress', 'cj', 'shopify', 'jav_market', 'kappa_market', 'vaitto_market', 'symphonya_market', 'soleil_market', 'catalog')",
+            "shop IN ('jav_market', 'catalog')",
             name="shop",
         ),
     )
@@ -92,25 +92,18 @@ class CartItem(UUIDPKMixin, TimestampMixin, Base):
         CheckConstraint("quantity > 0", name="quantity_positive"),
         CheckConstraint(f"quantity <= {MAX_ITEM_QUANTITY}", name="quantity_max"),
         # L'arco esclusivo: una riga appartiene a un negozio solo. Senza
-        # questo vincolo una riga potrebbe citare insieme una variante
-        # AliExpress e una CJ, e il checkout non saprebbe quale ordinare.
+        # questo vincolo una riga potrebbe citare insieme una variante dello
+        # Shop e un prodotto del catalogo, e il checkout non saprebbe quale
+        # ordinare.
         CheckConstraint(
-            "num_nonnulls(aliexpress_variant_id, cj_variant_id, shopify_variant_id,"
-            " jav_market_variant_id, kappa_market_variant_id, vaitto_market_variant_id, symphonya_market_variant_id, soleil_market_variant_id, product_version_id) = 1",
+            "num_nonnulls(jav_market_variant_id, product_version_id) = 1",
             name="exactly_one_reference",
         ),
         # Una riga per variante: aggiungere di nuovo lo stesso articolo
-        # aumenta la quantità, non crea un doppione. Quattro vincoli
+        # aumenta la quantità, non crea un doppione. Vincoli
         # separati perché un UNIQUE su colonne nullable in PostgreSQL non
         # vincola le righe che le lasciano NULL.
-        UniqueConstraint("cart_id", "aliexpress_variant_id", name="uq_cart_items_aliexpress_variant"),
-        UniqueConstraint("cart_id", "cj_variant_id", name="uq_cart_items_cj_variant"),
-        UniqueConstraint("cart_id", "shopify_variant_id", name="uq_cart_items_shopify_variant"),
         UniqueConstraint("cart_id", "jav_market_variant_id", name="uq_cart_items_jav_market_variant"),
-        UniqueConstraint("cart_id", "kappa_market_variant_id", name="uq_cart_items_kappa_market_variant"),
-        UniqueConstraint("cart_id", "vaitto_market_variant_id", name="uq_cart_items_vaitto_market_variant"),
-        UniqueConstraint("cart_id", "symphonya_market_variant_id", name="uq_cart_items_symphonya_market_variant"),
-        UniqueConstraint("cart_id", "soleil_market_variant_id", name="uq_cart_items_soleil_market_variant"),
         UniqueConstraint("cart_id", "product_version_id", name="uq_cart_items_product_version"),
     )
 
@@ -119,30 +112,9 @@ class CartItem(UUIDPKMixin, TimestampMixin, Base):
     )
     quantity: Mapped[int] = mapped_column(BigInteger, default=1)
 
-    # --- L'arco esclusivo: esattamente una di queste quattro ---
-    aliexpress_variant_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("aliexpress_variants.id", ondelete="CASCADE"), nullable=True
-    )
-    cj_variant_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("cj_variants.id", ondelete="CASCADE"), nullable=True
-    )
-    shopify_variant_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("shopify_variants.id", ondelete="CASCADE"), nullable=True
-    )
+    # --- L'arco esclusivo: esattamente una di queste due ---
     jav_market_variant_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("jav_market_variants.id", ondelete="CASCADE"), nullable=True
-    )
-    kappa_market_variant_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("kappa_market_variants.id", ondelete="CASCADE"), nullable=True
-    )
-    vaitto_market_variant_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("vaitto_market_variants.id", ondelete="CASCADE"), nullable=True
-    )
-    symphonya_market_variant_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("symphonya_market_variants.id", ondelete="CASCADE"), nullable=True
-    )
-    soleil_market_variant_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("soleil_market_variants.id", ondelete="CASCADE"), nullable=True
     )
     #: Il catalogo interno non ha varianti: la "variante" è la versione di
     #: prodotto, che è anche ciò che orders.Order congela già oggi.

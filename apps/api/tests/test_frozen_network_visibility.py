@@ -1,4 +1,4 @@
-"""Session 37: a FROZEN account disappears from the network branch as far
+"""A FROZEN account disappears from the network branch as far
 as their upline is concerned -- them AND everyone under them -- while the
 admin tier keeps seeing them, flagged is_frozen. Freezing sets
 users.status, which until now had no effect at all on the network tree.

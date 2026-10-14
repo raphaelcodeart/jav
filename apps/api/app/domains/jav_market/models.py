@@ -1,14 +1,11 @@
-"""Marketplace 4 -- «Fai la Spesa con Jav» (Session 79).
+"""Lo Shop -- «Fai la Spesa con Jav».
 
-Il quarto negozio di prodotti importati, accanto a CJ (1), Shopify (2) e
-AliExpress (3). Al cliente si comporta come gli altri -- carrello, JavCash
-da spendere e mai da guadagnare, bonifico scontato, IVA aggiunta al prezzo
--- ma i prodotti **non arrivano da un fornitore**: li carica
-l'amministratore a mano, uno per uno, come se li avesse importati.
+Il negozio con carrello, JavCash da spendere e mai da guadagnare, pagamento
+con bonifico e IVA aggiunta al prezzo. I prodotti **non arrivano da un
+fornitore**: li carica l'amministratore a mano, uno per uno.
 
 Tabelle sue, come vuole `marketplaces/rules.py`: niente qui tocca
-`catalog.products` né i tre domini dei fornitori, e spegnere questo negozio
-non disturba nessun altro.
+`catalog.products`, e spegnere questo negozio non disturba nessun altro.
 
 **I produttori stanno in una tabella a parte.** Un'azienda produce molti
 articoli, e scrivere i suoi dati dentro ogni prodotto vorrebbe dire
@@ -33,6 +30,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    Text,
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -46,20 +44,20 @@ from app.domains.marketplaces.models import SHOP_ORDER_NUMBER_SEQ
 #: un'impostazione e può cambiare, la chiave no.
 SHOP = "jav_market"
 
-#: Come per gli altri negozi: la spedizione la paga il cliente, oppure è
-#: già dentro il prezzo di listino.
+#: La spedizione la paga il cliente, oppure è già dentro il prezzo di
+#: listino.
 SHIPPING_MODES = ("CUSTOMER_PAYS", "INCLUDED")
 PRODUCT_STATUSES = ("ACTIVE", "INACTIVE")
-JAV_MARKET_ORDER_PAYMENT_METHODS = ("BANK_TRANSFER", "CARD")
+JAV_MARKET_ORDER_PAYMENT_METHODS = ("BANK_TRANSFER",)
 MAX_QUANTITY = 10
 
 
 class JavMarketSettings(UUIDPKMixin, TimestampMixin, Base):
     """Le impostazioni del negozio, una riga per organizzazione.
 
-    Molte meno degli altri tre: non c'è un fornitore da collegare, né un
-    cambio valuta, né un ricarico da applicare a un costo. Il prezzo lo
-    scrive l'amministratore, ed è già quello di vendita."""
+    Poche: non c'è un fornitore da collegare, né un cambio valuta, né un
+    ricarico da applicare a un costo. Il prezzo lo scrive l'amministratore,
+    ed è già quello di vendita."""
 
     __tablename__ = "jav_market_settings"
     __table_args__ = (UniqueConstraint("organization_id"),)
@@ -71,7 +69,7 @@ class JavMarketSettings(UUIDPKMixin, TimestampMixin, Base):
     shipping_mode: Mapped[str] = mapped_column(String(16), default="CUSTOMER_PAYS")
     #: Quanto si addebita di spedizione, una volta per ordine. Qui è un
     #: importo e non un minimo: senza un fornitore da interrogare non
-    #: esiste un costo reale da confrontare (a differenza di AliExpress).
+    #: esiste un costo reale da confrontare.
     shipping_flat_cents: Mapped[int] = mapped_column(Integer, default=0)
     shipping_days: Mapped[str | None] = mapped_column(String(32), nullable=True, default="3-5")
     #: Ottobre 2026 -- regole solo di questo negozio, decise dall'utente
@@ -82,10 +80,17 @@ class JavMarketSettings(UUIDPKMixin, TimestampMixin, Base):
     min_order_cents: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     free_shipping_threshold_cents: Mapped[int | None] = mapped_column(Integer, nullable=True)
     ship_to_country: Mapped[str] = mapped_column(String(2), default="IT")
-    #: Session 80 -- un ordine pagato parte da solo verso l'azienda che
+    #: Un ordine pagato parte da solo verso l'azienda che
     #: produce la merce. Nasce spento: mandare una email a un'azienda vera è
     #: un'azione verso l'esterno, e la prima volta la si vuole guardare.
     auto_forward: Mapped[bool] = mapped_column(Boolean, default=False)
+    #: Ottobre 2026 -- l'indirizzo da cui partono le email ai fornitori
+    #: (es. info@...), che è anche il Reply-To e la copia nascosta: la
+    #: risposta col tracking torna lì e la casella conserva ogni ordine
+    #: mandato. NULL = il mittente predefinito dell'SMTP.
+    supplier_email_from: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    #: La firma in fondo alla lettera al fornitore, testo semplice.
+    supplier_email_signature: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 
 
 class JavMarketProducer(UUIDPKMixin, TimestampMixin, Base):
@@ -184,9 +189,9 @@ class JavMarketVariant(UUIDPKMixin, TimestampMixin, Base):
 
 
 class JavMarketOrder(UUIDPKMixin, TimestampMixin, Base):
-    """Un ordine del negozio. Stessa forma degli altri tre, perché la
-    gestione è unificata: «I miei Ordini», il pannello admin e la
-    Contabilità mostrano una lista sola (CLAUDE.md §5).
+    """Un ordine del negozio. «I miei Ordini», il pannello admin e la
+    Contabilità lo mostrano nella stessa lista degli ordini del catalogo
+    (CLAUDE.md §5).
 
     Le colonne di riga (prodotto, variante, quantità, prezzo unitario) non
     esistono qui: questo negozio nasce già multi-riga, quindi stanno tutte
@@ -203,6 +208,11 @@ class JavMarketOrder(UUIDPKMixin, TimestampMixin, Base):
         UUID(as_uuid=True), ForeignKey("organizations.id"), index=True
     )
     customer_user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), index=True)
+    #: Per quale atleta della famiglia è il materiale (il judogi di chi?).
+    #: Facoltativo: un genitore può comprare anche per sé, senza atleta.
+    athlete_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("club_athletes.id"), nullable=True, index=True
+    )
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
     #: Il numero che legge il cliente, dalla sequenza condivisa da tutti i
     #: negozi: in "I miei Ordini" stanno nello stesso elenco.
@@ -227,7 +237,6 @@ class JavMarketOrder(UUIDPKMixin, TimestampMixin, Base):
 
     status: Mapped[str] = mapped_column(String(16), default="AWAITING_PAYMENT", index=True)
     payment_method: Mapped[str] = mapped_column(String(16), default="BANK_TRANSFER")
-    stripe_checkout_session_id: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
     note: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     payment_proof_storage_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     payment_proof_original_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -257,7 +266,7 @@ class JavMarketOrder(UUIDPKMixin, TimestampMixin, Base):
     #: Non c'è un fornitore a cui inoltrare: spedisce l'organizzazione, e
     #: l'amministratore segna quando parte e con quale tracking.
     fulfillment_status: Mapped[str] = mapped_column(String(16), default="NOT_SENT", index=True)
-    #: Session 80 -- quando l'ordine è stato mandato alle aziende, chi lo ha
+    #: Quando l'ordine è stato mandato alle aziende, chi lo ha
     #: mandato e cosa è andato storto. Un solo `forwarded_at` anche se le
     #: email sono più d'una: dice che il giro è stato fatto, non a chi --
     #: i destinatari sono le aziende delle righe, e stanno già lì.
@@ -297,4 +306,61 @@ class JavMarketOrderItem(UUIDPKMixin, TimestampMixin, Base):
     variant_label: Mapped[str | None] = mapped_column(String(255), nullable=True)
     #: Congelato come il resto: un'azienda rinominata non riscrive un ordine.
     producer_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    #: Il fornitore che deve preparare questa riga, congelato alla creazione
+    #: (quello del prodotto o, se manca, della sua categoria: vedi
+    #: `service.resolve_suppliers`). È la chiave con cui le righe di più
+    #: ordini si raccolgono in una sola email al fornitore: spostare domani
+    #: un prodotto su un'altra azienda non deve dirottare un ordine già fatto.
+    producer_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("jav_market_producers.id"), nullable=True, index=True
+    )
+    #: L'email con cui questa riga è stata mandata al fornitore. NULL = ancora
+    #: da mandare: è questo, e non un flag sull'ordine, a dire cosa resta da
+    #: avvisare, perché un ordine con due fornitori può essere mandato a uno
+    #: e non ancora all'altro. Si scrive solo dopo che l'email è partita.
+    supplier_dispatch_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("jav_market_supplier_dispatches.id"), nullable=True, index=True
+    )
     credit_discount_percentage: Mapped[int] = mapped_column(Integer, default=0)
+
+
+#: Da dove è partita un'email al fornitore: dalla coda «Fornitori da
+#: avvisare» (più ordini insieme, testo rivisto dall'amministratore), dal
+#: pulsante sul singolo ordine, dall'invio automatico al pagamento, oppure
+#: un invio fatto prima che esistesse questo storico (migrazione 0003).
+DISPATCH_SOURCES = ("QUEUE", "ORDER", "AUTO", "LEGACY")
+
+
+class JavMarketSupplierDispatch(UUIDPKMixin, TimestampMixin, Base):
+    """Un'email partita verso un fornitore, con il testo esatto che è
+    stato mandato.
+
+    Esiste solo se l'email è partita davvero: un invio fallito non lascia
+    una riga qui e non segna nessuna riga d'ordine, così quella merce resta
+    nella coda e nessuno pensa che il fornitore la stia preparando. Le righe
+    d'ordine che contiene puntano qui (`supplier_dispatch_id`)."""
+
+    __tablename__ = "jav_market_supplier_dispatches"
+    __table_args__ = (
+        CheckConstraint(
+            "source IN ('QUEUE', 'ORDER', 'AUTO', 'LEGACY')", name="source"
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id"), index=True
+    )
+    producer_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("jav_market_producers.id"), index=True
+    )
+    source: Mapped[str] = mapped_column(String(16))
+    #: Destinatario, oggetto e testo come sono partiti: l'amministratore può
+    #: averli corretti nell'anteprima, e la scheda del fornitore può cambiare.
+    to_email: Mapped[str] = mapped_column(String(255))
+    subject: Mapped[str] = mapped_column(String(255))
+    body_text: Mapped[str] = mapped_column(Text)
+    sent_at: Mapped[datetime] = mapped_column()
+    #: NULL per l'invio automatico al pagamento: non l'ha premuto nessuno.
+    sent_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )

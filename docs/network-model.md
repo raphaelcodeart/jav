@@ -24,13 +24,16 @@ Internal-only network (not published to host):
 ```
 
 ## Rules
-- Only `nginx` publishes ports to the host/internet. `postgres`, `redis`, `minio`
-  (admin), and `flower` (if enabled) are reachable only on the internal Compose
-  network, never published.
+- Only Caddy (on the host) is reachable from the internet, on 80/443. The
+  stack's `nginx` publishes only `127.0.0.1:8081` (Caddy proxies to it) and the
+  MinIO console only `127.0.0.1:9001`; `postgres`, `redis` and `minio` (API)
+  are reachable only on the internal Compose network. Docker bypasses ufw for
+  published ports, so binding to 127.0.0.1 is what keeps them private.
 - All application containers run as a non-root user (set explicitly in each
   Dockerfile via `USER app`).
-- TLS terminates at nginx; Let's Encrypt (certbot) in production, self-signed/plain
-  HTTP acceptable in local dev.
+- TLS terminates at Caddy on the host, which obtains and renews the Let's
+  Encrypt certificate by itself (`infrastructure/caddy/jav.caddy`); nginx is
+  plain HTTP behind it and reads the real scheme from `X-Forwarded-Proto`.
 - Service-to-service calls (dashboard → api, worker → postgres/redis) use Compose
   service names as hostnames; no hardcoded IPs.
 

@@ -27,7 +27,7 @@ const columns = [
   }),
   columnHelper.accessor("promoter_code", {
     header: "Codice",
-    cell: (info) => <span className="font-mono text-xs text-slate-400 light:text-slate-500">{info.getValue()}</span>,
+    cell: (info) => <span className="font-mono text-xs text-slate-500">{info.getValue()}</span>,
   }),
   columnHelper.accessor("rank_code", {
     header: "Qualifica",
@@ -45,12 +45,12 @@ export function BranchTable({ members }: { members: BranchMemberRead[] }) {
   const table = useReactTable({ data: members, columns, getCoreRowModel: getCoreRowModel() });
 
   return (
-    <table className="w-full border-collapse text-sm text-white light:text-slate-900">
+    <table className="w-full border-collapse text-sm text-slate-900">
       <thead>
         {table.getHeaderGroups().map((headerGroup) => (
-          <tr key={headerGroup.id} className="border-b border-slate-800 light:border-slate-200 text-left">
+          <tr key={headerGroup.id} className="border-b border-slate-200 text-left">
             {headerGroup.headers.map((header) => (
-              <th key={header.id} className="py-2 pr-4 text-slate-400 light:text-slate-500">
+              <th key={header.id} className="py-2 pr-4 text-slate-500">
                 {flexRender(header.column.columnDef.header, header.getContext())}
               </th>
             ))}
@@ -59,7 +59,7 @@ export function BranchTable({ members }: { members: BranchMemberRead[] }) {
       </thead>
       <tbody>
         {table.getRowModel().rows.map((row) => (
-          <tr key={row.id} className="border-b border-slate-900 light:border-slate-100">
+          <tr key={row.id} className="border-b border-slate-100">
             {row.getVisibleCells().map((cell) => (
               <td key={cell.id} className="py-2 pr-4">
                 {flexRender(cell.column.columnDef.cell, cell.getContext())}

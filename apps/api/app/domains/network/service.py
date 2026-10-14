@@ -574,7 +574,7 @@ async def create_customer_with_account_by_staff(
     payload: "CustomerCreate",
     actor_user_id: uuid.UUID,
 ) -> "Customer":
-    """The administration's "Nuovo cliente" (Session 67): the same thing a
+    """The administration's "Nuovo cliente": the same thing a
     promoter's "Miei Clienti" does -- anagrafica, a real login and the
     set-your-password invite -- so the customer can pay the pratica opened
     for them. The customer goes under the promoter the administrator picks,
@@ -1265,7 +1265,7 @@ async def get_branch(
 
     include_frozen=False prunes a frozen person AND their whole subtree --
     a frozen member is "completamente sganciato" from their upline's view
-    (Session 37, explicit business rule). The subtree goes with them
+    (explicit business rule). The subtree goes with them
     deliberately: leaving orphans behind would both break the tree the UI
     builds from parent_agent_id and misrepresent depth, which is what the
     12-level commission structure is counted on. Callers pass True only for
@@ -1505,7 +1505,7 @@ async def get_branch_contracts(
     from app.domains.catalog.models import ProductVersion
     from app.domains.commissions.models import CommissionMovement
     from app.domains.contracts.models import Contract, ContractAttribution, ContractStatusHistory
-    from app.domains.customers.models import Company, Customer, CustomerProfile, SupplyPoint
+    from app.domains.customers.models import Company, Customer, CustomerProfile
     from app.domains.customers.service import display_name_for
 
     branch = await get_branch(db, organization_id=organization_id, root_agent_id=root_agent_id)
@@ -1519,7 +1519,6 @@ async def get_branch_contracts(
             Contract.id,
             Contract.status,
             Contract.customer_id,
-            Contract.supply_point_id,
             Contract.expires_at,
             ContractAttribution.producer_agent_id,
             ProductVersion.name,
@@ -1537,7 +1536,6 @@ async def get_branch_contracts(
 
     contract_ids = [r[0] for r in rows]
     customer_ids = list({r[2] for r in rows})
-    supply_point_ids = list({r[3] for r in rows})
 
     customers = {c.id: c for c in (await db.execute(select(Customer).where(Customer.id.in_(customer_ids)))).scalars()}
     profiles = {
@@ -1548,11 +1546,6 @@ async def get_branch_contracts(
         c.customer_id: c
         for c in (await db.execute(select(Company).where(Company.customer_id.in_(customer_ids)))).scalars()
     }
-    supply_point_labels = dict(
-        (
-            await db.execute(select(SupplyPoint.id, SupplyPoint.label).where(SupplyPoint.id.in_(supply_point_ids)))
-        ).all()
-    )
 
     commission_stmt = (
         select(CommissionMovement.contract_id, func.coalesce(func.sum(CommissionMovement.amount_cents), 0))
@@ -1597,7 +1590,7 @@ async def get_branch_contracts(
 
     result = []
     for (
-        contract_id, status, customer_id, supply_point_id, expires_at, producer_agent_id, product_name, base_price_cents,
+        contract_id, status, customer_id, expires_at, producer_agent_id, product_name, base_price_cents,
     ) in rows:
         customer = customers.get(customer_id)
         result.append({
@@ -1610,7 +1603,6 @@ async def get_branch_contracts(
             "customer_phone": customer.phone if customer else None,
             "product_name": product_name,
             "value_cents": base_price_cents,
-            "supply_point_label": supply_point_labels.get(supply_point_id),
             "expires_at": expires_at,
             "producer_agent_id": producer_agent_id,
             "producer_name": agent_name_by_id.get(producer_agent_id, "—"),

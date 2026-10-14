@@ -7,7 +7,7 @@ import { ContractRequestPaymentPanel } from "@/components/contract-request-payme
 import { FullScreenPanel } from "@/components/full-screen-panel";
 import { ProductDetailModal } from "@/components/product-detail-modal";
 import { friendlyApiError } from "@/lib/api-error";
-import { ENERGY_POINT_LABELS, pointCode, pointsBreakdown } from "@/lib/contract-status";
+import { pointCode, pointsBreakdown } from "@/lib/contract-status";
 import { contractPrices, formatEuroCents as euro, isBusinessCustomer, productAllowsCustomerKind } from "@/lib/product-audience";
 import { PROVINCES } from "@/lib/provinces";
 import type {
@@ -26,22 +26,15 @@ const STEPS: { key: Step; label: string }[] = [
   { key: "summary", label: "Riepilogo" },
 ];
 
-/** Tetto sulla somma POD + PDR (MAX_POINTS_PER_REQUEST lato API). */
+/** Tetto sui contratti di una pratica (MAX_POINTS_PER_REQUEST lato API). */
 const MAX_POINTS = 50;
-/** A POD (luce) takes only luce offers, a PDR (gas) only gas ones. */
-const POINT_ENERGY: Record<"POD" | "PDR", string> = { POD: "ELECTRICITY", PDR: "GAS" };
 
-function countsOf(points: ContractRequestPointRead[]): { pod: number; pdr: number } {
-  const pdr = points.filter((p) => p.point_kind === "PDR").length;
-  return { pod: points.length - pdr, pdr };
-}
-
-const inputClass = "w-full rounded-xl glass-input px-3 py-2.5 text-sm focus:border-orange-500";
-const labelClass = "text-[10px] font-semibold text-slate-300 light:text-slate-600 uppercase block";
+const inputClass = "w-full rounded-xl glass-input px-3 py-2.5 text-sm focus:border-brand-500";
+const labelClass = " font-semibold text-slate-600 uppercase block";
 const primaryButton =
-  "rounded-xl bg-gradient-to-r from-orange-600 to-amber-500 hover:from-orange-500 hover:to-amber-400 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-orange-500/20 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed";
+  "rounded-xl bg-gradient-to-r from-brand-600 to-brand-400 hover:from-brand-500 hover:to-brand-400 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-brand-500/20 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed";
 const secondaryButton =
-  "rounded-xl bg-white/10 light:bg-slate-900/5 hover:bg-white/20 light:hover:bg-slate-900/10 px-4 py-2.5 text-xs font-semibold text-white light:text-slate-700 transition cursor-pointer disabled:opacity-50";
+  "rounded-xl bg-slate-900/5 hover:bg-slate-900/10 px-4 py-2.5 text-xs font-semibold text-slate-700 transition cursor-pointer disabled:opacity-50";
 
 async function fetchRequest(id: string): Promise<ContractRequestDetailRead> {
   const res = await fetch(`/api/proxy/contract-requests/${id}`);
@@ -69,12 +62,11 @@ type AddressValue = { street: string; city: string; province: string; postal_cod
 /** "Attiva nuovo contratto": the pratica di attivazione (Sessions 52-53).
  *
  *  Everything is asked once, at the start -- holder, PEC, IBAN, address --
- *  together with "quanti POD hai?" (luce) and "quanti PDR hai?" (gas). The
- *  pratica is created with those points already there; after the identity
- *  documents, each point only needs the contract to activate on it -- a POD
- *  chooses among luce offers only, a PDR among gas offers only. Each POD becomes its own contract -- its own
- *  review, its own commissions -- while documents and payment are dealt with
- *  once. No POD code is asked.
+ *  together with "quanti contratti vuoi attivare?". The pratica is created
+ *  with that many contracts already there; after the identity documents,
+ *  each one only needs the offer to activate. Each becomes its own contract
+ *  -- its own review, its own commissions -- while documents and payment are
+ *  dealt with once.
  *
  *  Everything is saved as it is filled in, so closing halfway loses nothing
  *  and "Riprendi" reopens exactly here.
@@ -96,7 +88,7 @@ export function ContractRequestWizard({
   requestId?: string;
   initialStep?: "documents" | "packages" | "summary";
   /** The contract the customer started from in the catalog: pre-chosen for
-      every POD, freely changed per POD later. */
+      every contract of the pratica, freely changed one by one later. */
   initialProduct?: ProductCatalogRead | null;
   /** Promoter mode: the customer this pratica is for. */
   customer?: {
@@ -215,17 +207,17 @@ export function ContractRequestWizard({
                   onClick={() => reachable && goTo(s.key)}
                   disabled={!reachable}
                   className={`flex items-center gap-1.5 px-2 py-1 rounded-lg shrink-0 transition ${
-                    current ? "bg-orange-600/15" : reachable ? "hover:bg-white/5 cursor-pointer" : "opacity-50"
+                    current ? "bg-brand-600/15" : reachable ? "hover:bg-slate-100 cursor-pointer" : "opacity-50"
                   }`}
                 >
                   <span
                     className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                      current ? "bg-orange-600 text-white" : "bg-white/10 light:bg-slate-900/10 text-slate-400"
+                      current ? "bg-brand-600 text-white" : " bg-slate-900/10 text-slate-400"
                     }`}
                   >
                     {i + 1}
                   </span>
-                  <span className={`text-[11px] font-semibold ${current ? "text-white light:text-slate-900" : "text-slate-500"}`}>
+                  <span className={`text-[11px] font-semibold ${current ? " text-slate-900" : "text-slate-500"}`}>
                     {s.label}
                   </span>
                 </button>
@@ -233,9 +225,9 @@ export function ContractRequestWizard({
             })}
           </div>
           {request && request.points.length > 0 && (
-            <p className="text-[11px] text-slate-400 light:text-slate-500">
+            <p className=" text-slate-500">
               {pointsBreakdown(request.points)}
-              {liveTotal > 0 && <> · totale <strong className="text-orange-400 tabular-nums">{euro(liveTotal)}</strong></>}
+              {liveTotal > 0 && <> · totale <strong className="text-brand-600 tabular-nums">{euro(liveTotal)}</strong></>}
             </p>
           )}
         </div>
@@ -245,17 +237,17 @@ export function ContractRequestWizard({
       {actionError && (
         <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs">{actionError}</div>
       )}
-      {step === null && !loadError && <div className="h-40 rounded-2xl bg-white/5 light:bg-slate-900/5 animate-pulse" />}
+      {step === null && !loadError && <div className="h-40 rounded-2xl bg-slate-900/5 animate-pulse" />}
 
       {step === "data" && fiscalWarning && (
         <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-2">
-          <p className="text-xs font-semibold text-amber-300 light:text-amber-700">
+          <p className="text-xs font-semibold text-amber-700">
             Attenzione: il codice fiscale non sembra tornare con i dati scritti
           </p>
-          <ul className="list-disc pl-5 text-xs text-amber-200 light:text-amber-800 space-y-0.5">
+          <ul className="list-disc pl-5 text-xs text-amber-800 space-y-0.5">
             {fiscalWarning.map((p) => <li key={p}>{p}</li>)}
           </ul>
-          <p className="text-[11px] text-slate-400 light:text-slate-600">
+          <p className=" text-slate-600">
             I dati sono salvati. Controlla nome, cognome, data e luogo di nascita e il codice fiscale (nome e cognome
             invertiti?) e premi di nuovo «Continua», oppure vai avanti così.
           </p>
@@ -285,9 +277,8 @@ export function ContractRequestWizard({
           }}
           promoterMode={promoterMode}
           customerKind={customer?.kind ?? customerKind ?? null}
-          initialEnergy={initialProduct?.energy_type ?? null}
           busy={busy === "data"}
-          onSubmit={async (body, counts) => {
+          onSubmit={async (body, count) => {
             if (request && request.status !== "DRAFT") {
               goTo("documents");
               return;
@@ -298,8 +289,7 @@ export function ContractRequestWizard({
                 method: "POST",
                 body: JSON.stringify({
                   ...body,
-                  pod_count: counts.pod,
-                  pdr_count: counts.pdr,
+                  points_count: count,
                   customer_id: customer?.id ?? null,
                   producer_agent_id: producerAgentId ?? null,
                   product_version_id: initialProduct?.current_version?.id ?? null,
@@ -307,11 +297,10 @@ export function ContractRequestWizard({
               });
             } else {
               detail = await mutate("data", `/${request.id}`, { method: "PATCH", body: JSON.stringify(body) });
-              const now = detail ? countsOf(detail.points) : null;
-              if (detail && now && (now.pod !== counts.pod || now.pdr !== counts.pdr)) {
+              if (detail && detail.points.length !== count) {
                 detail = await mutate("data", `/${request.id}/points-count`, {
                   method: "PUT",
-                  body: JSON.stringify({ pod_count: counts.pod, pdr_count: counts.pdr }),
+                  body: JSON.stringify({ count }),
                 });
               }
             }
@@ -331,16 +320,15 @@ export function ContractRequestWizard({
       {step === "documents" && request && (
         <div className="space-y-5">
           <div>
-            <h3 className="text-sm font-bold text-white light:text-slate-900">Documenti</h3>
-            <p className="text-xs text-slate-400 light:text-slate-500 mt-1">
-              Si caricano una volta sola e valgono per tutti i punti della pratica ({pointsBreakdown(request.points)}).
-              Ogni documento può avere più pagine: fotografa fronte e retro del documento e tutte le pagine della
-              bolletta (fino a 20).
+            <h3 className="text-sm font-bold text-slate-900">Documenti</h3>
+            <p className="text-xs text-slate-500 mt-1">
+              Si caricano una volta sola e valgono per tutta la pratica ({pointsBreakdown(request.points)}).
+              Ogni documento può avere più pagine: fotografa fronte e retro (fino a 20 pagine).
             </p>
           </div>
           <ContractDocumentsPanel requestId={request.id} />
           {isDraft && (request.documents_blocking ?? []).length > 0 && (
-            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs">
+            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 text-xs">
               Per andare avanti carica almeno una pagina di: <strong>{request.documents_blocking.join(", ")}</strong>.
             </div>
           )}
@@ -351,7 +339,7 @@ export function ContractRequestWizard({
               disabled={isDraft && (request.documents_blocking ?? []).length > 0}
               className={`flex-1 ${primaryButton}`}
             >
-              Continua: scegli il contratto per ogni punto
+              Continua: scegli le offerte
             </button>
           </div>
         </div>
@@ -374,12 +362,6 @@ export function ContractRequestWizard({
             mutate("package-all", `/${request.id}/product`, {
               method: "PUT",
               body: JSON.stringify({ product_version_id: versionId }),
-            })
-          }
-          onMoveAddress={(pointId, address) =>
-            mutate(`address-${pointId}`, `/${request.id}/points/${pointId}/address`, {
-              method: "PATCH",
-              body: JSON.stringify(address),
             })
           }
           onBack={() => goTo("documents")}
@@ -413,7 +395,7 @@ export function ContractRequestWizard({
           customerKind={kind}
           ctaLabel={
             preview.pointId
-              ? `Scegli per questo ${request?.points.find((p) => p.id === preview.pointId)?.point_kind ?? "punto"}`
+              ? "Scegli per questo contratto"
               : "Chiudi"
           }
           onClose={() => setPreview(null)}
@@ -433,13 +415,13 @@ export function ContractRequestWizard({
   );
 }
 
-// --- 1. Dati: intestatario, indirizzo, quanti POD -------------------------------------
+// --- 1. Dati: intestatario, indirizzo, quanti contratti -------------------------------
 
 function AddressFields({ value, onChange }: { value: AddressValue; onChange: (value: AddressValue) => void }) {
   return (
     <>
       <div className="space-y-1">
-        <label className={labelClass}>Indirizzo di fornitura</label>
+        <label className={labelClass}>Indirizzo</label>
         <input
           required
           value={value.street}
@@ -459,7 +441,7 @@ function AddressFields({ value, onChange }: { value: AddressValue; onChange: (va
             required
             value={value.province}
             onChange={(e) => onChange({ ...value, province: e.target.value })}
-            className="w-full rounded-xl glass-input px-1.5 py-2.5 text-sm bg-slate-900 light:bg-white focus:border-orange-500"
+            className="w-full rounded-xl glass-input px-1.5 py-2.5 text-sm bg-white focus:border-brand-500"
           >
             <option value="" disabled>--</option>
             {PROVINCES.map((p) => <option key={p} value={p}>{p}</option>)}
@@ -524,7 +506,7 @@ function BirthplaceInput({
         className={inputClass}
       />
       {open && !value && query.length >= 2 && (
-        <div className="absolute z-20 mt-1 w-full max-h-60 overflow-y-auto rounded-xl border border-white/10 light:border-slate-200 bg-slate-900 light:bg-white shadow-xl">
+        <div className="absolute z-20 mt-1 w-full max-h-60 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl">
           {options.length === 0 ? (
             <p className="px-3 py-2 text-xs text-slate-500">{isFetching ? "Cerco…" : "Nessun comune o Stato con questo nome"}</p>
           ) : (
@@ -538,7 +520,7 @@ function BirthplaceInput({
                   setText(label(p));
                   setOpen(false);
                 }}
-                className="w-full text-left px-3 py-2 text-sm text-slate-200 light:text-slate-700 hover:bg-white/5 light:hover:bg-slate-900/5 cursor-pointer"
+                className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-900/5 cursor-pointer"
               >
                 {label(p)}
                 {!p.active && (
@@ -560,7 +542,6 @@ function DataStep({
   defaults,
   promoterMode,
   customerKind,
-  initialEnergy,
   busy,
   onSubmit,
 }: {
@@ -569,9 +550,6 @@ function DataStep({
   promoterMode: boolean;
   /** The customer's own kind: what "Il contratto è per" starts from. */
   customerKind: string | null;
-  /** Energy of the offer the customer started from in the catalog: a gas
-      offer starts the pratica at 0 POD and 1 PDR. */
-  initialEnergy: string | null;
   busy: boolean;
   onSubmit: (
     body: {
@@ -587,7 +565,7 @@ function DataStep({
       holder_birth_date: string | null;
       holder_birth_place_code: string | null;
     } & AddressValue,
-    counts: { pod: number; pdr: number }
+    count: number
   ) => void;
 }) {
   const readOnly = Boolean(request && request.status !== "DRAFT");
@@ -623,14 +601,7 @@ function DataStep({
     province: request?.province ?? "",
     postal_code: request?.postal_code ?? "",
   });
-  const [counts, setCounts] = useState<{ pod: number; pdr: number }>(() =>
-    request && request.points.length > 0
-      ? countsOf(request.points)
-      : initialEnergy === "GAS"
-        ? { pod: 0, pdr: 1 }
-        : { pod: 1, pdr: 0 }
-  );
-  const total = counts.pod + counts.pdr;
+  const [count, setCount] = useState(() => (request && request.points.length > 0 ? request.points.length : 1));
 
   return (
     <form
@@ -657,7 +628,7 @@ function DataStep({
             ...address,
             province: address.province.toUpperCase(),
           },
-          counts
+          count
         );
       }}
       className="space-y-4"
@@ -668,7 +639,7 @@ function DataStep({
           <select
             value={business ? businessKind : "PRIVATE"}
             onChange={(e) => setHolderKind(e.target.value)}
-            className={`${inputClass} bg-slate-900 light:bg-white`}
+            className={`${inputClass} bg-white`}
           >
             <option value="PRIVATE">Privato</option>
             <option value={businessKind}>Azienda / Partita IVA</option>
@@ -682,7 +653,7 @@ function DataStep({
           </div>
         )}
 
-        <h3 className="text-sm font-bold text-white light:text-slate-900">
+        <h3 className="text-sm font-bold text-slate-900">
           {business ? "Legale rappresentante" : "Intestatario del contratto"}
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -749,7 +720,7 @@ function DataStep({
           <label className={labelClass}>
             PEC{" "}
             {business ? (
-              <span className="normal-case font-semibold text-orange-400">(obbligatoria per le aziende)</span>
+              <span className="normal-case font-semibold text-brand-600">(obbligatoria per le aziende)</span>
             ) : (
               <span className="normal-case font-normal text-slate-500">(facoltativa)</span>
             )}
@@ -784,41 +755,25 @@ function DataStep({
           <p className="text-[10px] text-slate-500">Potrai modificarlo in qualsiasi momento da “I miei Contratti”.</p>
         </div>
 
-        <h3 className="text-sm font-bold text-white light:text-slate-900 pt-3">Punto di fornitura</h3>
+        <h3 className="text-sm font-bold text-ink-900 pt-3">Residenza / sede</h3>
         <AddressFields value={address} onChange={setAddress} />
 
-        <div className="pt-3 border-t border-white/5 light:border-slate-200 space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <PointCounter
-              label="Quanti POD hai?"
-              hint="Contatori della luce"
-              value={counts.pod}
-              max={MAX_POINTS - counts.pdr}
-              onChange={(pod) => setCounts((c) => ({ ...c, pod }))}
-            />
-            <PointCounter
-              label="Quanti PDR hai?"
-              hint="Contatori del gas"
-              value={counts.pdr}
-              max={MAX_POINTS - counts.pod}
-              onChange={(pdr) => setCounts((c) => ({ ...c, pdr }))}
-            />
-          </div>
-          <p className="text-[10px] text-slate-500">
-            Ogni POD e ogni PDR diventa un contratto a sé: tra poco sceglierai quale attivare su ciascuno — offerte
-            luce per i POD, offerte gas per i PDR.
-          </p>
-          {total === 0 && <p className="text-xs text-amber-400">Serve almeno un POD o un PDR.</p>}
+        <div className="pt-3 border-t border-ink-200 space-y-3">
+          <PointCounter
+            label="Quanti contratti vuoi attivare?"
+            hint="Uno per ogni persona o servizio: ognuno ha la sua offerta"
+            value={count}
+            max={MAX_POINTS}
+            onChange={(n) => setCount(Math.max(1, n))}
+          />
         </div>
       </fieldset>
-      <button type="submit" disabled={busy || (!readOnly && total === 0)} className={`w-full ${primaryButton}`}>
+      <button type="submit" disabled={busy} className={`w-full ${primaryButton}`}>
         {busy
           ? "Salvataggio..."
           : readOnly
             ? "Continua"
-            : `Continua con ${[counts.pod > 0 ? `${counts.pod} POD` : null, counts.pdr > 0 ? `${counts.pdr} PDR` : null]
-                .filter(Boolean)
-                .join(" e ") || "0 punti"}: documenti`}
+            : `Continua con ${count === 1 ? "1 contratto" : `${count} contratti`}: documenti`}
       </button>
     </form>
   );
@@ -838,24 +793,24 @@ function PointCounter({
   onChange: (value: number) => void;
 }) {
   const stepButton =
-    "w-10 h-10 rounded-xl bg-white/5 light:bg-slate-900/5 border border-white/10 light:border-slate-300 text-lg font-bold text-white light:text-slate-900 hover:bg-white/10 cursor-pointer disabled:opacity-40";
+    "w-10 h-10 rounded-xl bg-slate-900/5 border border-slate-300 text-lg font-bold text-slate-900 hover:bg-slate-100 cursor-pointer disabled:opacity-40";
   return (
-    <div className="space-y-2 p-3 rounded-xl bg-white/5 light:bg-slate-900/5 border border-white/10 light:border-slate-200">
+    <div className="space-y-2 p-3 rounded-xl bg-slate-900/5 border border-slate-200">
       <div>
         <label className={labelClass}>{label}</label>
         <p className="text-[10px] text-slate-500">{hint}</p>
       </div>
       <div className="flex items-center gap-2">
-        <button type="button" onClick={() => onChange(Math.max(0, value - 1))} disabled={value <= 0} className={stepButton}>
+        <button type="button" onClick={() => onChange(Math.max(1, value - 1))} disabled={value <= 1} className={stepButton}>
           −
         </button>
         <input
           type="number"
-          min={0}
+          min={1}
           max={max}
           value={value}
-          onChange={(e) => onChange(Math.min(max, Math.max(0, Number(e.target.value) || 0)))}
-          className="w-20 text-center rounded-xl glass-input px-2 py-2.5 text-base font-bold tabular-nums focus:border-orange-500"
+          onChange={(e) => onChange(Math.min(max, Math.max(1, Number(e.target.value) || 1)))}
+          className="w-20 text-center rounded-xl glass-input px-2 py-2.5 text-base font-bold tabular-nums focus:border-brand-500"
         />
         <button type="button" onClick={() => onChange(Math.min(max, value + 1))} disabled={value >= max} className={stepButton}>
           +
@@ -865,7 +820,7 @@ function PointCounter({
   );
 }
 
-// --- 3. Un contratto per ogni POD --------------------------------------------------
+// --- 3. Un'offerta per ogni contratto --------------------------------------------
 
 function PackageOption({
   product,
@@ -887,36 +842,30 @@ function PackageOption({
   return (
     <div
       className={`flex items-center gap-3 p-3 rounded-xl border transition ${
-        selected ? "bg-orange-500/10 border-orange-500/50" : "bg-white/5 light:bg-white border-white/10 light:border-slate-200"
+        selected ? "bg-brand-500/10 border-brand-500/50" : " bg-white border-slate-200"
       }`}
     >
       <button onClick={onChoose} disabled={disabled} className="flex items-center gap-3 flex-1 min-w-0 text-left cursor-pointer disabled:cursor-default">
-        <span className={`w-4 h-4 rounded-full border-2 shrink-0 ${selected ? "border-orange-500 bg-orange-500" : "border-slate-500"}`} />
+        <span className={`w-4 h-4 rounded-full border-2 shrink-0 ${selected ? "border-brand-500 bg-brand-500" : "border-slate-500"}`} />
         <span className="min-w-0">
-          <span className="block text-sm font-semibold text-white light:text-slate-900 truncate">
+          <span className="block text-sm font-semibold text-slate-900 truncate">
             {v.name}
-            {product.energy_type && ENERGY_POINT_LABELS[product.energy_type] && (
-              <span className="ml-2 text-[10px] font-semibold text-slate-500 uppercase">{ENERGY_POINT_LABELS[product.energy_type]}</span>
-            )}
           </span>
           {/* Session 84: the yearly price in evidence, and underneath the rate
               from the product's own monthly price -- never yearly / 12. */}
-          <span className="block text-sm font-bold text-white light:text-slate-900 tabular-nums">
+          <span className="block text-sm font-bold text-slate-900 tabular-nums">
             {euro(prices.oneGo.grossCents)}
-            <span className="ml-1 text-[11px] font-normal text-slate-400 light:text-slate-500">
+            <span className="ml-1 font-normal text-slate-500">
               annuale, unica soluzione{prices.oneGo.vatCents > 0 ? " · IVA incl." : ""}
             </span>
           </span>
-          <span className="block text-[11px] text-slate-400 light:text-slate-500 tabular-nums">
+          <span className="block text-slate-500 tabular-nums">
             oppure {euro(prices.monthlyGrossCents)} × 12 mesi = {euro(prices.instalments.grossCents)}
             {v.contract_cashback_percentage > 0 ? ` · cashback ${v.contract_cashback_percentage}%` : ""}
           </span>
-          <span className="block text-[11px] font-bold text-amber-400 light:text-amber-700 mt-0.5">
-            ATTENZIONE: scegli Klarna quando effettui il pagamento
-          </span>
         </span>
       </button>
-      <button onClick={onPreview} className="px-2.5 py-1 rounded-lg text-[11px] font-semibold text-orange-400 hover:bg-orange-500/10 cursor-pointer shrink-0">
+      <button onClick={onPreview} className="px-2.5 py-1 rounded-lg text-[11px] font-semibold text-brand-600 hover:bg-brand-500/10 cursor-pointer shrink-0">
         Anteprima
       </button>
     </div>
@@ -931,7 +880,6 @@ function ContractsStep({
   onPreview,
   onChoose,
   onChooseForAll,
-  onMoveAddress,
   onBack,
   onNext,
 }: {
@@ -942,86 +890,43 @@ function ContractsStep({
   onPreview: (product: ProductCatalogRead, pointId: string | null) => void;
   onChoose: (pointId: string, versionId: string) => void;
   onChooseForAll: (versionId: string) => void;
-  onMoveAddress: (pointId: string, address: AddressValue) => Promise<ContractRequestDetailRead | null>;
   onBack: () => void;
   onNext: () => void;
 }) {
   const editable = request.status === "DRAFT";
   const [openPoint, setOpenPoint] = useState<string | null>(null);
-  const [movingPoint, setMovingPoint] = useState<string | null>(null);
   const missing = request.points.filter((p) => !p.product_version_id).length;
-  // Un POD sceglie solo tra le offerte luce, un PDR solo tra quelle gas.
-  const packagesFor = (kind: "POD" | "PDR") => packages.filter((p) => p.energy_type === POINT_ENERGY[kind]);
-  const counts = countsOf(request.points);
 
   return (
     <div className="space-y-5">
       <div>
-        <h3 className="text-sm font-bold text-white light:text-slate-900">Scegli il contratto per ogni punto</h3>
-        <p className="text-xs text-slate-400 light:text-slate-500 mt-1">
-          Ogni POD e ogni PDR è un contratto a sé: puoi scegliere contratti diversi. Per i POD trovi le offerte luce,
-          per i PDR quelle gas. Apri “Anteprima” per leggerlo prima di sceglierlo.
+        <h3 className="text-sm font-bold text-ink-900">Scegli l&apos;offerta per ogni contratto</h3>
+        <p className="text-xs text-ink-500 mt-1">
+          Ogni contratto è a sé: puoi scegliere offerte diverse. Apri “Anteprima” per leggerla prima di sceglierla.
         </p>
       </div>
 
-      {editable &&
-        (["POD", "PDR"] as const).map((kind) =>
-          (kind === "POD" ? counts.pod : counts.pdr) > 1 && packagesFor(kind).length > 0 ? (
-            <BulkChoice
-              key={kind}
-              kind={kind}
-              packages={packagesFor(kind)}
-              busy={busy === "package-all"}
-              onApply={onChooseForAll}
-            />
-          ) : null
-        )}
+      {editable && request.points.length > 1 && packages.length > 0 && (
+        <BulkChoice packages={packages} busy={busy === "package-all"} onApply={onChooseForAll} />
+      )}
 
       <div className="space-y-4">
         {request.points.map((point) => (
-          <div key={point.id} className="p-4 rounded-2xl border border-white/10 light:border-slate-200 bg-slate-950/40 light:bg-white/70 space-y-3">
+          <div key={point.id} className="p-4 rounded-2xl border border-slate-200 bg-white/70 space-y-3">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-sm font-bold text-white light:text-slate-900">
-                  {pointCode(point)}
-                  {point.energy_type && ENERGY_POINT_LABELS[point.energy_type] && (
-                    <span className="ml-2 text-[10px] font-semibold text-slate-500 uppercase">{ENERGY_POINT_LABELS[point.energy_type]}</span>
-                  )}
-                </p>
-                <p className="text-[11px] text-slate-400 light:text-slate-500 truncate">
-                  {[point.street, point.city].filter(Boolean).join(", ")}
-                  {editable && (
-                    <button
-                      onClick={() => setMovingPoint(movingPoint === point.id ? null : point.id)}
-                      className="ml-2 font-semibold text-orange-400 hover:text-orange-300 cursor-pointer"
-                    >
-                      {movingPoint === point.id ? "Annulla" : "Indirizzo diverso?"}
-                    </button>
-                  )}
-                </p>
+                <p className="text-sm font-bold text-ink-900">{pointCode(point)}</p>
               </div>
               {point.gross_amount_cents != null && (
-                <span className="text-sm font-bold text-orange-400 tabular-nums shrink-0">{euro(point.gross_amount_cents)}</span>
+                <span className="text-sm font-bold text-brand-600 tabular-nums shrink-0">{euro(point.gross_amount_cents)}</span>
               )}
             </div>
 
-            {movingPoint === point.id && (
-              <MoveAddressForm
-                point={point}
-                busy={busy === `address-${point.id}`}
-                onSubmit={async (address) => {
-                  if (await onMoveAddress(point.id, address)) setMovingPoint(null);
-                }}
-              />
-            )}
-
-            {packagesFor(point.point_kind).length === 0 ? (
-              <p className="text-xs text-amber-400">
-                Nessuna offerta {point.point_kind === "PDR" ? "gas" : "luce"} disponibile al momento.
-              </p>
+            {packages.length === 0 ? (
+              <p className="text-xs text-amber-700">Nessuna offerta disponibile al momento.</p>
             ) : (
               <div className="space-y-2">
-                {packagesFor(point.point_kind).map((product) => (
+                {packages.map((product) => (
                   <PackageOption
                     key={product.id}
                     product={product}
@@ -1032,22 +937,22 @@ function ContractsStep({
                     onPreview={() => onPreview(product, editable ? point.id : null)}
                   />
                 ))}
-                {point.product_version_id && !packagesFor(point.point_kind).some((p) => p.current_version!.id === point.product_version_id) && (
+                {point.product_version_id && !packages.some((p) => p.current_version!.id === point.product_version_id) && (
                   <p className="text-[11px] text-slate-400">Contratto scelto: {point.product_name}</p>
                 )}
               </div>
             )}
 
-            <div className="pt-2 border-t border-white/5 light:border-slate-200">
+            <div className="pt-2 border-t border-slate-200">
               <button
                 onClick={() => setOpenPoint(openPoint === point.id ? null : point.id)}
-                className="text-xs font-semibold text-slate-300 light:text-slate-600 hover:text-orange-400 cursor-pointer"
+                className="text-xs font-semibold text-slate-600 hover:text-brand-600 cursor-pointer"
               >
-                {openPoint === point.id ? "▾" : "▸"} Allegati di questo {point.point_kind} (bolletta, foto del contatore)
+                {openPoint === point.id ? "▾" : "▸"} Allegati di questo contratto
               </button>
               {openPoint === point.id && (
                 <div className="mt-3">
-                  <ContractDocumentsPanel contractId={point.id} onlyTypes={["UTILITY_BILL"]} />
+                  <ContractDocumentsPanel contractId={point.id} />
                 </div>
               )}
             </div>
@@ -1058,7 +963,7 @@ function ContractsStep({
       <div className="flex gap-2">
         <button onClick={onBack} className={secondaryButton}>← Documenti</button>
         <button onClick={onNext} className={`flex-1 ${primaryButton}`}>
-          {missing > 0 ? `Continua (${missing} ${missing === 1 ? "punto" : "punti"} senza contratto)` : "Continua: riepilogo"}
+          {missing > 0 ? `Continua (${missing} ${missing === 1 ? "contratto" : "contratti"} senza offerta)` : "Continua: riepilogo"}
         </button>
       </div>
     </div>
@@ -1066,66 +971,31 @@ function ContractsStep({
 }
 
 function BulkChoice({
-  kind,
   packages,
   busy,
   onApply,
 }: {
-  kind: "POD" | "PDR";
   packages: ProductCatalogRead[];
   busy: boolean;
   onApply: (versionId: string) => void;
 }) {
   const [choice, setChoice] = useState("");
   return (
-    <div className="flex flex-col sm:flex-row gap-2 p-3 rounded-xl bg-white/5 light:bg-slate-900/5 border border-white/10 light:border-slate-200">
+    <div className="flex flex-col sm:flex-row gap-2 p-3 rounded-xl bg-slate-900/5 border border-slate-200">
       <select
         value={choice}
         onChange={(e) => setChoice(e.target.value)}
-        className="flex-1 rounded-xl glass-input px-3 py-2 text-xs bg-slate-900 light:bg-white"
+        className="flex-1 rounded-xl glass-input px-3 py-2 text-xs bg-white"
       >
-        <option value="">
-          Stessa offerta {kind === "PDR" ? "gas per tutti i PDR" : "luce per tutti i POD"}…
-        </option>
+        <option value="">Stessa offerta per tutti i contratti…</option>
         {packages.map((p) => (
           <option key={p.id} value={p.current_version!.id}>{p.current_version!.name}</option>
         ))}
       </select>
       <button onClick={() => choice && onApply(choice)} disabled={!choice || busy} className={secondaryButton}>
-        {busy ? "Applicazione..." : `Applica a tutti i ${kind}`}
+        {busy ? "Applicazione..." : "Applica a tutti"}
       </button>
     </div>
-  );
-}
-
-function MoveAddressForm({
-  point,
-  busy,
-  onSubmit,
-}: {
-  point: ContractRequestPointRead;
-  busy: boolean;
-  onSubmit: (address: AddressValue) => void;
-}) {
-  const [address, setAddress] = useState<AddressValue>({
-    street: point.street ?? "",
-    city: point.city ?? "",
-    province: point.province ?? "",
-    postal_code: point.postal_code ?? "",
-  });
-  return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        onSubmit({ ...address, province: address.province.toUpperCase() });
-      }}
-      className="space-y-2 p-3 rounded-xl border border-orange-500/25 bg-orange-500/5"
-    >
-      <AddressFields value={address} onChange={setAddress} />
-      <button type="submit" disabled={busy} className="w-full rounded-xl bg-orange-600 hover:bg-orange-500 px-4 py-2 text-xs font-bold text-white cursor-pointer disabled:opacity-50">
-        {busy ? "Salvataggio..." : `Salva l'indirizzo di questo ${point.point_kind}`}
-      </button>
-    </form>
   );
 }
 
@@ -1162,8 +1032,8 @@ function SummaryStep({
   return (
     <div className="space-y-5">
       <div>
-        <h3 className="text-sm font-bold text-white light:text-slate-900">{isDraft ? "Riepilogo della pratica" : "Pratica inviata"}</h3>
-        <p className="text-xs text-slate-400 light:text-slate-500 mt-1">
+        <h3 className="text-sm font-bold text-slate-900">{isDraft ? "Riepilogo della pratica" : "Pratica inviata"}</h3>
+        <p className="text-xs text-slate-500 mt-1">
           {isDraft
             ? `Controlla i contratti scelti. Inviando la pratica si aprono ${request.points.length} ${
                 request.points.length === 1 ? "contratto" : "contratti indipendenti"
@@ -1172,38 +1042,37 @@ function SummaryStep({
         </p>
       </div>
 
-      <div className="p-3 rounded-xl bg-white/5 light:bg-slate-900/5 border border-white/10 light:border-slate-200 text-[11px] text-slate-400 light:text-slate-500">
-        Intestatario: <strong className="text-slate-200 light:text-slate-800">{request.holder_name}</strong>
+      <div className="p-3 rounded-xl bg-slate-900/5 border border-slate-200 text-slate-500">
+        Intestatario: <strong className=" text-slate-800">{request.holder_name}</strong>
         {request.email ? ` · ${request.email}` : ""}
         {request.street ? ` · ${request.street}, ${request.postal_code} ${request.city} (${request.province})` : ""}
       </div>
 
-      <div className="rounded-2xl border border-white/10 light:border-slate-200 divide-y divide-white/5 light:divide-slate-200 overflow-hidden">
+      <div className="rounded-2xl border border-slate-200 divide-y divide-slate-200 overflow-hidden">
         {request.points.map((point) => (
           <div key={point.id} className="flex items-center justify-between gap-3 px-4 py-3">
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-white light:text-slate-900">{pointCode(point)}</p>
-              <p className={`text-[11px] ${point.product_name ? "text-slate-400 light:text-slate-500" : "text-amber-400"}`}>
-                {point.product_name ?? "Contratto non ancora scelto"}
-                {point.street && point.street !== request.street ? ` · ${point.street}, ${point.city}` : ""}
+              <p className="text-sm font-semibold text-slate-900">{pointCode(point)}</p>
+              <p className={`text-[11px] ${point.product_name ? " text-slate-500" : "text-amber-700"}`}>
+                {point.product_name ?? "Offerta non ancora scelta"}
               </p>
             </div>
-            <span className="text-sm font-semibold text-white light:text-slate-900 tabular-nums shrink-0">
+            <span className="text-sm font-semibold text-slate-900 tabular-nums shrink-0">
               {point.gross_amount_cents != null ? euro(point.gross_amount_cents) : "—"}
             </span>
           </div>
         ))}
-        <div className="flex items-center justify-between gap-3 px-4 py-3 bg-white/5 light:bg-slate-900/5">
-          <span className="text-sm font-bold text-white light:text-slate-900">Totale</span>
-          <span className="text-base font-extrabold text-orange-400 tabular-nums">{euro(total)}</span>
+        <div className="flex items-center justify-between gap-3 px-4 py-3 bg-slate-900/5">
+          <span className="text-sm font-bold text-slate-900">Totale</span>
+          <span className="text-base font-extrabold text-brand-600 tabular-nums">{euro(total)}</span>
         </div>
       </div>
 
       {(sharedMissing > 0 || pointsMissingDocs > 0) && (
-        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs">
+        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 text-xs">
           Mancano ancora dei documenti
           {sharedMissing > 0 ? ` (${sharedMissing} d'identità)` : ""}
-          {pointsMissingDocs > 0 ? ` (bolletta di ${pointsMissingDocs} ${pointsMissingDocs === 1 ? "punto" : "punti"})` : ""}. Puoi inviare e pagare lo stesso e
+          {pointsMissingDocs > 0 ? ` (allegati di ${pointsMissingDocs} ${pointsMissingDocs === 1 ? "contratto" : "contratti"})` : ""}. Puoi inviare e pagare lo stesso e
           caricarli dopo: ogni contratto si attiva quando i suoi documenti sono approvati.
         </div>
       )}
@@ -1225,7 +1094,7 @@ function SummaryStep({
             </button>
           ) : request.points_without_package > 0 ? (
             <button onClick={onChooseContracts} className={`w-full ${primaryButton}`}>
-              Scegli il contratto per i punti mancanti
+              Scegli l&apos;offerta per i contratti mancanti
             </button>
           ) : (
             <button
@@ -1288,14 +1157,14 @@ function PaymentLinkBox({ requestId, holderName }: { requestId: string; holderNa
   }
 
   return (
-    <div className="p-4 rounded-2xl border-2 border-orange-500/50 bg-orange-500/10 space-y-3">
+    <div className="p-4 rounded-2xl border-2 border-brand-500/50 bg-brand-500/10 space-y-3">
       <div>
-        <p className="text-sm font-bold text-white light:text-slate-900">Manda questo link al tuo cliente</p>
-        <p className="text-xs text-slate-300 light:text-slate-600 mt-1">
+        <p className="text-sm font-bold text-slate-900">Manda questo link al tuo cliente</p>
+        <p className="text-xs text-slate-600 mt-1">
           Aprendolo fa il login con la sua email e password e si trova direttamente sul pagamento di questa pratica.
         </p>
       </div>
-      <p className="px-3 py-2 rounded-lg bg-black/30 light:bg-white text-[11px] font-mono text-orange-300 light:text-orange-700 break-all select-all">
+      <p className="px-3 py-2 rounded-lg bg-white font-mono text-brand-700 break-all select-all">
         {link}
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -1340,9 +1209,9 @@ function NotesBox({
   if (!editable) {
     if (!request.notes) return null;
     return (
-      <div className="p-3 rounded-xl bg-white/5 light:bg-slate-900/5 border border-white/10 light:border-slate-200">
+      <div className="p-3 rounded-xl bg-slate-900/5 border border-slate-200">
         <p className={labelClass}>Note per l&apos;amministrazione</p>
-        <p className="text-sm text-slate-200 light:text-slate-700 whitespace-pre-wrap mt-1">{request.notes}</p>
+        <p className="text-sm text-slate-700 whitespace-pre-wrap mt-1">{request.notes}</p>
       </div>
     );
   }
@@ -1366,7 +1235,7 @@ function NotesBox({
         placeholder={
           promoterMode
             ? "Tutto quello che l'amministrazione deve sapere su questo cliente o su questa pratica…"
-            : "Un messaggio per noi: orari in cui chiamarti, dettagli sulla fornitura…"
+            : "Un messaggio per noi: orari in cui chiamarti, altri dettagli utili…"
         }
         className={`${inputClass} resize-none`}
       />

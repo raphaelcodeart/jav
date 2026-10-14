@@ -1,4 +1,4 @@
-"""PIN dei JavCash al posto del codice via email (Session 87).
+"""PIN dei JavCash al posto del codice via email.
 
 Il cliente può scegliere un PIN di quattro cifre per confermare l'uso dei
 JavCash al checkout. Qui si fissa ciò che lo rende sicuro quanto il codice
@@ -12,11 +12,11 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy import func, select
 
+from app.core.security import hash_password
 from app.domains.auth import service as auth_service
 from app.domains.auth.models import OtpCode
 from app.domains.jav_market import service as market
 from app.domains.wallets import service as wallet_service
-from app.core.security import hash_password
 from tests.test_jav_market import ADDRESS, OTP, _otp, _shop, _user, _variants
 
 PASSWORD = "Password-di-prova-1"

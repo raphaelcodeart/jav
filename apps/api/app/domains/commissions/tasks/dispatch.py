@@ -18,7 +18,7 @@ COMMISSION_TRIGGER_EVENTS = {"ContractActivated", "ContractRenewed", "ContractIn
 
 
 async def _dispatch_commission_event(db: AsyncSession, record: dict, contract_id: uuid.UUID) -> None:
-    """ContractInstalmentPaid pays one instalment's slice (Session 50).
+    """ContractInstalmentPaid pays one instalment's slice.
 
     ContractActivated pays the whole commission only for a contract with no
     instalment rows -- one activated before instalments existed, or through

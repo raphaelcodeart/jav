@@ -109,9 +109,9 @@ _CONTRACT_BLOCKS: list[dict] = [
         "conclusione di contratti relativi o comunque connessi a:",
     ),
     bullets(
-        "fornitura di energia elettrica e di gas naturale, anche disgiuntamente;",
-        "prodotti di telefonia, offerte sul traffico voce e dati, accessi alla rete telefonica;",
-        "prodotti e servizi digitali e per l'industria.",
+        "iscrizioni, abbonamenti e corsi;",
+        "attrezzature, abbigliamento e materiale sportivo;",
+        "prodotti e servizi digitali.",
     ),
     clause(
         "1.2.",
@@ -341,7 +341,7 @@ _CONTRACT_BLOCKS: list[dict] = [
     clause("7.3.", "JAV riconoscerà al Procacciatore i compensi analiticamente indicati nell'Allegato A del presente Contratto."),
     clause(
         "7.4.",
-        "Il diritto al compenso maturerà solamente una volta attivata la fornitura del Prodotto. Le Parti "
+        "Il diritto al compenso maturerà solamente una volta attivato il Prodotto. Le Parti "
         "espressamente riconoscono che il Procacciatore non avrà diritto a compenso alcuno in caso di:",
     ),
     bullets(
@@ -394,7 +394,7 @@ _CONTRACT_BLOCKS: list[dict] = [
         "8.4.",
         "Il Procacciatore prende atto che, in ragione del dovere di riservatezza che incombe su JAV, non "
         "potrà essergli trasmessa copia delle fatture emesse ai clienti, né alcun dato specifico "
-        "riguardante i consumi dei singoli clienti, bensì esclusivamente dati aggregati in via cumulativa "
+        "riguardante l'utilizzo dei Prodotti da parte dei singoli clienti, bensì esclusivamente dati aggregati in via cumulativa "
         "e non analitica.",
     ),
     clause(
@@ -410,7 +410,7 @@ _CONTRACT_BLOCKS: list[dict] = [
         "dimensioni e caratteristiche del cliente non compatibili con la sua proposta contrattuale;",
         "irreperibilità del cliente;",
         "mancata o inesatta identificazione del cliente e mancanza dei documenti necessari per "
-        "l'attivazione della fornitura.",
+        "l'attivazione del Prodotto.",
     ),
 
     heading("9. Risoluzione del rapporto e conseguenze"),
@@ -455,13 +455,13 @@ _CONTRACT_BLOCKS: list[dict] = [
     clause(
         "9.5.",
         "Il Procacciatore si asterrà dal contattare ulteriormente i clienti ai fini di proporre loro "
-        "ulteriori e diverse forniture per un periodo di almeno 36 (trentasei) mesi dalla risoluzione del "
+        "ulteriori e diversi prodotti o servizi per un periodo di almeno 36 (trentasei) mesi dalla risoluzione del "
         "presente Contratto.",
     ),
     clause(
         "9.6.",
         "In caso contrario, JAV avrà diritto di pretendere dal Procacciatore una penale pari a euro 10 "
-        "(dieci) al mese per ogni cliente e per ogni mese di mancata fornitura fino al trentaseiesimo mese "
+        "(dieci) al mese per ogni cliente e per ogni mese di rapporto perduto fino al trentaseiesimo mese "
         "indicato al precedente punto 9.5.",
     ),
     clause(
@@ -616,7 +616,7 @@ _CONTRACT_BLOCKS: list[dict] = [
         "14.6.",
         "Il Procacciatore si impegna ad informare i clienti che i dati personali dagli stessi forniti saranno "
         "trasmessi a JAV e ai fornitori dei Prodotti per le finalità del presente Contratto. JAV, insieme "
-        "ai contratti di fornitura, si impegna a far sottoscrivere ai clienti idonee autorizzazioni al "
+        "ai contratti con i clienti, si impegna a far sottoscrivere loro idonee autorizzazioni al "
         "trattamento dei dati personali. Il mancato rispetto, da parte del Procacciatore, degli obblighi che "
         "gli competono in qualità di Responsabile/Sub-Responsabile per conto di JAV del trattamento dei dati "
         "personali di cui sopra comporterà la risoluzione di diritto del presente contratto, nonché l'obbligo "
@@ -694,8 +694,8 @@ _ATTACHMENT_BLOCKS: list[dict] = [
     heading("Allegato A — Tabella dei compensi"),
     paragraph(
         "JAV riconosce al Procacciatore i compensi indicati in questa tabella, alle condizioni previste "
-        "dagli articoli 7 e 8 del Contratto. Il diritto al compenso matura solamente una volta attivata "
-        "la fornitura del Prodotto."
+        "dagli articoli 7 e 8 del Contratto. Il diritto al compenso matura solamente una volta attivato "
+        "il Prodotto."
     ),
     # DA COMPLETARE -- sostituire con table(columns=[...], rows=[[...]]) non
     # appena i compensi reali sono disponibili, e incrementare la version.

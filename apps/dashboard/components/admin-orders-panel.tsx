@@ -7,18 +7,9 @@ import { ProductThumbnail } from "@/components/product-thumbnail";
 import { friendlyApiError } from "@/lib/api-error";
 import { vatLineLabel } from "@/lib/product-audience";
 import type {
-  AliexpressOrderItemRead,
-  AliexpressOrderRead,
   CustomerRead,
-  CjOrderRead,
-  KappaMarketOrderRead,
+  JavMarketOrderItemRead,
   JavMarketOrderRead,
-  ShopifyOrderRead,
-  VaittoMarketOrderRead,
-  SymphonyaMarketOrderRead,
-  SoleilMarketOrderRead,
-  ImportedOrderRead,
-  ImportedProductAdminRead,
   OrderRead,
   ProductCatalogRead,
 } from "@/lib/types";
@@ -29,66 +20,47 @@ const STATUS_LABELS: Record<string, string> = {
   CANCELLED: "Annullato",
 };
 const STATUS_COLORS: Record<string, string> = {
-  AWAITING_PAYMENT: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+  AWAITING_PAYMENT: "bg-amber-500/10 text-amber-700 border-amber-500/20",
   PAID: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
   CANCELLED: "bg-rose-500/10 text-rose-400 border-rose-500/20",
 };
 const PAYMENT_METHOD_LABELS: Record<string, string> = {
   BANK_TRANSFER: "Bonifico",
-  CARD: "Carta (Stripe)",
 };
 
 /** Same unification as customer-orders-panel.tsx::UnifiedOrder -- an order
-    placed for a manually-catalogued product (orders.id) and one placed for
-    an imported-catalog product (imported_product_orders.id) are two
-    different tables internally, kept apart only so the product CATALOG
-    import mechanism stays isolated (see imported_products/models.py).
-    Everywhere else, including this admin screen, they are merged into one
-    continuous list and managed identically -- `source` only ever decides
-    which backend endpoint an action call goes to. */
+    of the internal catalog (orders.id) and one of the Shop
+    (jav_market_orders.id) are two different tables internally, but this
+    admin screen merges them into one continuous list and manages them
+    identically -- `source` only ever decides which backend endpoint an
+    action call goes to. */
 type UnifiedOrder = {
   id: string;
-  source: "standard" | "imported" | "partner" | "shopify" | "aliexpress" | OwnShop;
-  /** Shop Jav Partner: supplier-side state, shown as a hint here; the
-      sending and tracking are handled in "Shop Jav Partner → Ordini". */
+  source: "standard" | "jav_market";
+  /** Shop: shipping state, shown as a hint here; address, sending to the
+      producers and tracking are handled in the Shop's own page. */
   fulfillment_status?: string;
-  cj_payment_status?: string;
   customer_display_name: string;
   product_name: string;
-  /** Session 75: le righe di un ordine nato dal carrello, e -- per
-      AliExpress -- quale numero d'ordine fornitore è finito su ciascuna. */
-  items?: AliexpressOrderItemRead[];
-  item_supplier_orders?: { item_id: string; product_name: string; aliexpress_order_id: string | null }[];
+  /** Session 75: le righe di un ordine nato dal carrello. */
+  items?: JavMarketOrderItemRead[];
+  order_code?: string;
   product_image_url: string | null;
   amount_cents: number;
   credit_applied_cents: number;
   residual_amount_cents: number;
-  /** Marketplace orders: bank-transfer discount, already out of residual_amount_cents. */
+  /** Shop orders: bank-transfer discount, already out of residual_amount_cents. */
   bank_transfer_discount_cents?: number;
-  /** Marketplace orders (Session 74): the VAT already contained in the
-      total, frozen on the order. Missing on an older order -- nothing shown. */
+  /** Shop orders (Session 74): the VAT frozen on the order. Missing on an
+      order without it -- nothing shown. */
   vat_amount_cents?: number;
   vat_percentage?: number;
   status: "AWAITING_PAYMENT" | "PAID" | "CANCELLED";
-  payment_method: "BANK_TRANSFER" | "CARD";
+  payment_method: "BANK_TRANSFER";
   payment_proof_uploaded_at: string | null;
   cancellation_reason: string | null;
   created_at: string;
 };
-
-/** Session 88: i tre negozi con il catalogo scritto da noi. Fino a qui i loro
-    ordini si vedevano solo nella pagina di ciascun negozio, e l'utente non li
-    trovava in «Ordini»: ora stanno nell'elenco unico come gli altri, e la
-    spedizione (indirizzo, invio al fornitore, tracking) si gestisce nella
-    pagina del negozio, come per Shopify e AliExpress. */
-type OwnShop = "jav_market" | "kappa_market" | "vaitto_market" | "symphonya_market" | "soleil_market";
-const OWN_SHOPS: { source: OwnShop; path: string; label: string; page: string }[] = [
-  { source: "jav_market", path: "jav-market", label: "Fai la Spesa con Jav", page: "Fai la Spesa con Jav" },
-  { source: "kappa_market", path: "kappa-market", label: "Market Kappa", page: "Market Kappa" },
-  { source: "vaitto_market", path: "vaitto-market", label: "Marketplace 5 · Vaitto", page: "Marketplace VAITTO" },
-  { source: "symphonya_market", path: "symphonya-market", label: "Marketplace 6 · Symphonya", page: "Shop Symphonya" },
-  { source: "soleil_market", path: "soleil-market", label: "Market 7 · SoleilDrop", page: "Shop SoleilDrop" },
-];
 
 type UnifiedQuote = {
   product_name: string;
@@ -97,16 +69,10 @@ type UnifiedQuote = {
   max_creditable_cents: number;
   customer_wallet_balance_cents: number;
   bank_transfer_available: boolean;
-  card_available: boolean;
 };
 
 function ordersBasePath(source: UnifiedOrder["source"]): string {
-  if (source === "partner") return "/api/proxy/cj/orders";
-  if (source === "shopify") return "/api/proxy/shopify/orders";
-  if (source === "aliexpress") return "/api/proxy/aliexpress/orders";
-  const own = OWN_SHOPS.find((s) => s.source === source);
-  if (own) return `/api/proxy/${own.path}/orders`;
-  return source === "imported" ? "/api/proxy/imported-products/orders" : "/api/proxy/orders";
+  return source === "jav_market" ? "/api/proxy/jav-market/orders" : "/api/proxy/orders";
 }
 
 function euro(cents: number): string {
@@ -114,7 +80,7 @@ function euro(cents: number): string {
 }
 
 // Wallet credit is JavCash, never plain EUR -- see wallet-panel.tsx's
-// identical helper. Bonifico/Carta amounts always stay euro().
+// identical helper. Bonifico amounts always stay euro().
 function javCash(cents: number): string {
   return `${(cents / 100).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} JavCash`;
 }
@@ -146,109 +112,58 @@ async function fetchProducts(): Promise<ProductCatalogRead[]> {
   return res.json();
 }
 
-async function fetchImportedProducts(): Promise<ImportedProductAdminRead[]> {
-  const res = await fetch("/api/proxy/imported-products/products");
-  if (!res.ok) throw new Error("Impossibile caricare i prodotti importati.");
-  return res.json();
-}
-
 async function fetchOrders(statusFilter: string): Promise<UnifiedOrder[]> {
   const qs = statusFilter !== "ALL" ? `?status_filter=${statusFilter}` : "";
-  const [standardRes, importedRes, partnerRes, shopifyRes, aliexpressRes, ...ownRes] = await Promise.all([
+  const [standardRes, shopRes] = await Promise.all([
     fetch(`/api/proxy/orders${qs}`),
-    fetch(`/api/proxy/imported-products/orders${qs}`),
-    fetch(`/api/proxy/cj/orders${qs}`),
-    fetch(`/api/proxy/shopify/orders${qs}`),
-    fetch(`/api/proxy/aliexpress/orders${qs}`),
-    // I tre negozi nostri non filtrano per stato lato server: si filtra qui.
-    ...OWN_SHOPS.map((shop) => fetch(`/api/proxy/${shop.path}/orders`)),
+    // Lo Shop non filtra per stato lato server: si filtra qui.
+    fetch("/api/proxy/jav-market/orders"),
   ]);
-  const own: UnifiedOrder[] = [];
-  for (const [i, res] of ownRes.entries()) {
-    const shop = OWN_SHOPS[i];
-    if (!res.ok || !shop) continue;
-    const rows = (await res.json()) as (JavMarketOrderRead | KappaMarketOrderRead | VaittoMarketOrderRead | SymphonyaMarketOrderRead | SoleilMarketOrderRead)[];
-    for (const o of rows) {
-      if (statusFilter !== "ALL" && o.status !== statusFilter) continue;
-      const lines = o.items ?? [];
-      own.push({
-        ...o,
-        product_name: (lines.length > 1
-          ? `${lines.length} articoli`
-          : `${o.product_name}${lines[0] && lines[0].quantity > 1 ? ` × ${lines[0].quantity}` : ""}`) + ` (${shop.label})`,
-        source: shop.source,
-        residual_amount_cents: o.amount_due_cents,
-        items: lines,
-      } as UnifiedOrder);
-    }
-  }
-  if (!standardRes.ok || !importedRes.ok) throw new Error("Impossibile caricare gli ordini.");
+  if (!standardRes.ok) throw new Error("Impossibile caricare gli ordini.");
   const standard: OrderRead[] = await standardRes.json();
-  const imported: ImportedOrderRead[] = await importedRes.json();
+  const shop: UnifiedOrder[] = [];
+  for (const o of shopRes.ok ? ((await shopRes.json()) as JavMarketOrderRead[]) : []) {
+    if (statusFilter !== "ALL" && o.status !== statusFilter) continue;
+    const lines = o.items ?? [];
+    // Con più righe il totale degli articoli, non il nome del primo: un
+    // ordine da carrello deve leggersi per quello che è (Session 75).
+    shop.push({
+      ...o,
+      product_name: (lines.length > 1
+        ? `${lines.length} articoli`
+        : `${o.product_name}${lines[0] && lines[0].quantity > 1 ? ` × ${lines[0].quantity}` : ""}`) + " (Shop)",
+      source: "jav_market",
+      residual_amount_cents: o.amount_due_cents,
+      items: lines,
+    });
+  }
   const merged: UnifiedOrder[] = [
     ...standard.map((o) => ({ ...o, source: "standard" as const })),
-    ...imported.map((o) => ({
-      ...o,
-      source: "imported" as const,
-      residual_amount_cents: o.amount_due_cents ?? o.residual_amount_cents,
-    })),
-    ...(partnerRes.ok ? ((await partnerRes.json()) as CjOrderRead[]) : []).map((o) => ({
-      ...o,
-      product_name: `${o.product_name}${o.quantity > 1 ? ` × ${o.quantity}` : ""} (Shop Jav Partner)`,
-      source: "partner" as const,
-      residual_amount_cents: o.amount_due_cents,
-    })),
-    // Marketplace 3 (Shopify, Session 68): confirmed here like every order;
-    // sending to the store and tracking live in its own admin page.
-    ...(shopifyRes.ok ? ((await shopifyRes.json()) as ShopifyOrderRead[]) : []).map((o) => ({
-      ...o,
-      product_name: `${o.product_name}${o.quantity > 1 ? ` × ${o.quantity}` : ""} (Shopify)`,
-      source: "shopify" as const,
-      residual_amount_cents: o.amount_due_cents,
-    })),
-    // Marketplace 3 (AliExpress API, Session 71): same treatment again --
-    // the order is confirmed here, placed at AliExpress and tracked in its
-    // own admin page.
-    ...(aliexpressRes.ok ? ((await aliexpressRes.json()) as AliexpressOrderRead[]) : []).map((o) => ({
-      ...o,
-      // Con più righe il totale degli articoli, non il nome del primo: un
-      // ordine da carrello deve leggersi per quello che è (Session 75).
-      product_name: ((o.items ?? []).length > 1
-        ? `${(o.items ?? []).length} articoli`
-        : `${o.product_name}${o.quantity > 1 ? ` × ${o.quantity}` : ""}`) + " (AliExpress)",
-      source: "aliexpress" as const,
-      residual_amount_cents: o.amount_due_cents,
-    })),
-    ...own,
+    ...shop,
   ];
   merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   return merged;
 }
 
-async function fetchQuote(
-  customerUserId: string, productRef: { id: string; source: "standard" | "imported" }
-): Promise<UnifiedQuote> {
-  const url = productRef.source === "imported"
-    ? `/api/proxy/imported-products/orders/quote?customer_user_id=${customerUserId}&imported_product_id=${productRef.id}`
-    : `/api/proxy/orders/quote?customer_user_id=${customerUserId}&product_version_id=${productRef.id}`;
-  const res = await fetch(url);
+async function fetchQuote(customerUserId: string, productVersionId: string): Promise<UnifiedQuote> {
+  const res = await fetch(
+    `/api/proxy/orders/quote?customer_user_id=${customerUserId}&product_version_id=${productVersionId}`
+  );
   if (!res.ok) throw new Error("Impossibile calcolare il preventivo.");
   return res.json();
 }
 
-/** Checkout per prodotti dropshipping/partner E per prodotti importati
-    ("Acquisti Jav") -- vedi UnifiedOrder qui sopra: gestiti in modo
-    identico, un unico elenco, un solo form di creazione. MAI per prodotti
-    Interno Jav, che restano contratti (vedi "Nuovo Contratto").
-    Solo admin per ora: nessun self-checkout cliente per il catalogo
-    principale (il catalogo importato invece ha anche il self-checkout, vedi
-    customer-products-panel.tsx). */
+/** Ordini dei prodotti dropshipping/partner del catalogo e dello Shop --
+    vedi UnifiedOrder qui sopra: un unico elenco, gestiti in modo identico.
+    Il form di creazione vale per il catalogo; MAI per prodotti Interno Jav,
+    che restano contratti (vedi "Nuovo Contratto"). Gli ordini dello Shop
+    li crea il cliente dal suo carrello. */
 export function AdminOrdersPanel() {
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState("AWAITING_PAYMENT");
   const [showCreate, setShowCreate] = useState(false);
   const [customerUserId, setCustomerUserId] = useState("");
-  const [productRef, setProductRef] = useState<{ id: string; source: "standard" | "imported" } | null>(null);
+  const [productVersionId, setProductVersionId] = useState("");
   const [creditAmount, setCreditAmount] = useState("0.00");
   const [note, setNote] = useState("");
   const [createLoading, setCreateLoading] = useState(false);
@@ -259,7 +174,6 @@ export function AdminOrdersPanel() {
 
   const { data: customers } = useQuery({ queryKey: ["admin", "customers"], queryFn: fetchCustomers });
   const { data: allProducts } = useQuery({ queryKey: ["admin", "products"], queryFn: fetchProducts });
-  const { data: allImportedProducts } = useQuery({ queryKey: ["admin", "imported-products"], queryFn: fetchImportedProducts });
   const { data: orders, error: loadError } = useQuery({
     queryKey: ["admin", "orders", statusFilter],
     queryFn: () => fetchOrders(statusFilter),
@@ -267,12 +181,11 @@ export function AdminOrdersPanel() {
 
   const orderableCustomers = (customers ?? []).filter((c) => !!c.user_id);
   const orderableProducts = (allProducts ?? []).filter((p) => p.category !== "INTERNAL" && p.current_version);
-  const orderableImportedProducts = (allImportedProducts ?? []).filter((p) => p.status === "ACTIVE");
 
   const { data: quote } = useQuery({
-    queryKey: ["admin", "orders", "quote", customerUserId, productRef?.source, productRef?.id],
-    queryFn: () => fetchQuote(customerUserId, productRef!),
-    enabled: !!customerUserId && !!productRef,
+    queryKey: ["admin", "orders", "quote", customerUserId, productVersionId],
+    queryFn: () => fetchQuote(customerUserId, productVersionId),
+    enabled: !!customerUserId && !!productVersionId,
   });
 
   // Default the credit field to the maximum usable amount whenever the
@@ -291,7 +204,7 @@ export function AdminOrdersPanel() {
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
-    if (!productRef) return;
+    if (!productVersionId) return;
     const creditCents = Math.round(parseFloat(creditAmount.replace(",", ".")) * 100);
     if (!Number.isFinite(creditCents) || creditCents < 0) {
       setCreateError("Importo in JavCash non valido.");
@@ -300,11 +213,11 @@ export function AdminOrdersPanel() {
     setCreateLoading(true);
     setCreateError(null);
     try {
-      const url = productRef.source === "imported" ? "/api/proxy/imported-products/orders" : "/api/proxy/orders";
-      const body = productRef.source === "imported"
-        ? { customer_user_id: customerUserId, imported_product_id: productRef.id, credit_applied_cents: creditCents, note: note || null }
-        : { customer_user_id: customerUserId, product_version_id: productRef.id, credit_applied_cents: creditCents, note: note || null };
-      const res = await fetch(url, {
+      const body = {
+        customer_user_id: customerUserId, product_version_id: productVersionId, credit_applied_cents: creditCents,
+        note: note || null,
+      };
+      const res = await fetch("/api/proxy/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -312,7 +225,7 @@ export function AdminOrdersPanel() {
       if (!res.ok) throw new Error(await friendlyApiError(res));
       setShowCreate(false);
       setCustomerUserId("");
-      setProductRef(null);
+      setProductVersionId("");
       setCreditAmount("0.00");
       setNote("");
       await invalidate();
@@ -379,25 +292,25 @@ export function AdminOrdersPanel() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
-        <p className="text-sm text-slate-400 light:text-slate-500">
-          Acquisti di prodotti dropshipping/partner e Acquisti Jav, con sconto in JavCash opzionale -- un unico elenco.
+        <p className="text-sm text-slate-500">
+          Acquisti di prodotti dropshipping/partner e dello Shop, con sconto in JavCash opzionale -- un unico elenco.
         </p>
         <button
           onClick={() => { setShowCreate(!showCreate); setCreateError(null); }}
-          className="px-4 py-2 rounded-xl text-xs font-semibold bg-orange-600 hover:bg-orange-500 text-white shadow-lg shadow-orange-500/20 transition cursor-pointer shrink-0"
+          className="px-4 py-2 rounded-xl text-xs font-semibold bg-brand-600 hover:bg-brand-500 text-white shadow-lg shadow-brand-500/20 transition cursor-pointer shrink-0"
         >
           {showCreate ? "Annulla" : "+ Nuovo Ordine"}
         </button>
       </div>
 
       {showCreate && (
-        <div className="glass-card rounded-2xl p-6 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70">
+        <div className="glass-card rounded-2xl p-6 border-slate-200 bg-white/70">
           <form onSubmit={handleCreate} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Cliente</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">Cliente</label>
                 <select required value={customerUserId} onChange={(e) => setCustomerUserId(e.target.value)}
-                  className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-slate-900 light:bg-white focus:border-orange-500">
+                  className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-white focus:border-brand-500">
                   <option value="">Seleziona...</option>
                   {orderableCustomers.map((c) => (
                     <option key={c.id} value={c.user_id!}>{c.display_name}</option>
@@ -406,68 +319,52 @@ export function AdminOrdersPanel() {
                 <p className="text-[10px] text-slate-500">Solo clienti con un account collegato compaiono qui.</p>
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Prodotto</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">Prodotto</label>
                 <select
                   required
-                  value={productRef ? `${productRef.source}:${productRef.id}` : ""}
-                  onChange={(e) => {
-                    const [source, id] = e.target.value.split(":");
-                    setProductRef(id ? { id, source: source as "standard" | "imported" } : null);
-                  }}
-                  className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-slate-900 light:bg-white focus:border-orange-500"
+                  value={productVersionId}
+                  onChange={(e) => setProductVersionId(e.target.value)}
+                  className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-white focus:border-brand-500"
                 >
                   <option value="">Seleziona...</option>
-                  {orderableProducts.length > 0 && (
-                    <optgroup label="Catalogo prodotti">
-                      {orderableProducts.map((p) => (
-                        <option key={p.id} value={`standard:${p.current_version!.id}`}>
-                          {p.current_version!.name} ({euro(p.current_version!.base_price_cents)})
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {orderableImportedProducts.length > 0 && (
-                    <optgroup label="Acquisti Jav">
-                      {orderableImportedProducts.map((p) => (
-                        <option key={p.id} value={`imported:${p.id}`}>
-                          {p.name} ({euro(p.price_cents)})
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
+                  {orderableProducts.map((p) => (
+                    <option key={p.id} value={p.current_version!.id}>
+                      {p.current_version!.name} ({euro(p.current_version!.base_price_cents)})
+                    </option>
+                  ))}
                 </select>
-                <p className="text-[10px] text-slate-500">Solo prodotti dropshipping/partner/importati -- i prodotti Interno Jav si vendono come contratto.</p>
+                <p className="text-[10px] text-slate-500">Solo prodotti dropshipping/partner -- i prodotti Interno Jav si vendono come contratto.</p>
               </div>
             </div>
 
             {quote && (
-              <div className="p-4 rounded-xl bg-white/5 light:bg-slate-900/5 border border-white/10 light:border-slate-200 space-y-3">
+              <div className="p-4 rounded-xl bg-slate-900/5 border border-slate-200 space-y-3">
                 <div className="grid grid-cols-3 gap-3 text-xs">
                   <div>
                     <p className="text-[10px] text-slate-500 uppercase">Prezzo prodotto</p>
-                    <p className="font-semibold text-white light:text-slate-900">{euro(quote.amount_cents)}</p>
+                    <p className="font-semibold text-slate-900">{euro(quote.amount_cents)}</p>
                   </div>
                   <div>
                     <p className="text-[10px] text-slate-500 uppercase">Sconto max in JavCash</p>
-                    <p className="font-semibold text-orange-400">{quote.credit_discount_percentage}% ({euro(quote.max_creditable_cents)})</p>
+                    <p className="font-semibold text-brand-600">{quote.credit_discount_percentage}% ({euro(quote.max_creditable_cents)})</p>
                   </div>
                   <div>
                     <p className="text-[10px] text-slate-500 uppercase">Saldo cliente</p>
-                    <p className="font-semibold text-white light:text-slate-900">{euro(quote.customer_wallet_balance_cents)}</p>
+                    <p className="font-semibold text-slate-900">{euro(quote.customer_wallet_balance_cents)}</p>
                   </div>
                 </div>
-                <div className="space-y-1 pt-2 border-t border-white/5 light:border-slate-200">
-                  <label className="text-[10px] font-semibold text-slate-300 light:text-slate-600 uppercase block">JavCash da applicare</label>
+                <div className="space-y-1 pt-2 border-t border-slate-200">
+                  <label className=" font-semibold text-slate-600 uppercase block">JavCash da applicare</label>
                   <input
                     inputMode="decimal"
                     value={creditAmount}
                     onChange={(e) => setCreditAmount(e.target.value)}
-                    className="w-full max-w-[160px] rounded-lg glass-input px-3 py-1.5 text-sm focus:border-orange-500"
+                    className="w-full max-w-[160px] rounded-lg glass-input px-3 py-1.5 text-sm focus:border-brand-500"
                   />
                 </div>
                 {residualPreview != null && (
-                  <p className="text-xs text-slate-300 light:text-slate-600">
-                    Residuo da bonifico: <strong className="text-orange-400">{euro(Math.max(residualPreview, 0))}</strong>
+                  <p className="text-xs text-slate-600">
+                    Residuo da bonifico: <strong className="text-brand-600">{euro(Math.max(residualPreview, 0))}</strong>
                     {residualPreview <= 0 && <span className="text-emerald-400"> -- copre l&apos;intero importo, nessun bonifico necessario</span>}
                   </p>
                 )}
@@ -475,13 +372,13 @@ export function AdminOrdersPanel() {
             )}
 
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-300 light:text-slate-600 uppercase block">Nota (opzionale)</label>
+              <label className="text-xs font-semibold text-slate-600 uppercase block">Nota (opzionale)</label>
               <input value={note} onChange={(e) => setNote(e.target.value)}
-                className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-orange-500" />
+                className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
             </div>
 
             <button type="submit" disabled={createLoading || !quote}
-              className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50">
+              className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50">
               {createLoading ? "Creazione..." : "Crea Ordine"}
             </button>
             {createError && (
@@ -498,8 +395,8 @@ export function AdminOrdersPanel() {
             onClick={() => setStatusFilter(s)}
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition cursor-pointer ${
               statusFilter === s
-                ? "bg-orange-600 border-orange-600 text-white"
-                : "bg-white/5 light:bg-slate-900/5 border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 hover:bg-white/10"
+                ? "bg-brand-600 border-brand-600 text-white"
+                : " bg-slate-900/5 border-slate-300 text-slate-600 hover:bg-slate-100"
             }`}
           >
             {s === "ALL" ? "Tutti" : STATUS_LABELS[s]}
@@ -509,7 +406,7 @@ export function AdminOrdersPanel() {
 
       {loadError && <p className="text-sm text-rose-400">Impossibile caricare gli ordini.</p>}
 
-      <div className="glass-card rounded-2xl border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70 divide-y divide-white/5 light:divide-slate-200 overflow-hidden">
+      <div className="glass-card rounded-2xl border-slate-200 bg-white/70 divide-y divide-slate-200 overflow-hidden">
         {orders === undefined ? (
           <p className="text-center py-8 text-slate-500 text-sm">Caricamento...</p>
         ) : orders.length === 0 ? (
@@ -519,21 +416,21 @@ export function AdminOrdersPanel() {
             <div key={o.id} className="p-5">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="flex items-start gap-3 min-w-0">
-                  <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0 border border-white/10 light:border-slate-200">
-                    <ProductThumbnail imageUrl={o.product_image_url} alt={o.product_name} iconClassName="w-5 h-5 text-orange-400/40" />
+                  <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0 border border-slate-200">
+                    <ProductThumbnail imageUrl={o.product_image_url} alt={o.product_name} iconClassName="w-5 h-5 text-brand-600/40" />
                   </div>
                   <div>
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <span className="font-medium text-white light:text-slate-900">{o.customer_display_name}</span>
+                      <span className="font-medium text-slate-900">{o.customer_display_name}</span>
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${STATUS_COLORS[o.status]}`}>
                         {STATUS_LABELS[o.status]}
                       </span>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-white/5 light:bg-slate-900/5 border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600">
+                      <span className="px-2 py-0.5 rounded-full font-bold border bg-slate-900/5 border-slate-300 text-slate-600">
                         {PAYMENT_METHOD_LABELS[o.payment_method] ?? o.payment_method}
                       </span>
                     </div>
                     <p className="text-xs text-slate-500">
-                      Ordine <span className="font-mono text-slate-400 light:text-slate-600">#{orderCode(o)}</span> · {formatDate(o.created_at)}
+                      Ordine <span className="font-mono text-slate-600">#{orderCode(o)}</span> · {formatDate(o.created_at)}
                     </p>
                     <p className="text-xs text-slate-500 mt-0.5">
                       {o.product_name} · Totale {euro(o.amount_cents)}
@@ -544,84 +441,37 @@ export function AdminOrdersPanel() {
                     </p>
                     {(o.items ?? []).length > 1 && (
                       <ul className="mt-1 space-y-0.5">
-                        {(o.items ?? []).map((line) => {
-                          const supplier = (o.item_supplier_orders ?? []).find((r) => r.item_id === line.id);
-                          return (
-                            <li key={line.id} className="text-[11px] text-slate-500">
-                              · {line.quantity} × {line.product_name}
-                              {line.variant_label ? ` (${line.variant_label})` : ""} — {euro(line.line_total_cents)}
-                              {supplier?.aliexpress_order_id && (
-                                <span className="font-mono text-slate-600 light:text-slate-400">
-                                  {" "}· ord. {supplier.aliexpress_order_id}
-                                </span>
-                              )}
-                            </li>
-                          );
-                        })}
+                        {(o.items ?? []).map((line) => (
+                          <li key={line.id} className="text-[11px] text-slate-500">
+                            · {line.quantity} × {line.product_name}
+                            {line.variant_label ? ` (${line.variant_label})` : ""} — {euro(line.line_total_cents)}
+                          </li>
+                        ))}
                       </ul>
                     )}
                     {o.cancellation_reason && (
                       <p className="text-[11px] text-rose-400 mt-1">Motivo annullamento: {o.cancellation_reason}</p>
                     )}
-                    {o.source === "shopify" && o.status === "PAID" && (
-                      <p className={`text-[11px] mt-1 ${o.fulfillment_status === "ERROR" || o.fulfillment_status === "NOT_SENT" || o.fulfillment_status === "CANCELLED" ? "text-amber-400" : "text-sky-400"}`}>
-                        {o.fulfillment_status === "NOT_SENT"
-                          ? "Da inviare al negozio Shopify: Prodotti Shopify → Ordini"
-                          : o.fulfillment_status === "ERROR"
-                            ? "Invio al negozio Shopify non riuscito: Prodotti Shopify → Ordini"
-                            : o.fulfillment_status === "CANCELLED"
-                              ? "Annullato nel negozio Shopify: Prodotti Shopify → Ordini"
-                              : `Spedizione: ${o.fulfillment_status === "SHIPPED" ? "spedito" : o.fulfillment_status === "DELIVERED" ? "consegnato" : "in lavorazione"}`}
-                      </p>
-                    )}
-                    {o.source === "aliexpress" && o.status === "PAID" && (
-                      <p className={`text-[11px] mt-1 ${o.fulfillment_status === "ERROR" || o.fulfillment_status === "NOT_SENT" || o.fulfillment_status === "CANCELLED" ? "text-amber-400" : "text-sky-400"}`}>
-                        {o.fulfillment_status === "NOT_SENT"
-                          ? "Da inviare ad AliExpress: Shop AliExpress → Ordini"
-                          : o.fulfillment_status === "ERROR"
-                            ? "Invio ad AliExpress non riuscito: Shop AliExpress → Ordini"
-                            : o.fulfillment_status === "CANCELLED"
-                              ? "Annullato su AliExpress: Shop AliExpress → Ordini"
-                              : `Spedizione: ${o.fulfillment_status === "SHIPPED" ? "spedito" : o.fulfillment_status === "DELIVERED" ? "consegnato" : "in lavorazione"}`}
-                      </p>
-                    )}
-                    {OWN_SHOPS.some((s) => s.source === o.source) && o.status === "PAID" && (
-                      <p className={`text-[11px] mt-1 ${o.fulfillment_status === "SHIPPED" || o.fulfillment_status === "DELIVERED" ? "text-sky-400" : "text-amber-400"}`}>
+                    {o.source === "jav_market" && o.status === "PAID" && (
+                      <p className={`text-[11px] mt-1 ${o.fulfillment_status === "SHIPPED" || o.fulfillment_status === "DELIVERED" ? "text-sky-400" : "text-amber-700"}`}>
                         {o.fulfillment_status === "DELIVERED"
                           ? "Consegnato"
                           : o.fulfillment_status === "SHIPPED"
                             ? "Spedito"
-                            : `Da spedire: indirizzo, invio al fornitore e tracking in ${OWN_SHOPS.find((s) => s.source === o.source)?.page} → Ordini`}
-                      </p>
-                    )}
-                    {o.source === "partner" && o.status === "PAID" && (
-                      <p className={`text-[11px] mt-1 ${o.fulfillment_status === "ERROR" || o.fulfillment_status === "NOT_SENT" || o.cj_payment_status === "PAYMENT_REQUIRED" ? "text-amber-400" : "text-sky-400"}`}>
-                        {o.cj_payment_status === "PAYMENT_REQUIRED"
-                          ? "Pagamento CJ richiesto: Shop Jav Partner → Ordini"
-                          : o.fulfillment_status === "NOT_SENT"
-                          ? "Da inviare al fornitore: Shop Jav Partner → Ordini"
-                          : o.fulfillment_status === "ERROR"
-                            ? "Invio al fornitore non riuscito: Shop Jav Partner → Ordini"
-                            : `Spedizione: ${o.fulfillment_status === "SHIPPED" ? "spedito" : o.fulfillment_status === "DELIVERED" ? "consegnato" : "in lavorazione"}`}
+                            : "Da spedire: indirizzo, invio al fornitore e tracking in Fai la Spesa con Jav → Ordini"}
                       </p>
                     )}
                   </div>
                 </div>
                 {o.status === "AWAITING_PAYMENT" && (
                   <div className="flex flex-col gap-2 w-full sm:w-56 shrink-0">
-                    {o.payment_method === "CARD" ? (
-                      <span className="w-full px-4 py-2 rounded-xl text-center bg-white/5 light:bg-slate-900/5 border border-white/10 light:border-slate-300 text-slate-400 light:text-slate-500 text-xs font-medium">
-                        In attesa di conferma Stripe
-                      </span>
-                    ) : (
-                      <button
-                        onClick={() => handleConfirmPayment(o)}
-                        disabled={actionLoadingId === o.id}
-                        className="w-full px-4 py-2 rounded-xl bg-emerald-600/10 hover:bg-emerald-600/20 border border-emerald-500/20 text-emerald-400 text-xs font-semibold transition cursor-pointer disabled:opacity-50"
-                      >
-                        {actionLoadingId === o.id ? "..." : "Conferma bonifico ricevuto"}
-                      </button>
-                    )}
+                    <button
+                      onClick={() => handleConfirmPayment(o)}
+                      disabled={actionLoadingId === o.id}
+                      className="w-full px-4 py-2 rounded-xl bg-emerald-600/10 hover:bg-emerald-600/20 border border-emerald-500/20 text-emerald-400 text-xs font-semibold transition cursor-pointer disabled:opacity-50"
+                    >
+                      {actionLoadingId === o.id ? "..." : "Conferma bonifico ricevuto"}
+                    </button>
                     {o.payment_proof_uploaded_at && (
                       <button
                         onClick={() => handleViewPaymentProof(o)}
@@ -641,11 +491,11 @@ export function AdminOrdersPanel() {
                 )}
               </div>
               {cancellingId === o.id && (
-                <div className="mt-3 pt-3 border-t border-white/5 light:border-slate-200 flex items-end gap-2">
+                <div className="mt-3 pt-3 border-t border-slate-200 flex items-end gap-2">
                   <div className="space-y-1 flex-1 max-w-sm">
-                    <label className="text-[10px] font-semibold text-slate-300 light:text-slate-600 uppercase block">Motivo annullamento</label>
+                    <label className=" font-semibold text-slate-600 uppercase block">Motivo annullamento</label>
                     <input autoFocus value={cancelReason} onChange={(e) => setCancelReason(e.target.value)}
-                      className="w-full rounded-lg glass-input px-3 py-1.5 text-sm focus:border-orange-500" />
+                      className="w-full rounded-lg glass-input px-3 py-1.5 text-sm focus:border-brand-500" />
                   </div>
                   <button
                     onClick={() => handleCancel(o)}

@@ -114,9 +114,9 @@ export function AdminCommissionsPanel({ initialStatusFilter }: { initialStatusFi
   return (
     <div className="space-y-6">
       {/* Per-level rollup -- "per ogni livello: contratti attivi, fatturato, provvigioni" */}
-      <div className="glass-card rounded-2xl border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70 overflow-hidden">
+      <div className="glass-card rounded-2xl border-slate-200 bg-white/70 overflow-hidden">
         <div className="p-5 pb-3">
-          <h3 className="text-sm font-semibold text-white light:text-slate-900">Distribuzione per livello di rete</h3>
+          <h3 className="text-sm font-semibold text-slate-900">Distribuzione per livello di rete</h3>
           <p className="text-[11px] text-slate-500 mt-1">
             Livello 0 = il promoter che ha prodotto direttamente il contratto; livello N = quanti passaggi di sponsorizzazione sopra di lui.
           </p>
@@ -124,22 +124,22 @@ export function AdminCommissionsPanel({ initialStatusFilter }: { initialStatusFi
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-left text-xs">
             <thead>
-              <tr className="border-b border-white/5 light:border-slate-200 text-slate-400 light:text-slate-500 font-semibold">
+              <tr className="border-b border-slate-200 text-slate-500 font-semibold">
                 <th className="py-2 px-5">Livello</th>
                 <th className="py-2 px-5 text-right">Contratti</th>
                 <th className="py-2 px-5 text-right">Fatturato</th>
                 <th className="py-2 px-5 text-right">Provvigioni generate</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5 light:divide-slate-200">
+            <tbody className="divide-y divide-slate-200">
               {(levelTotals ?? []).map((row) => (
-                <tr key={row.depth} className="text-slate-300 light:text-slate-600">
-                  <td className="py-2 px-5 font-semibold text-white light:text-slate-900">
+                <tr key={row.depth} className=" text-slate-600">
+                  <td className="py-2 px-5 font-semibold text-slate-900">
                     {row.depth === 0 ? "0 (produttore)" : row.depth}
                   </td>
                   <td className="py-2 px-5 text-right">{row.contracts}</td>
                   <td className="py-2 px-5 text-right">{euro(row.value_cents)}</td>
-                  <td className="py-2 px-5 text-right font-semibold text-orange-400">{euro(row.commission_cents)}</td>
+                  <td className="py-2 px-5 text-right font-semibold text-brand-600">{euro(row.commission_cents)}</td>
                 </tr>
               ))}
               {(levelTotals ?? []).length === 0 && (
@@ -153,11 +153,11 @@ export function AdminCommissionsPanel({ initialStatusFilter }: { initialStatusFi
       {/* KPI + filters + export */}
       <div className="flex flex-col lg:flex-row gap-4">
         <div className="flex-1 grid grid-cols-2 gap-4">
-          <div className="glass-card rounded-2xl p-4 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70">
+          <div className="glass-card rounded-2xl p-4 border-slate-200 bg-white/70">
             <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Maturate (nel filtro)</p>
             <p className="text-xl font-bold text-sky-400">{euro(totalAccrued)}</p>
           </div>
-          <div className="glass-card rounded-2xl p-4 border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70">
+          <div className="glass-card rounded-2xl p-4 border-slate-200 bg-white/70">
             <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Pagate (nel filtro)</p>
             <p className="text-xl font-bold text-emerald-400">{euro(totalPaid)}</p>
           </div>
@@ -166,7 +166,7 @@ export function AdminCommissionsPanel({ initialStatusFilter }: { initialStatusFi
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="rounded-xl glass-input px-3 py-2 text-xs bg-slate-900 light:bg-white focus:border-orange-500"
+            className="rounded-xl glass-input px-3 py-2 text-xs bg-white focus:border-brand-500"
           >
             <option value="ALL">Tutti gli stati</option>
             <option value="ACCRUED">Solo maturate</option>
@@ -175,7 +175,7 @@ export function AdminCommissionsPanel({ initialStatusFilter }: { initialStatusFi
           <select
             value={agentFilter}
             onChange={(e) => setAgentFilter(e.target.value)}
-            className="rounded-xl glass-input px-3 py-2 text-xs bg-slate-900 light:bg-white focus:border-orange-500 max-w-[220px]"
+            className="rounded-xl glass-input px-3 py-2 text-xs bg-white focus:border-brand-500 max-w-[220px]"
           >
             <option value="ALL">Tutti i promoter</option>
             {agents.map(([id, label]) => (
@@ -184,7 +184,7 @@ export function AdminCommissionsPanel({ initialStatusFilter }: { initialStatusFi
           </select>
           <button
             onClick={handleExportCsv}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 light:bg-slate-900/5 hover:bg-white/10 border border-white/10 light:border-slate-300 text-slate-300 light:text-slate-600 text-xs font-semibold transition cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 text-xs font-semibold transition cursor-pointer"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -202,11 +202,11 @@ export function AdminCommissionsPanel({ initialStatusFilter }: { initialStatusFi
       )}
 
       {/* Movement ledger with full traceability */}
-      <div className="glass-card rounded-2xl border-white/5 light:border-slate-200 bg-slate-950/40 light:bg-white/70 overflow-hidden">
+      <div className="glass-card rounded-2xl border-slate-200 bg-white/70 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-left text-xs">
             <thead>
-              <tr className="border-b border-white/5 light:border-slate-200 text-slate-400 light:text-slate-500 font-semibold">
+              <tr className="border-b border-slate-200 text-slate-500 font-semibold">
                 <th className="py-3 px-5">Cliente / Contratto</th>
                 <th className="py-3 px-5">Promoter beneficiario</th>
                 <th className="py-3 px-5">Livello</th>
@@ -216,7 +216,7 @@ export function AdminCommissionsPanel({ initialStatusFilter }: { initialStatusFi
                 <th className="py-3 px-5 text-right">Azioni</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5 light:divide-slate-200">
+            <tbody className="divide-y divide-slate-200">
               {isLoading && (
                 <tr><td colSpan={7} className="text-center py-8 text-slate-500">Caricamento...</td></tr>
               )}
@@ -226,11 +226,11 @@ export function AdminCommissionsPanel({ initialStatusFilter }: { initialStatusFi
               {pagination.pageItems.map((m) => (
                 <Fragment key={m.id}>
                   <tr
-                    className="text-slate-300 light:text-slate-600 hover:bg-white/5 transition-colors cursor-pointer"
+                    className=" text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
                     onClick={() => setExpandedId(expandedId === m.id ? null : m.id)}
                   >
                     <td className="py-3 px-5">
-                      <div className="font-medium text-white light:text-slate-900">{m.customer_name}</div>
+                      <div className="font-medium text-slate-900">{m.customer_name}</div>
                       <div className="text-[10px] text-slate-500 font-mono">{m.contract_id}</div>
                     </td>
                     <td className="py-3 px-5">
@@ -241,7 +241,7 @@ export function AdminCommissionsPanel({ initialStatusFilter }: { initialStatusFi
                       {m.depth_from_producer === 0 ? "Produttore" : `${m.depth_from_producer}° livello`}
                     </td>
                     <td className="py-3 px-5">{MOVEMENT_TYPE_LABELS[m.movement_type] ?? m.movement_type}</td>
-                    <td className="py-3 px-5 text-right font-semibold text-orange-400">{euro(m.amount_cents)}</td>
+                    <td className="py-3 px-5 text-right font-semibold text-brand-600">{euro(m.amount_cents)}</td>
                     <td className="py-3 px-5">
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                         m.status === "PAID"
@@ -264,34 +264,34 @@ export function AdminCommissionsPanel({ initialStatusFilter }: { initialStatusFi
                     </td>
                   </tr>
                   {expandedId === m.id && (
-                    <tr className="bg-white/2 light:bg-slate-900/[0.02]">
+                    <tr className=" bg-slate-900/[0.02]">
                       <td colSpan={7} className="px-5 py-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
                           <div className="space-y-1.5">
-                            <p><span className="text-slate-500">Prodotto:</span> <span className="text-slate-300 light:text-slate-600">{m.product_name}</span></p>
-                            <p><span className="text-slate-500">Valore del contratto:</span> <span className="text-slate-300 light:text-slate-600">{euro(m.value_cents)}</span></p>
-                            <p><span className="text-slate-500">Produttore del contratto:</span> <span className="text-slate-300 light:text-slate-600">{m.producer_name}</span></p>
-                            <p><span className="text-slate-500">Qualifica del promoter al momento del calcolo:</span> <span className="font-semibold text-orange-400">{m.rank_at_calculation ?? "—"}</span></p>
-                            <p><span className="text-slate-500">Qualifica attuale del promoter:</span> <span className="text-slate-300 light:text-slate-600">{m.agent_current_rank_code ?? "—"}</span></p>
+                            <p><span className="text-slate-500">Prodotto:</span> <span className=" text-slate-600">{m.product_name}</span></p>
+                            <p><span className="text-slate-500">Valore del contratto:</span> <span className=" text-slate-600">{euro(m.value_cents)}</span></p>
+                            <p><span className="text-slate-500">Produttore del contratto:</span> <span className=" text-slate-600">{m.producer_name}</span></p>
+                            <p><span className="text-slate-500">Qualifica del promoter al momento del calcolo:</span> <span className="font-semibold text-brand-600">{m.rank_at_calculation ?? "—"}</span></p>
+                            <p><span className="text-slate-500">Qualifica attuale del promoter:</span> <span className=" text-slate-600">{m.agent_current_rank_code ?? "—"}</span></p>
                           </div>
                           <div className="space-y-1.5">
                             {m.base_amount_cents !== null && (
-                              <p><span className="text-slate-500">Gettone base per la qualifica:</span> <span className="text-slate-300 light:text-slate-600">{euro(m.base_amount_cents)}</span></p>
+                              <p><span className="text-slate-500">Gettone base per la qualifica:</span> <span className=" text-slate-600">{euro(m.base_amount_cents)}</span></p>
                             )}
                             {m.already_distributed_cents !== null && m.already_distributed_cents > 0 && (
-                              <p><span className="text-slate-500">Già riconosciuto ai livelli inferiori:</span> <span className="text-slate-300 light:text-slate-600">{euro(m.already_distributed_cents)}</span></p>
+                              <p><span className="text-slate-500">Già riconosciuto ai livelli inferiori:</span> <span className=" text-slate-600">{euro(m.already_distributed_cents)}</span></p>
                             )}
                             {m.entrepreneurial_difference_cents !== null && m.entrepreneurial_difference_cents > 0 && (
-                              <p><span className="text-slate-500">Differenza imprenditoriale riconosciuta:</span> <span className="text-slate-300 light:text-slate-600">{euro(m.entrepreneurial_difference_cents)}</span></p>
+                              <p><span className="text-slate-500">Differenza imprenditoriale riconosciuta:</span> <span className=" text-slate-600">{euro(m.entrepreneurial_difference_cents)}</span></p>
                             )}
-                            <p><span className="text-slate-500">Data maturazione:</span> <span className="text-slate-300 light:text-slate-600">{new Date(m.effective_date).toLocaleDateString("it-IT")}</span></p>
+                            <p><span className="text-slate-500">Data maturazione:</span> <span className=" text-slate-600">{new Date(m.effective_date).toLocaleDateString("it-IT")}</span></p>
                             {m.paid_date && (
                               <p><span className="text-slate-500">Data pagamento:</span> <span className="text-emerald-400">{new Date(m.paid_date).toLocaleDateString("it-IT")}</span></p>
                             )}
                           </div>
                         </div>
                         {m.explanation && (
-                          <div className="mt-3 p-3 rounded-xl bg-orange-500/5 border border-orange-500/15 text-orange-200 light:text-orange-700">
+                          <div className="mt-3 p-3 rounded-xl bg-brand-500/5 border border-brand-500/15 text-brand-700">
                             <span className="font-bold uppercase tracking-wider text-[10px] block mb-1">Perché questo importo</span>
                             {m.explanation}
                           </div>
