@@ -68,3 +68,38 @@ class PublicBotRead(BaseModel):
     text: str
     actions: list[BotAction]
     quick_replies: list[str]
+
+
+# --- La base di conoscenza (knowledge_router.py) --------------------------------------------------
+
+
+class KnowledgeDocumentRead(BaseModel):
+    id: uuid.UUID
+    title: str
+    filename: str
+    size_bytes: int
+    page_count: int
+    #: READY: l'assistente lo consulta; EMPTY: il PDF non ha testo (una scansione).
+    status: str
+    #: Della base comune a tutti i club.
+    common: bool
+    created_at: datetime
+
+
+class KnowledgeRead(BaseModel):
+    documents: list[KnowledgeDocumentRead]
+    #: Per la segreteria di un club: i documenti comuni, da vedere e non da toccare.
+    common_documents: list[KnowledgeDocumentRead] = []
+    instructions: str
+    #: Le istruzioni comuni, per chi scrive quelle del club: sa che cosa precisa.
+    common_instructions: str = ""
+    #: False se il server non ha la chiave del modello: JAVBOT risponde a parole chiave.
+    assistant_enabled: bool
+
+
+class InstructionsWrite(BaseModel):
+    text: str = Field(default="", max_length=8000)
+
+
+class DocumentLinkRead(BaseModel):
+    url: str

@@ -140,6 +140,9 @@ def compose(*, club: Club, comp: ClubCompetition, athletes: list[ClubAthlete]) -
 async def _competition(db: AsyncSession, *, scope: ClubScope, competition_id: uuid.UUID) -> ClubCompetition:
     comp = await db.get(ClubCompetition, competition_id)
     if comp is None or comp.club_id != scope.club_id:
+        # Anche un evento della rete: la richiesta di trasporto è del club
+        # che organizza; per quelli della rete vale l'indicazione
+        # `transport_mode` dell'evento.
         raise ClubNotFoundError("Evento non trovato.")
     return comp
 
@@ -173,7 +176,7 @@ async def ensure_draft(db: AsyncSession, *, comp: ClubCompetition) -> ClubTransp
             to_email=comp.transport_entity_email, subject=subject, body_text=body, status="DRAFT",
             athletes_count=len(athletes),
         )
-        .on_conflict_do_nothing(constraint="uq_club_transport_requests_competition_id")
+        .on_conflict_do_nothing(constraint="uq_club_transport_requests_competition_club")
     )
     return await _request(db, competition_id=comp.id)
 

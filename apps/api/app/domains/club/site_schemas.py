@@ -7,7 +7,7 @@ c'è niente come data di nascita, peso o genitore, nemmeno facoltativo.
 """
 
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, time
 
 from pydantic import BaseModel, Field
 
@@ -30,6 +30,9 @@ class PublicJudoka(BaseModel):
     id: uuid.UUID
     display_name: str
     photo_url: str | None
+    #: False: in classifica ma senza consenso alla pagina pubblica (niente
+    #: foto, niente link a /judocas/{id}).
+    has_page: bool = True
     belt: str | None
     age_band: str
     club: PublicClubRef
@@ -55,7 +58,24 @@ class PublicEvent(BaseModel):
     registration_deadline: date
     location: str | None
     organizer: str | None
-    club: PublicClubRef
+    #: None per un evento della rete (il calendário comune dei club).
+    club: PublicClubRef | None = None
+    #: Le fasce federali ammesse; vuoto = tutte.
+    age_groups: list[str] = []
+    transport_mode: str = "TBC"
+    #: Quanto costa iscriversi (dell'organizzatore, non una quota di famiglia).
+    price_cents: int = 0
+    starts_at_time: time | None = None
+    registration_deadline_time: time | None = None
+    places: int | None = None
+    circular_url: str | None = None
+    #: Quanti atleti iscritti (solo il numero).
+    entries_count: int = 0
+
+
+class PublicDecorPhoto(BaseModel):
+    url: str
+    club: str
 
 
 class PublicMedal(BaseModel):

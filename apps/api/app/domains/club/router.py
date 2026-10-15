@@ -80,6 +80,7 @@ from app.domains.club.schemas import (
     ClubSettingsWrite,
     ClubShopOrderRead,
     ClubStaffRead,
+    StaffAccessLinkRead,
     ClubStaffWrite,
     ClubUpdate,
     CompetitionRead,
@@ -189,9 +190,8 @@ def _config() -> ClubConfigRead:
         belts=[BeltRead(**family_service.belt_dict(b.code)) for b in belts_catalog.BELTS],
         age_bands=[AgeBandRead(code=b.code, label=b.label, min_age=b.min_age, max_age=b.max_age)
                    for b in competitions_service.AGE_BANDS],
-        placement_points={str(k): v for k, v in competitions_service.PLACEMENT_POINTS.items()},
         placement_labels={str(k): v for k, v in competitions_service.PLACEMENT_LABELS.items()},
-        level_coefficients=competitions_service.LEVEL_COEFFICIENTS,
+        level_points={k: list(v) for k, v in competitions_service.LEVEL_POINTS.items()},
         level_labels=competitions_service.LEVEL_LABELS,
         achievements=[
             {"code": a.code, "label": a.label, "description": a.description, "target": a.target}
@@ -358,7 +358,7 @@ async def upload_my_payment_proof(
     note: str | None = Form(default=None, max_length=500),
     credit_cents: int = Form(default=0, ge=0),
     spend_code: str | None = Form(default=None, max_length=12),
-    method: str = Form(default="BANK_TRANSFER", pattern="^(BANK_TRANSFER|CASH)$"),
+    method: str = Form(default="BANK_TRANSFER", pattern="^(BANK_TRANSFER|MBWAY|CASH)$"),
     cash_received_by_user_id: uuid.UUID | None = Form(default=None),
     cash_received_by_name: str | None = Form(default=None, max_length=120),
     current_user: ClubUser = Depends(require_club_permission(FAMILY)),
@@ -665,18 +665,20 @@ async def get_ranking(
     season: int | None = None,
     sex: str | None = Query(default=None, pattern="^[MF]$"),
     age_band: str | None = None,
+    club_only: bool = False,
     current_user: ClubUser = Depends(require_club_permission(FAMILY)),
     db: AsyncSession = Depends(get_db),
 ) -> RankingRead:
-    season = season if season is not None else seasons.season_of(_today())
+    season = season if season is not None else competitions_service.ranking_year(_today())
     try:
         rows = await competitions_service.ranking(
             db, scope=current_user.scope, season=season, sex=sex, age_band=age_band,
-            viewer_user_id=current_user.user_id,
+            viewer_user_id=current_user.user_id, club_only=club_only,
         )
     except club_service.ClubError as exc:
         _raise(exc)
-    return RankingRead(season=season, season_label=seasons.season_label(season), sex=sex, age_band=age_band, rows=rows)
+    return RankingRead(season=season, season_label=competitions_service.ranking_label(season), sex=sex,
+                       age_band=age_band, rows=rows)
 
 
 @router.get("/athletes/{athlete_id}/belts", response_model=list[BeltHistoryRead])
@@ -1311,17 +1313,19 @@ async def admin_get_ranking(
     season: int | None = None,
     sex: str | None = Query(default=None, pattern="^[MF]$"),
     age_band: str | None = None,
+    club_only: bool = False,
     current_user: ClubUser = Depends(require_club_permission(MANAGE)),
     db: AsyncSession = Depends(get_db),
 ) -> RankingRead:
-    season = season if season is not None else seasons.season_of(_today())
+    season = season if season is not None else competitions_service.ranking_year(_today())
     try:
         rows = await competitions_service.ranking(
-            db, scope=current_user.scope, season=season, sex=sex, age_band=age_band
+            db, scope=current_user.scope, season=season, sex=sex, age_band=age_band, club_only=club_only,
         )
     except club_service.ClubError as exc:
         _raise(exc)
-    return RankingRead(season=season, season_label=seasons.season_label(season), sex=sex, age_band=age_band, rows=rows)
+    return RankingRead(season=season, season_label=competitions_service.ranking_label(season), sex=sex,
+                       age_band=age_band, rows=rows)
 
 
 @admin_router.delete("/belts/{belt_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -1788,6 +1792,26 @@ async def add_club_staff(
     except club_service.ClubError as exc:
         _raise(exc)
     return ClubStaffRead(user_id=user.id, email=user.email, role=payload.role, invite_link=invite_link)
+
+
+@clubs_router.post("/{club_id}/staff/{user_id}/access-link", response_model=StaffAccessLinkRead)
+async def club_staff_access_link(
+    club_id: uuid.UUID,
+    user_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_permission(CLUBS_MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> StaffAccessLinkRead:
+    """Il superadmin rimanda a una persona dello staff il link per scegliere
+    la password (clubs.staff_access_link)."""
+    try:
+        club = await clubs_service.get_club(db, organization_id=current_user.organization_id, club_id=club_id)
+        link = await clubs_service.staff_access_link(
+            db, scope=ClubScope(organization_id=club.organization_id, club_id=club.id), user_id=user_id,
+            actor_user_id=current_user.user_id,
+        )
+    except club_service.ClubError as exc:
+        _raise(exc)
+    return StaffAccessLinkRead(link=link, emailed=link is None)
 
 
 @clubs_router.get("/public/{slug}", response_model=PublicClubRead)

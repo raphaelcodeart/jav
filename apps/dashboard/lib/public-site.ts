@@ -34,6 +34,8 @@ export interface Judoka {
   id: string;
   display_name: string;
   photo_url: string | null;
+  /** false: in classifica senza consenso alla pagina pubblica (niente scheda). */
+  has_page?: boolean;
   belt: string | null;
   age_band: string;
   club: ClubRef;
@@ -59,7 +61,19 @@ export interface PublicEvent {
   registration_deadline: string;
   location: string | null;
   organizer: string | null;
-  club: ClubRef;
+  /** null per un evento della rete (il calendário comune dei club). */
+  club: ClubRef | null;
+  /** Le fasce federali ammesse; vuoto = tutte. */
+  age_groups?: string[];
+  transport_mode?: string;
+  /** Quanto costa iscriversi (dell'organizzatore). */
+  price_cents: number;
+  starts_at_time?: string | null;
+  registration_deadline_time?: string | null;
+  places?: number | null;
+  circular_url?: string | null;
+  /** Quanti atleti iscritti (solo il numero). */
+  entries_count: number;
 }
 
 export interface Medal {
@@ -292,9 +306,12 @@ export const publicSite = {
   club: (slug: string) => get<ClubPage>(`/clubs/${encodeURIComponent(slug)}`),
   clubVideos: (slug: string) => get<ChannelVideo[]>(`/clubs/${encodeURIComponent(slug)}/videos`),
   judoka: (id: string) => get<JudokaProfile>(`/judoka/${encodeURIComponent(id)}`),
-  events: (filters: { club?: string; kind?: string; when?: string }) => get<PublicEvent[]>(`/events${query(filters)}`),
+  events: (filters: { club?: string; kind?: string; when?: string; from?: string; to?: string; limit?: string }) =>
+    get<PublicEvent[]>(`/events${query(filters)}`),
+  /** Le foto già pubblicate dai club, per le testate. */
+  photos: () => get<{ url: string; club: string }[]>("/photos"),
   event: (id: string) => get<EventDetail>(`/events/${encodeURIComponent(id)}`),
-  ranking: (filters: { age_band?: string; club?: string }) => get<PublicRanking>(`/ranking${query(filters)}`),
+  ranking: (filters: { age_band?: string; club?: string; season?: string }) => get<PublicRanking>(`/ranking${query(filters)}`),
 };
 
 /** Un id che non è un UUID non arriva nemmeno all'API (che risponderebbe 422). */

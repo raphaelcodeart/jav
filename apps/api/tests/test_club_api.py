@@ -82,7 +82,7 @@ async def test_a_family_end_to_end_through_the_api(db, scope, monkeypatch):
 
             config = (await client.get("/club/config")).json()
             assert config["belts"][0]["code"] == "WHITE"
-            assert "Fanciulli" in config["age_bands"][1]["label"]
+            assert "Grupo 2" in config["age_bands"][1]["label"]
 
             # Il genitore non entra nelle rotte della segreteria.
             assert (await client.get("/club/admin/fees")).status_code == 403

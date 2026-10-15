@@ -13,6 +13,7 @@ pubblicato: un club in bozza o un atleta senza consenso non esistono.
 """
 
 import uuid
+from datetime import date
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,6 +35,7 @@ from app.domains.club.site_schemas import (
     PublicClubCard,
     PublicClubPage,
     PublicCoursesRead,
+    PublicDecorPhoto,
     PublicEvent,
     PublicEventDetail,
     PublicJudokaProfile,
@@ -116,12 +118,29 @@ async def list_events(
     club: str | None = Query(default=None, max_length=80),
     kind: str | None = Query(default=None),
     when: str | None = Query(default=None),
+    start: date | None = Query(default=None, alias="from"),
+    end: date | None = Query(default=None, alias="to"),
+    q: str | None = Query(default=None, max_length=80),
+    level: str | None = Query(default=None, max_length=24),
+    age_group: str | None = Query(default=None, max_length=20),
+    limit: int = Query(default=60, ge=1, le=500),
     db: AsyncSession = Depends(get_db),
 ) -> list[PublicEvent]:
+    """La ricerca degli eventi: periodo (`from`/`to`), testo, tipo, livello,
+    escalão, club ("rede" = il calendário comune)."""
     try:
-        return [PublicEvent(**e) for e in await site_service.list_events(db, club_slug=club, kind=kind, when=when)]
+        return [PublicEvent(**e) for e in await site_service.list_events(
+            db, club_slug=club, kind=kind, when=when, start=start, end=end, query=q, level=level,
+            age_group=age_group, limit=limit,
+        )]
     except club_service.ClubError as exc:
         _raise(exc)
+
+
+@public_site_router.get("/photos", response_model=list[PublicDecorPhoto])
+async def decor_photos(db: AsyncSession = Depends(get_db)) -> list[PublicDecorPhoto]:
+    """Le foto già pubblicate dai club, per le testate delle pagine."""
+    return [PublicDecorPhoto(**p) for p in await site_service.decor_photos(db)]
 
 
 @public_site_router.get("/events/{event_id}", response_model=PublicEventDetail)

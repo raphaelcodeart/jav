@@ -242,7 +242,7 @@ export default async function PortalHomePage() {
               <>
                 {home.top_ranking.length >= 3 && (
                   <div className="mb-6">
-                    <Podium entries={home.top_ranking.slice(0, 3).map((r) => ({ name: r.display_name, points: r.points, photoUrl: r.photo_url, href: `/judocas/${r.id}` }))} />
+                    <Podium entries={home.top_ranking.slice(0, 3).map((r) => ({ name: r.display_name, points: r.points, photoUrl: r.photo_url, href: r.has_page === false ? undefined : `/judocas/${r.id}` }))} />
                   </div>
                 )}
                 <RankingTable rows={home.top_ranking.slice(0, 5)} t={t} />

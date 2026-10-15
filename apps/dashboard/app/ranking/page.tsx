@@ -1,14 +1,15 @@
 import type { Metadata } from "next";
 import { Podium } from "@/components/ui/gamification";
-import { Chip, Container, EmptyNote, FilterRow, PageIntro, RankingTable } from "@/components/site/blocks";
+import { Chip, Container, EmptyNote, FilterRow, RankingTable } from "@/components/site/blocks";
+import { HeroStat, PageHero } from "@/components/site/page-hero";
 import { ageBandLabel, siteI18n } from "@/components/site/i18n";
 import { SiteShell } from "@/components/site/site-shell";
 import { publicSite } from "@/lib/public-site";
 
-type Search = { searchParams: Promise<{ age_band?: string; club?: string }> };
+type Search = { searchParams: Promise<{ age_band?: string; club?: string; year?: string }> };
 
 // Le fasce del Jav Ranking (club/competitions.py::AGE_BANDS), nello stesso ordine.
-const AGE_BANDS = ["BAMBINI", "FANCIULLI", "RAGAZZI", "ESORDIENTI", "CADETTI", "JUNIORES", "SENIORES"] as const;
+const AGE_BANDS = ["GRUPO_1", "GRUPO_2", "GRUPO_3", "VETERANOS"] as const;
 
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await siteI18n();
@@ -21,29 +22,44 @@ export default async function RankingPage({ searchParams }: Search) {
   const params = await searchParams;
   const ageBand = AGE_BANDS.find((b) => b === params.age_band);
   const club = params.club || undefined;
-  const [{ t }, ranking, clubs] = await Promise.all([
-    siteI18n(), publicSite.ranking({ age_band: ageBand, club }), publicSite.clubs(),
+  const thisYear = new Date().getFullYear();
+  const year = [thisYear, thisYear - 1, thisYear - 2].includes(Number(params.year)) ? Number(params.year) : thisYear;
+  const [{ t }, ranking, clubs, photos] = await Promise.all([
+    siteI18n(), publicSite.ranking({ age_band: ageBand, club, season: year === thisYear ? undefined : String(year) }),
+    publicSite.clubs(), publicSite.photos(),
   ]);
   const rows = ranking?.rows ?? [];
+  const points = rows.reduce((sum, r) => sum + r.points, 0);
 
-  const href = (change: { age_band?: string; club?: string }) => {
-    const next = { age_band: ageBand as string | undefined, club, ...change };
+  const href = (change: { age_band?: string; club?: string; year?: string }) => {
+    const next = { age_band: ageBand as string | undefined, club, year: year === thisYear ? undefined : String(year), ...change };
     const q = new URLSearchParams();
     if (next.age_band) q.set("age_band", next.age_band);
     if (next.club) q.set("club", next.club);
+    if (next.year) q.set("year", next.year);
     const s = q.toString();
     return s ? `/ranking?${s}` : "/ranking";
   };
 
   return (
     <SiteShell>
-      <PageIntro
-        eyebrow={ranking ? t("site.ranking.season", { season: ranking.season_label }) : t("site.ranking.eyebrow")}
-        title={t("site.ranking.title")}
-        text={t("site.ranking.intro")}
-      />
+      <PageHero
+        theme="ranking" icon="🏆" photos={photos ?? []}
+        eyebrow={`Ranking ${ranking?.season_label ?? year}`} title={t("site.ranking.title")} text={t("site.ranking.intro")}
+      >
+        <div className="flex flex-wrap gap-2">
+          <HeroStat value={rows.length} label={t("site.rank.heroAthletes")} />
+          <HeroStat value={new Set(rows.map((r) => r.club.slug)).size} label={t("site.rank.heroClubs")} />
+          <HeroStat value={points} label={t("site.rank.heroPoints")} />
+        </div>
+      </PageHero>
       <Container className="py-10">
-        <div className="mb-8 space-y-3">
+        <div className="glass-card mb-8 space-y-3 rounded-3xl border-t-4 border-t-accent-400 p-4">
+          <FilterRow label={t("site.ev.viewYear")}>
+            {[thisYear, thisYear - 1, thisYear - 2].map((y) => (
+              <Chip key={y} href={href({ year: y === thisYear ? undefined : String(y) })} active={year === y}>{y}</Chip>
+            ))}
+          </FilterRow>
           <FilterRow label={t("site.filter.ageBand")}>
             <Chip href={href({ age_band: undefined })} active={!ageBand}>{t("site.filter.all")}</Chip>
             {AGE_BANDS.map((b) => <Chip key={b} href={href({ age_band: b })} active={ageBand === b}>{ageBandLabel(t, b)}</Chip>)}
@@ -59,7 +75,7 @@ export default async function RankingPage({ searchParams }: Search) {
           <>
             {rows.length >= 3 && (
               <div className="mb-10">
-                <Podium entries={rows.slice(0, 3).map((r) => ({ name: r.display_name, points: r.points, photoUrl: r.photo_url, href: `/judocas/${r.id}` }))} />
+                <Podium entries={rows.slice(0, 3).map((r) => ({ name: r.display_name, points: r.points, photoUrl: r.photo_url, href: r.has_page === false ? undefined : `/judocas/${r.id}` }))} />
               </div>
             )}
             <RankingTable rows={rows} t={t} />

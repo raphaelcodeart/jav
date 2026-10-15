@@ -69,6 +69,9 @@ def test_adapted_judo_counts_as_tier_a_and_never_goes_below_zero():
     class _A:
         adapted_judo = True
         social_tier = "C"
+        exempt_monthly = False
+        custom_discount_kind = None
+        custom_discount_value = None
 
     price = pricing_rules.monthly_price(list_cents=600, athlete=_A(), family_size=3, pricing=pricing)
     assert price["discount_note"] == "Judo adattato −25% · Famiglia −4,50 €"
@@ -79,6 +82,9 @@ def test_adapted_judo_counts_as_tier_a_and_never_goes_below_zero():
     class _B:
         adapted_judo = True
         social_tier = "B"
+        exempt_monthly = False
+        custom_discount_kind = None
+        custom_discount_value = None
 
     assert pricing_rules.monthly_price(list_cents=4000, athlete=_B(), family_size=1, pricing=custom)[
         "discount_note"] == "Escalão B −30%"

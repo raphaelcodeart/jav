@@ -121,7 +121,7 @@ async def _entry(
             .join(ClubCompetitionEntry, ClubCompetitionEntry.competition_id == ClubCompetition.id)
             .join(ClubAthlete, ClubAthlete.id == ClubCompetitionEntry.athlete_id)
             .where(
-                ClubCompetition.id == competition_id, ClubCompetition.club_id == scope.club_id,
+                ClubCompetition.id == competition_id, ClubCompetitionEntry.club_id == scope.club_id,
                 ClubCompetitionEntry.id == entry_id,
             )
         )
@@ -276,7 +276,7 @@ async def generate(
     old_key = letter.storage_key if letter is not None else None
     if letter is None:
         letter = ClubSchoolLetter(
-            **scope_of(comp).columns(), entry_id=entry.id, competition_id=comp.id, athlete_id=athlete.id,
+            **scope_of(entry).columns(), entry_id=entry.id, competition_id=comp.id, athlete_id=athlete.id,
             body_text=body_text, storage_key=key, generated_at=utcnow(), generated_by_user_id=actor_user_id,
         )
         db.add(letter)

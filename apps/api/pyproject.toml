@@ -31,6 +31,10 @@ dependencies = [
     # L'Excel del catalogo SoleilDrop (soleil_market/feed.py): SoleilDrop
     # non ha un'API, l'amministratore carica l'export .xlsx del portale.
     "openpyxl>=3.1",
+    # JAVBOT dell'area privata: il modello (javbot/assistant.py) e il testo
+    # dei PDF della base di conoscenza (javbot/knowledge.py), puro Python.
+    "anthropic>=1.14,<2",
+    "pypdf>=5.0",
 ]
 
 [project.optional-dependencies]

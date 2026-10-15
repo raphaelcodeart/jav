@@ -97,6 +97,13 @@ un bug, ricrea `jav_test` vuoto (`DROP DATABASE jav_test WITH (FORCE)`).
 La suite completa impiega ~5 minuti: lanciala in background e nel frattempo
 fai altro. Il driver è `psycopg`, non `asyncpg`.
 
+**Il sorgente montato vale solo dalla sua cartella.** L'immagine contiene
+il pacchetto `app` già installato (site-packages). `python -m pytest` o
+`python -m app...` lanciati con `-w /src` usano `/src/app`; uno script
+lanciato come `python /qualcosa.py` usa invece il codice **cotto
+nell'immagine**, cioè quello vecchio. Per uno script fuori da `/src`
+aggiungi `-e PYTHONPATH=/src`.
+
 ---
 
 ## 3. Verifiche prima di un deploy

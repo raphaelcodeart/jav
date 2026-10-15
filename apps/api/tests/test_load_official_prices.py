@@ -37,7 +37,7 @@ async def test_the_official_table_loads_once_and_the_bot_tells_it(db, scope):
     ]
     await db.refresh(club)
     pricing = pricing_rules.get_pricing(club)
-    assert pricing["tier_discount_pct"] == {"A": 25, "B": 15, "C": 5}
+    assert pricing["tier_discount_pct"] == {"A": 25, "B": 20, "C": 15, "D": 10}
     assert (pricing["family_discount_cents"], pricing["referral_credit_cents"], pricing["parent_member_fee_cents"]) == (
         500, 500, 6000)
     slots = (await db.execute(
@@ -51,5 +51,5 @@ async def test_the_official_table_loads_once_and_the_bot_tells_it(db, scope):
     reply = await public_bot.answer(ctx, "quanto custa a mensalidade em Lagos")
     for expected in ("Grupo 1 · Iniciação (2–7 anos): 35,00 € por mês, inscrição anual 120,00 €",
                      "Paga-se até ao dia 15 de cada mês", "12,50 € por aula", "Treinos: Segunda 18:30–19:30",
-                     "Escalão: A −25%, B −15%, C −5%", "Inscrição na FPJ e seguro desportivo"):
+                     "Escalão: A −25%, B −20%, C −15%, D −10%", "Inscrição na FPJ e seguro desportivo"):
         assert expected in reply.text, expected

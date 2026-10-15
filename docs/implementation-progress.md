@@ -535,3 +535,119 @@ Poi, su richiesta del titolare: nel sito pubblico "Cursos nas escolas" è
 passato dalla barra alla tendina "Quem somos" (con la sua riga di
 spiegazione), per lasciare spazio nel menu; il bottone "A minha área" /
 "Entrar" è diventato rosso del club, in gradiente, con icona e freccia.
+
+## Sessione 14 — 2026-10-15 — Due JAVBOT: quello del sito e l'assistente dei soci
+
+Il titolare voleva distinguere i due JAVBOT: quello del **sito pubblico**
+va bene così, semplice, con poche risposte generiche; quello **dell'area
+riservata**, per chi fa login, deve essere "potente" e conoscere i
+documenti, con una base di conoscenza **comune a tutti i club** e la
+possibilità, per ogni club, di aggiungere i suoi PDF e un suo prompt.
+
+**L'assistente** (`javbot/assistant.py`). Nell'area riservata risponde
+Claude, con gli stessi strumenti che usava il pianificatore (solo quelli
+che leggono e solo quelli che i permessi dell'utente consentono) più
+`search_knowledge`. Il pianificatore a parole chiave non sparisce: tiene i
+percorsi guidati che scrivono (judogi, messaggio alla segreteria, presenza,
+ricevuta) con il compito da confermare, perché un modello che conferma da
+sé sarebbe un passo indietro sull'idempotenza; e risponde quando il modello
+non può (senza chiave, API giù, rifiuto, oltre 150 risposte al giorno per
+utente). Così la chat non si spegne mai e, **finché il `.env` non ha
+`ANTHROPIC_API_KEY`, tutto funziona esattamente come prima**. Modello
+`claude-opus-5-5` con sforzo `low` (configurabili), regole fisse in cache,
+`fallbacks: "default"` per i rifiuti.
+
+**La base di conoscenza** (`javbot/knowledge.py`, migrazione 0015).
+PDF nel bucket privato, testo estratto con `pypdf`, a pezzi di ~1.500
+caratteri, normalizzato e cercato con il full-text di Postgres in
+configurazione `simple`. Niente embedding: con 3,7 GB di RAM e due core un
+modello di embedding sul server costava più di quanto rendeva per qualche
+decina di PDF, e un servizio esterno era un'altra chiave da gestire. Chi
+cerca è il modello, che riprova con altre parole: per una base piccola
+basta. Istruzioni: una comune e una per club; quella del club vince in caso
+di contrasto.
+
+**Interfaccia.** Sezione "JAVBOT" nel menu del club (segreteria, o la
+piattaforma entrando nel club): istruzioni del club, PDF del club, e in sola
+lettura le istruzioni e i documenti comuni. Nella console, "JudoArteVida →
+JAVBOT" (solo superadmin, API con `clubs.manage`) per la base comune. Se la
+chiave manca, un avviso dice che i documenti si possono già preparare.
+Testi nelle tre lingue.
+
+Rimane aperto (open-questions §17): l'informativa privacy prima di
+accendere la chiave, i costi da misurare, le scansioni senza testo.
+
+Test: `tests/test_javbot_knowledge.py` (12, con un finto client al posto
+dell'API: niente chiamate vere e niente costi); i test di `test_javbot.py`
+passano invariati.
+
+Poi, su richiesta del titolare: l'API dell'AI si collega più avanti, e
+**intanto la base di conoscenza deve rispondere senza modello**. Il
+pianificatore, prima di dire "non ho capito", cerca nei PDF e mostra fino a
+due estratti con titolo e pagina (`Planner.from_knowledge`,
+`knowledge.passages` / `knowledge.excerpt`); una domanda agganciata a una
+sola parola chiave va ai documenti se questi rispondono alla domanda intera
+(almeno due parole e due terzi). Si cita e basta: senza modello non si
+riassume. Test: `test_javbot_knowledge.py` ora 15, suite JAVBOT 30 passati.
+
+## Sessione 15 — 2026-10-15 — Il gestionale dei club entra in Jav (fase 1)
+
+Il titolare ha mandato il backup completo del gestionale che i club usano
+oggi (PHP + MariaDB, "judo-aev"): da studiare, da cui prendere tutte le
+funzioni che a Jav mancano, e i cui dati vanno importati. Studio, confronto
+e piano: `docs/legacy-judo-aev.md`; la specifica completa del vecchio, file
+per file, sta fuori dal repository (`/opt/legacy/judo-aev/analysis/`),
+perché descrive anche le sue falle di sicurezza.
+
+**Isolamento.** Il sorgente in `/opt/legacy/judo-aev` (root, 700: la
+cartella SFTP di webadmin non lo vede), il database in un MariaDB a parte
+(`legacy-mariadb`, rete sua, nessuna porta). Lo zip conteneva documenti
+d'identità ed era scaricabile senza password dal sito da cui è arrivato: il
+titolare è stato avvisato.
+
+**Decisioni del titolare**: mensilità su 12 mesi come facevano i club;
+ranking con la loro tabella punti per livello e medaglia; le segreterie
+importate subito, gli amministratori generali più avanti.
+
+**Fondamenta (migrazione 0016).** La ficha de inscrição (nº de sócio, nome
+sul judogi, documenti, contatti dei genitori in una tabella letta solo
+dalla segreteria), MB Way, quote a rate, escalão D, esenzioni e sconto
+personale, multe, numero di ricevuta atomico, eventi della rete
+(`club_id` NULL: il calendario comune che nel vecchio era di tutti), i 10
+livelli portoghesi, le cinture intermedie, documenti, consensi RGPD con
+storico, richieste di modifica, domande d'iscrizione, ordini di judogi,
+pulizie con firma, compensi dei treinadores esterni, relatori.
+
+**L'importazione** (`app/legacy/judo_aev.py`) è rilanciabile
+(`legacy_import_map`), non manda email, e si è provata su una copia del
+database prima di toccare quello vero. La prova ha trovato e fatto
+correggere: le date "0000-00-00" di MySQL, un peso scritto come categoria,
+i livelli più lunghi di 16 caratteri, e soprattutto le rate del vecchio che
+non tornano con i pagamenti (ora conta l'importo vero, e ogni euro finisce
+in una quota pagata, perché la contabilità conta le quote). Esiti in
+`docs/legacy-judo-aev.md`, "Che cosa ha detto la prova".
+
+Una trappola pagata durante il collaudo, scritta in CLAUDE.md §2: uno
+script lanciato fuori da `/src` usa il codice cotto nell'immagine.
+
+Test: `tests/test_club_legacy_features.py` (7); aggiornati i test del
+ranking (nuova tabella punti) e del listino ufficiale (escalão D).
+
+Poi, su richiesta del titolare:
+- **Link di accesso per lo staff** (console → Club → 🔑 accanto a ogni
+  segreteria o istruttore): un link per scegliere la password, valido 7
+  giorni, lo stesso meccanismo dell'invito. Serve alle segreterie importate,
+  che non hanno mai avuto una password; la password non passa mai da chi lo
+  genera. In più `scripts/set-password.sh` dall'host, per il superadmin.
+- **Contabilità**: judogi e multe nella ripartizione degli incassi (prima
+  sparivano dal grafico).
+- **Documenti del club** (migrazione 0017, `club/club_documents.py`):
+  certidões, atas, rivalidazione FPJ, assicurazioni, statuto, con scadenza e
+  avviso alla segreteria; e il **certificato medico caricato dall'atleta**
+  dalla sua area. Test in `test_club_legacy_features.py`.
+- **Sito pubblico**: ranking per anno solare, Grupo 1/2/3 e Veteranos, di
+  tutta la rete (classifica generale su `/ranking`, del solo club sulla sua
+  pagina), con tutti gli atleti come "Nome I." e la pagina solo con il
+  consenso; il calendario degli eventi rifatto (lista, calendario, anno,
+  ricerca e filtri); testate con le foto dei club su eventi, ranking e club.
+

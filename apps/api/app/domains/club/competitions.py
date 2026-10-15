@@ -3,13 +3,20 @@
 Il ranking non si salva da nessuna parte: si somma dai risultati ogni volta
 che qualcuno lo guarda. Correggere un piazzamento corregge la classifica,
 senza un ricalcolo da ricordarsi di lanciare.
+
+**Eventi della rete** (`club_id` NULL): il calendário comune dei club
+(federazione, ADJA, opens, estágios). Li vede ogni club
+dell'organizzazione e ognuno ci iscrive i suoi atleti; l'iscrizione e la
+quota hanno il club dell'atleta, mai quello (inesistente) dell'evento.
+L'evento lo modifica solo la piattaforma (network.py); un club registra i
+risultati dei suoi atleti.
 """
 
 import uuid
 from dataclasses import dataclass
 from datetime import date
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import utcnow
@@ -34,10 +41,28 @@ from app.domains.club.service import (
     has_valid_agonistic_certificate,
 )
 
-#: Punti per piazzamento (0 = partecipazione).
-PLACEMENT_POINTS = {1: 100, 2: 70, 3: 50, 5: 30, 7: 20, 0: 10}
-LEVEL_COEFFICIENTS = {"CLUB": 1, "REGIONAL": 2, "NATIONAL": 3, "INTERNATIONAL": 4}
-LEVEL_LABELS = {"CLUB": "Club", "REGIONAL": "Regionale", "NATIONAL": "Nazionale", "INTERNATIONAL": "Internazionale"}
+#: Punti per livello di gara: (oro, argento, bronzo, partecipazione). È la
+#: tabella che i club usavano già (docs/legacy-judo-aev.md): le famiglie
+#: ritrovano gli stessi punti. Un 5°, un 7° o un piazzamento più basso
+#: valgono la partecipazione; CLUB e INTERNATIONAL (generico) sono i nostri,
+#: tra i livelli vicini.
+LEVEL_POINTS: dict[str, tuple[int, int, int, int]] = {
+    "CLUB": (3, 2, 1, 1),
+    "REGIONAL": (5, 3, 2, 1),
+    "ZONAL": (7, 5, 3, 2),
+    "OPENS": (10, 8, 5, 3),
+    "NATIONAL": (15, 10, 8, 4),
+    "INTERNATIONAL": (20, 15, 10, 5),
+    "EUROPEAN_CUP": (20, 15, 10, 5),
+    "EUROPEAN_CHAMPIONSHIP": (25, 20, 15, 6),
+    "WORLD_CHAMPIONSHIP": (30, 25, 20, 7),
+    "OLYMPIC_GAMES": (35, 30, 25, 8),
+}
+LEVEL_LABELS = {
+    "CLUB": "Club", "REGIONAL": "Regionale", "ZONAL": "Zonale", "OPENS": "Open", "NATIONAL": "Nazionale",
+    "INTERNATIONAL": "Internazionale", "EUROPEAN_CUP": "Coppa Europa", "EUROPEAN_CHAMPIONSHIP": "Campionato europeo",
+    "WORLD_CHAMPIONSHIP": "Campionato del mondo", "OLYMPIC_GAMES": "Giochi Olimpici",
+}
 PLACEMENT_LABELS = {1: "1° posto", 2: "2° posto", 3: "3° posto", 5: "5° posto", 7: "7° posto", 0: "Partecipazione"}
 
 
@@ -49,17 +74,31 @@ class AgeBand:
     max_age: int | None
 
 
-#: Le fasce del Jav Ranking, per età al 1° settembre della stagione
-#: (le stesse soglie delle classi d'età giovanili del judo italiano).
+#: I gruppi del Jav Ranking: gli stessi Grupo 1/2/3 dei club (e dei loro
+#: piani), per età federale nell'anno della classifica (anno − anno di
+#: nascita), come nel gestionale che i club usavano; i Veteranos (30 anni
+#: federali e oltre, come l'escalão federale) hanno la loro classifica, e il
+#: Grupo 3 si ferma a 29.
 AGE_BANDS: tuple[AgeBand, ...] = (
-    AgeBand("BAMBINI", "Bambini (fino a 7 anni)", 0, 7),
-    AgeBand("FANCIULLI", "Fanciulli (8-9)", 8, 9),
-    AgeBand("RAGAZZI", "Ragazzi (10-11)", 10, 11),
-    AgeBand("ESORDIENTI", "Esordienti (12-13)", 12, 13),
-    AgeBand("CADETTI", "Cadetti (14-16)", 14, 16),
-    AgeBand("JUNIORES", "Juniores (17-19)", 17, 19),
-    AgeBand("SENIORES", "Seniores (20+)", 20, None),
+    AgeBand("GRUPO_1", "Grupo 1 · 3–7 anos", 0, 7),
+    AgeBand("GRUPO_2", "Grupo 2 · 8–12 anos", 8, 12),
+    AgeBand("GRUPO_3", "Grupo 3 · 13–29 anos", 13, 29),
+    AgeBand("VETERANOS", "Veteranos · 30+ anos", 30, None),
 )
+
+
+def ranking_year(today: date) -> int:
+    """Il ranking è dell'anno solare, come l'età federale e come lo
+    conoscevano i club ("Ranking 2026")."""
+    return today.year
+
+
+def ranking_label(year: int) -> str:
+    return str(year)
+
+
+def ranking_age(birth_date: date, year: int) -> int:
+    return seasons.federal_age(birth_date, year)
 _BANDS_BY_CODE = {b.code: b for b in AGE_BANDS}
 
 
@@ -73,7 +112,25 @@ def age_band_for(age: int) -> AgeBand:
 def points_for(*, placement: int | None, level: str) -> int:
     if placement is None:
         return 0
-    return PLACEMENT_POINTS[placement] * LEVEL_COEFFICIENTS[level]
+    gold, silver, bronze, participation = LEVEL_POINTS[level]
+    return {1: gold, 2: silver, 3: bronze}.get(placement, participation)
+
+
+def visible_to(scope: ClubScope):
+    """Gli eventi di un club: i suoi e quelli della rete."""
+    return or_(
+        ClubCompetition.club_id == scope.club_id,
+        and_(ClubCompetition.club_id.is_(None), ClubCompetition.organization_id == scope.organization_id),
+    )
+
+
+def entry_scope(competition: ClubCompetition, athlete: ClubAthlete) -> ClubScope:
+    """Il club di un'iscrizione e della sua quota: quello dell'atleta (per
+    un evento della rete l'evento non ne ha uno)."""
+    return scope_of(athlete)
+
+
+NETWORK_EVENT = "È un evento della rete: lo modifica JudoArteVida."
 
 
 # --- Gare (segreteria) ----------------------------------------------------------------------------
@@ -83,7 +140,7 @@ def _validate_competition(c: ClubCompetition) -> None:
     if c.level not in COMPETITION_LEVELS:
         raise ClubValidationError("Livello della gara non valido.")
     if c.kind not in EVENT_KINDS:
-        raise ClubValidationError("Tipo di evento non valido: gara o stage.")
+        raise ClubValidationError("Tipo di evento non valido.")
     if c.transport_entity_email and "@" not in c.transport_entity_email:
         raise ClubValidationError("L'email dell'ente per il trasporto non è valida.")
     if c.ends_on < c.starts_on:
@@ -127,9 +184,19 @@ async def create_competition(
     return comp
 
 
-async def get_competition(db: AsyncSession, *, scope: ClubScope, competition_id: uuid.UUID) -> ClubCompetition:
+async def get_competition(
+    db: AsyncSession, *, scope: ClubScope, competition_id: uuid.UUID, editing: bool = False,
+) -> ClubCompetition:
+    """La gara, se il club la vede: sua o della rete. `editing`: solo le
+    sue (un evento della rete lo modifica la piattaforma)."""
     comp = await db.get(ClubCompetition, competition_id)
-    if comp is None or comp.club_id != scope.club_id:
+    if comp is None or comp.organization_id != scope.organization_id:
+        raise ClubNotFoundError("Gara non trovata.")
+    if comp.club_id is None:
+        if editing:
+            raise ClubValidationError(NETWORK_EVENT)
+        return comp
+    if comp.club_id != scope.club_id:
         raise ClubNotFoundError("Gara non trovata.")
     return comp
 
@@ -138,7 +205,7 @@ async def update_competition(
     db: AsyncSession, *, scope: ClubScope, competition_id: uuid.UUID, actor_user_id: uuid.UUID,
     changes: dict,
 ) -> ClubCompetition:
-    comp = await get_competition(db, scope=scope, competition_id=competition_id)
+    comp = await get_competition(db, scope=scope, competition_id=competition_id, editing=True)
     for key, value in changes.items():
         setattr(comp, key, value)
     _validate_competition(comp)
@@ -155,7 +222,7 @@ async def update_competition(
 async def set_competition_status(
     db: AsyncSession, *, scope: ClubScope, competition_id: uuid.UUID, actor_user_id: uuid.UUID, status: str
 ) -> ClubCompetition:
-    comp = await get_competition(db, scope=scope, competition_id=competition_id)
+    comp = await get_competition(db, scope=scope, competition_id=competition_id, editing=True)
     if status not in ("OPEN", "CLOSED", "DONE"):
         raise ClubValidationError("Stato della gara non valido.")
     was_open = comp.status == "OPEN"
@@ -178,7 +245,7 @@ async def set_competition_status(
 async def list_competitions(
     db: AsyncSession, *, scope: ClubScope, status: str | None = None, from_date: date | None = None,
 ) -> list[ClubCompetition]:
-    stmt = select(ClubCompetition).where(ClubCompetition.club_id == scope.club_id)
+    stmt = select(ClubCompetition).where(visible_to(scope))
     if status:
         stmt = stmt.where(ClubCompetition.status == status)
     if from_date:
@@ -204,12 +271,15 @@ async def record_results(
     """I piazzamenti, inseriti dalla segreteria a gara finita. La gara
     passa a DONE: le iscrizioni sono chiuse per definizione."""
     comp = await get_competition(db, scope=scope, competition_id=competition_id)
-    if comp.kind == "STAGE":
-        raise ClubValidationError("Uno stage non ha piazzamenti: i risultati si inseriscono solo per le gare.")
+    if comp.kind != "COMPETITION":
+        raise ClubValidationError("Solo le gare hanno piazzamenti: per gli altri eventi non si inseriscono risultati.")
+    # Di un evento della rete, ogni club registra i suoi atleti.
     entries = {
         e.id: e
         for e in (
-            await db.execute(select(ClubCompetitionEntry).where(ClubCompetitionEntry.competition_id == comp.id))
+            await db.execute(select(ClubCompetitionEntry).where(
+                ClubCompetitionEntry.competition_id == comp.id, ClubCompetitionEntry.club_id == scope.club_id,
+            ))
         ).scalars()
     }
     for entry_id, placement in results:
@@ -221,7 +291,8 @@ async def record_results(
         if entry.status != "REGISTERED" and placement is not None:
             raise ClubValidationError("Un atleta ritirato non può avere un risultato.")
         entry.placement = placement
-    comp.status = "DONE"
+    if comp.club_id is not None:
+        comp.status = "DONE"
     await audit_service.record(
         db, organization_id=scope.organization_id, actor_user_id=actor_user_id,
         action="club.competition_results", entity_type="club_competition", entity_id=str(comp.id),
@@ -280,7 +351,7 @@ async def register_entry(
 
     if entry is None:
         entry = ClubCompetitionEntry(
-            **scope_of(competition).columns(), competition_id=competition.id, athlete_id=athlete.id,
+            **entry_scope(competition, athlete).columns(), competition_id=competition.id, athlete_id=athlete.id,
             registered_by_user_id=actor_user_id,
         )
         db.add(entry)
@@ -292,7 +363,7 @@ async def register_entry(
 
     if competition.fee_cents > 0:
         await _insert_fee(
-            db, **scope_of(competition).columns(), athlete_id=athlete.id, kind="COMPETITION",
+            db, **entry_scope(competition, athlete).columns(), athlete_id=athlete.id, kind="COMPETITION",
             period=str(competition.id), competition_id=competition.id,
             description=f"Iscrizione {'stage' if competition.kind == 'STAGE' else 'gara'}: {competition.name}"[:200],
             amount_cents=competition.fee_cents, due_date=competition.registration_deadline,
@@ -363,7 +434,8 @@ async def withdraw_entry(
 async def athlete_points(
     db: AsyncSession, *, athlete_ids: list[uuid.UUID], season: int | None = None,
 ) -> dict[uuid.UUID, dict]:
-    """Punti, gare e medaglie per atleta, nella stagione (o da sempre)."""
+    """Punti, gare e medaglie per atleta, nell'anno solare `season` (il nome
+    è rimasto: il ranking era per stagione), o da sempre."""
     if not athlete_ids:
         return {}
     stmt = (
@@ -379,8 +451,8 @@ async def athlete_points(
     )
     if season is not None:
         stmt = stmt.where(
-            ClubCompetition.starts_on >= seasons.season_start(season),
-            ClubCompetition.starts_on <= seasons.season_end(season),
+            ClubCompetition.starts_on >= date(season, 1, 1),
+            ClubCompetition.starts_on <= date(season, 12, 31),
         )
     out = {
         a: {"points": 0, "competitions": 0, "gold": 0, "silver": 0, "bronze": 0}
@@ -401,22 +473,28 @@ async def athlete_points(
 
 async def ranking(
     db: AsyncSession, *, scope: ClubScope, season: int, sex: str | None = None,
-    age_band: str | None = None, viewer_user_id: uuid.UUID | None = None,
+    age_band: str | None = None, viewer_user_id: uuid.UUID | None = None, club_only: bool = False,
 ) -> list[dict]:
-    """La classifica della stagione. Ex aequo: stessa posizione, e chi viene
-    dopo salta i posti (1, 2, 2, 4), come in ogni classifica sportiva."""
+    """La classifica dell'anno, **di tutta la rete** (tutti i club
+    dell'organizzazione che hanno il ranking), come nel gestionale di prima;
+    `club_only` la restringe al club. Ex aequo: stessa posizione, e chi
+    viene dopo salta i posti (1, 2, 2, 4), come in ogni classifica sportiva."""
     if age_band is not None and age_band not in _BANDS_BY_CODE:
         raise ClubValidationError("Fascia d'età non valida.")
     if not (await kinds.club_rules(db, club_id=scope.club_id)).in_rankings:
         # I corsi JAV non hanno classifica (club/kinds.py).
         return []
-    stmt = select(ClubAthlete).where(ClubAthlete.club_id == scope.club_id, ClubAthlete.status != "LEFT")
+    clubs = {
+        c.id: c for c in (await db.execute(select(Club).where(Club.organization_id == scope.organization_id))).scalars()
+        if (c.id == scope.club_id or not club_only) and kinds.rules_of(c).in_rankings
+    }
+    stmt = select(ClubAthlete).where(ClubAthlete.club_id.in_(list(clubs)), ClubAthlete.status != "LEFT")
     if sex:
         stmt = stmt.where(ClubAthlete.sex == sex)
     athletes = list((await db.execute(stmt)).scalars())
     if age_band is not None:
         band = _BANDS_BY_CODE[age_band]
-        athletes = [a for a in athletes if age_band_for(seasons.season_age(a.birth_date, season)).code == band.code]
+        athletes = [a for a in athletes if age_band_for(ranking_age(a.birth_date, season)).code == band.code]
     points = await athlete_points(db, athlete_ids=[a.id for a in athletes], season=season)
     ranked = [a for a in athletes if points[a.id]["competitions"] > 0]
     ranked.sort(key=lambda a: (-points[a.id]["points"], -points[a.id]["gold"], a.last_name, a.first_name))
@@ -437,9 +515,10 @@ async def ranking(
             "display_name": f"{athlete.first_name} {athlete.last_name[:1]}.",
             "photo_url": athlete.photo_url,
             "sex": athlete.sex,
-            "age_band": age_band_for(seasons.season_age(athlete.birth_date, season)).code,
+            "age_band": age_band_for(ranking_age(athlete.birth_date, season)).code,
             "belt": belts.get(athlete.id),
             "is_mine": viewer_user_id is not None and athlete.guardian_user_id == viewer_user_id,
+            "club_name": clubs[athlete.club_id].name,
             **p,
         })
     return rows

@@ -12,6 +12,7 @@ import { AchievementBadge } from "@/components/ui/gamification";
 import { ProgressBar } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
+import { CertificatesTab } from "@/components/club/athlete-detail-modal";
 import { SeasonMonthsPanel } from "@/components/club/season-months";
 import { ACHIEVEMENT_ICONS, clubGet, clubSend, type AthleteDetail } from "@/lib/club";
 import { cn } from "@/lib/cn";
@@ -195,6 +196,16 @@ function Area({ id }: { id: string }) {
             </ul>
           </>
         )}
+      </section>
+
+      {/* --- Il certificato medico: lo carica anche l'atleta, che va dal medico --- */}
+      <section className="rounded-3xl bg-white p-5 shadow-soft ring-1 ring-ink-900/5 sm:p-6">
+        <h2 className="mb-4 text-xl text-ink-900">🩺 {t("athleteArea.certificateTitle")}</h2>
+        <CertificatesTab
+          athlete={a}
+          uploadPath={`/athlete-area/${id}/certificates`}
+          urlPath={(certificateId) => `/athlete-area/${id}/certificates/${certificateId}/url`}
+        />
       </section>
 
       <div className="grid gap-6 lg:grid-cols-2">

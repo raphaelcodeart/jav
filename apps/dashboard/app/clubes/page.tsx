@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Container, EmptyNote, PageIntro } from "@/components/site/blocks";
+import { Container, EmptyNote } from "@/components/site/blocks";
+import { HeroStat, PageHero } from "@/components/site/page-hero";
 import { TatamiBackdrop } from "@/components/site/club-carousel";
 import { siteI18n } from "@/components/site/i18n";
 import { linkButton } from "@/components/site/link-button";
@@ -15,11 +16,13 @@ export async function generateMetadata(): Promise<Metadata> {
 
 /** Tutti i club della rete con la pagina pubblicata. */
 export default async function ClubsPage() {
-  const { t } = await siteI18n();
-  const clubs = (await publicSite.clubs()) ?? [];
+  const [{ t }, clubsOrNull, photos] = await Promise.all([siteI18n(), publicSite.clubs(), publicSite.photos()]);
+  const clubs = clubsOrNull ?? [];
   return (
     <SiteShell>
-      <PageIntro eyebrow={t("site.clubs.eyebrow")} title={t("site.clubs.title")} text={t("site.clubs.text")} />
+      <PageHero theme="clubs" icon="🏯" photos={photos ?? []} eyebrow={t("site.clubs.eyebrow")} title={t("site.clubs.title")} text={t("site.clubs.text")}>
+        <HeroStat value={clubs.length} label={t("site.rank.heroClubs")} />
+      </PageHero>
       <Container className="py-12">
         {clubs.length === 0 ? (
           <EmptyNote>{t("site.clubs.empty")}</EmptyNote>

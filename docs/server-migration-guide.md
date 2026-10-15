@@ -153,6 +153,13 @@ Variabili che vanno adattate al nuovo server (non generate a caso):
   scriverli in `.env`).
 - `ENABLE_API_DOCS=false` in produzione: altrimenti `/backend/docs` è
   pubblico.
+- `ANTHROPIC_API_KEY` — opzionale: la chiave dell'API di Claude per JAVBOT
+  dell'area riservata (`javbot/assistant.py`). Vuota, JAVBOT risponde con le
+  parole chiave come prima e la base di conoscenza si può già riempire.
+  `JAVBOT_MODEL` (predefinito `claude-opus-5-5`) e `JAVBOT_EFFORT`
+  (predefinito `low`) la regolano. Dopo averla cambiata vanno ricreati
+  `api` e i due worker (`up -d --force-recreate api celery-worker
+  celery-beat`): il `.env` si legge all'avvio.
 
 **Mai committare `.env` nel repository.** È già in `.gitignore`; se `git status`
 lo mostra come modificabile, fermati e controlla prima di fare qualsiasi `git add`.

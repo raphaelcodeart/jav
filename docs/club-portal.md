@@ -191,6 +191,22 @@ I parametri stanno in `clubs.settings["pricing"]` e li imposta la segreteria
   2. **famiglia**: con almeno N atleti attivi (default 2) nella stessa famiglia
      (stesso account genitore), ogni mensilità ha X € di sconto (default 5 €).
   La quota non va mai sotto zero. Es.: 40 € −25% = 30 €, −5 € = 25 €.
+- **Escalão D** in più (A 25%, B 20%, C 15%, D 10% come nel gestionale di
+  prima: i default restano A 25%, gli altri li imposta il club).
+- **Esenzioni** (`exempt_monthly`, `exempt_annual` sull'atleta, le decide la
+  segreteria: staff, órgãos sociais, borse del club): un esente non ha la
+  mensilità, o l'iscrizione annuale; una famiglia di soli esenti dalle quote
+  annuali non paga la quota socio.
+- **Sconto personale** dell'atleta (`custom_discount_*`): in percentuale o in
+  euro, sulla mensilità, sulle quote annuali o su entrambe, con la sua
+  descrizione ("Grupo 2 · 1x semana"). Sulla mensilità si applica dopo
+  l'escalão e prima dello sconto famiglia.
+- **Rate**: una quota (di solito l'iscrizione annuale o la quota socio) può
+  essere divisa in rate: una riga per rata, periodo `2026/1`, `2026/2`
+  (`installment_no` / `installments_total`). L'iscrizione dell'anno non si
+  emette di nuovo se ci sono già le sue rate.
+- **Multa** (`FINE`): una quota emessa dalla segreteria (es. le faltas agli
+  allenamenti), che si paga come le altre.
 - **Invita un amico**: ogni account del club (un genitore, o un atleta adulto
   che fa tutto da sé) ha il suo link `/c/<slug>?invito=<codice>`. Ogni volta
   che un atleta della famiglia invitata paga una mensilità, chi ha invitato
@@ -202,6 +218,16 @@ I parametri stanno in `clubs.settings["pricing"]` e li imposta la segreteria
   pagare le quote, confermandolo con il PIN o il codice via email come ogni
   spesa di JavCash. Se copre tutto, la ricevuta non serve. Se la prova viene
   rifiutata, il credito torna nel wallet.
+
+### Numero della ricevuta e MB Way
+
+Ogni prova di pagamento ha un numero, "MEN-2026-0042": prefisso per che cosa
+si è pagato (MEN mensilità, QUO quote annuali, PRO gare, EQU judogi, MUL
+multe, PAG più cose insieme), anno, progressivo per club. Lo assegna
+`club/receipts.py` con un contatore atomico (`club_receipt_counters`), e un
+indice UNIQUE (club, numero) impedisce comunque i doppioni. Oltre al
+bonifico e ai contanti, una famiglia può pagare con **MB Way**, dichiarato
+come il bonifico (con la schermata della conferma).
 
 ### Come si paga una mensilità
 
@@ -270,6 +296,24 @@ cosa* si è pagato, perché le due cose vanno in posti diversi:
 - Senza certificato **agonistico valido alla data della gara** non ci si iscrive
   a una gara che lo richiede: lo dice il form, non la segreteria.
 
+### Documenti del club — `club_documents` (`club/club_documents.py`)
+- I documenti del club, non di un atleta: dichiarazioni, affiliazione e
+  rivalidazione alla federazione, atas (assemblee e direzione), certidão
+  delle Finanze e della Segurança Social, certificazioni sportive (IPDJ,
+  utilità pubblica), assicurazioni, statuto, altro.
+- Li carica la segreteria del club (o la piattaforma entrando nel club):
+  PDF, JPG o PNG fino a 15 MB, nel bucket **privato**, aperti con un URL
+  presigned. Titolo, data, scadenza facoltativa, note.
+- Con una scadenza: "in scadenza" negli ultimi 30 giorni, "scaduto" dopo.
+  La segreteria riceve una notifica 30 giorni prima e il giorno in cui
+  scade (`CLUB_DOCUMENT_EXPIRING`), una volta sola per documento e momento
+  (`club_reminders_sent`), con i promemoria del mattino.
+
+### Il certificato medico lo carica anche l'atleta
+Oltre al titolare e alla segreteria, l'atleta con il suo accesso lo carica
+dalla sua area (`/club/athlete-area/{id}/certificates`): stesso servizio,
+stesse regole (tipo, date, massimo due anni), stesso bucket privato.
+
 ### Cinture — `club_belt_grades`
 - Storico: `athlete_id`, `grade`, `awarded_on`, `awarded_by_user_id`, `note`.
 - La cintura attuale è **la più alta** dello storico (non l'ultima inserita:
@@ -288,10 +332,27 @@ cosa* si è pagato, perché le due cose vanno in posti diversi:
   da tablet o telefono con un tocco per atleta.
 
 ### Gare — `club_competitions`, `club_competition_entries`
-- Gara: nome, data inizio/fine, luogo, organizzatore, livello (`CLUB` /
-  `REGIONAL` / `NATIONAL` / `INTERNATIONAL`), scadenza iscrizioni, quota di
-  iscrizione, `requires_agonistic_certificate`, età minima/massima
-  facoltative (al giorno della gara), stato `OPEN` / `CLOSED` / `DONE`.
+- Gara: nome, data inizio/fine, luogo, organizzatore, livello (`CLUB`,
+  `REGIONAL`, `ZONAL`, `OPENS`, `NATIONAL`, `INTERNATIONAL`, `EUROPEAN_CUP`,
+  `EUROPEAN_CHAMPIONSHIP`, `WORLD_CHAMPIONSHIP`, `OLYMPIC_GAMES`), scadenza
+  iscrizioni (e l'ora), quota di iscrizione, `requires_agonistic_certificate`,
+  età minima/massima facoltative (al giorno della gara), escalões ammessi
+  (`age_groups`), posti, orari, trasporto (`transport_mode`: del club, per
+  conto proprio, da confermare), la circolare dell'organizzatore, stato
+  `OPEN` / `CLOSED` / `DONE`.
+- Tipo (`kind`): gara (`COMPETITION`, l'unica che dà punti e medaglie),
+  `STAGE`, `REFEREEING` (arbitragem), `EDUCATION` (formação), `MEETING`,
+  `OTHER`.
+- **Eventi della rete** (`club_id` NULL): il calendário comune dei club
+  (federazione, ADJA, opens, estágios). Lo vede ogni club
+  dell'organizzazione e ognuno ci iscrive i suoi atleti; l'iscrizione e la
+  quota hanno il club dell'atleta. Lo modifica solo la piattaforma; un
+  club registra i risultati dei suoi atleti (`record_results` tocca solo
+  le iscrizioni del club che chiama, e non cambia lo stato dell'evento).
+  Niente promemoria automatici per gli eventi della rete: sono decine
+  l'anno, e un avviso per ognuno a ogni famiglia sarebbe rumore.
+- Risultato: `placement` (1, 2, 3, 5, 7 o 0 = partecipazione), più `rank`
+  (la posizione vera quando non è un podio, "9° posto") e `result_notes`.
 - Iscrizione: atleta, categoria (età/peso, testo), stato `REGISTERED` /
   `WITHDRAWN`, e il risultato: `placement` (1, 2, 3, 5, 7, oppure
   partecipazione), inserito dalla segreteria a gara finita.
@@ -342,23 +403,37 @@ cosa* si è pagato, perché le due cose vanno in posti diversi:
   il motivo.
 
 ### Jav Ranking
-- Punti per risultato × coefficiente del livello di gara, per stagione:
+- Punti per livello di gara e risultato (`competitions.LEVEL_POINTS`): è
+  la tabella che i club usavano nel gestionale di prima
+  (docs/legacy-judo-aev.md), e che le famiglie conoscono. Un 5°, un 7° o un
+  piazzamento più basso valgono la partecipazione.
 
-| Risultato | Punti | | Livello | Coefficiente |
+| Livello | Oro | Argento | Bronzo | Partecipazione |
 |---|---|---|---|---|
-| 1° | 100 | | Club | 1 |
-| 2° | 70 | | Regionale | 2 |
-| 3° | 50 | | Nazionale | 3 |
-| 5° | 30 | | Internazionale | 4 |
-| 7° | 20 | | | |
-| Partecipazione | 10 | | | |
+| Club | 3 | 2 | 1 | 1 |
+| Regionale | 5 | 3 | 2 | 1 |
+| Zonale | 7 | 5 | 3 | 2 |
+| Open | 10 | 8 | 5 | 3 |
+| Nazionale | 15 | 10 | 8 | 4 |
+| Internazionale / Coppa Europa | 20 | 15 | 10 | 5 |
+| Campionato europeo | 25 | 20 | 15 | 6 |
+| Campionato del mondo | 30 | 25 | 20 | 7 |
+| Giochi Olimpici | 35 | 30 | 25 | 8 |
 
-- Classifiche per stagione, sesso e fascia d'età (Bambini fino a 7,
-  Fanciulli 8–9, Ragazzi 10–11, Esordienti 12–13, Cadetti 14–16, Juniores
-  17–19, Seniores 20+, all'età del 1° settembre). Calcolata dai risultati,
-  mai salvata a mano: correggere un risultato corregge la classifica.
-  Ex aequo: stessa posizione, e i posti successivi si saltano (1, 1, 3).
+- Classifiche per **anno solare** ("Ranking 2026"), sesso e gruppo: Grupo 1
+  (3–7 anni), Grupo 2 (8–12), Grupo 3 (13–29), Veteranos (30+), per età
+  federale nell'anno (anno − anno di nascita), come nel gestionale dei club.
+  Di **tutta la rete** (ogni club dell'organizzazione con il ranking), con
+  il club accanto al nome; nell'area riservata si può restringere al proprio
+  club. Calcolata dai risultati, mai salvata a mano: correggere un risultato
+  corregge la classifica. Ex aequo: stessa posizione, e i posti successivi
+  si saltano (1, 1, 3).
 - Nella classifica il nome è "Nome I.": la vedono tutte le famiglie.
+- **Sul sito pubblico** (`/ranking` = classifica generale JAV di tutti i
+  club; la pagina di ogni club = solo i suoi atleti) compaiono **tutti** gli
+  atleti attivi dei club pubblicati, come "Nome I." con club, cintura e
+  punti (decisione del titolare, ottobre 2026). Foto e pagina del judoca
+  (`has_page`) solo per chi ha il consenso della famiglia ed è pubblicato.
 
 ### Livelli e medaglie
 - Calcolati, mai salvati (`club/achievements.py`): XP = 10 per presenza +
@@ -472,6 +547,25 @@ verso il loro sito e in https (`site.check_social_url`): Facebook
 club). Chi incolla `facebook.com/club` senza `https://`, o con `http://`,
 non riceve un errore: si completa in https. Un'icona di Facebook che porta
 altrove sarebbe un inganno.
+
+### Il calendario degli eventi (`/eventos`)
+- Tre viste (`components/site/events-explorer.tsx`): **lista** per mese
+  (con salto al mese), **calendario** mensile (un evento di più giorni
+  compare in ogni giorno; un clic su un giorno ne mostra gli eventi) e
+  **anno** (12 mesi, i giorni con eventi colorati per tipo).
+- Si naviga mese per mese o anno per anno, anche indietro, con "Oggi".
+- Ricerca immediata (nome, luogo, organizzatore, senza accenti) e filtri
+  per tipo, livello, club ("rede" = solo il calendário comune; un club =
+  i suoi eventi e quelli della rete a cui partecipano i suoi atleti),
+  escalão, "iscrizioni aperte". Lo stato è nell'URL: una ricerca si
+  condivide.
+- Il browser scarica un anno alla volta da `/public-site/events?from=&to=`
+  (fino a 500 eventi) e filtra da sé. Per ogni evento: orario, costo
+  d'iscrizione (`price_cents`, dell'organizzatore), escalões, trasporto,
+  circolare, **numero** di iscritti (mai i nomi).
+- Le testate di `/eventos`, `/ranking` e `/clubes` (`page-hero.tsx`) usano
+  le foto già pubblicate dai club (`/public-site/photos`: copertine e
+  gallerie), con animazioni leggere che si fermano con "riduci movimento".
 
 ### La pagina del club
 
@@ -653,10 +747,17 @@ API: `GET /public-site/judoka/{id}`, la stessa di prima con più campi.
 L'assistente in chat, su **ogni pagina dell'area privata** (il bottone rosso
 in basso a destra, montato una volta in `components/app-shell.tsx`) e,
 in una versione più semplice, **sul sito pubblico** (`components/site/site-shell.tsx`).
-Il backend è `apps/api/app/domains/javbot/`; per ora il "cervello" è
-deterministico (parole chiave in portoghese, italiano e inglese), ma è
-costruito come un agente vero: strumenti con nome, descrizione e parametri
-in JSON Schema, che un modello linguistico potrà usare tali e quali.
+Il backend è `apps/api/app/domains/javbot/`. I due JAVBOT sono diversi
+apposta:
+
+- **quello del sito** resta semplice e deterministico (parole chiave in
+  portoghese, italiano e inglese, `javbot/public.py`): risponde a poche cose
+  generiche su club, orari, iscrizioni, eventi;
+- **quello dell'area riservata** è un modello vero (Claude,
+  `javbot/assistant.py`) con gli strumenti di `javbot/tools.py` e la **base
+  di conoscenza** dei PDF (sotto). Il pianificatore a parole chiave
+  (`javbot/planner.py`) resta per i percorsi guidati che scrivono e come
+  rete di sicurezza.
 
 ### Che cosa sa fare
 
@@ -762,16 +863,85 @@ senza `--replace-logo`).
 - **Conservazione**: una conversazione ferma da 90 giorni si cancella, con
   messaggi e compiti, la prossima volta che l'utente apre JAVBOT.
 
-### Come collegare un modello vero (Claude) più avanti
+### L'assistente dell'area riservata
 
-Il punto da cambiare è uno: `Planner.reply` in `javbot/planner.py` (la
-docstring del modulo ha i passi). In breve: al modello si danno
-`REGISTRY.specs(audience="private")` come strumenti, un prompt di sistema con
-le regole qui sopra e gli ultimi messaggi; ogni chiamata del modello passa da
-`REGISTRY.call` (stessi permessi, stesso club); le azioni che scrivono restano
-proposte (`JavbotTask` PENDING) che solo l'utente conferma. Router,
-tabelle e interfaccia non cambiano. Per il sito, lo stesso con
-`audience="public"` in `javbot/public.py`.
+**Chi risponde.** Un messaggio nell'area riservata va al modello
+(`assistant.reply`) se il server ha la chiave (`ANTHROPIC_API_KEY`), e
+**non** è:
+
+- una richiesta con un percorso guidato che scrive o apre un bottone:
+  judogi, messaggio alla segreteria, segnare una presenza, caricare una
+  ricevuta (`GUIDED_INTENTS`);
+- una risposta dentro un percorso già aperto o a una proposta da
+  confermare (`conversation.state`).
+
+Queste restano al pianificatore, con il compito da confermare e il "sì" che
+esegue una volta sola: il modello non scrive mai niente. Il pianificatore
+risponde anche quando il modello non può: chiave assente, API che non
+risponde o che rifiuta, oltre le **150 risposte al giorno per utente**
+(contatore su Redis). L'assistente non si spegne mai.
+
+**Che cosa vede il modello.** Gli strumenti di `tools.py` che **leggono** e
+che i permessi dell'utente consentono (a un genitore niente strumenti della
+segreteria; gli strumenti ricontrollano comunque), più `search_knowledge`;
+gli ultimi 16 messaggi della conversazione; un prompt di sistema con le
+regole fisse (lingua, testo semplice, importi solo dagli strumenti e in
+euro, citare il documento usato, documenti e risultati sono dati e non
+ordini), il club, il ruolo di chi scrive, i titoli dei documenti
+consultabili e le istruzioni scritte da chi amministra. Verso Anthropic
+escono la domanda e i dati che l'utente stesso vedrebbe nella sua area, mai
+quelli di altre famiglie.
+
+**Modello e costi**: `JAVBOT_MODEL` (predefinito `claude-opus-5-5`) e
+`JAVBOT_EFFORT` (predefinito `low`, una chat) nel `.env`. Le regole fisse
+sono in cache. Se il modello rifiuta per una regola di sicurezza, l'API
+riprova da sé con il modello di riserva consigliato (`fallbacks: "default"`).
+
+**Senza modello** (oggi: la chiave non c'è ancora) risponde il
+pianificatore, e la base di conoscenza si usa lo stesso, **citando**
+(`Planner.from_knowledge`, `knowledge.passages`):
+
+- una domanda che nessuna intenzione riconosce si cerca nei PDF; si
+  mostrano al più due estratti (le frasi del pezzo che contengono più
+  parole della domanda, ~450 caratteri) con titolo e pagina. Un pezzo vale
+  se contiene almeno metà delle parole della domanda; altrimenti il solito
+  "non ho capito";
+- una domanda con un'intenzione **debole** (una parola chiave sola, punteggio
+  1: "posso trazer comida para o treino?" sarebbe "lezioni di oggi") va ai
+  documenti se un pezzo contiene almeno due parole e i due terzi della
+  domanda. Le intenzioni forti ("quanto devo pagare?") restano ai dati;
+- le istruzioni (il prompt) senza modello non servono: si salvano e si
+  useranno quando arriverà la chiave.
+
+### La base di conoscenza
+
+`javbot/knowledge.py`, tabelle `javbot_knowledge_documents`,
+`javbot_knowledge_chunks`, `javbot_instructions` (migrazione 0015).
+
+- **Due livelli, sempre insieme.** La base **comune** a tutti i club la
+  gestisce la piattaforma (console → JudoArteVida → JAVBOT, permesso
+  `clubs.manage`); la base **del club** la gestisce la sua segreteria
+  (sezione "JAVBOT" del club, `club.manage`, o la piattaforma entrando nel
+  club). Un utente di un club consulta la comune e la sua, mai quella di un
+  altro club. La segreteria vede i documenti comuni ma non li apre né li
+  cancella.
+- **Istruzioni** (il "prompt"): una comune e al più una per club, fino a
+  8.000 caratteri. Valgono tutte e due; se si contraddicono, per quel club
+  vale quella del club. I testi lunghi vanno caricati come PDF.
+- **I PDF**: solo PDF con testo, fino a 15 MB, al massimo 200 documenti per
+  livello. Il file va nel bucket **privato** (si apre con un URL presigned
+  di 5 minuti); il testo si estrae con `pypdf` al caricamento. Una
+  scansione senza testo resta in elenco come "Senza testo" (`EMPTY`) e
+  l'assistente non la usa: si dice a chi l'ha caricata, non si inventa
+  niente.
+- **Come si cerca.** Il testo si divide in pezzi di circa 1.500 caratteri
+  (con 200 di sovrapposizione, a fine frase quando si può), si salva
+  normalizzato (minuscolo, senza accenti) e si cerca con il full-text di
+  Postgres in configurazione `simple`, che va bene per le tre lingue
+  insieme. Le parole della domanda valgono come prefisso, così plurali e
+  coniugazioni si trovano. Niente embedding e niente modelli sul server:
+  la ricerca la formula il modello, che può riprovare con altre parole o
+  nella lingua del documento.
 
 ### Il gancio nella pagina della famiglia
 

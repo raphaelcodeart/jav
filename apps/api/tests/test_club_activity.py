@@ -113,7 +113,7 @@ async def test_withdrawing_waives_the_unpaid_fee_and_registering_again_reopens_i
         )
 
 
-async def test_ranking_sums_results_with_level_coefficients_and_ties(db, scope):
+async def test_ranking_sums_the_level_points_table_and_ties(db, scope):
     admin = await _user(db, scope, "admin")
     await _plans(db, scope, admin)
     parent = await _user(db, scope)
@@ -134,13 +134,13 @@ async def test_ranking_sums_results_with_level_coefficients_and_ties(db, scope):
                 today=TODAY,
             )
 
-    # Regionale (x2): Aldo 1° = 200, Bruno 3° = 100, Carlo partecipa = 20.
+    # Regionale (5/3/2/1): Aldo 1° = 5, Bruno 3° = 2, Carlo partecipa = 1.
     await competitions_service.record_results(
         db, scope=scope, competition_id=regional.id, actor_user_id=admin.id,
         results=[(entries[(regional.id, a.id)].id, 1), (entries[(regional.id, b.id)].id, 3),
                  (entries[(regional.id, c.id)].id, 0)],
     )
-    # Club (x1): Bruno 1° = 100, Carlo 1° (ex aequo nella sua categoria) = 100.
+    # Club (3/2/1/1): Bruno 1° = 3, Carlo 1° (ex aequo nella sua categoria) = 3.
     await competitions_service.record_results(
         db, scope=scope, competition_id=club.id, actor_user_id=admin.id,
         results=[(entries[(club.id, b.id)].id, 1), (entries[(club.id, c.id)].id, 1),
@@ -151,9 +151,9 @@ async def test_ranking_sums_results_with_level_coefficients_and_ties(db, scope):
         db, scope=scope, season=2026, viewer_user_id=parent.id
     )
     assert [(r["display_name"], r["points"], r["position"]) for r in rows] == [
-        ("Aldo B.", 200, 1),
-        ("Bruno B.", 200, 1),
-        ("Carlo B.", 120, 3),
+        ("Aldo B.", 5, 1),
+        ("Bruno B.", 5, 1),
+        ("Carlo B.", 4, 3),
     ]
     assert [r["is_mine"] for r in rows] == [True, False, False]
     # Correggere un risultato corregge la classifica: niente da ricalcolare.
@@ -165,9 +165,9 @@ async def test_ranking_sums_results_with_level_coefficients_and_ties(db, scope):
     assert rows[0]["display_name"] == "Bruno B."
     assert await competitions_service.ranking(db, scope=scope, season=2026, sex="F") == []
     banded = await competitions_service.ranking(
-        db, scope=scope, season=2026, age_band="ESORDIENTI"
+        db, scope=scope, season=2026, age_band="GRUPO_2"
     )
-    assert len(banded) == 3  # 12 anni al 1° settembre 2026
+    assert len(banded) == 3  # 12 anni federali nel 2026: Grupo 2
 
 
 async def test_belts_only_go_up_and_the_current_one_is_the_highest(db, scope):

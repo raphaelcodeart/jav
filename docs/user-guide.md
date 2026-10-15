@@ -176,6 +176,10 @@ Lo stato dell'ordine lo vedi in "I miei Ordini".
   me?», «i miei dati», «che cintura ha Luca?», «quante presenze?» o
   «quanti punti ho nel ranking?»: risponde con i tuoi numeri, gli stessi di
   «I miei conti» e della scheda dell'atleta. Vede solo la tua famiglia.
+  Conosce anche i documenti del club e di JudoArteVida (regolamenti,
+  orari speciali, regole degli esami): chiedigli «cosa serve per l'esame di
+  cintura?» o «il dojo è aperto ad agosto?»: ti mostra il passaggio del
+  documento che risponde, con il titolo e la pagina.
 - **Invita un amico**: il tuo link personale e chi si è iscritto con quello;
   ogni 5 amici con un contratto attivo puoi richiedere un omaggio, che
   consegna la segreteria.
@@ -227,6 +231,18 @@ proprio club**: entrando, l'area si apre direttamente sul club. Le sezioni:
   club, con lo stato (in attesa di pagamento, pagato, spedito). Solo
   consultazione: lo Shop è della piattaforma, che conferma i bonifici e
   spedisce.
+- **Documenti del club**: certidões delle Finanze e della Segurança Social,
+  atas, rivalidazione alla federazione, assicurazioni, statuto. Con la
+  scadenza, ricevi un avviso 30 giorni prima. Li vedi solo tu e
+  JudoArteVida.
+- **JAVBOT**: che cosa sa l'assistente dei tuoi soci. Carica i **PDF del
+  club** (regolamento interno, orari speciali, materiale, procedure: PDF con
+  testo, fino a 15 MB; una scansione compare come «Senza testo» e non si
+  usa) e scrivi le **istruzioni per il club** (come deve rispondere: «il
+  dojo è al primo piano», «per le gare rimanda alla segreteria»). Si
+  aggiungono ai documenti e alle istruzioni comuni di JudoArteVida, che
+  vedi in fondo alla pagina. La console della piattaforma ha la stessa
+  pagina per la base comune a tutti i club (JudoArteVida → JAVBOT).
 - **Impostazioni**: IBAN, intestatario e istruzioni per il bonifico delle
   quote (li vedono i genitori quando pagano), l'email di contatto del club,
   il **link di registrazione** da dare alle famiglie (con il pulsante per

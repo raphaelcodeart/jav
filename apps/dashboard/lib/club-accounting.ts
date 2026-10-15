@@ -5,11 +5,12 @@
 import { friendlyApiError } from "@/lib/api-error";
 import type { Fee } from "@/lib/club";
 
-export const FEE_KINDS = ["MONTHLY", "ENROLLMENT", "COMPETITION", "MEMBERSHIP"] as const;
+export const FEE_KINDS = ["MONTHLY", "ENROLLMENT", "COMPETITION", "MEMBERSHIP", "EQUIPMENT", "FINE"] as const;
 export const EXPENSE_CATEGORIES = [
-  "RENT", "STAFF", "FEDERATION", "INSURANCE", "EQUIPMENT", "TRANSPORT", "EVENTS", "UTILITIES", "MARKETING", "ADMIN", "OTHER",
+  "RENT", "STAFF", "FEDERATION", "INSURANCE", "EQUIPMENT", "TRANSPORT", "EVENTS", "UTILITIES", "MARKETING", "ADMIN",
+  "COLLABORATORS", "CLEANING", "EXTERNAL_COACH", "OTHER",
 ] as const;
-export const PAYMENT_METHODS = ["BANK_TRANSFER", "CASH", "CARD", "DIRECT_DEBIT", "OTHER"] as const;
+export const PAYMENT_METHODS = ["BANK_TRANSFER", "MBWAY", "CASH", "CARD", "DIRECT_DEBIT", "CHEQUE", "OTHER"] as const;
 export const AGING_KEYS = ["NOT_DUE", "D0_30", "D31_60", "D61_90", "D90_PLUS"] as const;
 
 /** I colori dei grafici, sempre gli stessi per la stessa cosa: entrate,
@@ -23,7 +24,10 @@ export const CHART = {
   result: "#161515",
   grid: "#ededed",
   axis: "#6b696a",
-  kinds: { MONTHLY: "#2a78d6", ENROLLMENT: "#eb6834", COMPETITION: "#1baf7a", MEMBERSHIP: "#eda100" } as Record<string, string>,
+  kinds: {
+    MONTHLY: "#2a78d6", ENROLLMENT: "#eb6834", COMPETITION: "#1baf7a", MEMBERSHIP: "#eda100", EQUIPMENT: "#8b5cf6",
+    FINE: "#64748b",
+  } as Record<string, string>,
   /** Anzianità dei debiti: grigio per ciò che non è ancora scaduto, poi
    *  una sola tinta che scurisce con il ritardo (sequenziale). */
   aging: { NOT_DUE: "#bcbaba", D0_30: "#ffc5b6", D31_60: "#f6694e", D61_90: "#c8311a", D90_PLUS: "#6d2219" } as Record<string, string>,

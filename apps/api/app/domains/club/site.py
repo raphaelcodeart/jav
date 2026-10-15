@@ -32,7 +32,7 @@ import uuid
 from datetime import date
 from urllib.parse import parse_qs, urlparse
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -180,17 +180,20 @@ def _club_ref(club: Club, site: ClubSite | None = None) -> dict:
 
 
 def _judoka_dict(
-    athlete: ClubAthlete, profile: ClubAthletePublicProfile, *, club: Club, site: ClubSite | None,
+    athlete: ClubAthlete, profile: ClubAthletePublicProfile | None, *, club: Club, site: ClubSite | None,
     belt: str | None, totals: dict, season: int,
 ) -> dict:
     # Campo per campo, di proposito: niente di ClubAthlete arriva al browser
-    # se non è scritto qui.
+    # se non è scritto qui. Senza `profile` (nessun consenso alla pagina
+    # pubblica) resta ciò che una classifica sportiva dice di chiunque:
+    # "Nome I.", club, cintura, punti. Niente foto, niente pagina.
     return {
         "id": athlete.id,
         "display_name": display_name(athlete),
-        "photo_url": athlete.photo_url if profile.show_photo else None,
+        "photo_url": athlete.photo_url if profile is not None and profile.show_photo else None,
+        "has_page": profile is not None,
         "belt": belt,
-        "age_band": competitions_service.age_band_for(seasons.season_age(athlete.birth_date, season)).code,
+        "age_band": competitions_service.age_band_for(competitions_service.ranking_age(athlete.birth_date, season)).code,
         "club": _club_ref(club, site),
         "points": totals.get("points", 0),
         "competitions": totals.get("competitions", 0),
@@ -200,8 +203,26 @@ def _judoka_dict(
     }
 
 
+async def _ranking_athletes(
+    db: AsyncSession, *, club_ids: list[uuid.UUID],
+) -> list[tuple[ClubAthlete, ClubAthletePublicProfile | None]]:
+    """Chi entra nelle classifiche pubbliche: **tutti** gli atleti attivi dei
+    club pubblici (decisione del titolare: una classifica sportiva è
+    pubblica), ma con la scheda pubblica solo chi ha il consenso della
+    famiglia ed è pubblicato (_public_athletes); gli altri senza profilo."""
+    if not club_ids:
+        return []
+    with_page = {a.id: (a, p) for a, p in await _public_athletes(db, club_ids=club_ids)}
+    rows = (await db.execute(
+        select(ClubAthlete).join(Club, Club.id == ClubAthlete.club_id).where(
+            _publishable_club(), ClubAthlete.club_id.in_(club_ids), ClubAthlete.status == "ACTIVE",
+        )
+    )).scalars().all()
+    return [with_page.get(a.id, (a, None)) for a in rows]
+
+
 async def _judoka_list(
-    db: AsyncSession, pairs: list[tuple[ClubAthlete, ClubAthletePublicProfile]],
+    db: AsyncSession, pairs: list[tuple[ClubAthlete, ClubAthletePublicProfile | None]],
     clubs: dict[uuid.UUID, tuple[Club, ClubSite]], *, season: int, points_season: int | None,
 ) -> list[dict]:
     ids = [a.id for a, _ in pairs]
@@ -214,7 +235,8 @@ async def _judoka_list(
     ]
 
 
-def _event_dict(comp: ClubCompetition, club: Club, site: ClubSite | None) -> dict:
+def _event_dict(comp: ClubCompetition, club: Club | None, site: ClubSite | None) -> dict:
+    """`club` None per un evento della rete (calendário comune)."""
     return {
         "id": comp.id,
         "name": comp.name,
@@ -226,27 +248,77 @@ def _event_dict(comp: ClubCompetition, club: Club, site: ClubSite | None) -> dic
         "registration_deadline": comp.registration_deadline,
         "location": comp.location,
         "organizer": comp.organizer,
-        "club": _club_ref(club, site),
+        "club": _club_ref(club, site) if club is not None else None,
+        "age_groups": list(comp.age_groups or []),
+        "transport_mode": comp.transport_mode,
+        "price_cents": comp.fee_cents,
+        "starts_at_time": comp.starts_at_time,
+        "registration_deadline_time": comp.registration_deadline_time,
+        "places": comp.places,
+        "circular_url": comp.circular_url,
     }
 
 
 async def _events(
     db: AsyncSession, clubs: dict[uuid.UUID, tuple[Club, ClubSite]], *, kind: str | None = None,
-    when: str | None = None, limit: int = 50, today: date,
+    when: str | None = None, limit: int = 50, today: date, start: date | None = None, end: date | None = None,
+    query: str | None = None, level: str | None = None, age_group: str | None = None,
+    network: bool | None = None, organizations: set[uuid.UUID] | None = None,
 ) -> list[dict]:
-    if not clubs:
+    """Gli eventi dei club pubblici e quelli della rete (il calendário
+    comune, mostrati senza club). `network`: None entrambi, True solo la
+    rete, False solo i club. `start`/`end`: gli eventi che toccano il
+    periodo (anche uno di più giorni a cavallo del mese). `query`: nel nome,
+    nel luogo e nell'organizzatore."""
+    organizations = organizations or {club.organization_id for club, _site in clubs.values()}
+    if not clubs and not organizations:
         return []
-    stmt = select(ClubCompetition).where(ClubCompetition.club_id.in_(list(clubs)))
+    own = ClubCompetition.club_id.in_(list(clubs))
+    shared = ClubCompetition.club_id.is_(None) & ClubCompetition.organization_id.in_(organizations)
+    if network is False:
+        # Un club: i suoi eventi e quelli della rete a cui partecipano i suoi atleti.
+        joined = select(ClubCompetitionEntry.id).where(
+            ClubCompetitionEntry.competition_id == ClubCompetition.id,
+            ClubCompetitionEntry.club_id.in_(list(clubs)), ClubCompetitionEntry.status == "REGISTERED",
+        ).exists()
+        where = or_(own, shared & joined)
+    else:
+        where = shared if network else or_(own, shared)
+    stmt = select(ClubCompetition).where(where)
     if kind:
         stmt = stmt.where(ClubCompetition.kind == kind)
+    if level:
+        stmt = stmt.where(ClubCompetition.level == level)
+    if age_group:
+        # Un evento senza escalões è per tutti.
+        stmt = stmt.where(or_(ClubCompetition.age_groups.any(age_group), func.cardinality(ClubCompetition.age_groups) == 0))
+    if start:
+        stmt = stmt.where(ClubCompetition.ends_on >= start)
+    if end:
+        stmt = stmt.where(ClubCompetition.starts_on <= end)
+    if query and query.strip():
+        like = f"%{query.strip()[:80]}%"
+        stmt = stmt.where(or_(ClubCompetition.name.ilike(like), ClubCompetition.location.ilike(like),
+                              ClubCompetition.organizer.ilike(like)))
     if when == "upcoming":
         stmt = stmt.where(ClubCompetition.ends_on >= today).order_by(ClubCompetition.starts_on)
     elif when == "past":
         stmt = stmt.where(ClubCompetition.ends_on < today).order_by(ClubCompetition.starts_on.desc())
+    elif start or end:
+        stmt = stmt.order_by(ClubCompetition.starts_on)
     else:
         stmt = stmt.order_by(ClubCompetition.starts_on.desc())
     comps = list((await db.execute(stmt.limit(limit))).scalars())
-    return [_event_dict(c, *clubs[c.club_id]) for c in comps]
+    # Quanti iscritti (solo il numero: i nomi sono nella pagina dell'evento,
+    # e solo per chi ha il consenso).
+    counts = dict((await db.execute(
+        select(ClubCompetitionEntry.competition_id, func.count())
+        .where(ClubCompetitionEntry.competition_id.in_([c.id for c in comps]),
+               ClubCompetitionEntry.status == "REGISTERED")
+        .group_by(ClubCompetitionEntry.competition_id)
+    )).all()) if comps else {}
+    return [{**_event_dict(c, *clubs.get(c.club_id, (None, None))), "entries_count": counts.get(c.id, 0)}
+            for c in comps]
 
 
 async def _recent_medals(
@@ -344,15 +416,16 @@ async def _club_cards(
 
 async def portal_home(db: AsyncSession, *, today: date | None = None) -> dict:
     today = today or _today()
-    season = seasons.season_of(today)
+    season = competitions_service.ranking_year(today)
     pairs = await _public_clubs(db)
     clubs = {club.id: (club, site) for club, site in pairs}
     public = await _public_athletes(db, club_ids=list(clubs))
     cards = await _club_cards(db, pairs, public)
-    judoka = await _judoka_list(db, public, clubs, season=season, points_season=season)
+    ranked = await _judoka_list(db, await _ranking_athletes(db, club_ids=list(clubs)), clubs, season=season,
+                                points_season=season)
     return {
         "season": season,
-        "season_label": seasons.season_label(season),
+        "season_label": competitions_service.ranking_label(season),
         "clubs": cards,
         "totals": {
             "clubs": len(cards),
@@ -360,7 +433,7 @@ async def portal_home(db: AsyncSession, *, today: date | None = None) -> dict:
             "judoka_public": len(public),
         },
         "upcoming_events": await _events(db, clubs, when="upcoming", limit=6, today=today),
-        "top_ranking": _ranked(judoka)[:10],
+        "top_ranking": _ranked(ranked)[:10],
         "latest_medals": await _recent_medals(db, clubs, limit=8, today=today),
     }
 
@@ -460,7 +533,7 @@ async def _groups(db: AsyncSession, *, club: Club, site: ClubSite, schedule: lis
 
 async def club_page(db: AsyncSession, *, slug: str, today: date | None = None) -> dict:
     today = today or _today()
-    season = seasons.season_of(today)
+    season = competitions_service.ranking_year(today)
     club, site = await _public_club_by_slug(db, slug)
     clubs = {club.id: (club, site)}
     courses = list(
@@ -483,7 +556,8 @@ async def club_page(db: AsyncSession, *, slug: str, today: date | None = None) -
     judoka = await _judoka_list(db, public, clubs, season=season, points_season=None)
     # Il ranking del club è quello di /ranking filtrato sul club (punti della
     # stagione): lo stesso calcolo, così i due numeri non possono divergere.
-    season_judoka = await _judoka_list(db, public, clubs, season=season, points_season=season)
+    season_judoka = await _judoka_list(db, await _ranking_athletes(db, club_ids=list(clubs)), clubs, season=season,
+                                       points_season=season)
     schedule = _schedule(courses, slots)
     return {
         "name": club.name,
@@ -491,7 +565,7 @@ async def club_page(db: AsyncSession, *, slug: str, today: date | None = None) -
         **_site_content(site),
         "theme": brand.site_theme(site),
         "updated_at": site.updated_at,
-        "season_label": seasons.season_label(season),
+        "season_label": competitions_service.ranking_label(season),
         "athletes_active": athletes_active,
         "schedule": schedule,
         "show_prices": site.show_prices,
@@ -515,7 +589,7 @@ async def judoka_profile(db: AsyncSession, *, athlete_id: uuid.UUID, today: date
     della sua fascia, profilo IJF e i media pubblicati. Senza consenso e
     pubblicazione è "non trovato", come prima."""
     today = today or _today()
-    season = seasons.season_of(today)
+    season = competitions_service.ranking_year(today)
     clubs = {club.id: (club, site) for club, site in await _public_clubs(db)}
     found = await _public_athletes(db, club_ids=list(clubs), athlete_ids=[athlete_id])
     if not found:
@@ -525,8 +599,8 @@ async def judoka_profile(db: AsyncSession, *, athlete_id: uuid.UUID, today: date
     athlete, profile = found[0]
     [card] = await _judoka_list(db, found, clubs, season=season, points_season=None)
     season_points = await competitions_service.athlete_points(db, athlete_ids=[athlete.id], season=season)
-    # Solo gli eventi dei club pubblici: un evento che il sito non mostra non
-    # può comparire nemmeno qui (il suo link sarebbe un 404).
+    # Solo le iscrizioni fatte da un club pubblico (agli eventi suoi o della
+    # rete): un evento che il sito non mostra non può comparire nemmeno qui.
     entries = (
         await db.execute(
             select(ClubCompetitionEntry, ClubCompetition)
@@ -534,7 +608,8 @@ async def judoka_profile(db: AsyncSession, *, athlete_id: uuid.UUID, today: date
             .where(
                 ClubCompetitionEntry.athlete_id == athlete.id,
                 ClubCompetitionEntry.status == "REGISTERED",
-                ClubCompetition.club_id.in_(list(clubs)),
+                ClubCompetitionEntry.club_id.in_(list(clubs)),
+                or_(ClubCompetition.club_id.is_(None), ClubCompetition.club_id.in_(list(clubs))),
             )
             .order_by(ClubCompetition.starts_on.desc())
         )
@@ -563,7 +638,7 @@ async def judoka_profile(db: AsyncSession, *, athlete_id: uuid.UUID, today: date
     return {
         **card,
         "bio": profile.bio,
-        "season_label": seasons.season_label(season),
+        "season_label": competitions_service.ranking_label(season),
         "season_points": season_points[athlete.id]["points"],
         "results": [
             {
@@ -583,7 +658,8 @@ async def judoka_profile(db: AsyncSession, *, athlete_id: uuid.UUID, today: date
                                            today=today),
         "belt_history": [{"grade": grade, "awarded_on": awarded_on} for grade, awarded_on in belts],
         "upcoming": [
-            {**_event_dict(comp, *clubs[comp.club_id]), "category": entry.category} for entry, comp in upcoming
+            {**_event_dict(comp, *clubs.get(comp.club_id, (None, None))), "category": entry.category}
+            for entry, comp in upcoming
         ],
         **await _public_media(db, athlete=athlete, profile=profile),
         "ijf_profile_url": profile.ijf_profile_url,
@@ -630,25 +706,64 @@ async def _public_media(db: AsyncSession, *, athlete: ClubAthlete, profile: Club
     }
 
 
+#: Il "club" che vuol dire il calendário comune.
+NETWORK_SLUG = "rede"
+MAX_EVENTS = 500
+
+
 async def list_events(
     db: AsyncSession, *, club_slug: str | None = None, kind: str | None = None, when: str | None = None,
-    limit: int = 60, today: date | None = None,
+    limit: int = 60, today: date | None = None, start: date | None = None, end: date | None = None,
+    query: str | None = None, level: str | None = None, age_group: str | None = None,
 ) -> list[dict]:
+    """La ricerca degli eventi del sito. `club_slug` = un club (solo i suoi
+    eventi), "rede" = solo il calendário comune, niente = tutto."""
+    from app.domains.club.models import COMPETITION_LEVELS
+
     if kind is not None and kind not in EVENT_KINDS:
         raise ClubValidationError("Tipo di evento non valido.")
     if when is not None and when not in ("upcoming", "past"):
         raise ClubValidationError("Filtro non valido.")
-    clubs = {club.id: (club, site) for club, site in await _public_clubs(db)}
-    if club_slug:
-        clubs = {k: v for k, v in clubs.items() if v[0].slug == club_slug.strip().lower()}
-    return await _events(db, clubs, kind=kind, when=when, limit=limit, today=today or _today())
+    if level is not None and level not in COMPETITION_LEVELS:
+        raise ClubValidationError("Livello non valido.")
+    if start and end and end < start:
+        raise ClubValidationError("Il periodo non è valido.")
+    pairs = await _public_clubs(db)
+    clubs = {club.id: (club, site) for club, site in pairs}
+    organizations = {club.organization_id for club, _site in pairs}
+    network = None
+    slug = (club_slug or "").strip().lower()
+    if slug == NETWORK_SLUG:
+        network = True
+    elif slug:
+        clubs = {k: v for k, v in clubs.items() if v[0].slug == slug}
+        network = False
+    return await _events(
+        db, clubs, kind=kind, when=when, limit=min(max(limit, 1), MAX_EVENTS), today=today or _today(),
+        start=start, end=end, query=query, level=level, age_group=(age_group or None), network=network,
+        organizations=organizations,
+    )
+
+
+async def decor_photos(db: AsyncSession, *, limit: int = 24) -> list[dict]:
+    """Le foto che i club hanno già pubblicato sulle loro pagine (copertina e
+    galleria): il sito le usa come decorazione delle testate. Solo URL di
+    immagini pubbliche, nessun dato di atleti."""
+    photos: list[dict] = []
+    for club, site in await _public_clubs(db):
+        if site.hero_image_url:
+            photos.append({"url": site.hero_image_url, "club": club.name})
+        for item in site.gallery or []:
+            if isinstance(item, dict) and item.get("url"):
+                photos.append({"url": item["url"], "club": club.name})
+    return photos[:limit]
 
 
 async def event_detail(db: AsyncSession, *, event_id: uuid.UUID, today: date | None = None) -> dict:
-    season = seasons.season_of(today or _today())
+    season = competitions_service.ranking_year(today or _today())
     comp = await db.get(ClubCompetition, event_id)
     clubs = {club.id: (club, site) for club, site in await _public_clubs(db)}
-    if comp is None or comp.club_id not in clubs:
+    if comp is None or (comp.club_id is not None and comp.club_id not in clubs):
         raise ClubNotFoundError("Evento non trovato.")
     entries = list(
         (await db.execute(
@@ -659,7 +774,9 @@ async def event_detail(db: AsyncSession, *, event_id: uuid.UUID, today: date | N
     )
     # Solo i judoca pubblici: gli altri iscritti contano nel totale ma non
     # hanno un nome sul sito.
-    public = await _public_athletes(db, club_ids=[comp.club_id], athlete_ids=[e.athlete_id for e in entries])
+    # Un evento della rete ha iscritti di tutti i club pubblici.
+    club_ids = [comp.club_id] if comp.club_id is not None else list(clubs)
+    public = await _public_athletes(db, club_ids=club_ids, athlete_ids=[e.athlete_id for e in entries])
     by_id = {a.id: (a, p) for a, p in public}
     belts = await current_belts(db, athlete_ids=list(by_id))
     participants = []
@@ -672,7 +789,7 @@ async def event_detail(db: AsyncSession, *, event_id: uuid.UUID, today: date | N
             "display_name": display_name(athlete),
             "photo_url": athlete.photo_url if profile.show_photo else None,
             "belt": belts.get(athlete.id),
-            "age_band": competitions_service.age_band_for(seasons.season_age(athlete.birth_date, season)).code,
+            "age_band": competitions_service.age_band_for(competitions_service.ranking_age(athlete.birth_date, season)).code,
             "category": entry.category,
             # Gli stage non hanno piazzamenti, anche se qualcuno ne avesse scritto uno.
             "placement": entry.placement if comp.kind == "COMPETITION" else None,
@@ -685,7 +802,7 @@ async def event_detail(db: AsyncSession, *, event_id: uuid.UUID, today: date | N
         p["placement"] is None, p["placement"] == 0, p["placement"] or 0, p["display_name"],
     ))
     return {
-        **_event_dict(comp, *clubs[comp.club_id]),
+        **_event_dict(comp, *clubs.get(comp.club_id, (None, None))),
         "description": comp.description,
         "categories": comp.categories,
         "participants_count": len(entries),
@@ -697,19 +814,19 @@ async def public_ranking(
     db: AsyncSession, *, season: int | None = None, age_band: str | None = None, club_slug: str | None = None,
     today: date | None = None,
 ) -> dict:
-    season = season if season is not None else seasons.season_of(today or _today())
+    season = season if season is not None else competitions_service.ranking_year(today or _today())
     if age_band is not None and age_band not in {b.code for b in competitions_service.AGE_BANDS}:
         raise ClubValidationError("Fascia d'età non valida.")
     clubs = {club.id: (club, site) for club, site in await _public_clubs(db)}
     if club_slug:
         clubs = {k: v for k, v in clubs.items() if v[0].slug == club_slug.strip().lower()}
-    public = await _public_athletes(db, club_ids=list(clubs))
-    rows = await _judoka_list(db, public, clubs, season=season, points_season=season)
+    rows = await _judoka_list(db, await _ranking_athletes(db, club_ids=list(clubs)), clubs, season=season,
+                              points_season=season)
     if age_band:
         rows = [r for r in rows if r["age_band"] == age_band]
     return {
         "season": season,
-        "season_label": seasons.season_label(season),
+        "season_label": competitions_service.ranking_label(season),
         "clubs": [_club_ref(c, s) for c, s in clubs.values()],
         "rows": _ranked(rows),
     }

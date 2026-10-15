@@ -21,12 +21,18 @@ export function RankingPanel({ admin = false }: { admin?: boolean }) {
   const [sex, setSex] = useState<"" | "M" | "F">("");
   const { t } = useI18n();
   const [band, setBand] = useState("");
+  const thisYear = new Date().getFullYear();
+  const [year, setYear] = useState(thisYear);
+  // Di tutta la rete (come nel gestionale dei club) o solo del proprio club.
+  const [clubOnly, setClubOnly] = useState(false);
   const params = new URLSearchParams();
   if (sex) params.set("sex", sex);
   if (band) params.set("age_band", band);
+  params.set("season", String(year));
+  if (clubOnly) params.set("club_only", "true");
   const qs = params.toString();
   const { data, isLoading, error } = useQuery({
-    queryKey: ["club", "ranking", admin, sex, band],
+    queryKey: ["club", "ranking", admin, sex, band, year, clubOnly],
     queryFn: () => clubGet<Ranking>(`${admin ? "/admin" : ""}/ranking${qs ? `?${qs}` : ""}`),
   });
   const rows = data?.rows ?? [];
@@ -34,7 +40,7 @@ export function RankingPanel({ admin = false }: { admin?: boolean }) {
   return (
     <div>
       <PageHeader
-        eyebrow={data ? t("club.season", { season: data.season_label }) : t("ranking.eyebrow")}
+        eyebrow={t("ranking.year", { year })}
         title={<>Jav <span className="text-gradient-brand">Ranking</span></>}
         subtitle={t("ranking.subtitle")}
       />
@@ -43,6 +49,14 @@ export function RankingPanel({ admin = false }: { admin?: boolean }) {
           value={sex || "ALL"}
           onChange={(k) => setSex(k === "ALL" ? "" : (k as "M" | "F"))}
           items={[{ key: "ALL", label: t("ranking.all") }, { key: "M", label: t("ranking.male") }, { key: "F", label: t("ranking.female") }]}
+        />
+        <Select value={String(year)} onChange={(e) => setYear(Number(e.target.value))} className="sm:max-w-[8rem]" aria-label={t("ranking.yearLabel")}>
+          {[thisYear, thisYear - 1, thisYear - 2].map((y) => <option key={y} value={y}>{y}</option>)}
+        </Select>
+        <Tabs
+          value={clubOnly ? "CLUB" : "NETWORK"}
+          onChange={(k) => setClubOnly(k === "CLUB")}
+          items={[{ key: "NETWORK", label: t("ranking.network") }, { key: "CLUB", label: t("ranking.myClub") }]}
         />
         <Select value={band} onChange={(e) => setBand(e.target.value)} className="sm:max-w-xs" aria-label={t("ranking.ageBand")}>
           <option value="">{t("ranking.allAges")}</option>
@@ -92,6 +106,7 @@ export function RankingPanel({ admin = false }: { admin?: boolean }) {
                   <div className="flex items-center gap-2 mt-0.5">
                     {r.belt && <BeltBadge code={r.belt} size="sm" showLabel={false} />}
                     <span className="text-xs text-ink-500">{t(r.competitions === 1 ? "ranking.competitionOne" : "ranking.competitionMany", { n: r.competitions })}</span>
+                    {r.club_name && <span className="truncate text-xs text-ink-400">· {r.club_name}</span>}
                   </div>
                 </div>
                 <div className="hidden sm:flex items-center gap-2 text-sm">

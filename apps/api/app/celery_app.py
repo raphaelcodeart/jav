@@ -25,6 +25,8 @@ from app.domains.auth import models as _auth_models  # noqa: F401
 from app.domains.catalog import models as _catalog_models  # noqa: F401
 from app.domains.club import contact_models as _club_contact_models  # noqa: F401
 from app.domains.club import models as _club_models  # noqa: F401
+from app.domains.club import operations_models as _club_operations_models  # noqa: F401
+from app.domains.club import records_models as _club_records_models  # noqa: F401
 from app.domains.club import site_models as _club_site_models  # noqa: F401
 from app.domains.commissions import models as _commissions_models  # noqa: F401
 from app.domains.contracts import models as _contracts_models  # noqa: F401
@@ -42,6 +44,7 @@ from app.domains.referral import models as _referral_models  # noqa: F401
 from app.domains.support import models as _support_models  # noqa: F401
 from app.domains.users import models as _users_models  # noqa: F401
 from app.domains.wallets import models as _wallets_models  # noqa: F401
+from app.legacy import models as _legacy_models  # noqa: F401
 
 logger = logging.getLogger(__name__)
 settings = get_settings()

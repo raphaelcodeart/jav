@@ -239,7 +239,12 @@ export function AthleteDetailModal({ athleteId, onClose, initialTab = "path" }: 
   );
 }
 
-function CertificatesTab({ athlete }: { athlete: AthleteDetail }) {
+/** Il certificato medico: lo stato, lo storico, e il caricamento di uno
+ *  nuovo. Lo usa la famiglia (default) e l'area dell'atleta, che passa i suoi
+ *  indirizzi: stesso servizio sul server, stesso bucket privato. */
+export function CertificatesTab({ athlete, uploadPath, urlPath }: {
+  athlete: AthleteDetail; uploadPath?: string; urlPath?: (certificateId: string) => string;
+}) {
   const [type, setType] = useState("AGONISTIC");
   const [issued, setIssued] = useState("");
   const [expires, setExpires] = useState("");
@@ -265,7 +270,7 @@ function CertificatesTab({ athlete }: { athlete: AthleteDetail }) {
     form.append("issued_on", issued);
     form.append("expires_on", expires);
     try {
-      await clubSend(`/athletes/${athlete.id}/certificates`, "POST", form);
+      await clubSend(uploadPath ?? `/athletes/${athlete.id}/certificates`, "POST", form);
       await queryClient.invalidateQueries({ queryKey: ["club"] });
       toast({ tone: "success", title: t("cert.uploaded") });
       setFile(null);
@@ -278,7 +283,7 @@ function CertificatesTab({ athlete }: { athlete: AthleteDetail }) {
 
   async function open(id: string) {
     try {
-      const { url } = await clubGet<{ url: string }>(`/certificates/${id}/url`);
+      const { url } = await clubGet<{ url: string }>(urlPath ? urlPath(id) : `/certificates/${id}/url`);
       window.open(url, "_blank", "noopener");
     } catch (e) {
       toast({ tone: "error", title: t("cert.openFailed"), text: (e as Error).message });

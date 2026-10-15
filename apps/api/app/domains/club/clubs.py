@@ -308,6 +308,39 @@ async def add_staff(
     return user, None if sent else link
 
 
+async def staff_access_link(
+    db: AsyncSession, *, scope: ClubScope, user_id: uuid.UUID, actor_user_id: uuid.UUID,
+) -> str | None:
+    """Un link nuovo per impostare la password, per una persona dello staff
+    del club (segreteria o istruttore): serve a chi non ha mai ricevuto
+    l'invito (le segreterie importate dal gestionale di prima) o l'ha perso.
+    Lo stesso meccanismo dell'invito (auth_service.send_account_invite_email,
+    vale 7 giorni): se l'email parte restituisce None, altrimenti il link da
+    consegnare a mano. La password non passa mai da chi lo chiede."""
+    from app.domains.auth import service as auth_service
+
+    user = (
+        await db.execute(
+            select(User)
+            .join(UserRole, UserRole.user_id == User.id)
+            .join(Role, Role.id == UserRole.role_id)
+            .where(User.id == user_id, User.club_id == scope.club_id, Role.code.in_(CLUB_STAFF_ROLES))
+        )
+    ).scalars().first()
+    if user is None:
+        raise ClubNotFoundError("Persona dello staff non trovata in questo club.")
+    club = await get_club(db, organization_id=scope.organization_id, club_id=scope.club_id)
+    await audit_service.record(
+        db, organization_id=scope.organization_id, actor_user_id=actor_user_id,
+        action="clubs.staff_access_link", entity_type="user", entity_id=str(user.id),
+    )
+    link, sent = await auth_service.send_account_invite_email(
+        db, user=user, invited_by_display_name=club.name,
+        intro=f"Ecco il tuo accesso a Jav per {club.name}: scegli la tua password con il link qui sotto.",
+    )
+    return None if sent else link
+
+
 async def update_club_pricing(db: AsyncSession, *, scope: ClubScope, actor_user_id: uuid.UUID, changes: dict) -> dict:
     """Sconti e quote del club (pricing.py). Valgono per le quote emesse da
     adesso: quelle già emesse hanno il prezzo congelato (CLAUDE.md §5)."""

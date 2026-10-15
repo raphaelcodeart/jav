@@ -91,6 +91,23 @@ export function ClubList({ onEnter }: { onEnter: (id: string) => void }) {
   });
   const [creating, setCreating] = useState(false);
   const [staffFor, setStaffFor] = useState<ClubRow | null>(null);
+  const [access, setAccess] = useState<{ email: string; link: string } | null>(null);
+  const [sending, setSending] = useState<string | null>(null);
+
+  /** Un link nuovo per scegliere la password: per le segreterie importate,
+   *  che non hanno mai ricevuto l'invito, o per chi l'ha perso. */
+  async function accessLink(club: ClubRow, person: { user_id: string; email: string }) {
+    setSending(person.user_id);
+    try {
+      const res = await send<{ link: string | null; emailed: boolean }>(`/${club.id}/staff/${person.user_id}/access-link`, "POST", {});
+      if (res.link) setAccess({ email: person.email, link: res.link });
+      else toast({ tone: "success", title: t("clubs.accessLinkEmailed", { email: person.email }) });
+    } catch (e) {
+      toast({ tone: "error", title: t("clubs.failed"), text: (e as Error).message });
+    } finally {
+      setSending(null);
+    }
+  }
 
   async function toggleStatus(club: ClubRow) {
     const status = club.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE";
@@ -139,7 +156,18 @@ export function ClubList({ onEnter }: { onEnter: (id: string) => void }) {
                 <TD className="font-semibold">{club.athletes_active}</TD>
                 <TD className="text-xs">
                   {club.staff.length === 0 ? <Badge tone="warning">{t("clubs.noSecretary")}</Badge> : club.staff.map((s) => (
-                    <p key={s.user_id}>{s.email} <span className="text-ink-400">· {t.dyn(`clubs.role.${s.role}`, s.role)}</span></p>
+                    <p key={s.user_id} className="flex flex-wrap items-center gap-x-2">
+                      <span>{s.email} <span className="text-ink-400">· {t.dyn(`clubs.role.${s.role}`, s.role)}</span></span>
+                      <button
+                        type="button"
+                        onClick={() => accessLink(club, s)}
+                        disabled={sending === s.user_id}
+                        className="cursor-pointer font-semibold text-brand-700 hover:underline disabled:opacity-50"
+                        title={t("clubs.accessLinkHint")}
+                      >
+                        🔑 {t("clubs.accessLink")}
+                      </button>
+                    </p>
                   ))}
                 </TD>
                 <TD>
@@ -160,6 +188,7 @@ export function ClubList({ onEnter }: { onEnter: (id: string) => void }) {
         </Table>
       )}
       {creating && <CreateClubModal onClose={() => setCreating(false)} />}
+      {access && <InviteHandoff email={access.email} link={access.link} onClose={() => setAccess(null)} />}
       {staffFor && (
         <StaffModal
           title={t("clubs.addStaffTo", { name: staffFor.name })}

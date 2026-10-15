@@ -109,7 +109,9 @@ export function EventCard({ event, t, fmt }: { event: PublicEvent; t: Translator
           {eventDates(fmt, event.starts_on, event.ends_on)}
           {event.location ? ` · ${event.location}` : ""}
         </p>
-        <p className="relative z-10 mt-2"><ClubLink club={event.club} className="text-xs" /></p>
+        <p className="relative z-10 mt-2">
+          {event.club ? <ClubLink club={event.club} className="text-xs" /> : <span className="text-xs font-semibold text-ink-500">🌍 {t("site.event.network")}</span>}
+        </p>
       </div>
     </article>
   );
@@ -203,7 +205,9 @@ export function RankingTable({ rows, t, showClub = true }: { rows: RankingRow[];
                 <div className="flex items-center gap-3">
                   <Avatar name={r.display_name} photoUrl={r.photo_url} size="sm" />
                   <div className="min-w-0">
-                    <Link href={`/judocas/${r.id}`} className="font-semibold text-ink-900 hover:text-brand-700">{r.display_name}</Link>
+                    {r.has_page === false
+                      ? <span className="font-semibold text-ink-900">{r.display_name}</span>
+                      : <Link href={`/judocas/${r.id}`} className="font-semibold text-ink-900 hover:text-brand-700">{r.display_name}</Link>}
                     <p className="text-xs text-ink-500">{ageBandLabel(t, r.age_band)}</p>
                   </div>
                 </div>

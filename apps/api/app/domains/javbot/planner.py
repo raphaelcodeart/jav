@@ -181,10 +181,38 @@ class Planner:
             if intent is None:
                 if flow:
                     return self.reask(state)
-                return Reply(say(self.lang, "fallback"), quick_replies=self.suggestions())
+                return await self.from_knowledge(text)
+            # Una sola parola chiave ("treino" in "posso trazer comida para o
+            # treino?") è un indizio debole: se i documenti rispondono
+            # davvero alla domanda intera, rispondono loro.
+            if score <= 1 and not flow:
+                quoted = await self.from_knowledge(text, strict=True)
+                if quoted is not None:
+                    return quoted
             return await self.dispatch(intent, text, score)
         except ToolDenied as denied:
             return Reply(say(self.lang, denied.reason), quick_replies=self.suggestions(), intent=intent)
+
+    async def from_knowledge(self, text: str, *, strict: bool = False) -> Reply | None:
+        """Una domanda che nessuna intenzione riconosce: prima di dire "non
+        ho capito" si cerca nei PDF della base comune e del club
+        (knowledge.py), e si mostrano gli estratti con il documento e la
+        pagina. Senza modello non si riassume né si interpreta: si cita.
+        Con `strict` niente ripiego: None se i documenti non rispondono."""
+        from app.domains.javbot import knowledge
+
+        organization_id = self.ctx.scope.organization_id if self.ctx.scope else self.ctx.organization_id
+        found = await knowledge.passages(
+            self.ctx.db, organization_id=organization_id,
+            club_id=self.ctx.scope.club_id if self.ctx.scope else None, query=text, strict=strict,
+        ) if organization_id else []
+        if not found:
+            return None if strict else Reply(say(self.lang, "fallback"), quick_replies=self.suggestions())
+        parts = [say(self.lang, "kb.found")]
+        for hit in found:
+            parts.append(f"«{hit['excerpt']}»\n" + say(self.lang, "kb.source", title=hit["document"], page=hit["page"]))
+        parts.append(say(self.lang, "kb.more"))
+        return Reply("\n\n".join(parts), quick_replies=self.suggestions(), intent="knowledge")
 
     def reask(self, state: dict) -> Reply:
         question = state.get("question") or say(self.lang, "fallback")
@@ -277,7 +305,7 @@ class Planner:
                          actions=[nav(lang, "wallet", "act.wallet")], quick_replies=self.suggestions(), intent=intent)
         if intent == "secretary":
             return await self.secretary()
-        return Reply(say(lang, "fallback"), quick_replies=self.suggestions())
+        return await self.from_knowledge(text)
 
     # --- Quote e ricevute -------------------------------------------------------------------------
 

@@ -1,7 +1,8 @@
 """JAVBOT: conversazioni, messaggi e conferme.
 
-Il router chiama solo queste funzioni; il "cervello" è planner.py (area
-privata) e public.py (sito). Qui si decide chi è l'utente per gli strumenti
+Il router chiama solo queste funzioni; il "cervello" è assistant.py (area
+privata, con un modello) con planner.py come percorsi guidati e rete di
+sicurezza, e public.py (sito). Qui si decide chi è l'utente per gli strumenti
 (`build_context`: il club da club/scope.py, i permessi da rbac), si salvano
 le battute e si tiene pulito lo storico (conservazione in models.py).
 """
@@ -17,6 +18,7 @@ from app.core.db import utcnow
 from app.core.deps import CurrentUser
 from app.domains.club.lessons import club_now
 from app.domains.club.scope import resolve_club
+from app.domains.javbot import assistant
 from app.domains.javbot import planner as planner_module
 from app.domains.javbot.models import RETENTION_DAYS, JavbotConversation, JavbotMessage, JavbotTask
 from app.domains.javbot.planner import Planner, Reply
@@ -129,7 +131,11 @@ async def post_message(db: AsyncSession, *, ctx: ToolContext, text: str) -> list
     text = (text or "").strip()[:MAX_TEXT]
     conversation = await open_conversation(db, ctx=ctx)
     conversation_id = conversation.id
-    reply = await Planner(ctx, conversation).reply(text)
+    reply = None
+    if assistant.enabled() and assistant.should_handle(conversation, text, lang=ctx.lang):
+        reply = await assistant.reply(ctx, conversation, text)
+    if reply is None:
+        reply = await Planner(ctx, conversation).reply(text)
     return await _save_exchange(db, ctx=ctx, conversation_id=conversation_id, user_text=text, reply=reply)
 
 

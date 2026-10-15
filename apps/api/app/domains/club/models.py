@@ -53,13 +53,24 @@ CLUB_KINDS = ("CLUB", "JAV_COURSES")
 ATHLETE_STATUSES = ("ACTIVE", "SUSPENDED", "LEFT")
 #: MEMBERSHIP è la quota socio del genitore di un atleta minorenne: una per
 #: famiglia e per anno, legata al genitore e non a un atleta.
-FEE_KINDS = ("MONTHLY", "ENROLLMENT", "COMPETITION", "MEMBERSHIP")
+#: FINE è una multa decisa dalla segreteria (es. le assenze agli allenamenti),
+#: EQUIPMENT il prezzo di un ordine di judogi del club (club_equipment_orders).
+FEE_KINDS = ("MONTHLY", "ENROLLMENT", "COMPETITION", "MEMBERSHIP", "FINE", "EQUIPMENT")
 #: L'escalão (fascia di reddito per gli aiuti sociali, in Portogallo A/B/C):
 #: dà uno sconto in percentuale sulla mensilità, deciso dal club.
-SOCIAL_TIERS = ("A", "B", "C")
-#: COMPETITION conta per il Jav Ranking; STAGE (allenamento collegiale,
-#: stage tecnico) no.
-EVENT_KINDS = ("COMPETITION", "STAGE")
+SOCIAL_TIERS = ("A", "B", "C", "D")
+#: Lo sconto personale di un atleta (oltre a escalão e famiglia): in
+#: percentuale o in centesimi, sulla mensilità, sulle quote annuali o su
+#: entrambe. Lo decide la segreteria, con la sua descrizione.
+CUSTOM_DISCOUNT_KINDS = ("PERCENT", "FIXED")
+CUSTOM_DISCOUNT_SCOPES = ("MONTHLY", "ANNUAL", "BOTH")
+#: COMPETITION conta per il Jav Ranking; gli altri no: STAGE (allenamento
+#: collegiale, stage tecnico), REFEREEING (corso o servizio di arbitraggio),
+#: EDUCATION (formazione, seminario, clinic), MEETING (riunione, assemblea).
+EVENT_KINDS = ("COMPETITION", "STAGE", "REFEREEING", "EDUCATION", "MEETING", "OTHER")
+#: Come si va all'evento: con il trasporto del club, ognuno per conto suo, o
+#: ancora da decidere.
+TRANSPORT_MODES = ("CLUB", "OWN", "TBC")
 TRANSPORT_REQUEST_STATUSES = ("DRAFT", "SENT")
 #: Le funzioni di chi insegna nel club. Treinador e treinador adjunto hanno
 #: un account (ruolo INSTRUCTOR) e la loro area; monitor e monitor adjunto
@@ -74,10 +85,17 @@ PROOF_STATUSES = ("ACCEPTED", "REJECTED")
 #: genitore (la ricevuta del bonifico, o a chi ha dato i contanti); CARD
 #: solo la segreteria (POS in palestra) finché il pagamento online non c'è;
 #: WALLET quando il credito del wallet copre tutto.
-PAYMENT_METHODS = ("BANK_TRANSFER", "CASH", "CARD", "WALLET")
-PROOF_METHODS = ("BANK_TRANSFER", "CASH")
+#: MBWAY (il pagamento da telefono portoghese) si dichiara come il bonifico,
+#: con la schermata della conferma.
+PAYMENT_METHODS = ("BANK_TRANSFER", "MBWAY", "CASH", "CARD", "WALLET")
+PROOF_METHODS = ("BANK_TRANSFER", "MBWAY", "CASH")
 CERTIFICATE_TYPES = ("NON_AGONISTIC", "AGONISTIC")
-COMPETITION_LEVELS = ("CLUB", "REGIONAL", "NATIONAL", "INTERNATIONAL")
+#: I livelli dei club portoghesi, dal regionale ai Giochi Olimpici; CLUB e
+#: INTERNATIONAL (generico) per le gare che non ne hanno uno preciso.
+COMPETITION_LEVELS = (
+    "CLUB", "REGIONAL", "ZONAL", "OPENS", "NATIONAL", "INTERNATIONAL", "EUROPEAN_CUP",
+    "EUROPEAN_CHAMPIONSHIP", "WORLD_CHAMPIONSHIP", "OLYMPIC_GAMES",
+)
 COMPETITION_STATUSES = ("OPEN", "CLOSED", "DONE")
 ENTRY_STATUSES = ("REGISTERED", "WITHDRAWN")
 #: 0 è la partecipazione senza piazzamento; 5 e 7 sono i quinti e settimi
@@ -178,6 +196,24 @@ class ClubAthlete(UUIDPKMixin, TimestampMixin, Base):
         CheckConstraint(f"status IN ({_in(ATHLETE_STATUSES)})", name="status"),
         CheckConstraint("weight_kg IS NULL OR weight_kg > 0", name="weight_positive"),
         CheckConstraint(f"social_tier IS NULL OR social_tier IN ({_in(SOCIAL_TIERS)})", name="social_tier"),
+        CheckConstraint(
+            f"custom_discount_kind IS NULL OR custom_discount_kind IN ({_in(CUSTOM_DISCOUNT_KINDS)})",
+            name="custom_discount_kind",
+        ),
+        CheckConstraint(
+            f"custom_discount_scope IN ({_in(CUSTOM_DISCOUNT_SCOPES)})", name="custom_discount_scope",
+        ),
+        CheckConstraint(
+            "custom_discount_kind IS NULL OR (custom_discount_value > 0 AND "
+            "(custom_discount_kind <> 'PERCENT' OR custom_discount_value <= 100))",
+            name="custom_discount_value",
+        ),
+        CheckConstraint("height_cm IS NULL OR (height_cm > 40 AND height_cm < 250)", name="height_range"),
+        # Il nº de sócio è del club: lo stesso numero in due club va bene.
+        Index(
+            "uq_club_athletes_club_member_number", "club_id", "member_number",
+            unique=True, postgresql_where=text("member_number IS NOT NULL"),
+        ),
         # Una persona è "me stesso" una volta sola per account.
         Index(
             "uq_club_athletes_one_self_per_guardian", "guardian_user_id",
@@ -218,6 +254,29 @@ class ClubAthlete(UUIDPKMixin, TimestampMixin, Base):
     adapted_judo: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     joined_on: Mapped[date] = mapped_column(Date)
     left_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # --- La ficha de inscrição: ciò che serve alla segreteria e alla
+    # federazione. I dati d'identità (documenti, indirizzo, contatti dei
+    # genitori) stanno in club_athlete_records, letti solo dalla segreteria. ---
+    #: Il nº de sócio, del club (unico nel club).
+    member_number: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    #: Il nome da ricamare sul judogi (sotto i 13 anni solo il nome proprio).
+    kimono_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    height_cm: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    nationality: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    #: La categoria di peso come la scrive la federazione ("-66kg").
+    weight_category: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    #: L'ultimo anno in cui la licenza federale è stata rivalidata.
+    federation_renewal_year: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    # --- Esenzioni e sconto personale (club/pricing.py). ---
+    #: Non paga la mensilità (staff, órgãos sociais, borsa del club).
+    exempt_monthly: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    #: Non paga le quote annuali (iscrizione e quota socio).
+    exempt_annual: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    custom_discount_kind: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    #: Percentuale (1-100) o centesimi, secondo il tipo.
+    custom_discount_value: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    custom_discount_scope: Mapped[str] = mapped_column(String(8), default="MONTHLY", server_default="MONTHLY")
+    custom_discount_note: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
 
 class ClubPaymentProof(UUIDPKMixin, TimestampMixin, Base):
@@ -233,6 +292,10 @@ class ClubPaymentProof(UUIDPKMixin, TimestampMixin, Base):
         CheckConstraint(f"status IN ({_in(PROOF_STATUSES)})", name="status"),
         CheckConstraint("amount_cents >= 0", name="amount_non_negative"),
         CheckConstraint("credit_cents >= 0 AND credit_cents <= amount_cents", name="credit_range"),
+        Index(
+            "uq_club_payment_proofs_club_receipt", "club_id", "receipt_number",
+            unique=True, postgresql_where=text("receipt_number IS NOT NULL"),
+        ),
         CheckConstraint(f"method IN ({_in(PROOF_METHODS)})", name="method"),
         # Senza foto solo se il credito paga tutto, o se sono contanti: lì la
         # prova è la persona che li ha ricevuti.
@@ -277,6 +340,27 @@ class ClubPaymentProof(UUIDPKMixin, TimestampMixin, Base):
     #: Il nome di chi ha ricevuto i contanti, congelato: resta leggibile
     #: anche se l'account cambia nome o se ne va.
     cash_received_by_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    #: Il numero della ricevuta, per chi parla con la segreteria al telefono:
+    #: "MEN-2026-0042". Unico nel club (indice), lo assegna il server
+    #: (club_receipt_counters): nessun conteggio di righe che due richieste
+    #: insieme possano duplicare.
+    receipt_number: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    #: Il giorno del pagamento dichiarato da chi carica la prova (il bonifico
+    #: di ieri caricato oggi); NULL = il giorno del caricamento.
+    paid_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+
+class ClubReceiptCounter(Base):
+    """L'ultimo numero di ricevuta dato, per club, prefisso e anno. Il
+    numero nuovo si prende con un INSERT ... ON CONFLICT DO UPDATE ...
+    RETURNING: due pagamenti insieme non avranno mai lo stesso numero."""
+
+    __tablename__ = "club_receipt_counters"
+
+    club_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("clubs.id"), primary_key=True)
+    prefix: Mapped[str] = mapped_column(String(4), primary_key=True)
+    year: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
+    last_number: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class ClubCompetition(UUIDPKMixin, TimestampMixin, Base):
@@ -290,19 +374,27 @@ class ClubCompetition(UUIDPKMixin, TimestampMixin, Base):
         CheckConstraint("registration_deadline <= starts_on", name="deadline_before_start"),
         CheckConstraint("fee_cents >= 0", name="fee_non_negative"),
         CheckConstraint("max_age IS NULL OR min_age IS NULL OR max_age >= min_age", name="age_range"),
+        CheckConstraint(f"transport_mode IN ({_in(TRANSPORT_MODES)})", name="transport_mode"),
+        CheckConstraint("places IS NULL OR places > 0", name="places_positive"),
     )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("organizations.id"), index=True
     )
-    club_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("clubs.id"), index=True)
+    #: NULL = un evento **della rete** (il calendário comune: gare della
+    #: federazione, opens, estágios, formazioni): lo crea la piattaforma, lo
+    #: vede ogni club dell'organizzazione, e ogni club ci iscrive i suoi
+    #: atleti (le iscrizioni e le quote hanno il club dell'atleta).
+    club_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("clubs.id"), nullable=True, index=True
+    )
     name: Mapped[str] = mapped_column(String(200))
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     starts_on: Mapped[date] = mapped_column(Date, index=True)
     ends_on: Mapped[date] = mapped_column(Date)
     location: Mapped[str | None] = mapped_column(String(200), nullable=True)
     organizer: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    level: Mapped[str] = mapped_column(String(16), default="CLUB")
+    level: Mapped[str] = mapped_column(String(24), default="CLUB")
     #: Ultimo giorno utile per iscriversi, incluso.
     registration_deadline: Mapped[date] = mapped_column(Date)
     fee_cents: Mapped[int] = mapped_column(BigInteger, default=0)
@@ -333,6 +425,24 @@ class ClubCompetition(UUIDPKMixin, TimestampMixin, Base):
     #: (il default): la bozza si prepara da sola e la segreteria la manda
     #: con un clic dopo averla riletta.
     transport_auto_send: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    #: Come ci si va (TRANSPORT_MODES) e le note per le famiglie.
+    transport_mode: Mapped[str] = mapped_column(String(8), default="TBC", server_default="TBC")
+    transport_info: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    starts_at_time: Mapped[time | None] = mapped_column(Time, nullable=True)
+    ends_at_time: Mapped[time | None] = mapped_column(Time, nullable=True)
+    #: L'ora del giorno di scadenza (NULL = fino a fine giornata).
+    registration_deadline_time: Mapped[time | None] = mapped_column(Time, nullable=True)
+    #: Posti disponibili, se l'organizzatore li limita.
+    places: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: Le fasce federali ammesse (benj_inf_inic, juvenis, cadetes, juniores,
+    #: sub23, seniores, veteranos, adaptado, katas, formacao); vuoto = tutte.
+    age_groups: Mapped[list[str]] = mapped_column(
+        ARRAY(String(20)), default=list, server_default=text("'{}'::varchar[]")
+    )
+    #: La circolare o il regolamento dell'organizzatore (PDF o immagine) nel
+    #: bucket media: è pensata per essere letta da tutti.
+    circular_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    circular_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
 
 class ClubTransportRequest(UUIDPKMixin, TimestampMixin, Base):
@@ -343,7 +453,8 @@ class ClubTransportRequest(UUIDPKMixin, TimestampMixin, Base):
 
     __tablename__ = "club_transport_requests"
     __table_args__ = (
-        UniqueConstraint("competition_id", name="uq_club_transport_requests_competition_id"),
+        # Un evento della rete ha una richiesta per club: ognuno porta i suoi.
+        UniqueConstraint("competition_id", "club_id", name="uq_club_transport_requests_competition_club"),
         CheckConstraint(f"status IN ({_in(TRANSPORT_REQUEST_STATUSES)})", name="status"),
     )
 
@@ -401,6 +512,11 @@ class ClubFee(UUIDPKMixin, TimestampMixin, Base):
         CheckConstraint(
             f"payment_method IS NULL OR payment_method IN ({_in(PAYMENT_METHODS)})", name="payment_method"
         ),
+        CheckConstraint(
+            "(installment_no IS NULL AND installments_total IS NULL) OR "
+            "(installment_no >= 1 AND installments_total >= 2 AND installment_no <= installments_total)",
+            name="installments",
+        ),
     )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
@@ -418,8 +534,15 @@ class ClubFee(UUIDPKMixin, TimestampMixin, Base):
     )
     kind: Mapped[str] = mapped_column(String(16))
     #: `YYYY-MM` per le mensili, l'anno solare per iscrizione e quota socio,
-    #: l'id della gara per le gare.
-    period: Mapped[str] = mapped_column(String(36))
+    #: l'id della gara per le gare, l'id dell'ordine per un judogi, un
+    #: codice della segreteria per una multa. Una rata aggiunge `/n`
+    #: ("2026/2"): la quota divisa resta una riga per rata, e l'unicità
+    #: (atleta, tipo, periodo) vale per ognuna.
+    period: Mapped[str] = mapped_column(String(40))
+    #: La rata (1..installments_total) di una quota divisa in rate (1-4
+    #: prestações); NULL per una quota intera.
+    installment_no: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    installments_total: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     description: Mapped[str] = mapped_column(String(200))
     #: Quanto si paga: il listino meno gli sconti. Congelato.
     amount_cents: Mapped[int] = mapped_column(BigInteger)
@@ -716,6 +839,10 @@ class ClubCompetitionEntry(UUIDPKMixin, TimestampMixin, Base):
     registered_by_user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
     #: NULL finché la segreteria non inserisce i risultati.
     placement: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    #: La posizione vera in classifica quando non è un podio né un 5°/7°
+    #: (il 9° di un open): `placement` resta 0, la partecipazione.
+    rank: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    result_notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
 
 class ClubSchoolLetter(UUIDPKMixin, TimestampMixin, Base):
@@ -774,13 +901,16 @@ class ClubReminderSent(UUIDPKMixin, TimestampMixin, Base):
 
 #: Le categorie di spesa, quelle che un club di judo riconosce nel suo
 #: estratto conto. La commissione della piattaforma non c'è: si calcola.
+#: COLLABORATORS: i pagamenti a chi aiuta il club senza un contratto da staff;
+#: CLEANING: le pulizie della palestra (club_cleaning_logs); EXTERNAL_COACH: i
+#: compensi dei treinadores esterni (club_external_coach_fees).
 EXPENSE_CATEGORIES = (
     "RENT", "STAFF", "FEDERATION", "INSURANCE", "EQUIPMENT", "TRANSPORT", "EVENTS", "UTILITIES",
-    "MARKETING", "ADMIN", "OTHER",
+    "MARKETING", "ADMIN", "COLLABORATORS", "CLEANING", "EXTERNAL_COACH", "OTHER",
 )
 #: Come il club ha pagato un fornitore (non come le famiglie pagano il club:
 #: quello resta bonifico o JavCash).
-EXPENSE_PAYMENT_METHODS = ("BANK_TRANSFER", "CASH", "CARD", "DIRECT_DEBIT", "OTHER")
+EXPENSE_PAYMENT_METHODS = ("BANK_TRANSFER", "MBWAY", "CASH", "CARD", "DIRECT_DEBIT", "CHEQUE", "OTHER")
 #: La percentuale degli incassi che un club riconosce alla piattaforma,
 #: finché il superadmin non ne decide un'altra.
 DEFAULT_PLATFORM_FEE_PCT = Decimal(10)

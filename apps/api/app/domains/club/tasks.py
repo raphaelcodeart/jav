@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import utcnow
 from app.domains.club import seasons, transport
+from app.domains.club.competitions import visible_to as competitions_visible_to
 from app.domains.club import service as club_service
 from app.domains.club.models import (
     ClubAthlete,
@@ -165,6 +166,11 @@ async def send_reminders(db: AsyncSession, *, scope: ClubScope, today: date | No
             db, organization_id=scope.organization_id, user_id=guardian_id, type_=type_,
             entity_type="club", entity_id=guardian_id, title=title,
         )
+    # I documenti del club in scadenza (certidões, assicurazioni): un avviso
+    # alla segreteria, nella stessa transazione degli altri promemoria.
+    from app.domains.club import club_documents
+
+    documents_sent = await club_documents.expiry_reminders(db, scope=scope, today=today)
     # I promemoria risultano inviati solo se il commit riesce: un job che
     # cade a metà li rimanda tutti al giro dopo, invece di perderne qualcuno.
     await db.commit()
@@ -172,15 +178,17 @@ async def send_reminders(db: AsyncSession, *, scope: ClubScope, today: date | No
         await club_service.email_guardian(
             db, user_id=guardian_id, context="club reminder", subject=subject, heading=title, lines=lines
         )
-    return len(pending)
+    return len(pending) + documents_sent
 
 
 async def close_expired_competitions(db: AsyncSession, *, scope: ClubScope, today: date | None = None) -> int:
     today = today or utcnow().date()
     comps = (
         await db.execute(
+            # Anche quelli della rete: chiuderli da ogni club è innocuo, e
+            # così nessun evento resta aperto oltre la scadenza.
             select(ClubCompetition).where(
-                ClubCompetition.club_id == scope.club_id, ClubCompetition.status == "OPEN",
+                competitions_visible_to(scope), ClubCompetition.status == "OPEN",
                 ClubCompetition.registration_deadline < today,
             )
         )

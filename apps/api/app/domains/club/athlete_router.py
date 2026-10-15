@@ -3,13 +3,16 @@
 - `/club/athletes/{id}/login[...]`: il titolare crea, cambia e spegne
   l'accesso del suo atleta, e ne genera il QR (`club.family`);
 - `/club/athlete-area[...]`: l'area dell'atleta, per l'atleta stesso o per il
-  suo titolare (`club.athlete`, che hanno sia ATHLETE sia CUSTOMER).
+  suo titolare (`club.athlete`, che hanno sia ATHLETE sia CUSTOMER). Anche
+  l'atleta con il suo accesso carica il proprio certificato medico: è lui
+  che va dal medico, e la segreteria lo vede come quello caricato dal
+  titolare (stesso servizio, stesso bucket privato).
 """
 
 import uuid
 from datetime import date, datetime, time
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,7 +22,7 @@ from app.domains.club import athlete_access, seasons
 from app.domains.club import lessons as lessons_service
 from app.domains.club import months as months_service
 from app.domains.club import service as club_service
-from app.domains.club.schemas import AthleteDetailRead, SeasonMonthsRead
+from app.domains.club.schemas import AthleteDetailRead, CertificateRead, SeasonMonthsRead, UrlRead
 from app.domains.club.scope import ClubUser, require_club_permission
 
 router = APIRouter(prefix="/club", tags=["club-athlete"])
@@ -264,6 +267,67 @@ async def unmark_present(
         )
     except club_service.ClubError as exc:
         _raise(exc)
+
+
+def _certificates(certs, today: date) -> list[CertificateRead]:
+    return [
+        CertificateRead(
+            id=c.id, type=c.type, issued_on=c.issued_on, expires_on=c.expires_on,
+            status=club_service.certificate_status(c, today=today), original_filename=c.original_filename,
+        )
+        for c in certs
+    ]
+
+
+@router.get("/athlete-area/{athlete_id}/certificates", response_model=list[CertificateRead])
+async def list_area_certificates(
+    athlete_id: uuid.UUID, current_user: ClubUser = Depends(require_club_permission(ATHLETE)),
+    db: AsyncSession = Depends(get_db),
+) -> list[CertificateRead]:
+    athlete = await _area_athlete(db, current_user, athlete_id)
+    today = (await lessons_service.club_now(db, club_id=current_user.club_id)).date()
+    return _certificates(await club_service.list_certificates(db, athlete_id=athlete.id), today)
+
+
+@router.post(
+    "/athlete-area/{athlete_id}/certificates", response_model=CertificateRead, status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit("club-certificate", max_requests=20, window_seconds=300))],
+)
+async def upload_area_certificate(
+    athlete_id: uuid.UUID,
+    file: UploadFile = File(...),
+    type: str = Form(...),
+    issued_on: date = Form(...),
+    expires_on: date = Form(...),
+    current_user: ClubUser = Depends(require_club_permission(ATHLETE)),
+    db: AsyncSession = Depends(get_db),
+) -> CertificateRead:
+    athlete = await _area_athlete(db, current_user, athlete_id)
+    try:
+        cert = await club_service.upload_certificate(
+            db, athlete=athlete, actor_user_id=current_user.user_id, type_=type, issued_on=issued_on,
+            expires_on=expires_on, file_bytes=await file.read(), content_type=file.content_type or "",
+            original_filename=file.filename or "certificato",
+        )
+    except club_service.ClubError as exc:
+        _raise(exc)
+    today = (await lessons_service.club_now(db, club_id=current_user.club_id)).date()
+    return _certificates([cert], today)[0]
+
+
+@router.get("/athlete-area/{athlete_id}/certificates/{certificate_id}/url", response_model=UrlRead)
+async def area_certificate_url(
+    athlete_id: uuid.UUID, certificate_id: uuid.UUID,
+    current_user: ClubUser = Depends(require_club_permission(ATHLETE)), db: AsyncSession = Depends(get_db),
+) -> UrlRead:
+    athlete = await _area_athlete(db, current_user, athlete_id)
+    try:
+        cert = await club_service.get_certificate(db, scope=current_user.scope, certificate_id=certificate_id)
+    except club_service.ClubError as exc:
+        _raise(exc)
+    if cert.athlete_id != athlete.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Certificato non trovato.")
+    return UrlRead(url=club_service.presigned_url(cert.storage_key))
 
 
 @router.post("/athlete-area/{athlete_id}/become-holder", status_code=status.HTTP_204_NO_CONTENT)

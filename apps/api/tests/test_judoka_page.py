@@ -105,11 +105,11 @@ async def test_the_page_carries_the_ijf_style_card(db, scope):
     assert profile["belt"] == "YELLOW"
     assert [b["grade"] for b in profile["belt_history"]] == ["WHITE", "YELLOW"]
     assert profile["belt_history"][-1]["awarded_on"] == date(2026, 10, 16)
-    assert profile["age_band"] == "RAGAZZI"
+    assert profile["age_band"] == "GRUPO_2"
     assert profile["category"] == "-38 kg"
     assert (profile["silver"], profile["gold"], profile["competitions"]) == (1, 0, 1)
     # Il rivale ha vinto: Tiago è secondo su due nella sua fascia.
-    assert profile["ranking"] == {"position": 2, "total": 2, "age_band": "RAGAZZI", "points": 140}
+    assert profile["ranking"] == {"position": 2, "total": 2, "age_band": "GRUPO_2", "points": 3}
     [result] = profile["results"]
     assert (result["event_id"], result["placement"], result["location"]) == (past.id, 2, "Portimão")
     assert [(u["id"], u["category"]) for u in profile["upcoming"]] == [(upcoming.id, "-38 kg")]

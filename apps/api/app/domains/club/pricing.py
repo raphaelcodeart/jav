@@ -5,14 +5,17 @@ Tutte le regole stanno qui, come funzioni pure dei parametri del club
 (`clubs.settings["pricing"]`): chi genera le quote (service.py) chiede il
 prezzo e lo congela sulla quota, nessuno lo ricalcola dopo (CLAUDE.md §5).
 
-- **Mensilità**: listino del piano, meno la percentuale dell'escalão (A/B/C,
-  il judo adattato vale come A; con entrambi vale il maggiore, non si
-  sommano), poi meno lo sconto famiglia in euro se la
-  famiglia ha abbastanza atleti attivi. Mai sotto zero.
+- **Mensilità**: listino del piano, meno la percentuale dell'escalão
+  (A/B/C/D, il judo adattato vale come A; con entrambi vale il maggiore,
+  non si sommano), poi lo sconto personale dell'atleta, poi lo sconto
+  famiglia in euro se la famiglia ha abbastanza atleti attivi. Mai sotto
+  zero. Un atleta esente (`exempt_monthly`: staff, órgãos sociais) paga 0.
 - **Iscrizione** (anno solare, 1 gennaio–31 dicembre): l'importo annuo del
-  piano, per i mesi che restano dell'anno contando quello d'ingresso. Nessuno
-  sconto: comprende quota di socio, taxa de falta, assicurazione e
-  iscrizioni a federazione e associazione distrettuale.
+  piano, per i mesi che restano dell'anno contando quello d'ingresso. Né
+  escalão né famiglia: solo lo sconto personale, se la segreteria l'ha
+  dato anche sulle quote annuali, e l'esenzione (`exempt_annual`). Comprende
+  quota di socio, taxa de falta, assicurazione e iscrizioni a federazione e
+  associazione distrettuale.
 - **Quota socio del genitore**: chi ha un atleta minorenne è socio anch'egli,
   una volta per famiglia e per anno, a pro rata come l'iscrizione. Non la paga
   chi è già atleta (la sua iscrizione la comprende).
@@ -29,7 +32,7 @@ MINOR_AGE = 18
 
 DEFAULT_PRICING: dict = {
     #: Percentuale di sconto sulla mensilità per escalão.
-    "tier_discount_pct": {"A": 25, "B": 0, "C": 0},
+    "tier_discount_pct": {"A": 25, "B": 0, "C": 0, "D": 0},
     #: Sconto in centesimi su ogni mensilità quando la famiglia ha almeno
     #: `family_min_athletes` atleti attivi.
     "family_discount_cents": 500,
@@ -74,7 +77,7 @@ def validate_pricing(changes: dict) -> dict:
             tiers = {}
             for tier, pct in (value or {}).items():
                 if tier not in SOCIAL_TIERS:
-                    raise ValueError("Gli escalão sono A, B e C.")
+                    raise ValueError("Gli escalão sono A, B, C e D.")
                 if not isinstance(pct, int) or not 0 <= pct <= 100:
                     raise ValueError("Lo sconto di un escalão è una percentuale tra 0 e 100.")
                 tiers[tier] = pct
@@ -110,15 +113,40 @@ def _euro(cents: int) -> str:
     return f"{cents / 100:.2f}".replace(".", ",") + " €"
 
 
+def _custom_discount(athlete: ClubAthlete, *, amount: int, annual: bool) -> tuple[int, str | None]:
+    """(centesimi da togliere, etichetta) dello sconto personale, se vale per
+    questo tipo di quota."""
+    if athlete.custom_discount_kind is None or not athlete.custom_discount_value:
+        return 0, None
+    scopes = ("ANNUAL", "BOTH") if annual else ("MONTHLY", "BOTH")
+    if athlete.custom_discount_scope not in scopes or amount <= 0:
+        return 0, None
+    label = (athlete.custom_discount_note or "Sconto").strip()[:60]
+    if athlete.custom_discount_kind == "PERCENT":
+        return min(amount, round(amount * athlete.custom_discount_value / 100)), f"{label} −{athlete.custom_discount_value}%"
+    cut = min(amount, athlete.custom_discount_value)
+    return cut, f"{label} −{_euro(cut)}"
+
+
+def _exempt(list_cents: int, note: str) -> dict:
+    return {"amount_cents": 0, "gross_amount_cents": list_cents, "discount_cents": list_cents, "discount_note": note}
+
+
 def monthly_price(*, list_cents: int, athlete: ClubAthlete, family_size: int, pricing: dict) -> dict:
     """Il prezzo della mensilità: {amount_cents, gross_amount_cents,
-    discount_cents, discount_note}. Prima la percentuale, poi gli euro."""
+    discount_cents, discount_note}. Prima le percentuali, poi gli euro."""
+    if athlete.exempt_monthly:
+        return _exempt(list_cents, "Esente")
     amount = list_cents
     notes: list[str] = []
     pct, label = _tier_discount(athlete, pricing)
     if pct:
         amount -= round(list_cents * pct / 100)
         notes.append(f"{label} −{pct}%")
+    cut, label = _custom_discount(athlete, amount=amount, annual=False)
+    if cut:
+        amount -= cut
+        notes.append(label)
     family_cents = pricing["family_discount_cents"]
     if family_cents and family_size >= pricing["family_min_athletes"] and amount > 0:
         cut = min(family_cents, amount)
@@ -129,6 +157,18 @@ def monthly_price(*, list_cents: int, athlete: ClubAthlete, family_size: int, pr
         "gross_amount_cents": list_cents,
         "discount_cents": list_cents - amount,
         "discount_note": " · ".join(notes) or None,
+    }
+
+
+def annual_price(*, amount_cents: int, athlete: ClubAthlete) -> dict:
+    """Il prezzo dell'iscrizione annuale (già a pro rata): l'esenzione o lo
+    sconto personale "sulle quote annuali", nient'altro."""
+    if athlete.exempt_annual:
+        return _exempt(amount_cents, "Esente")
+    cut, label = _custom_discount(athlete, amount=amount_cents, annual=True)
+    return {
+        "amount_cents": amount_cents - cut, "gross_amount_cents": amount_cents, "discount_cents": cut,
+        "discount_note": label,
     }
 
 
@@ -151,4 +191,7 @@ def needs_parent_membership(athletes: list[ClubAthlete], *, on: date) -> bool:
     active = [a for a in athletes if a.status == "ACTIVE"]
     if any(a.is_self for a in active):
         return False
+    # Una famiglia di soli esenti dalle quote annuali (figli di órgãos
+    # sociais, staff) non paga nemmeno la quota socio.
+    active = [a for a in active if not a.exempt_annual]
     return any(seasons.age_on(a.birth_date, on) < MINOR_AGE for a in active)

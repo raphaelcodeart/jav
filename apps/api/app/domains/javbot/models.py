@@ -1,9 +1,11 @@
 """JAVBOT: le conversazioni dell'assistente dell'area privata e i compiti
 che aspettano una conferma.
 
-Tre tabelle, e nessuna colonna su quelle degli altri domini: l'assistente
-legge i dati del club e dello Shop attraverso i loro servizi, e qui tiene
-solo ciò che è suo — che cosa si sono detti e che cosa ha promesso di fare.
+Tre tabelle per le conversazioni, e nessuna colonna su quelle degli altri
+domini: l'assistente legge i dati del club e dello Shop attraverso i loro
+servizi, e qui tiene solo ciò che è suo — che cosa si sono detti e che cosa
+ha promesso di fare. Più le tre della base di conoscenza (in fondo): i PDF,
+i loro pezzi di testo e le istruzioni scritte da chi amministra.
 
 **Un compito (`javbot_tasks`) è l'unico modo in cui JAVBOT scrive.** Un
 ordine, un messaggio alla segreteria, una presenza: prima nasce un compito
@@ -24,7 +26,7 @@ non accumula niente che qualcuno legga.
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, Index, String, Text
+from sqlalchemy import ForeignKey, Index, Integer, String, Text
 from sqlalchemy import text as sql_text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -112,3 +114,92 @@ class JavbotTask(UUIDPKMixin, TimestampMixin, Base):
     #: risultato appartiene a un compito solo.
     result_ref: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
     done_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+
+# --- La base di conoscenza dell'assistente dell'area privata --------------------------------------
+#
+# I PDF che l'assistente consulta (knowledge.py). `club_id` NULL = la base
+# **comune** a tutti i club, che carica la piattaforma; con un club = i
+# documenti di quel club, che carica la sua segreteria. Un utente di un club
+# vede sempre le due insieme, mai i documenti di un altro club.
+
+#: Un documento si legge solo se ha testo: una scansione senza testo resta
+#: in elenco come EMPTY, così chi l'ha caricata sa perché l'assistente non la usa.
+KNOWLEDGE_STATUSES = ("READY", "EMPTY")
+
+
+class JavbotKnowledgeDocument(UUIDPKMixin, TimestampMixin, Base):
+    """Un PDF caricato. Il file resta nel bucket privato (`storage_key`), il
+    testo estratto vive nei pezzi (`javbot_knowledge_chunks`)."""
+
+    __tablename__ = "javbot_knowledge_documents"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id"), index=True
+    )
+    club_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("clubs.id"), nullable=True, index=True
+    )
+    title: Mapped[str] = mapped_column(String(200))
+    filename: Mapped[str] = mapped_column(String(255))
+    storage_key: Mapped[str] = mapped_column(String(512))
+    size_bytes: Mapped[int] = mapped_column(Integer)
+    page_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    char_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    status: Mapped[str] = mapped_column(String(16))
+    uploaded_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+
+
+class JavbotKnowledgeChunk(UUIDPKMixin, Base):
+    """Un pezzo di testo di un documento, quello che la ricerca restituisce.
+    `norm` è il testo minuscolo e senza accenti (intents.normalize): la
+    ricerca a parole (`to_tsvector('simple', norm)`, indice GIN) trova
+    "inscrição" scrivendo "inscricao", in ogni lingua, senza estensioni di
+    Postgres da installare."""
+
+    __tablename__ = "javbot_knowledge_chunks"
+    __table_args__ = (
+        Index("ix_javbot_knowledge_chunks_search", sql_text("to_tsvector('simple', norm)"), postgresql_using="gin"),
+    )
+
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("javbot_knowledge_documents.id", ondelete="CASCADE"), index=True
+    )
+    #: Ripetuti dal documento: la ricerca filtra per club senza un JOIN.
+    organization_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id"))
+    club_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("clubs.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    ordinal: Mapped[int] = mapped_column(Integer)
+    #: La pagina del PDF da cui inizia il pezzo (da 1), per citarla.
+    page: Mapped[int] = mapped_column(Integer)
+    text: Mapped[str] = mapped_column(Text)
+    norm: Mapped[str] = mapped_column(Text)
+
+
+class JavbotInstructions(UUIDPKMixin, TimestampMixin, Base):
+    """Il prompt scritto da chi amministra: come deve comportarsi
+    l'assistente. Una riga comune (`club_id` NULL, della piattaforma) e al
+    più una per club: valgono tutte e due, quella del club per ultima, così
+    può precisare o correggere la comune per i suoi soci."""
+
+    __tablename__ = "javbot_instructions"
+    __table_args__ = (
+        Index("uq_javbot_instructions_club", "club_id", unique=True, postgresql_where=sql_text("club_id IS NOT NULL")),
+        Index(
+            "uq_javbot_instructions_common", "organization_id", unique=True,
+            postgresql_where=sql_text("club_id IS NULL"),
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id"))
+    club_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("clubs.id", ondelete="CASCADE"), nullable=True
+    )
+    text: Mapped[str] = mapped_column(Text, default="", server_default="")
+    updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
+    updated_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )

@@ -20,6 +20,8 @@ import { useCurrentClub, type ClubSettings } from "@/components/club/current-clu
 import { AttendanceTool } from "@/components/club/attendance-tool";
 import { ClubAccounting, ClubMoneyHome } from "@/components/club/club-accounting";
 import { ClubSiteEditor } from "@/components/club/club-site-editor";
+import { KnowledgePanel } from "@/components/javbot/knowledge-panel";
+import { ClubDocumentsPanel } from "@/components/club/club-documents";
 import { ContactInbox } from "@/components/club/contact-inbox";
 import { AthletePublicPageSection } from "@/components/club/athlete-public-page";
 import { AbsencePanel, DayLogPanel, PeoplePanel, WorkHoursPanel } from "@/components/club/club-console";
@@ -59,7 +61,7 @@ import {
 export type ClubSection =
   | "overview" | "people" | "athletes" | "plans" | "accounting" | "fees" | "proofs" | "absence" | "certificates"
   | "competitions" | "courses" | "calendar" | "attendance" | "daylog" | "belts" | "ranking" | "workhours"
-  | "shop-orders" | "site" | "messages" | "settings";
+  | "shop-orders" | "site" | "messages" | "javbot" | "documents" | "settings";
 type Section = ClubSection;
 
 /** Le sezioni del club, nell'ordine e con i gruppi del menu laterale: la
@@ -86,6 +88,10 @@ export const CLUB_SECTIONS: { key: ClubSection; icon: string; group: "people" | 
   { key: "site", icon: "🌐", group: "club" },
   // I messaggi scritti al club dalla sua pagina pubblica (contact-inbox.tsx).
   { key: "messages", icon: "✉️", group: "club" },
+  // Che cosa sa JAVBOT dell'area riservata: i PDF e le istruzioni del club.
+  { key: "javbot", icon: "🤖", group: "club" },
+  // Certidões, atas, rivalidazione FPJ, assicurazioni, statuto del club.
+  { key: "documents", icon: "📁", group: "club" },
   { key: "settings", icon: "⚙️", group: "club" },
 ];
 
@@ -162,6 +168,8 @@ export function ClubAdminPanel({ section: controlled, onGo, canInvest = false }:
         {section === "shop-orders" && <ShopOrders />}
         {section === "site" && <ClubSiteEditor />}
         {section === "messages" && <ContactInbox mode="club" />}
+        {section === "javbot" && <KnowledgePanel mode="club" />}
+        {section === "documents" && <ClubDocumentsPanel />}
         {section === "settings" && <ClubSettingsSection />}
       </motion.div>
     </div>

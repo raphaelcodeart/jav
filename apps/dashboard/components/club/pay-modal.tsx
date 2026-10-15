@@ -177,7 +177,7 @@ function FeesStep({ open, onClose, onBack, fees, preselect }: { open: boolean; o
   const [useCredit, setUseCredit] = useState(false);
   const [code, setCode] = useState("");
   const [codeRequested, setCodeRequested] = useState(false);
-  const [how, setHow] = useState<"BANK_TRANSFER" | "CASH">("BANK_TRANSFER");
+  const [how, setHow] = useState<"BANK_TRANSFER" | "MBWAY" | "CASH">("BANK_TRANSFER");
   const [receiver, setReceiver] = useState("");
   const [otherName, setOtherName] = useState("");
   const queryClient = useQueryClient();
@@ -271,8 +271,9 @@ function FeesStep({ open, onClose, onBack, fees, preselect }: { open: boolean; o
       <div className="space-y-5">
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-ink-500 mb-2">{t("pay.howTitle")}</p>
-          <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label={t("pay.howTitle")}>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="radiogroup" aria-label={t("pay.howTitle")}>
             <HowTile icon="🏦" title={t("pay.howTransfer")} text={t("pay.howTransferText")} on={how === "BANK_TRANSFER"} onClick={() => setHow("BANK_TRANSFER")} />
+            <HowTile icon="📱" title={t("pay.howMbway")} text={t("pay.howMbwayText")} on={how === "MBWAY"} onClick={() => setHow("MBWAY")} />
             <HowTile icon="💶" title={t("pay.howCash")} text={t("pay.howCashText")} on={how === "CASH"} onClick={() => setHow("CASH")} />
             {/* Spento finché il club non ha un pagamento online (Stripe). */}
             <HowTile icon="💳" title={t("pay.howCard")} text={t("pay.howCardText")} on={false} disabled onClick={() => undefined} />

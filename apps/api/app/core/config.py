@@ -59,6 +59,14 @@ class Settings(BaseSettings):
     # console. Quelli a un club vanno all'email di contatto del club.
     jav_contact_email: str = "info@judoartevida.com"
 
+    # L'assistente dell'area privata (javbot/assistant.py). Senza chiave
+    # JAVBOT risponde come prima, con le parole chiave: niente si rompe.
+    anthropic_api_key: str = ""
+    javbot_model: str = "claude-opus-5-5"
+    # Quanto ragiona prima di rispondere: per una chat "low" basta, e
+    # costa meno; "medium" per risposte più ragionate sui documenti.
+    javbot_effort: str = "low"
+
 
 @lru_cache
 def get_settings() -> Settings:

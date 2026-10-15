@@ -98,7 +98,9 @@ async def athlete_cards(
             belt_counts[athlete_id] += 1
     certs = await club_service.latest_certificates(db, athlete_ids=ids)
     due_fees = await club_service.list_fees(db, scope=scope_of(athletes[0]), athlete_ids=ids, status="DUE") if athletes else []
-    season_points = await competitions_service.athlete_points(db, athlete_ids=ids, season=season)
+    # I punti "di adesso" sono quelli dell'anno del ranking (anno solare).
+    season_points = await competitions_service.athlete_points(
+        db, athlete_ids=ids, season=competitions_service.ranking_year(today))
     lifetime = await competitions_service.athlete_points(db, athlete_ids=ids)
     attendances = await courses_service.attendance_counts(db, athlete_ids=ids)
 
@@ -246,6 +248,8 @@ def proof_dict(proof, *, fees: list[ClubFee], today: date) -> dict:
         "uploaded_by_user_id": proof.uploaded_by_user_id,
         "method": proof.method,
         "cash_received_by_name": proof.cash_received_by_name,
+        "receipt_number": proof.receipt_number,
+        "paid_on": proof.paid_on,
         "fees": [fee_dict(f, today=today) for f in fees],
     }
 

@@ -13,13 +13,20 @@ import { Tabs } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toast";
 import { celebrate } from "@/lib/motion";
 import { LEVEL_LABELS, PLACEMENT_LABELS, clubGet, clubSend, daysUntil, type FamilyCompetition } from "@/lib/club";
+import type { MessageKey } from "@/lib/i18n/messages/it";
 import { useI18n } from "@/lib/i18n/provider";
 
 const LEVEL_TONES: Record<string, string> = {
   CLUB: "from-ink-600 to-ink-800",
   REGIONAL: "from-sky-500 to-sky-700",
+  ZONAL: "from-sky-600 to-sky-800",
+  OPENS: "from-emerald-500 to-emerald-700",
   NATIONAL: "from-brand-500 to-brand-700",
   INTERNATIONAL: "from-accent-400 to-accent-600 text-ink-900",
+  EUROPEAN_CUP: "from-accent-400 to-accent-600 text-ink-900",
+  EUROPEAN_CHAMPIONSHIP: "from-accent-400 to-accent-600 text-ink-900",
+  WORLD_CHAMPIONSHIP: "from-accent-500 to-accent-700 text-ink-900",
+  OLYMPIC_GAMES: "from-accent-500 to-accent-700 text-ink-900",
 };
 
 /** The competition calendar, per family: for every competition, each child
@@ -50,12 +57,19 @@ export function CompetitionsPanel() {
   );
 }
 
+const EVENT_KIND_KEYS: Record<string, MessageKey> = {
+  STAGE: "event.stage", REFEREEING: "event.referee", EDUCATION: "event.education", MEETING: "event.meeting",
+  OTHER: "event.other",
+};
+
 function CompetitionCard({ competition: c, delay }: { competition: FamilyCompetition; delay: number }) {
   const { t, fmt } = useI18n();
   const start = new Date(`${c.starts_on}T00:00:00`);
   const toDeadline = daysUntil(c.registration_deadline);
-  // Uno stage non ha livello di ranking: si dice che è uno stage.
-  const level = c.kind === "STAGE" ? t("event.stage") : t.dyn(`club.level.${c.level}`, LEVEL_LABELS[c.level] ?? c.level);
+  // Solo una gara ha un livello di ranking: per gli altri eventi si dice che cosa sono.
+  const level = c.kind === "COMPETITION" || !c.kind
+    ? t.dyn(`club.level.${c.level}`, LEVEL_LABELS[c.level] ?? c.level)
+    : t(EVENT_KIND_KEYS[c.kind] ?? "event.other");
   return (
     <motion.article initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay }} className="glass-card rounded-3xl overflow-hidden">
       <div className="flex flex-col sm:flex-row">

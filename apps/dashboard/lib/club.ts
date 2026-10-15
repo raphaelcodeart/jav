@@ -25,9 +25,9 @@ export interface ClubConfig {
   season_label: string;
   belts: ClubBelt[];
   age_bands: AgeBand[];
-  placement_points: Record<string, number>;
   placement_labels: Record<string, string>;
-  level_coefficients: Record<string, number>;
+  /** [oro, argento, bronzo, partecipazione] per livello di gara. */
+  level_points: Record<string, [number, number, number, number]>;
   level_labels: Record<string, string>;
   achievements: AchievementDef[];
   weekdays: string[];
@@ -193,7 +193,7 @@ export interface Proof {
   reviewed_at: string | null;
   uploaded_by_user_id: string;
   /** BANK_TRANSFER (con la ricevuta) o CASH (consegnati a qualcuno). */
-  method?: "BANK_TRANSFER" | "CASH";
+  method?: "BANK_TRANSFER" | "MBWAY" | "CASH";
   cash_received_by_name?: string | null;
   fees: Fee[];
 }
@@ -227,7 +227,7 @@ export interface AthleteSeasonMonths {
   months_overdue: number;
 }
 
-export type PaymentMethod = "BANK_TRANSFER" | "CASH" | "CARD" | "WALLET";
+export type PaymentMethod = "BANK_TRANSFER" | "MBWAY" | "CASH" | "CARD" | "WALLET";
 
 export const PAYMENT_METHOD_ICONS: Record<string, string> = {
   BANK_TRANSFER: "🏦", CASH: "💶", CARD: "💳", WALLET: "🎁",
@@ -380,6 +380,7 @@ export interface RankingRow {
   age_band: string;
   belt: string | null;
   is_mine: boolean;
+  club_name?: string | null;
   points: number;
   competitions: number;
   gold: number;
@@ -567,8 +568,14 @@ export const CERTIFICATE_TYPES: Record<string, string> = {
 export const LEVEL_LABELS: Record<string, string> = {
   CLUB: "Club",
   REGIONAL: "Regionale",
+  ZONAL: "Zonale",
+  OPENS: "Open",
   NATIONAL: "Nazionale",
   INTERNATIONAL: "Internazionale",
+  EUROPEAN_CUP: "Coppa Europa",
+  EUROPEAN_CHAMPIONSHIP: "Campionato europeo",
+  WORLD_CHAMPIONSHIP: "Campionato del mondo",
+  OLYMPIC_GAMES: "Giochi Olimpici",
 };
 
 export const PLACEMENT_LABELS: Record<number, string> = {

@@ -41,6 +41,18 @@ T: dict[str, tuple[str, str, str]] = {
         "Desculpa, não percebi bem. Experimenta perguntar-me uma destas coisas:",
         "Sorry, I didn't quite get that. Try asking me one of these:",
     ),
+    # --- Dai documenti della base di conoscenza (planner.from_knowledge) ----------------------------
+    "kb.found": (
+        "Ecco che cosa dicono i documenti:",
+        "Eis o que dizem os documentos:",
+        "Here's what the documents say:",
+    ),
+    "kb.source": ("📄 {title}, pag. {page}", "📄 {title}, pág. {page}", "📄 {title}, p. {page}"),
+    "kb.more": (
+        "Se non è quello che cercavi, prova con altre parole o chiedi alla segreteria.",
+        "Se não é o que procuravas, experimenta outras palavras ou pergunta à secretaria.",
+        "If that's not what you were looking for, try other words or ask the club office.",
+    ),
     "thanks": (
         "Di niente! Se ti serve altro, sono qui.",
         "De nada! Se precisares de mais alguma coisa, estou aqui.",
@@ -404,6 +416,8 @@ T: dict[str, tuple[str, str, str]] = {
     "feeKind.ENROLLMENT": ("Iscrizione", "Inscrição", "Enrolment"),
     "feeKind.COMPETITION": ("Gara", "Prova", "Competition"),
     "feeKind.MEMBERSHIP": ("Quota socio", "Quota de sócio", "Membership fee"),
+    "feeKind.FINE": ("Multa", "Multa", "Fine"),
+    "feeKind.EQUIPMENT": ("Judogi", "Judogi", "Judogi"),
     # --- I miei dati ------------------------------------------------------------------------------
     "profile.intro": ("Ecco i dati che abbiamo:", "Estes são os dados que temos:", "Here are the details we have:"),
     "profile.name": ("• Nome: {v}", "• Nome: {v}", "• Name: {v}"),

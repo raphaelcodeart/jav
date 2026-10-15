@@ -43,9 +43,9 @@ class ClubConfigRead(BaseModel):
     season_label: str
     belts: list[BeltRead]
     age_bands: list[AgeBandRead]
-    placement_points: dict[str, int]
     placement_labels: dict[str, str]
-    level_coefficients: dict[str, int]
+    #: (oro, argento, bronzo, partecipazione) per livello.
+    level_points: dict[str, list[int]]
     level_labels: dict[str, str]
     achievements: list[AchievementDefRead]
     weekdays: list[str]
@@ -289,9 +289,13 @@ class ProofRead(BaseModel):
     rejection_reason: str | None
     reviewed_at: datetime | None
     uploaded_by_user_id: uuid.UUID
-    #: BANK_TRANSFER (con la ricevuta) o CASH (consegnati a qualcuno).
+    #: BANK_TRANSFER o MBWAY (con la ricevuta), CASH (consegnati a qualcuno).
     method: str = "BANK_TRANSFER"
     cash_received_by_name: str | None = None
+    #: "MEN-2026-0042": il numero da dire alla segreteria.
+    receipt_number: str | None = None
+    #: Il giorno del pagamento dichiarato (None = quello del caricamento).
+    paid_on: date | None = None
     fees: list[FeeRead]
 
 
@@ -338,7 +342,7 @@ class MarkPaidWrite(NoteWrite):
     """La segreteria segna pagata una quota: come, e per i contanti a chi
     (una persona dello staff, o un nome scritto)."""
 
-    method: str = Field(pattern="^(BANK_TRANSFER|CASH|CARD)$")
+    method: str = Field(pattern="^(BANK_TRANSFER|MBWAY|CASH|CARD)$")
     cash_received_by_user_id: uuid.UUID | None = None
     cash_received_by_name: str | None = Field(default=None, max_length=120)
 
@@ -536,6 +540,8 @@ class RankingRowRead(BaseModel):
     age_band: str
     belt: str | None
     is_mine: bool
+    #: Il club dell'atleta: il ranking è di tutta la rete.
+    club_name: str | None = None
     points: int
     competitions: int
     gold: int
@@ -714,6 +720,13 @@ class ClubStaffRead(BaseModel):
     #: Solo appena creato e solo se l'email d'invito non è partita: il link
     #: di primo accesso da consegnare a mano (vale 7 giorni).
     invite_link: str | None = None
+
+
+class StaffAccessLinkRead(BaseModel):
+    #: Il link per scegliere la password, se l'email non è partita (da
+    #: consegnare a mano); None se l'email è arrivata.
+    link: str | None
+    emailed: bool
 
 
 class ClubRead(BaseModel):

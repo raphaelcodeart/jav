@@ -20,6 +20,8 @@ from app.domains.catalog import models as _catalog_models  # noqa: F401
 from app.domains.catalog.router import router as catalog_router
 from app.domains.club import contact_models as _club_contact_models  # noqa: F401
 from app.domains.club import models as _club_models  # noqa: F401
+from app.domains.club import operations_models as _club_operations_models  # noqa: F401
+from app.domains.club import records_models as _club_records_models  # noqa: F401
 from app.domains.club import site_models as _club_site_models  # noqa: F401
 from app.domains.club.accounting_router import (
     admin_accounting_router,
@@ -53,6 +55,9 @@ from app.domains.friend_referrals.router import router as friend_referrals_route
 from app.domains.jav_market import models as _jav_market_models  # noqa: F401
 from app.domains.jav_market.router import router as jav_market_router
 from app.domains.javbot import models as _javbot_models  # noqa: F401
+from app.domains.club.club_documents_router import router as club_documents_router
+from app.domains.javbot.knowledge_router import club_knowledge_router as javbot_club_knowledge_router
+from app.domains.javbot.knowledge_router import platform_knowledge_router as javbot_platform_knowledge_router
 from app.domains.javbot.router import public_router as javbot_public_router
 from app.domains.javbot.router import router as javbot_router
 from app.domains.marketplaces import models as _marketplaces_models  # noqa: F401
@@ -80,6 +85,7 @@ from app.domains.support.router import router as support_router
 from app.domains.users import models as _users_models  # noqa: F401
 from app.domains.users.router import router as users_router
 from app.domains.wallets import models as _wallets_models  # noqa: F401
+from app.legacy import models as _legacy_models  # noqa: F401
 from app.domains.wallets.router import router as wallets_router
 
 settings = get_settings()
@@ -142,6 +148,9 @@ app.include_router(organizations_router, prefix="/api")
 app.include_router(users_router, prefix="/api")
 app.include_router(javbot_router, prefix="/api")
 app.include_router(javbot_public_router, prefix="/api")
+app.include_router(javbot_club_knowledge_router, prefix="/api")
+app.include_router(club_documents_router, prefix="/api")
+app.include_router(javbot_platform_knowledge_router, prefix="/api")
 
 
 @app.on_event("startup")

@@ -1230,7 +1230,7 @@ percorso delle cinture, prove in programma e il tema dei colori del sito
 delle cinture del club a ogni richiesta (il tema lo calcola `club/brand.py`
 dai tre colori).
 
-## 23. JAVBOT (`domains/javbot`, migrazione 0008)
+## 23. JAVBOT (`domains/javbot`, migrazioni 0008 e 0015)
 
 L'assistente dell'area privata. Legge i dati degli altri domini attraverso
 i loro servizi; qui tiene solo la conversazione e le azioni che aspettano un
@@ -1263,6 +1263,31 @@ javbot_tasks                     ciò che JAVBOT farà solo dopo un "sì"
 
 Conservazione: una conversazione ferma da più di 90 giorni si cancella (con
 battute e compiti) la volta successiva che lo stesso utente apre JAVBOT.
+
+**La base di conoscenza** (migrazione 0015, `javbot/knowledge.py`): i PDF
+che l'assistente dell'area riservata consulta e le istruzioni scritte da chi
+amministra. `club_id` NULL = la base comune a tutti i club.
+
+```
+javbot_knowledge_documents       un PDF caricato
+  organization_id, club_id -> clubs (NULL = comune), title, filename,
+  storage_key (bucket privato), size_bytes, page_count, char_count,
+  status (READY | EMPTY: senza testo), uploaded_by_user_id -> users,
+  created_at
+
+javbot_knowledge_chunks          il testo del PDF a pezzi
+  document_id -> javbot_knowledge_documents ON DELETE CASCADE,
+  organization_id, club_id -> clubs ON DELETE CASCADE (ripetuto dal
+  documento: la ricerca filtra senza JOIN), ordinal, page (da 1), text,
+  norm (minuscolo, senza accenti)
+  -- indice GIN su to_tsvector('simple', norm)
+
+javbot_instructions              il prompt di chi amministra
+  organization_id, club_id -> clubs ON DELETE CASCADE (NULL = comune),
+  text, updated_at, updated_by_user_id -> users, created_at
+  -- UNIQUE (club_id) WHERE club_id IS NOT NULL; UNIQUE (organization_id)
+     WHERE club_id IS NULL: una riga comune, al più una per club
+```
 
 ## 24. Contabilità del club (`club/models.py`, migrazione 0007)
 
@@ -1329,4 +1354,73 @@ club_fees (0009)      + course_id -> club_courses, coach_user_id -> users,
 
 Nessuna tabella per i guadagni dei treinador o la parte di JAV: si calcolano
 dalle quote pagate (`club/accounting.py`, `club/jav_courses.py`).
+
+
+## 26. Il gestionale dei club e l'importazione (migrazione 0016)
+
+Ciò che è servito per accogliere il gestionale che i club usavano
+(docs/legacy-judo-aev.md). Regole in docs/club-portal.md.
+
+**Colonne nuove**
+
+```
+club_athletes        + member_number (nº de sócio, UNIQUE nel club), kimono_name,
+                       height_cm, nationality, weight_category,
+                       federation_renewal_year, exempt_monthly, exempt_annual,
+                       custom_discount_kind (PERCENT | FIXED), custom_discount_value,
+                       custom_discount_scope (MONTHLY | ANNUAL | BOTH),
+                       custom_discount_note; social_tier ora A/B/C/D
+club_fees            + installment_no, installments_total (rate, periodo "2026/2");
+                       kind + FINE, EQUIPMENT; payment_method + MBWAY; period 40 car.
+club_payment_proofs  + receipt_number (UNIQUE per club), paid_on; method + MBWAY
+club_competitions    club_id NULL = evento della rete; level 24 car. e i livelli
+                       portoghesi; kind + REFEREEING, EDUCATION, MEETING, OTHER;
+                       + transport_mode (CLUB | OWN | TBC), transport_info,
+                       starts_at_time, ends_at_time, registration_deadline_time,
+                       places, age_groups (varchar[]), circular_url, circular_filename
+club_competition_entries + rank, result_notes
+club_transport_requests  UNIQUE (competition_id, club_id) al posto di (competition_id)
+club_belt_grades     grade + WHITE_BARS_3/6/9/12, GREEN_BLUE, BLUE_BROWN
+club_expenses (e ricorrenti)  category + COLLABORATORS, CLEANING, EXTERNAL_COACH;
+                       payment_method + MBWAY, CHEQUE
+```
+
+**Tabelle nuove** (`club/records_models.py`, `club/operations_models.py`,
+`legacy/models.py`)
+
+```
+club_athlete_records    1:1 con l'atleta (PK athlete_id, ON DELETE CASCADE): indirizzo,
+                        telefoni, email, stato civile, documento d'identità e passaporto,
+                        responsabile (nome, telefoni di padre e madre, NIF, documento),
+                        note. Solo segreteria.
+club_athlete_documents  documenti dell'atleta nel bucket privato (kind, descrizione,
+                        storage_key, nome, tipo, dimensione)
+club_consents           consensi RGPD, solo aggiunte: kind (PRIVACY_POLICY dell'account |
+                        PHOTOS | MARKETING dell'atleta), granted, policy_version,
+                        source (PORTAL | BACKOFFICE | LEGACY), ip_hash, given_at, revoked_at
+club_change_requests    richieste dei genitori (BELT | WEIGHT_CATEGORY | WEIGHT),
+                        PENDING → APPROVED | REJECTED
+club_applications       domande d'iscrizione: il modulo in `data` JSONB, stato, atleta
+                        nato all'approvazione
+club_equipment_orders   ordini di judogi del club: nome da ricamare, tipo, colore, marca,
+                        taglia, prezzo, permuta, stato, fee_id (la quota EQUIPMENT, UNIQUE)
+club_cleaning_logs      pulizie: ore × €/ora = totale, firma (PNG nel bucket privato),
+                        pagato → expense_id (UNIQUE)
+club_external_coach_fees compensi mensili dei treinadores esterni: ore feriali/weekend,
+                        allievi, tariffe, totale, stato (PENDING | PAID | PARTIAL | EXEMPT),
+                        pagato → expense_id
+club_reports            relatori generati (PDF nel bucket privato, parametri JSONB)
+club_receipt_counters   (club_id, prefix, year) → last_number
+legacy_import_map       (source, source_table, source_id) UNIQUE → target_table, target_id:
+                        la corrispondenza che rende l'importazione rilanciabile
+```
+
+**Documenti del club** (migrazione 0017):
+
+```
+club_documents   organization_id, club_id, category (DECLARATION | FEDERATION | MINUTES | TAX |
+                 SOCIAL_SECURITY | SPORTS | INSURANCE | STATUTES | OTHER), title, issued_on,
+                 expires_on (indice), notes, storage_key (bucket privato), original_filename,
+                 content_type, size_bytes, uploaded_by_user_id, created_at
+```
 

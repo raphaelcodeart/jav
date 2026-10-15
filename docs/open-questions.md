@@ -198,3 +198,25 @@ Scelte fatte senza il titolare, da confermare:
   giorno della gara, non con quella federale.
 - **Carta online**: il bottone è spento; serve un account Stripe per club
   (o della piattaforma) prima di accenderlo.
+
+## 17. JAVBOT con un modello vero (sessione 14)
+
+- **Privacy (GDPR).** Con la chiave accesa, la domanda e i dati che l'utente
+  vede nella sua area (nomi degli atleti, quote, certificati) vanno
+  all'API di Anthropic per comporre la risposta. Va detto nell'informativa
+  privacy delle famiglie (Anthropic come responsabile del trattamento) prima
+  di accendere la chiave in produzione, e va deciso se serve un consenso.
+- **Costi.** Il tetto è 150 risposte al giorno per utente; il modello
+  predefinito è Claude Opus 5.5 con sforzo `low`. Se la spesa cresce,
+  `JAVBOT_MODEL=claude-sonnet-5-5` costa circa la metà: da misurare sulle
+  domande vere prima di cambiare.
+- **PDF scansionati.** Oggi una scansione senza testo non si usa. Si
+  potrebbe leggerla con il modello (OCR) al caricamento, a pagamento.
+- **Ordini e messaggi via modello.** Oggi restano ai percorsi guidati del
+  pianificatore. Se si vuole che il modello proponga anche quelli, va
+  esposto `propose_task` come strumento (il compito resta da confermare con
+  il bottone).
+- **Classifica pubblica con tutti gli atleti come "Nome I."** (decisione del
+  titolare): va scritto nell'informativa privacy delle famiglie, con la
+  possibilità di chiedere di non comparire.
+

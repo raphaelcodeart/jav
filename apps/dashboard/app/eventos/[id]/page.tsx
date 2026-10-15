@@ -21,7 +21,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   if (!event) return { title: t("site.notFound.event") };
   return {
     title: `${event.name} · Judo Arte e Vida`,
-    description: [eventDates(fmt, event.starts_on, event.ends_on), event.location, event.club.name].filter(Boolean).join(" · "),
+    description: [eventDates(fmt, event.starts_on, event.ends_on), event.location, event.club?.name].filter(Boolean).join(" · "),
   };
 }
 
@@ -52,7 +52,9 @@ export default async function EventPage({ params }: Params) {
           <Reveal>
             <nav aria-label={t("site.breadcrumb")} className="mb-6 text-sm text-white/70">
               <Link href="/eventos" className="hover:text-white">{t("site.nav.events")}</Link> <span aria-hidden="true">/</span>{" "}
-              <Link href={`/clubes/${event.club.slug}`} className="hover:text-white">{event.club.name}</Link>
+              {event.club
+                ? <Link href={`/clubes/${event.club.slug}`} className="hover:text-white">{event.club.name}</Link>
+                : <span>{t("site.event.network")}</span>}
             </nav>
             <KindBadge kind={event.kind} t={t} />
             <h1 className="mt-3 max-w-4xl text-3xl sm:text-5xl">{event.name}</h1>
@@ -73,7 +75,9 @@ export default async function EventPage({ params }: Params) {
           </dl>
           {event.status === "OPEN" && (
             <div className="rounded-3xl bg-brand-50 p-6 ring-1 ring-brand-100">
-              <p className="text-sm text-ink-700">{t("site.event.howToJoin", { club: event.club.name })}</p>
+              <p className="text-sm text-ink-700">
+                {event.club ? t("site.event.howToJoin", { club: event.club.name }) : t("site.event.howToJoinNetwork")}
+              </p>
               <Link href="/login" className={linkButton({ size: "sm", className: "mt-4" })}>{t("site.nav.login")}</Link>
             </div>
           )}

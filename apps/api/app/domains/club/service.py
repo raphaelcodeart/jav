@@ -13,7 +13,7 @@ import uuid
 from datetime import date, timedelta
 from html import escape
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,7 +23,7 @@ from app.core.email import send_html_email_best_effort
 from app.core.email_templates import render_email
 from app.domains.audit import service as audit_service
 from app.domains.club import belts as belts_catalog
-from app.domains.club import kinds, referrals, seasons
+from app.domains.club import kinds, receipts, referrals, seasons
 from app.domains.club import pricing as pricing_rules
 from app.domains.club.models import (
     ATHLETE_STATUSES,
@@ -433,8 +433,11 @@ async def _insert_fee(db: AsyncSession, **values) -> None:
 
 
 def monthly_fee_due(athlete: ClubAthlete, plan: ClubPlan, *, year: int, month: int) -> bool:
-    """Se per quel mese all'atleta tocca la quota."""
+    """Se per quel mese all'atleta tocca la quota. Un esente non ha
+    mensilità: una quota da 0 € sarebbe solo rumore nel suo conto."""
     if athlete.status != "ACTIVE" or plan.monthly_fee_cents <= 0 or month not in (plan.billing_months or []):
+        return False
+    if athlete.exempt_monthly:
         return False
     first_of_month = date(year, month, 1)
     next_month = date(year + (month == 12), month % 12 + 1, 1)
@@ -520,16 +523,34 @@ async def ensure_enrollment_fee(
 ) -> None:
     """L'iscrizione dell'anno solare, dal mese d'ingresso a dicembre. Senza
     sconti (pricing.py)."""
-    if athlete.status != "ACTIVE" or plan.enrollment_fee_cents <= 0:
+    if athlete.status != "ACTIVE" or plan.enrollment_fee_cents <= 0 or athlete.exempt_annual:
+        return
+    # Divisa in rate ("2026/1", "2026/2"): l'iscrizione dell'anno c'è già.
+    if await _has_annual_fee(db, athlete_id=athlete.id, kind="ENROLLMENT", year=year):
         return
     amount = pricing_rules.prorated(plan.enrollment_fee_cents, start_month=start_month)
     await _insert_fee(
         db, **scope_of(athlete).columns(), athlete_id=athlete.id, kind="ENROLLMENT",
         period=str(year),
         description=f"Iscrizione {pricing_rules.period_label(year, start_month)}",
-        amount_cents=amount, gross_amount_cents=amount,
+        **pricing_rules.annual_price(amount_cents=amount, athlete=athlete),
         due_date=max(date(year, start_month, plan.due_day), athlete.joined_on),
     )
+
+
+async def _has_annual_fee(
+    db: AsyncSession, *, kind: str, year: int, athlete_id: uuid.UUID | None = None,
+    club_id: uuid.UUID | None = None, guardian_user_id: uuid.UUID | None = None,
+) -> bool:
+    """Se la quota annuale c'è già, intera o divisa in rate."""
+    stmt = select(ClubFee.id).where(
+        ClubFee.kind == kind, or_(ClubFee.period == str(year), ClubFee.period.like(f"{year}/%")),
+    )
+    if athlete_id is not None:
+        stmt = stmt.where(ClubFee.athlete_id == athlete_id)
+    else:
+        stmt = stmt.where(ClubFee.club_id == club_id, ClubFee.guardian_user_id == guardian_user_id)
+    return (await db.execute(stmt.limit(1))).first() is not None
 
 
 async def ensure_membership_fee(
@@ -540,6 +561,10 @@ async def ensure_membership_fee(
     ha già deciso che serve (pricing.py::needs_parent_membership)."""
     amount = pricing_rules.prorated(pricing["parent_member_fee_cents"], start_month=start_month)
     if amount <= 0:
+        return
+    if await _has_annual_fee(
+        db, kind="MEMBERSHIP", year=year, club_id=scope.club_id, guardian_user_id=guardian_user_id,
+    ):
         return
     await db.execute(
         insert(ClubFee)
@@ -799,8 +824,8 @@ async def mark_fee_paid(
 ) -> ClubFee:
     """Pagata fuori dal portale: la segreteria la segna a mano e dice come
     (bonifico arrivato in banca, contanti e a chi, carta al POS)."""
-    if method not in ("BANK_TRANSFER", "CASH", "CARD"):
-        raise ClubValidationError("Scegli come è stata pagata: bonifico, contanti o carta.")
+    if method not in ("BANK_TRANSFER", "MBWAY", "CASH", "CARD"):
+        raise ClubValidationError("Scegli come è stata pagata: bonifico, MB Way, contanti o carta.")
     receiver_id, receiver_name = (None, None)
     if method == "CASH":
         receiver_id, receiver_name = await _cash_receiver(
@@ -895,8 +920,8 @@ async def upload_payment_proof(
     fee_ids = list(dict.fromkeys(fee_ids))
     if not fee_ids:
         raise ClubValidationError("Scegli almeno una quota da pagare.")
-    if method not in ("BANK_TRANSFER", "CASH"):
-        raise ClubValidationError("Scegli come hai pagato: bonifico o contanti.")
+    if method not in ("BANK_TRANSFER", "MBWAY", "CASH"):
+        raise ClubValidationError("Scegli come hai pagato: bonifico, MB Way o contanti.")
     receiver_id, receiver_name = (None, None)
     if method == "CASH":
         if credit_cents:
@@ -946,7 +971,10 @@ async def upload_payment_proof(
         except UploadValidationError as exc:
             raise ClubValidationError("Carica una foto (JPG o PNG) o un PDF, di massimo 15 MB.") from exc
     elif credit_cents < total and method != "CASH":
-        raise ClubValidationError("Carica la foto o il PDF della ricevuta del bonifico.")
+        raise ClubValidationError(
+            "Carica la foto o il PDF della conferma MB Way." if method == "MBWAY"
+            else "Carica la foto o il PDF della ricevuta del bonifico."
+        )
 
     proof = ClubPaymentProof(
         **scope.columns(),
@@ -961,6 +989,10 @@ async def upload_payment_proof(
         method=method,
         cash_received_by_user_id=receiver_id,
         cash_received_by_name=receiver_name,
+        receipt_number=await receipts.next_number(
+            db, club_id=scope.club_id, prefix=receipts.prefix_for([f.kind for f, _a in rows]),
+            year=utcnow().year,
+        ),
     )
     db.add(proof)
     await db.flush()

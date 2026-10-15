@@ -11,6 +11,7 @@ import { AdminWalletsPanel } from "@/components/admin-wallets-panel";
 import { PlatformMoney } from "@/components/admin/platform-accounting";
 import { ClubAdminPanel, sectionsFor, type ClubSection } from "@/components/club/club-admin-panel";
 import { ContactInbox } from "@/components/club/contact-inbox";
+import { KnowledgePanel } from "@/components/javbot/knowledge-panel";
 import { CoursesUnitPanel } from "@/components/club/courses-unit-panel";
 import { ClubList } from "@/components/club/clubs-panel";
 import { useCurrentClub } from "@/components/club/current-club";
@@ -23,7 +24,7 @@ import type { PlatformOverview } from "@/lib/club";
 import { enterClub, leaveClub } from "@/lib/club-cookie";
 import { useI18n } from "@/lib/i18n/provider";
 
-type PlatformKey = "hq" | "clubs" | "jav-courses" | "messages" | "shop" | "wallets" | "support" | "settings";
+type PlatformKey = "hq" | "clubs" | "jav-courses" | "messages" | "javbot" | "shop" | "wallets" | "support" | "settings";
 type Key = PlatformKey | `club:${ClubSection}`;
 
 const emoji = (e: string) => <span className="text-base leading-none" aria-hidden="true">{e}</span>;
@@ -54,6 +55,8 @@ export function AdminConsole({ email, isSuperAdmin }: { email?: string; isSuperA
     { key: "jav-courses", label: t("javCourses.navEntry"), icon: emoji("🏫"), group: "JudoArteVida" },
     // I messaggi scritti a JudoArteVida da /contactos.
     { key: "messages", label: t("console.messages"), icon: emoji("✉️"), group: "JudoArteVida", notificationTypes: ["CONTACT_MESSAGE"] },
+    // La base di conoscenza comune di JAVBOT: la gestisce chi gestisce i club (clubs.manage).
+    ...(isSuperAdmin ? [{ key: "javbot", label: t("console.javbot"), icon: emoji("🤖"), group: "JudoArteVida" }] : []),
     ...sectionsFor(current?.kind).map((s) => ({
       key: `club:${s.key}`, label: t.dyn(`clubNav.${s.key}`, s.key), icon: emoji(s.icon), group: clubGroup,
     })),
@@ -80,6 +83,12 @@ export function AdminConsole({ email, isSuperAdmin }: { email?: string; isSuperA
         <>
           <PageHeader eyebrow="JudoArteVida" title={t("console.messages")} subtitle={isSuperAdmin ? t("console.messagesSubtitleSuper") : t("console.messagesSubtitle")} />
           <ContactInbox mode="platform" canFilterClubs={isSuperAdmin} />
+        </>
+      )}
+      {active === "javbot" && (
+        <>
+          <PageHeader eyebrow="JudoArteVida" title={t("console.javbot")} subtitle={t("console.javbotSubtitle")} />
+          <KnowledgePanel mode="platform" />
         </>
       )}
       {clubSection && (current

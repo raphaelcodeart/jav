@@ -73,7 +73,9 @@ GROUPS = (
 )
 
 PRICING = {
-    "tier_discount_pct": {"A": 25, "B": 15, "C": 5},
+    # Gli escalão della Segurança Social come li applica il gestionale che i
+    # club usano oggi (docs/legacy-judo-aev.md): A 25%, B 20%, C 15%, D 10%.
+    "tier_discount_pct": {"A": 25, "B": 20, "C": 15, "D": 10},
     "family_discount_cents": 500,
     "family_min_athletes": 2,
     "referral_credit_cents": 500,

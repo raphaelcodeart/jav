@@ -170,13 +170,13 @@ async def test_public_payloads_carry_only_what_may_be_public(db, scope, monkeypa
     page = await site_service.club_page(db, slug=slug, today=TODAY)
     [judoka] = page["judoka"]
     assert set(judoka) == {
-        "id", "display_name", "photo_url", "belt", "age_band", "club",
+        "id", "display_name", "photo_url", "has_page", "belt", "age_band", "club",
         "points", "competitions", "gold", "silver", "bronze",
     }
     assert judoka["display_name"] == "Tiago M."
     assert judoka["photo_url"] is None  # la famiglia non ha permesso la foto
-    assert judoka["age_band"] == "RAGAZZI"
-    assert judoka["gold"] == 1 and judoka["points"] == 200
+    assert judoka["age_band"] == "GRUPO_2"
+    assert judoka["gold"] == 1 and judoka["points"] == 5  # oro regionale
     assert page["schedule"] == [{"weekday": 1, "slots": [{
         "course": "Infantis", "level": "Iniciação", "min_age": 6, "max_age": 9,
         "starts_at": "18:00", "ends_at": "19:00", "room": "Tatami 1",
@@ -213,10 +213,15 @@ async def test_public_payloads_carry_only_what_may_be_public(db, scope, monkeypa
                 assert res.status_code == 200, (path, res.text)
                 bodies.append(json.dumps(res.json()))
             assert (await client.get(f"/public-site/judoka/{hidden.id}")).status_code == 404
+            # In classifica ci sono tutti (decisione del titolare), ma chi non
+            # ha il consenso è solo "Nome I.": niente pagina, niente foto.
+            ranking = (await client.get("/public-site/ranking")).json()["rows"]
+            rita = next(r for r in ranking if r["id"] == str(hidden.id))
+            assert (rita["display_name"], rita["has_page"], rita["photo_url"]) == ("Rita S.", False, None)
     finally:
         app.dependency_overrides.clear()
     everything = "\n".join(bodies)
-    for secret in ("Matias", "Segreta", "Rita", "2015-03-03", "MTSTGO15C03Z128X", "birth", "fiscal", "weight",
+    for secret in ("Matias", "Segreta", "2015-03-03", "MTSTGO15C03Z128X", "birth", "fiscal", "weight",
                    "guardian", "fee", str(parent.id), parent.email):
         assert secret not in everything, secret
 
