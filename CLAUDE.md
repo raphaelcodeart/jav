@@ -168,9 +168,13 @@ qui l'essenziale.
   deterministica**, mai con un flag applicativo e mai con un UUID generato
   al volo dal client. Bonus, cashback, provvigioni, quote e pagamenti non
   devono poter essere creati o accreditati due volte.
-- **Si paga con bonifico o con JavCash.** Non esistono pagamenti con carta:
-  un bonifico lo conferma l'amministratore (ordini, contratti, rate), oppure
-  — per le quote del club — lo dichiara il genitore caricando la prova.
+- **Si paga con bonifico o con JavCash.** Non esistono pagamenti online con
+  carta: un bonifico lo conferma l'amministratore (ordini, contratti, rate),
+  oppure — per le quote del club — lo dichiara il genitore caricando la
+  prova. Le quote del club si pagano anche in **contanti** (il genitore dice
+  a chi li ha dati) o con la **carta al POS** del club (lo segna la
+  segreteria): ogni quota pagata registra il metodo (`payment_method`). Il
+  bottone "Carta online" è spento finché non c'è un pagamento online.
 - **Gli snapshot sono congelati**: la rete al momento dell'attivazione, il
   prezzo al momento della creazione del contratto, l'importo di una quota al
   momento in cui è emessa. Non si ricalcolano mai a posteriori.
@@ -185,8 +189,16 @@ qui l'essenziale.
   - **la prova di pagamento caricata segna subito le quote come pagate**; la
     segreteria può rifiutarla (le quote tornano da pagare e il genitore
     viene avvisato), ma nessuna prova resta in attesa di qualcuno;
-  - l'età per il piano si calcola **al 1° settembre** della stagione, come
-    nelle categorie federali (salvo `plan_locked`);
+  - l'età per il piano è l'**età federale** (anni compiuti entro il 31
+    dicembre, `seasons.federal_age`): a gennaio chi entra nella fascia dopo
+    paga la mensilità del gruppo nuovo, i mesi già emessi non cambiano
+    (salvo `plan_locked`). Le fasce del Jav Ranking contano invece l'età al
+    1° settembre;
+  - **ogni file personale sta nel bucket privato** (`upload_document`):
+    prove di pagamento, certificati, giustificazioni per la scuola,
+    ricevute delle spese. Si apre solo con un URL presigned di pochi minuti
+    dato dopo il controllo di chi lo chiede. Nel bucket pubblico dei media
+    solo foto pensate per essere viste (loghi, foto del sito, foto profilo);
   - senza certificato agonistico valido alla data della gara non ci si
     iscrive a una gara che lo richiede;
   - la cintura attuale e il Jav Ranking si **calcolano** dallo storico e dai

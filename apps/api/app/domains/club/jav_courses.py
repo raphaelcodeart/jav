@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import utcnow
 from app.domains.audit import service as audit_service
-from app.domains.club import kinds, seasons
+from app.domains.club import kinds
 from app.domains.club import service as club_service
 from app.domains.club.accounting import Period, _month_of, _share_groups, _utc, fee_cents
 from app.domains.club.models import (
@@ -310,12 +310,11 @@ async def move_family_to_club(
 
     target_scope = ClubScope(organization_id=target.organization_id, club_id=target.id)
     pricing = await club_service.club_pricing(db, club_id=target.id)
-    season = seasons.season_of(today)
     next_year, next_month = (today.year + (today.month == 12), today.month % 12 + 1)
     active = [a for a in moving if a.status == "ACTIVE"]
     sizes = {guardian_user_id: len(active)}
     for athlete in moving:
-        plan = await club_service.assign_plan(db, athlete=athlete, season=season)
+        plan = await club_service.assign_plan(db, athlete=athlete, year=today.year)
         club_service.give_starting_belt(db, athlete=athlete, on=today)
         await db.flush()
         if plan is not None:

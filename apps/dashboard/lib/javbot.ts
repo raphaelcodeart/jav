@@ -36,6 +36,7 @@ export const NAV_TARGETS: Record<string, string[]> = {
   settings: ["settings"],
   competitions: ["club-competitions"],
   wallet: ["wallet", "wallets"],
+  accounts: ["club-accounting"],
 };
 
 export type PayKind = "fees" | "choose";

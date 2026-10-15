@@ -291,3 +291,65 @@ def test_the_youtube_feed_is_read_without_trusting_it():
         ("_CZLqZpNnn8", "Troféu & Juvenil", "2026-06-23", 42)
     ]
     assert videos[0]["thumbnail"] == "https://i.ytimg.com/vi/_CZLqZpNnn8/hqdefault.jpg"
+
+
+async def test_the_club_mini_site_is_cleaned_before_it_reaches_the_page(db, scope):
+    """Storia, numeri, pilastri, novità e video: la segreteria scrive, il
+    servizio ripulisce (ordine, limiti, indirizzi, solo l'id di YouTube) e
+    la pagina pubblica mostra esattamente ciò che è stato salvato."""
+    admin = await _user(db, scope, "admin")
+    await _published_site(db, scope)
+    site = await site_service.update_site(db, scope=scope, actor_user_id=admin.id, changes={
+        "founded_year": 1985,
+        "venue": "  Pavilhão Municipal  ",
+        "highlights": [{"value": "40+", "label": "anos de judo"}, {"value": "", "label": "vuoto"}],
+        "history": [
+            {"year": 2010, "title": "Primeiro campeão nacional"},
+            {"year": 1985, "title": "Fundação", "text": "Num ginásio emprestado."},
+        ],
+        "pillars": [{"title": "Respeito", "text": "No tatami e fora dele."}, {"title": " "}],
+        "news": [
+            {"date": date(2026, 3, 1), "title": "Torneio da Primavera"},
+            {"date": date(2026, 9, 20), "title": "Abertura da época", "image_url": "https://media.example/x.jpg"},
+        ],
+        "videos": [
+            {"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "caption": "Estágio"},
+            {"url": "https://youtu.be/dQw4w9WgXcQ"},
+        ],
+        "coaches": [{"name": "Ana", "grade": "Cinto preto 3.º dan", "bio": "Treinadora desde 2001."}],
+    })
+    assert site.venue == "Pavilhão Municipal"
+    assert site.highlights == [{"value": "40+", "label": "anos de judo"}]
+    assert [h["year"] for h in site.history] == [1985, 2010]
+    assert [p["title"] for p in site.pillars] == ["Respeito"]
+    assert [n["date"] for n in site.news] == ["2026-09-20", "2026-03-01"]
+    assert site.videos == [{"youtube_id": "dQw4w9WgXcQ", "caption": "Estágio"}]
+    assert site.coaches[0]["grade"] == "Cinto preto 3.º dan"
+
+    page = await site_service.club_page(db, slug=await _slug(db, scope), today=TODAY)
+    assert page["founded_year"] == 1985 and page["news"][0]["title"] == "Abertura da época"
+
+    # Un iframe verso un sito qualsiasi non si può mettere; un link non web nemmeno.
+    with pytest.raises(club_service.ClubValidationError):
+        await site_service.update_site(db, scope=scope, actor_user_id=admin.id, changes={
+            "videos": [{"url": "https://evil.example/watch?v=dQw4w9WgXcQ"}],
+        })
+    with pytest.raises(club_service.ClubValidationError):
+        await site_service.update_site(db, scope=scope, actor_user_id=admin.id, changes={
+            "news": [{"date": date(2026, 1, 1), "title": "x", "link_url": "javascript:alert(1)"}],
+        })
+    with pytest.raises(club_service.ClubValidationError):
+        await site_service.update_site(db, scope=scope, actor_user_id=admin.id, changes={
+            "pillars": [{"title": f"p{i}"} for i in range(site_service.MAX_PILLARS + 1)],
+        })
+
+
+def test_a_club_channel_feed_is_read_only_from_a_channel_link():
+    from app.domains.club import videos
+
+    assert videos.channel_id_from_url("https://www.youtube.com/channel/UCKyB7cQxPl56Mm3xsdxolFw") == "UCKyB7cQxPl56Mm3xsdxolFw"
+    assert videos.channel_id_from_url("https://www.youtube.com/channel/UCKyB7cQxPl56Mm3xsdxolFw/videos") == "UCKyB7cQxPl56Mm3xsdxolFw"
+    # Un @nome non si risolve senza le API di Google; un altro sito mai.
+    assert videos.channel_id_from_url("https://www.youtube.com/@judoclube") is None
+    assert videos.channel_id_from_url("https://evil.example/channel/UCKyB7cQxPl56Mm3xsdxolFw") is None
+    assert videos.channel_id_from_url(None) is None

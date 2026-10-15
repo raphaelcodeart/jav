@@ -145,7 +145,7 @@ async def test_an_invited_family_paying_a_month_credits_the_inviter_once(db, sco
     assert await _balance(db, scope, inviter) == 0
 
     # Ripagata: un pagamento nuovo, un credito nuovo.
-    await club_service.mark_fee_paid(db, scope=scope, fee_id=october.id, actor_user_id=admin.id, note="Contanti")
+    await club_service.mark_fee_paid(db, scope=scope, fee_id=october.id, actor_user_id=admin.id, note="Contanti", method="CARD")
     assert await _balance(db, scope, inviter) == 500
 
     info = await referrals.invite_link(

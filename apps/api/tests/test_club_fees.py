@@ -1,7 +1,7 @@
 """Club: piani per età, quote, prove di pagamento (docs/club-portal.md).
 
 Quello che questi test proteggono è la promessa "il club si gestisce da
-solo": il piano lo sceglie l'età al 1° settembre, le quote si generano una
+solo": il piano lo sceglie l'età federale, le quote si generano una
 volta sola anche se il job gira due volte, una prova caricata paga subito e
 un rifiuto riapre esattamente ciò che aveva pagato -- e mai niente di
 un'altra famiglia.
@@ -65,18 +65,19 @@ async def _fees(db, athlete_id, **filters) -> list[ClubFee]:
     return list((await db.execute(stmt.order_by(ClubFee.due_date))).scalars())
 
 
-async def test_plan_follows_the_age_on_september_first(db, scope):
+async def test_plan_follows_the_federal_age(db, scope):
     admin = await _user(db, scope, "admin")
     kids, youth, _everyone = await _plans(db, scope, admin)
     parent = await _user(db, scope)
 
-    # Compie 8 anni a febbraio 2027: per tutta la stagione 2026 conta 7 anni.
-    seven_on_sept_1 = await _athlete(db, scope, parent, birth_date=date(2019, 2, 20))
-    assert seven_on_sept_1.plan_id == kids.id
+    # Compie 8 anni a febbraio 2027: nel 2026 ne ha 7 federali.
+    seven = await _athlete(db, scope, parent, birth_date=date(2019, 2, 20))
+    assert seven.plan_id == kids.id
 
-    # Ha compiuto 8 anni il 1° settembre: Ragazzi, e non "Adulti 4+",
-    # che pure lo copre -- vince il piano più stretto.
-    eight = await _athlete(db, scope, parent, birth_date=date(2018, 9, 1), first_name="Anna", sex="F")
+    # Il 15 ottobre 2026 ha ancora 7 anni, ma ne compie 8 a novembre: l'età
+    # federale (gli anni compiuti entro il 31 dicembre) è 8. Ragazzi, e non
+    # "Adulti 4+", che pure lo copre -- vince il piano più stretto.
+    eight = await _athlete(db, scope, parent, birth_date=date(2018, 11, 20), first_name="Anna", sex="F")
     assert eight.plan_id == youth.id
 
 
@@ -254,7 +255,8 @@ async def test_waive_and_mark_paid_by_hand(db, scope):
     enrollment = (await _fees(db, athlete.id, kind="ENROLLMENT"))[0]
 
     paid = await club_service.mark_fee_paid(
-        db, scope=scope, fee_id=monthly.id, actor_user_id=admin.id, note="Contanti in palestra"
+        db, scope=scope, fee_id=monthly.id, actor_user_id=admin.id, note="Contanti in palestra",
+        method="CASH", cash_received_by_name="Segreteria",
     )
     waived = await club_service.waive_fee(
         db, scope=scope, fee_id=enrollment.id, actor_user_id=admin.id, reason="Fratello minore"

@@ -380,3 +380,158 @@ taxa de faltas, scadenza il 15, sconti A25/B15/C5, famiglia 5 €, invito
 - `test_organizations.py::test_a_missing_organization_resolves_to_the_only_one`
   fallisce nella suite completa (passa da solo): i test di concorrenza dei
   wallet lasciano organizzazioni nel database di test.
+
+---
+
+## Sessione 9 — 2026-10-14 — "Cinto preto", non "negro"
+
+In portoghese europeo la cintura nera è il **cinto preto**: "negro" è un
+calco dallo spagnolo, sbagliato e stonato per le famiglie. Corretti i
+quattro testi di `pt.ts` (traguardo `BLACK_BELT` e la sua descrizione,
+`belt.BLACK` "Preto N.º dan", l'esempio di biografia nel consenso del sito).
+Nessun dato nel database conteneva la parola. Ricostruito solo `dashboard`.
+
+## Sessione 10 — 2026-10-14 — JAVBOT conosce chi gli scrive
+
+Il titolare voleva che il bot dell'area riservata sapesse "tutto"
+dell'utente: quanto ha pagato, quanto deve, i suoi dati. Scelta del
+titolare: **niente modello esterno**, i dati non escono dal server; si resta
+al pianificatore a regole, con più strumenti e più domande riconosciute.
+
+Tre strumenti nuovi in `javbot/tools.py`, tutti in sola lettura e sui soli
+dati di chi chiede: `family_payments` (le cifre di "I miei conti",
+`accounting.personal_account`, più gli ultimi pagamenti), `my_profile`
+(anagrafica dell'utente e scheda di ogni atleta; senza `club.family` solo
+l'utente) e `family_progress` (cintura e da quando, presenze del mese e
+della stagione, ranking, medaglie, livello; niente cinture e gare nei corsi
+JAV). Riusano le funzioni delle pagine, così bot e schermo non si
+contraddicono. Intenzioni nuove: `payments_made`, `overview` ("cosa sai di
+me?"), `my_profile`, `belts`, `attendance_stats`, `ranking`; "debito /
+dívida / debt" vanno a `fees_due`, e un genitore che chiede "estou em
+dívida?" riceve le sue quote invece del rifiuto dello strumento della
+segreteria. Un nome di atleta nella domanda restringe la risposta a lui.
+Nuovo bottone `accounts` → scheda "I miei conti" (`lib/javbot.ts`).
+Suggerimenti della famiglia, saluto e aiuto aggiornati. Nessuna migrazione.
+
+## Sessione 11 — 2026-10-14 — La pagina del club diventa un mini-sito
+
+Il titolare voleva pagine dei club "potenti", stile pagina Facebook con
+sotto un vero mini-sito, riempite con i dati veri dei club. Migrazione
+**0012** (`club_sites`: `founded_year` con CHECK, `venue`, e le liste JSONB
+`highlights`, `history`, `pillars`, `news`, `videos`); grado e due righe
+per gli allenatori (nel JSONB, senza migrazione). Pagina rifatta:
+copertina più alta che "respira" (`animate-ken-burns`, spenta con riduci
+movimento), nome sotto la copertina, badge della rete, numeri che salgono,
+"Próximo treino" dal vivo, capolettera, numeri del club, pilastri, novità
+come post, storia a linea del tempo, allenatori con grado, foto e video
+separati, video del canale YouTube del club in automatico
+(`/public-site/clubs/{slug}/videos`), mappa caricata solo su richiesta,
+barra mobile. Editor: le nuove liste (`RowsCard`), sede, anno, grado e bio.
+
+Contenuti caricati con `scripts/load_club_pages.py` (fonti nel docstring:
+blog del JC Albufeira, judoartevida.com, racius, postal.pt; Facebook e
+Instagram non si leggono senza login). Niente nomi di minorenni, niente
+foto di giornali; copertina vera solo ad Albufeira (Lagos e Alvor tengono
+la loro finché la segreteria non carica una foto del club). Applicato
+anche `load_club_branding.py` (loghi, colori, social), che falliva con
+`NoReferencedTableError`: ora importa `app.main` per registrare tutti i
+modelli, come `load_club_pages.py`.
+
+Poi, su richiesta del titolare: la pagina è diventata **a schede** (una
+alla volta, bottoni grandi, "Horários e preços" con card per gruppo e
+calendario della settimana) e `load_official_prices.py --apply
+--show-prices` è stato applicato ai tre club (piani, prezzi visibili, orari
+di Lagos e Alvor; Albufeira senza orario finché il club non lo dà). Lo
+script aveva lo stesso `NoReferencedTableError`: ora importa `app.main`. Le email di contatto dei club restano
+`matiasluwawa@gmail.com` (le fonti danno indirizzi propri per ogni club).
+`scripts/backup.sh` segnala "sospettosamente piccolo" sotto i 100 KB, ma il
+database è ancora così piccolo: il dump era completo.
+
+## Sessione 12 — 2026-10-14 — Il conto dell'atleta
+
+Il titolare voleva che ogni atleta avesse la sua area, anche i bambini senza
+email, e che il "conto famiglia" restasse per chi paga. Decisioni del
+titolare: accesso dei figli **con nome utente + password e con QR**; un
+minorenne **vede** lezioni e quote e **segna la presenza**, non paga; a 18
+anni **proposta** di diventare titolare (mai automatica). Migrazione
+**0013** (`users.username`, `club_athletes.user_id`,
+`club_athlete_login_codes`), ruolo `ATHLETE` e permesso `club.athlete`
+(anche a `CUSTOMER`: il genitore apre l'area dei figli). Pagine `/atleta`
+e `/entrar/<codice>`; scheda dell'atleta → *Acesso*; nel conto famiglia il
+riquadro "Área do atleta". Dettagli in docs/club-portal.md, "Il conto
+dell'atleta". Test: `tests/test_club_athlete_access.py`.
+
+Dopo il deploy va rilanciato `python -m app.seed.bootstrap` (crea il ruolo
+ATHLETE e il permesso).
+
+SFTP: impostata una password nuova per `webadmin` (chroot su /opt) su
+richiesta del titolare.
+
+
+## Sessione 13 — 2026-10-15 — Età federale, mensilità mese per mese, giustificazione per la scuola
+
+**Età federale.** Il titolare: l'età dei gruppi è quella federale, gli anni
+che si compiono entro il 31 dicembre; quando si passa nella fascia del
+gruppo dopo, la mensilità sale. `seasons.federal_age` sostituisce l'età al
+1° settembre nella scelta del piano (`assign_plan(year=…)`). Il gruppo si
+sceglie **mese per mese** in `generate_monthly_fees`: a gennaio chi cambia
+fascia paga già il gruppo nuovo, `plan_id` lo segue (solo per il mese in
+corso o futuri: rigenerare un mese passato non lo riporta indietro) e il
+titolare riceve `CLUB_PLAN_CHANGED`. I mesi già emessi non cambiano. Le
+fasce del Jav Ranking restano all'età del 1° settembre. Nessun atleta reale
+cambiava gruppo con la regola nuova (i club veri non hanno ancora iscritti
+attivi): niente da riallineare.
+
+**Come si paga una mensilità** (migrazione **0014**). Ogni quota pagata dice
+come (`club_fees.payment_method`: bonifico, contanti, carta, credito) e per
+i contanti a chi (`cash_received_by_user_id` / `_name`, nome congelato). Il
+genitore, nella finestra di pagamento, sceglie Bonifico (ricevuta, come
+prima), Contanti (a chi: staff del club o nome scritto; prova con
+`method = CASH` senza file, la persona riceve `CLUB_CASH_DECLARED`) o Carta
+online, **spenta** finché il club non ha Stripe. La segreteria segna pagata
+con una finestra (metodo + a chi) al posto del vecchio `prompt`;
+`mark_fee_paid` richiede il metodo. Rifiuto e riapertura cancellano il
+metodo. Le quote già pagate con una prova hanno ricevuto il metodo dalla
+migrazione; quelle segnate a mano prima no.
+
+**Il calendario delle mensilità** (`club/months.py`, componente
+`SeasonMonthsPanel`): le dodici caselle della stagione per atleta, verde
+pagata, giallo da pagare, rosso scaduta, tratteggiata prevista (con
+l'importo previsto calcolato dal server, cambio di gruppo compreso). Un mese
+si apre con il dettaglio (gruppo ed età federale, scadenza, sconti, quando e
+come pagato, ricevuta) e da lì si paga. Sopra, una ciambella
+pagato/da pagare/scaduto/previsto e le presenze mese per mese (recharts).
+È nella scheda Quote dell'atleta (famiglia), nell'area dell'atleta (in
+lettura) e nella scheda atleta della segreteria (con "Segna pagata"). Nella
+pagina della famiglia una barra per atleta (`FamilyRead.season_months`).
+Nell'interfaccia l'età mostrata al genitore è quella vera; la segreteria e
+lo staff vedono quella federale.
+
+**Giustificazione per la scuola** (`club/school_letters.py`, tabella
+`club_school_letters`). In "Iscritti e risultati" ogni iscritto ha
+"Giustificazione": testo proposto nella lingua delle lettere del club (al
+maschile o al femminile, con data di nascita e tesseramento), la segreteria
+lo corregge e genera il PDF su carta intestata (logo, recapiti e colore
+della pagina del club; `storage.read_media_url` legge il logo lato server).
+Il PDF va nel bucket **privato**, si apre con URL presigned di 5 minuti; il
+titolare lo scarica dalla pagina delle gare quando è pronto. Una per
+iscrizione, rigenerarla cancella il file vecchio. La regola "dopo la
+scadenza nessuno si iscrive" c'era già (`eligibility`): ora ha un test.
+
+**Privacy dei file.** Verificato: prove di pagamento, certificati e ricevute
+delle spese erano già nel bucket privato (policy `private`, nessun accesso
+anonimo); il bucket media è pubblico in sola lettura per oggetto, senza
+elenco. Regola scritta in CLAUDE.md §5. Le foto degli atleti restano nel
+bucket media (servono alla pagina pubblica del judoca, con consenso): vedi
+open-questions se vanno spostate.
+
+Test: `tests/test_club_months.py` (9); suite completa 534 passati, 1 fallito
+(`test_organizations::test_a_missing_organization_resolves_to_the_only_one`,
+il problema noto della sessione 8). Typecheck verde, lint dei file toccati
+pulito. Backup prima della migrazione (55 KB, completo: l'avviso
+"sospettosamente piccolo" è la soglia dei 100 KB).
+
+Poi, su richiesta del titolare: nel sito pubblico "Cursos nas escolas" è
+passato dalla barra alla tendina "Quem somos" (con la sua riga di
+spiegazione), per lasciare spazio nel menu; il bottone "A minha área" /
+"Entrar" è diventato rosso del club, in gradiente, con icona e freccia.

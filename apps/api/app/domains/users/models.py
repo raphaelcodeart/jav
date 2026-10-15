@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, String, UniqueConstraint
+from sqlalchemy import ForeignKey, Index, String, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -10,7 +10,13 @@ from app.core.db import Base, TimestampMixin, UUIDPKMixin
 
 class User(UUIDPKMixin, TimestampMixin, Base):
     __tablename__ = "users"
-    __table_args__ = (UniqueConstraint("organization_id", "email", name="uq_users_org_email"),)
+    __table_args__ = (
+        UniqueConstraint("organization_id", "email", name="uq_users_org_email"),
+        # Il nome utente degli atleti senza email (club/athlete_access.py),
+        # minuscolo, unico nell'organizzazione.
+        Index("uq_users_org_username", "organization_id", "username", unique=True,
+              postgresql_where=text("username IS NOT NULL")),
+    )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("organizations.id"), index=True
@@ -22,6 +28,11 @@ class User(UUIDPKMixin, TimestampMixin, Base):
         UUID(as_uuid=True), ForeignKey("clubs.id"), nullable=True, index=True
     )
     email: Mapped[str] = mapped_column(String(255), index=True)
+    #: Il nome utente di un account atleta ("tiago.lagos"): si entra con
+    #: questo o con l'email. Un atleta senza email ha un indirizzo finto
+    #: `<username>@atleta.invalid` (.invalid non esiste per definizione, e
+    #: core/email.py non ci spedisce niente).
+    username: Mapped[str | None] = mapped_column(String(40), nullable=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     # ACTIVE / FROZEN (an admin-frozen account: login is
     # refused and every existing session revoked immediately, but the row and

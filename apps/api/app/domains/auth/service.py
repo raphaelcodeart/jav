@@ -70,9 +70,9 @@ async def authenticate(
     validators), but this must still find accounts created before that
     normalization existed, whatever case their email happens to be stored
     in."""
-    stmt = select(User).where(
-        User.organization_id == organization_id, func.lower(User.email) == email.lower()
-    )
+    # Con "@" è un'email; senza, il nome utente di un atleta (sempre minuscolo).
+    match = func.lower(User.email) == email.lower() if "@" in email else User.username == email.lower()
+    stmt = select(User).where(User.organization_id == organization_id, match)
     user = (await db.execute(stmt)).scalar_one_or_none()
 
     if user is None:
@@ -117,7 +117,17 @@ async def authenticate(
 
     user.failed_login_attempts = 0
     user.locked_until = None
+    return await issue_session(
+        db, user=user, organization_id=organization_id, ip_address=ip_address, user_agent=user_agent,
+    )
 
+
+async def issue_session(
+    db: AsyncSession, *, user: User, organization_id: uuid.UUID, ip_address: str | None, user_agent: str | None,
+    action: str = "login.success",
+) -> tuple[str, str]:
+    """La sessione di un utente già riconosciuto (password o QR dell'atleta):
+    access token con i ruoli, refresh token, audit."""
     roles = await get_roles_for_user(db, user_id=user.id, organization_id=organization_id)
     access_token = create_access_token(
         subject=str(user.id), organization_id=str(organization_id), roles=roles
@@ -134,7 +144,7 @@ async def authenticate(
 
     await audit_service.record(
         db, organization_id=organization_id, actor_user_id=user.id,
-        action="login.success", entity_type="user", entity_id=str(user.id),
+        action=action, entity_type="user", entity_id=str(user.id),
         ip_address=ip_address, user_agent=user_agent,
     )
     await db.commit()
@@ -611,9 +621,9 @@ async def request_password_reset(
     account -- same enumeration-safety principle as authenticate(): a caller
     must never be able to use this endpoint to discover which emails have
     accounts."""
-    stmt = select(User).where(
-        User.organization_id == organization_id, func.lower(User.email) == email.lower()
-    )
+    # Con "@" è un'email; senza, il nome utente di un atleta (sempre minuscolo).
+    match = func.lower(User.email) == email.lower() if "@" in email else User.username == email.lower()
+    stmt = select(User).where(User.organization_id == organization_id, match)
     user = (await db.execute(stmt)).scalar_one_or_none()
     if user is None:
         await audit_service.record(

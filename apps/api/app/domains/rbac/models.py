@@ -22,6 +22,9 @@ SYSTEM_ROLES = [
     "INSTRUCTOR",
     # La segreteria di un club: tutto il club, nient'altro della piattaforma.
     "SECRETARY",
+    # L'accesso di un atleta alla sua area (club/athlete_access.py): un figlio
+    # con il suo nome utente, o un adulto prima di diventare titolare.
+    "ATHLETE",
 ]
 
 # Granular permission codes. Kept as a flat list (not an enum) so new permissions can
@@ -47,7 +50,7 @@ PERMISSIONS = [
     # Il club (docs/club-portal.md). `club.family` è il genitore: vede e
     # gestisce solo la propria famiglia, e lo verifica il servizio, non il
     # permesso. `club.manage` è la segreteria, `club.instruct` gli istruttori.
-    "club.family", "club.manage", "club.instruct",
+    "club.family", "club.manage", "club.instruct", "club.athlete",
     # Più club sulla stessa piattaforma: `clubs.manage` li crea e li modifica,
     # `clubs.enter` lavora dentro un club qualsiasi scegliendolo (club/scope.py).
     "clubs.manage", "clubs.enter",
@@ -113,13 +116,14 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, list[str]] = {
     ],
     "CUSTOMER": [
         "contracts.read", "documents.download", "documents.upload", "products.read", "tickets.create",
-        "club.family",
+        "club.family", "club.athlete",
     ],
     "AUDITOR": ["audit.read", "reports.export", "reports.read"],
     "INSTRUCTOR": ["club.instruct", "tickets.create"],
     # Il perimetro (solo il suo club) non lo dà il permesso ma users.club_id:
     # vedi club/scope.py.
     "SECRETARY": ["club.manage", "club.instruct", "tickets.create"],
+    "ATHLETE": ["club.athlete"],
 }
 
 

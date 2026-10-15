@@ -16,6 +16,7 @@ from app.domains.club import achievements as achievements_catalog
 from app.domains.club import belts as belts_catalog
 from app.domains.club import competitions as competitions_service
 from app.domains.club import courses as courses_service
+from app.domains.club import months as months_service
 from app.domains.club import seasons
 from app.domains.club import service as club_service
 from app.domains.club.models import (
@@ -56,6 +57,8 @@ def fee_dict(fee: ClubFee, *, today: date, athlete: ClubAthlete | None = None) -
         "paid_at": fee.paid_at,
         "paid_via_proof_id": fee.paid_via_proof_id,
         "payment_note": fee.payment_note,
+        "payment_method": fee.payment_method,
+        "cash_received_by_name": fee.cash_received_by_name,
         "waive_reason": fee.waive_reason,
         "competition_id": fee.competition_id,
         "course_id": fee.course_id,
@@ -131,6 +134,8 @@ async def athlete_cards(
             "birth_date": athlete.birth_date,
             "age": seasons.age_on(athlete.birth_date, today),
             "season_age": seasons.season_age(athlete.birth_date, season),
+            # L'età che decide il gruppo: gli anni compiuti entro il 31 dicembre.
+            "federal_age": seasons.federal_age(athlete.birth_date, today.year),
             "sex": athlete.sex,
             "photo_url": athlete.photo_url,
             "is_self": athlete.is_self,
@@ -192,6 +197,27 @@ async def family_summary(
     open_competitions = await competitions_service.list_competitions(
         db, scope=scope, status="OPEN", from_date=today
     )
+    # Le mensilità della stagione di ogni atleta, per il grafico della
+    # famiglia: dalle quote già lette, nessuna query in più.
+    season_periods = {f"{y:04d}-{m:02d}" for y, m in months_service.season_periods(season)}
+    by_athlete = {
+        a.id: {"athlete_id": a.id, "first_name": a.first_name, "paid_cents": 0, "due_cents": 0,
+               "overdue_cents": 0, "months_paid": 0, "months_due": 0, "months_overdue": 0}
+        for a in athletes
+    }
+    for f in fees:
+        row = by_athlete.get(f.athlete_id)
+        if row is None or f.kind != "MONTHLY" or f.period not in season_periods:
+            continue
+        if f.status == "PAID":
+            row["paid_cents"] += f.amount_cents
+            row["months_paid"] += 1
+        elif f.status == "DUE" and f.due_date < today:
+            row["overdue_cents"] += f.amount_cents
+            row["months_overdue"] += 1
+        elif f.status == "DUE":
+            row["due_cents"] += f.amount_cents
+            row["months_due"] += 1
     return {
         "season": season,
         "season_label": seasons.season_label(season),
@@ -202,6 +228,7 @@ async def family_summary(
         "paid_season_cents": sum(f.amount_cents for f in in_season),
         "recent_proofs": [proof_dict(p, fees=proof_fees.get(p.id, []), today=today) for p in proofs],
         "open_competitions": len([c for c in open_competitions if c.registration_deadline >= today]),
+        "season_months": list(by_athlete.values()),
     }
 
 
@@ -217,6 +244,8 @@ def proof_dict(proof, *, fees: list[ClubFee], today: date) -> dict:
         "rejection_reason": proof.rejection_reason,
         "reviewed_at": proof.reviewed_at,
         "uploaded_by_user_id": proof.uploaded_by_user_id,
+        "method": proof.method,
+        "cash_received_by_name": proof.cash_received_by_name,
         "fees": [fee_dict(f, today=today) for f in fees],
     }
 

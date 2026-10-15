@@ -25,6 +25,15 @@ class EmailNotConfiguredError(Exception):
     pass
 
 
+#: Il dominio degli atleti senza email: `.invalid` è riservato (RFC 2606),
+#: nessuna posta può arrivarci.
+PLACEHOLDER_EMAIL_DOMAIN = "atleta.invalid"
+
+
+def is_placeholder_address(address: str | None) -> bool:
+    return (address or "").lower().endswith(f"@{PLACEHOLDER_EMAIL_DOMAIN}")
+
+
 def send_html_email(
     *, to: str, subject: str, html_body: str, text_body: str,
     from_address: str | None = None, reply_to: str | None = None, bcc: str | None = None,
@@ -41,6 +50,10 @@ def send_html_email(
     SMTP deve accettare `from_address` come mittente."""
     if not settings.smtp_host:
         raise EmailNotConfiguredError("SMTP is not configured (smtp_host is empty)")
+    if is_placeholder_address(to):
+        # L'account di un atleta senza email (club/athlete_access.py): non c'è
+        # nessuno a cui scrivere, e non è un errore.
+        return
 
     message = EmailMessage()
     message["Subject"] = subject

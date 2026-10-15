@@ -152,10 +152,12 @@ async def family_today(db: AsyncSession, *, scope: ClubScope, guardian_user_id: 
 async def family_mark(
     db: AsyncSession, *, scope: ClubScope, guardian_user_id: uuid.UUID, athlete_id: uuid.UUID,
     course_id: uuid.UUID, present: bool, note: str | None, today: date | None = None,
+    actor_user_id: uuid.UUID | None = None,
 ) -> None:
     """Il genitore segna (o toglie) la presenza di oggi. Solo oggi, solo una
     lezione di oggi a cui l'atleta è iscritto. Una presenza già segnata dallo
-    staff, il genitore non la toglie."""
+    staff, il genitore non la toglie. `actor_user_id`: chi la segna, se non
+    è il titolare (l'atleta dalla sua area, club/athlete_access.py)."""
     today = today or (await club_now(db, club_id=scope.club_id)).date()
     athlete = await get_owned_athlete(db, scope=scope, guardian_user_id=guardian_user_id, athlete_id=athlete_id)
     lesson = next(
@@ -177,7 +179,7 @@ async def family_mark(
         raise ClubValidationError("La presenza l'ha già segnata l'istruttore: per correggerla parla con la segreteria.")
     course = await db.get(ClubCourse, course_id)
     await courses_service.mark_attendance(
-        db, course=course, athlete=athlete, on=today, present=present, actor_user_id=guardian_user_id,
+        db, course=course, athlete=athlete, on=today, present=present, actor_user_id=actor_user_id or guardian_user_id,
         note=note, by_family=True,
     )
 

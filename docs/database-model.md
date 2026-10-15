@@ -1121,6 +1121,19 @@ club_payment_proofs        la foto/PDF del bonifico (bucket privato);
 club_payment_proof_fees    quali quote copre una prova
   UNIQUE (proof_id, fee_id)
 
+club_fees (0014)           + payment_method (BANK_TRANSFER/CASH/CARD/WALLET,
+                           CHECK, NULL se da pagare), cash_received_by_user_id
+                           -> users, cash_received_by_name (congelato)
+club_payment_proofs (0014) + method (BANK_TRANSFER/CASH, default
+                           BANK_TRANSFER), cash_received_by_user_id -> users,
+                           cash_received_by_name; CHECK file_or_credit ora
+                           "file, o credito che copre tutto, o contanti";
+                           CHECK cash_receiver (i contanti dicono a chi)
+club_school_letters (0014) la giustificazione per la scuola di un iscritto
+  entry_id -> club_competition_entries (UNIQUE), competition_id, athlete_id,
+  body_text (il testo stampato), storage_key (PDF nel bucket privato),
+  generated_at, generated_by_user_id
+
 club_medical_certificates  type (AGONISTIC/NON_AGONISTIC), issued_on,
                            expires_on, file nel bucket privato
 club_belt_grades           storico cinture, UNIQUE (athlete_id, grade);

@@ -122,6 +122,20 @@ function AthleteEntryRow({ competition: c, athlete: a }: { competition: FamilyCo
     }
   }
 
+  async function openLetter() {
+    // La finestra si apre nel clic: dopo l'await il browser la bloccherebbe.
+    const tab = window.open("", "_blank");
+    if (tab) tab.opener = null;
+    try {
+      const { url } = await clubGet<{ url: string }>(`/competitions/${c.id}/entries/${a.athlete_id}/school-letter/url`);
+      if (tab) tab.location.href = url;
+      else window.location.href = url;
+    } catch (e) {
+      tab?.close();
+      toast({ tone: "error", title: t("letter.downloadFailed"), text: (e as Error).message });
+    }
+  }
+
   async function withdraw() {
     if (!window.confirm(t("comp.withdrawConfirm", { name: a.first_name, competition: c.name }))) return;
     setBusy(true);
@@ -151,6 +165,9 @@ function AthleteEntryRow({ competition: c, athlete: a }: { competition: FamilyCo
             <p className="text-xs text-ink-500">{t("comp.eligible")}</p>
           )}
         </div>
+        {registered && a.school_letter_ready && (
+          <Button variant="secondary" size="sm" onClick={openLetter}>🏫 {t("letter.download")} ↗</Button>
+        )}
         {c.registrations_open &&
           (registered ? (
             <Button variant="ghost" size="sm" onClick={withdraw} loading={busy}>{t("comp.withdraw")}</Button>

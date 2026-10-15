@@ -97,6 +97,52 @@ class CoachItem(BaseModel):
     name: str = Field(max_length=120)
     role: str | None = Field(default=None, max_length=120)
     photo_url: str | None = Field(default=None, max_length=500)
+    #: Il grado ("Cinto preto 4.º dan") e due righe di presentazione.
+    grade: str | None = Field(default=None, max_length=60)
+    bio: str | None = Field(default=None, max_length=400)
+
+
+class HighlightItem(BaseModel):
+    """Un numero che il club dice di sé ("40+" · "anos de judo")."""
+
+    value: str = Field(max_length=12)
+    label: str = Field(max_length=60)
+
+
+class HistoryItem(BaseModel):
+    year: int = Field(ge=1882, le=2100)
+    title: str = Field(max_length=120)
+    text: str | None = Field(default=None, max_length=600)
+
+
+class PillarItem(BaseModel):
+    """Perché allenarsi qui: un titolo e due righe."""
+
+    title: str = Field(max_length=60)
+    text: str | None = Field(default=None, max_length=300)
+
+
+class NewsItem(BaseModel):
+    """Una novità, come un post della pagina Facebook del club."""
+
+    date: date
+    title: str = Field(max_length=140)
+    text: str | None = Field(default=None, max_length=2000)
+    image_url: str | None = Field(default=None, max_length=500)
+    link_url: str | None = Field(default=None, max_length=500)
+
+
+class ClubVideoItem(BaseModel):
+    #: Solo l'id: il sito costruisce da sé l'indirizzo youtube-nocookie.
+    youtube_id: str = Field(max_length=11)
+    caption: str | None = Field(default=None, max_length=200)
+
+
+class ClubVideoWrite(BaseModel):
+    """Un video come lo scrive la segreteria: il link di YouTube (o l'id)."""
+
+    url: str = Field(max_length=500)
+    caption: str | None = Field(default=None, max_length=200)
 
 
 class ScheduleSlot(BaseModel):
@@ -135,6 +181,13 @@ class SiteContent(BaseModel):
     brand_primary: str | None = None
     brand_secondary: str | None = None
     brand_accent: str | None = None
+    founded_year: int | None = None
+    venue: str | None = None
+    highlights: list[HighlightItem] = []
+    history: list[HistoryItem] = []
+    pillars: list[PillarItem] = []
+    news: list[NewsItem] = []
+    videos: list[ClubVideoItem] = []
 
 
 class BrandTheme(BaseModel):
@@ -320,6 +373,14 @@ class SiteWrite(BaseModel):
     brand_primary: str | None = Field(default=None, max_length=7)
     brand_secondary: str | None = Field(default=None, max_length=7)
     brand_accent: str | None = Field(default=None, max_length=7)
+    founded_year: int | None = Field(default=None, ge=1882, le=2100)
+    venue: str | None = Field(default=None, max_length=160)
+    highlights: list[HighlightItem] | None = None
+    history: list[HistoryItem] | None = None
+    pillars: list[PillarItem] | None = None
+    news: list[NewsItem] | None = None
+    #: I video si scrivono come link (o id) e si salvano come id.
+    videos: list[ClubVideoWrite] | None = None
     published: bool | None = None
     show_prices: bool | None = None
 

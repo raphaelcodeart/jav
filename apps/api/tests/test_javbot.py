@@ -494,3 +494,88 @@ async def test_how_to_get_a_discount(db, scope):
     })
     none = await public_bot.answer(_public_ctx(db, "en"), "discounts?", club_slug=club.slug)
     assert say("en", "pub.discountsNone", club=club.name) in none.text
+
+
+# --- Che cosa sa di me ----------------------------------------------------------------------------
+
+
+def test_personal_questions_in_three_languages():
+    cases = {
+        ("Quanto ho pagato quest'anno?", "it"): "payments_made",
+        ("Quanto paguei este ano?", "pt"): "payments_made",
+        ("How much have I paid?", "en"): "payments_made",
+        ("Ho debiti con il club?", "it"): "fees_due",
+        ("Tenho dívidas?", "pt"): "fees_due",
+        ("Estou em dívida?", "pt"): "fees_due",
+        ("Cosa sai di me?", "it"): "overview",
+        ("O que sabes de mim?", "pt"): "overview",
+        ("Quais são os meus dados?", "pt"): "my_profile",
+        ("Che piano ha Luca?", "it"): "my_profile",
+        ("Que cinto tem o Rui?", "pt"): "belts",
+        ("Quante presenze ha fatto Luca?", "it"): "attendance_stats",
+        ("Quantos treinos fez este mês?", "pt"): "attendance_stats",
+        ("Quantos pontos tem no ranking?", "pt"): "ranking",
+        # Le domande che c'erano prima restano dove erano.
+        ("Ho pagato ma non riesco a caricare la ricevuta", "it"): "upload_proof",
+        ("Há aulas hoje?", "pt"): "lessons_today",
+        ("Quem não pagou?", "pt"): "staff_unpaid",
+    }
+    for (text, lang), expected in cases.items():
+        assert intents.detect(text, lang=lang)[0] == expected, text
+
+
+async def test_the_bot_knows_the_family_and_only_it(db, scope, monkeypatch):
+    admin = await _user(db, scope, "admin")
+    await _plans(db, scope, admin)
+    parent = await _user(db, scope)
+    await _with_address(db, scope, parent)
+    other = await _user(db, scope, "altro")
+    luca = await _athlete(db, scope, parent, birth_date=date(2016, 3, 3))
+    stranger = await _athlete(db, scope, other, birth_date=date(2015, 1, 1), first_name="Estraneo", last_name="Segreto")
+    due = await club_service.list_fees(db, scope=scope, athlete_ids=[luca.id], status="DUE")
+    paid = await club_service.mark_fee_paid(db, scope=scope, fee_id=due[0].id, actor_user_id=admin.id, note=None, method="CARD")
+    for fee in await club_service.list_fees(db, scope=scope, athlete_ids=[stranger.id], status="DUE"):
+        await club_service.mark_fee_paid(db, scope=scope, fee_id=fee.id, actor_user_id=admin.id, note=None, method="CARD")
+    await club_service.award_belt(db, athlete=luca, grade="YELLOW", awarded_on=date(2026, 6, 20), actor_user_id=admin.id)
+
+    ctx = await _ctx(db, monkeypatch, parent, scope, {"club.family"})
+    money = await REGISTRY.call("family_payments", ctx)
+    assert money["totals"]["paid_all_time_cents"] == paid.amount_cents
+    assert [r["first_name"] for r in money["recent"]] == ["Luca"]
+
+    answer = await _say(db, ctx, "Quanto ho pagato?")
+    assert euro(paid.amount_cents, "it") in answer.text and "Luca" in answer.text
+    assert "Estraneo" not in answer.text
+    assert any(a.get("target") == "accounts" for a in answer.actions)
+
+    answer = await _say(db, ctx, "Che cintura ha Luca?")
+    assert "gialla" in answer.text and "20/06/2026" in answer.text
+
+    answer = await _say(db, ctx, "I miei dati")
+    assert "Maria Silva" in answer.text and "Rua das Flores 10" in answer.text and "Luca Bianchi" in answer.text
+    assert "Segreto" not in answer.text
+
+    ctx_pt = await _ctx(db, monkeypatch, parent, scope, {"club.family"}, lang="pt")
+    answer = await _say(db, ctx_pt, "O que sabes de mim?")
+    assert "Olá Maria" in answer.text and "cinto amarelo" in answer.text
+    assert euro(paid.amount_cents, "pt") in answer.text and "Estraneo" not in answer.text
+
+    answer = await _say(db, ctx_pt, "Estou em dívida?")
+    assert "No total tens" in answer.text  # un genitore parla della sua famiglia, non del club
+
+    answer = await _say(db, ctx_pt, "Quantas presenças tem o Luca?")
+    assert "0 treinos este mês" in answer.text
+
+
+async def test_personal_data_needs_the_family_permission(db, scope, monkeypatch):
+    """Lo staff senza famiglia nel club vede solo i suoi dati, non quelli degli atleti."""
+    admin = await _user(db, scope, "admin")
+    await _plans(db, scope, admin)
+    parent = await _user(db, scope)
+    await _athlete(db, scope, parent, birth_date=date(2016, 3, 3))
+    staff = await _user(db, scope, "istruttore")
+    ctx = await _ctx(db, monkeypatch, staff, scope, {"club.instruct"})
+    data = await REGISTRY.call("my_profile", ctx)
+    assert data["email"] == staff.email and data["athletes"] == []
+    answer = await _say(db, ctx, "Quanto ho pagato?")
+    assert "Luca" not in answer.text

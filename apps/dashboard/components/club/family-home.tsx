@@ -18,7 +18,7 @@ import { FamilyToday } from "@/components/club/family-today";
 import { InviteCard } from "@/components/club/invite-card";
 import { useClubFeatures } from "@/components/club/jav-courses";
 import { PayModal } from "@/components/club/pay-modal";
-import { clubGet, type Family } from "@/lib/club";
+import { clubGet, type AthleteSeasonMonths, type Family } from "@/lib/club";
 import { useI18n } from "@/lib/i18n/provider";
 
 /** The parent's home: one card per child, three big buttons, and what is
@@ -37,6 +37,8 @@ export function FamilyHome({ onNavigate, familyOverride }: { onNavigate: (key: s
   useJavbotPayRequest(setPay);
   const [addOpen, setAddOpen] = useState(false);
   const [openAthlete, setOpenAthlete] = useState<string | null>(null);
+  // Dal grafico delle mensilità la scheda si apre sulle quote.
+  const [openOnFees, setOpenOnFees] = useState(false);
   // Nei corsi JAV nelle scuole niente gare: al loro posto, i corsi.
   const features = useClubFeatures();
   const { t, fmt } = useI18n();
@@ -121,6 +123,21 @@ export function FamilyHome({ onNavigate, familyOverride }: { onNavigate: (key: s
         <ActionButton icon="🥋" title={t("family.actionShop")} text={t("family.actionShopText")} tone="ink" onClick={() => onNavigate("products")} />
       </section>
 
+      {/* L'area di ogni atleta: la sua pagina (lezioni, presenza, traguardi),
+          e da lì il genitore crea l'accesso del figlio. */}
+      {!noAthletes && (
+        <a href="/atleta" className="group flex items-center justify-between gap-4 rounded-3xl bg-ink-950 p-5 text-white shadow-lift transition hover:-translate-y-0.5">
+          <span className="flex items-center gap-4">
+            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-400 text-2xl" aria-hidden="true">🥋</span>
+            <span>
+              <span className="block font-semibold">{t("family.athleteArea")}</span>
+              <span className="block text-sm text-white/70">{t("family.athleteAreaText")}</span>
+            </span>
+          </span>
+          <span aria-hidden="true" className="text-xl transition-transform group-hover:translate-x-1">→</span>
+        </a>
+      )}
+
       {!noAthletes && <FamilyToday />}
 
       {/* Numbers */}
@@ -130,6 +147,10 @@ export function FamilyHome({ onNavigate, familyOverride }: { onNavigate: (key: s
         <StatTile label={t("family.statPaid")} value={family.paid_season_cents / 100} format={euroFmt} accent="success" icon={<span className="text-lg">✅</span>} />
         {features.competitions && <StatTile label={t("family.statOpenCompetitions")} value={family.open_competitions} accent="accent" icon={<span className="text-lg">🏟️</span>} onClick={() => onNavigate("club-competitions")} />}
       </section>
+
+      {!noAthletes && (family.season_months ?? []).length > 0 && (
+        <SeasonChart rows={family.season_months!} season={family.season_label} onOpen={(id) => { setOpenOnFees(true); setOpenAthlete(id); }} />
+      )}
 
       {!noAthletes && <FamilyAccountingCard onOpen={() => onNavigate("club-accounting")} />}
 
@@ -154,7 +175,7 @@ export function FamilyHome({ onNavigate, familyOverride }: { onNavigate: (key: s
         ) : (
           <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-6">
             {family.athletes.map((a) => (
-              <AthleteTile key={a.id} athlete={a} onOpen={() => setOpenAthlete(a.id)} />
+              <AthleteTile key={a.id} athlete={a} onOpen={() => { setOpenOnFees(false); setOpenAthlete(a.id); }} />
             ))}
           </div>
         )}
@@ -222,7 +243,56 @@ export function FamilyHome({ onNavigate, familyOverride }: { onNavigate: (key: s
         />
       )}
       {addOpen && <AthleteFormModal open={addOpen} onClose={() => setAddOpen(false)} />}
-      <AthleteDetailModal athleteId={openAthlete} onClose={() => setOpenAthlete(null)} />
+      <AthleteDetailModal key={`${openAthlete}-${openOnFees}`} athleteId={openAthlete} initialTab={openOnFees ? "fees" : "path"} onClose={() => setOpenAthlete(null)} />
     </div>
+  );
+}
+
+const SEGMENTS = [
+  { key: "paid_cents", months: "months_paid", label: "months.paid", color: "#1baf7a" },
+  { key: "due_cents", months: "months_due", label: "months.due", color: "#eda100" },
+  { key: "overdue_cents", months: "months_overdue", label: "months.overdue", color: "#d63a2f" },
+] as const;
+
+/** Una barra per atleta: la stagione divisa in pagato, da pagare e scaduto.
+ *  Toccandola si apre la scheda dell'atleta, sulle sue mensilità. */
+function SeasonChart({ rows, season, onOpen }: { rows: AthleteSeasonMonths[]; season: string; onOpen: (id: string) => void }) {
+  const { t, fmt } = useI18n();
+  const max = Math.max(1, ...rows.map((r) => r.paid_cents + r.due_cents + r.overdue_cents));
+  return (
+    <section className="glass-card rounded-3xl p-5">
+      <h3 className="text-base text-ink-900">{t("family.seasonChartTitle")}</h3>
+      <p className="text-sm text-ink-500">{t("family.seasonChartHint", { season })}</p>
+      <ul className="mt-4 space-y-3">
+        {rows.map((r, i) => {
+          const total = r.paid_cents + r.due_cents + r.overdue_cents;
+          return (
+            <li key={r.athlete_id}>
+              <button type="button" onClick={() => onOpen(r.athlete_id)} className="w-full text-left cursor-pointer group">
+                <span className="flex items-baseline justify-between gap-2 text-sm">
+                  <span className="font-semibold text-ink-900 group-hover:text-brand-700">{r.first_name}</span>
+                  <span className="text-xs text-ink-500">
+                    {t("months.paidOf", { paid: r.months_paid, total: r.months_paid + r.months_due + r.months_overdue })}
+                    {r.overdue_cents > 0 && <span className="ml-2 font-semibold text-rose-600">{t("months.overdue")}: {fmt.euro(r.overdue_cents)}</span>}
+                  </span>
+                </span>
+                <span className="mt-1.5 flex h-4 overflow-hidden rounded-full bg-ink-100" style={{ width: `${Math.max(8, (total / max) * 100)}%` }}
+                  role="img" aria-label={SEGMENTS.map((sg) => `${t(sg.label)} ${fmt.euro(r[sg.key])}`).join(", ")}>
+                  {SEGMENTS.filter((sg) => r[sg.key] > 0).map((sg) => (
+                    <motion.span key={sg.key} initial={{ width: 0 }} animate={{ width: `${(r[sg.key] / Math.max(1, total)) * 100}%` }}
+                      transition={{ delay: i * 0.08 }} className="h-full" style={{ background: sg.color }} title={`${t(sg.label)}: ${fmt.euro(r[sg.key])}`} />
+                  ))}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      <ul className="mt-4 flex flex-wrap gap-4 text-xs text-ink-600">
+        {SEGMENTS.map((sg) => (
+          <li key={sg.key} className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ background: sg.color }} />{t(sg.label)}</li>
+        ))}
+      </ul>
+    </section>
   );
 }

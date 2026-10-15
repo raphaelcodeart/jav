@@ -133,7 +133,7 @@ class Planner:
 
     def suggestions(self) -> list[str]:
         if self.can(FAMILY):
-            keys = ("qr.fees", "qr.upload", "qr.judogi", "qr.lessons", "qr.secretary")
+            keys = ("qr.overview", "qr.fees", "qr.paid", "qr.upload", "qr.judogi", "qr.secretary")
         elif self.can(MANAGE):
             keys = ("qr.staffUnpaid", "qr.lessons", "qr.staffCerts")
         elif self.can(INSTRUCT):
@@ -230,7 +230,22 @@ class Planner:
                 return await self.staff_unpaid()
             return await self.fees()
         if intent == "staff_unpaid":
+            # "Estou em dívida?" detto da un genitore: parla di sé, non del club.
+            if self.can(FAMILY) and not self.can(MANAGE):
+                return await self.fees()
             return await self.staff_unpaid()
+        if intent == "payments_made":
+            return await self.payments()
+        if intent == "overview":
+            return await (self.overview() if self.can(FAMILY) else self.profile(text))
+        if intent == "my_profile":
+            return await self.profile(text)
+        if intent == "belts":
+            return await self.belts(text)
+        if intent == "attendance_stats":
+            return await self.attendance(text)
+        if intent == "ranking":
+            return await self.ranking(text)
         if intent == "upload_proof":
             if intents.mentions(text, *ORDER_WORDS):
                 return await self.upload_order()
@@ -329,6 +344,202 @@ class Planner:
         actions = [open_pay(lang, "choose")] if self.can(FAMILY) else [nav(self.lang, "orders", "act.orders")]
         return Reply(say(lang, "upload.problems", mb=PROOF_MAX_MB), actions=actions,
                      quick_replies=[say(lang, "qr.secretary")], intent="upload_proof")
+
+    # --- I miei conti, i miei dati, il percorso --------------------------------------------------
+
+    def personal_suggestions(self) -> list[str]:
+        return [say(self.lang, k) for k in ("qr.paid", "qr.fees", "qr.myData", "qr.belts", "qr.attendance")]
+
+    def owed_line(self, totals: dict) -> str:
+        lang = self.lang
+        if not totals["due_cents"]:
+            return say(lang, "paid.allClear")
+        if totals["overdue_cents"]:
+            return say(lang, "paid.dueOverdue", due=euro(totals["due_cents"], lang),
+                       overdue=euro(totals["overdue_cents"], lang))
+        return say(lang, "paid.due", due=euro(totals["due_cents"], lang))
+
+    def fee_label(self, row: dict) -> str:
+        lang = self.lang
+        label = say(lang, f"feeKind.{row['kind']}")
+        if row["kind"] == "MONTHLY" and row["period"] and len(row["period"]) == 7:
+            label = f"{label} {texts.month_label(row['period'])}"
+        elif row["kind"] == "COMPETITION" and row["description"]:
+            label = f"{label} {row['description']}"
+        if row["first_name"]:
+            label = say(lang, "paid.of", label=label, name=row["first_name"])
+        return label
+
+    async def payments(self) -> Reply:
+        lang = self.lang
+        data = await self.tool("family_payments")
+        totals = data["totals"]
+        lines = []
+        if not data["paid_count"]:
+            lines.append(say(lang, "paid.nothing"))
+        else:
+            lines.append(say(lang, "paid.total", year=data["year"], amount=euro(totals["paid_year_cents"], lang),
+                             all=euro(totals["paid_all_time_cents"], lang)))
+            for person in data["people"]:
+                if person["paid_year_cents"]:
+                    lines.append(say(lang, "paid.person", name=person["first_name"] or say(lang, "fees.family"),
+                                     amount=euro(person["paid_year_cents"], lang)))
+            lines.append("")
+            lines.append(say(lang, "paid.recent"))
+            for row in data["recent"]:
+                lines.append(say(lang, "paid.line", date=texts.day(row["paid_on"], lang), label=self.fee_label(row),
+                                 amount=euro(row["amount_cents"], lang)))
+            if data["paid_count"] > len(data["recent"]):
+                lines.append(say(lang, "paid.more", n=data["paid_count"] - len(data["recent"])))
+        if data["shop"]["year_cents"]:
+            lines.append(say(lang, "paid.shop", amount=euro(data["shop"]["year_cents"], lang),
+                             n=data["shop"]["orders_year"]))
+        if totals["savings_year_cents"]:
+            lines.append(say(lang, "paid.savings", amount=euro(totals["savings_year_cents"], lang)))
+        lines.append("")
+        lines.append(self.owed_line(totals))
+        if data["wallet_balance_cents"]:
+            lines.append(say(lang, "paid.wallet", amount=euro(data["wallet_balance_cents"], lang)))
+        actions = [nav(lang, "accounts", "act.accounts")]
+        if totals["due_cents"]:
+            actions.insert(0, open_pay(lang, "fees"))
+        return Reply("\n".join(lines), actions=actions, quick_replies=self.personal_suggestions(),
+                     intent="payments_made")
+
+    def only_named(self, rows: list[dict], text: str) -> list[dict]:
+        """"Che cintura ha Luca?": solo Luca. Nessun nome: tutta la famiglia."""
+        name = first_name_in(text, [r["first_name"] for r in rows])
+        return [r for r in rows if r["first_name"] == name] if name else rows
+
+    def certificate_text(self, status: str, expires_on) -> str:
+        return say(self.lang, f"cert.{status}", date=texts.day(expires_on, self.lang))
+
+    async def profile(self, text: str) -> Reply:
+        lang = self.lang
+        data = await self.tool("my_profile")
+        name = " ".join(p for p in (data["first_name"], data["last_name"]) if p)
+        lines = [say(lang, "profile.intro")]
+        for key, value in (("name", name), ("email", data["email"]), ("phone", data["phone"]),
+                           ("fiscal", data["fiscal_code"])):
+            if value:
+                lines.append(say(lang, f"profile.{key}", v=value))
+        if data["address"]:
+            a = data["address"]
+            place = " ".join(p for p in (a["postal_code"], a["city"]) if p)
+            province = f" ({a['province']})" if a["province"] else ""
+            lines.append(say(lang, "profile.address", v=f"{a['street']}, {place}{province}"))
+        for athlete in self.only_named(data["athletes"], text):
+            lines.append("")
+            who = say(lang, "profile.you") if athlete["is_self"] else f"{athlete['first_name']} {athlete['last_name']}"
+            lines.append(say(lang, "profile.athlete", name=who, birth=texts.day(athlete["birth_date"], lang),
+                             age=athlete["age"]))
+            if athlete["plan_name"]:
+                lines.append(say(lang, "profile.plan", plan=athlete["plan_name"],
+                                 fee=euro(athlete["monthly_fee_cents"], lang)))
+            if athlete["federation_number"]:
+                expires = (say(lang, "profile.until", date=texts.day(athlete["federation_expires_on"], lang))
+                           if athlete["federation_expires_on"] else "")
+                lines.append(say(lang, "profile.federation", n=athlete["federation_number"], until=expires))
+            if athlete["fiscal_code"]:
+                lines.append(say(lang, "profile.fiscal", v=athlete["fiscal_code"]))
+            if athlete["weight_kg"] is not None:
+                lines.append(say(lang, "profile.weight", kg=f"{athlete['weight_kg']:g}"))
+            lines.append(say(lang, "profile.joined", date=texts.day(athlete["joined_on"], lang)))
+            lines.append(f"• {self.certificate_text(athlete['certificate'], athlete['certificate_expires_on'])}")
+            if athlete["status"] != "ACTIVE":
+                lines.append(say(lang, "profile.suspended"))
+        lines.append("")
+        lines.append(say(lang, "profile.fix"))
+        return Reply("\n".join(lines), actions=[nav(lang, "settings", "act.myData")],
+                     quick_replies=self.personal_suggestions(), intent="my_profile")
+
+    def belt_text(self, code: str) -> str:
+        if code.startswith("BLACK_"):
+            return say(self.lang, "beltName.BLACK", n=code.split("_")[1])
+        return say(self.lang, f"beltName.{code}")
+
+    async def belts(self, text: str) -> Reply:
+        lang = self.lang
+        data = await self.tool("family_progress")
+        if not data["has_belts"]:
+            return Reply(say(lang, "belts.notInCourses"), quick_replies=self.personal_suggestions(), intent="belts")
+        rows = self.only_named(data["athletes"], text)
+        if not rows:
+            return Reply(say(lang, "progress.none"), quick_replies=self.suggestions(), intent="belts")
+        lines = [say(lang, "belts.intro")]
+        for row in rows:
+            since = say(lang, "belts.since", date=texts.day(row["belt_since"], lang)) if row["belt_since"] else ""
+            lines.append(say(lang, "belts.line", name=row["first_name"], belt=self.belt_text(row["belt"] or "WHITE"),
+                             since=since))
+        lines.append("")
+        lines.append(say(lang, "belts.how"))
+        return Reply("\n".join(lines), actions=[nav(lang, "club", "act.club")],
+                     quick_replies=self.personal_suggestions(), intent="belts")
+
+    async def attendance(self, text: str) -> Reply:
+        lang = self.lang
+        data = await self.tool("family_progress")
+        rows = self.only_named(data["athletes"], text)
+        if not rows:
+            return Reply(say(lang, "progress.none"), quick_replies=self.suggestions(), intent="attendance_stats")
+        lines = [say(lang, "attendance.intro")]
+        for row in rows:
+            lines.append(say(lang, "attendance.line", name=row["first_name"], month=row["attendances_month"],
+                             season=row["attendances_season"], label=data["season_label"], all=row["attendances"]))
+        return Reply("\n".join(lines), actions=[nav(lang, "club", "act.club")],
+                     quick_replies=self.personal_suggestions(), intent="attendance_stats")
+
+    async def ranking(self, text: str) -> Reply:
+        lang = self.lang
+        data = await self.tool("family_progress")
+        rows = self.only_named(data["athletes"], text)
+        if not rows:
+            return Reply(say(lang, "progress.none"), quick_replies=self.suggestions(), intent="ranking")
+        lines = []
+        for row in rows:
+            if data["has_competitions"]:
+                m = row["medals"]
+                lines.append(say(lang, "ranking.line", name=row["first_name"], points=row["ranking_points"],
+                                 label=data["season_label"], gold=m["gold"], silver=m["silver"], bronze=m["bronze"],
+                                 level=row["level"], n=row["achievements_earned"]))
+                comp = row["next_competition"]
+                if comp:
+                    lines.append(say(lang, "ranking.next", name=comp["name"], date=texts.day(comp["starts_on"], lang)))
+            else:
+                lines.append(say(lang, "ranking.levelOnly", name=row["first_name"], level=row["level"],
+                                 n=row["achievements_earned"]))
+        actions = [nav(lang, "competitions", "act.competitions")] if data["has_competitions"] else []
+        return Reply("\n".join(lines), actions=actions, quick_replies=self.personal_suggestions(), intent="ranking")
+
+    async def overview(self) -> Reply:
+        """"Che cosa sai di me?": chi sei, ogni atleta in una riga, i conti."""
+        lang = self.lang
+        me = await self.tool("my_profile")
+        progress = {r["first_name"]: r for r in (await self.tool("family_progress"))["athletes"]}
+        money = await self.tool("family_payments")
+        name = me["first_name"] or ""
+        lines = [say(lang, "overview.intro", name=f" {name}" if name else "", club=me["club_name"] or "Jav")]
+        for athlete in me["athletes"]:
+            row = progress.get(athlete["first_name"], {})
+            parts = [say(lang, "overview.age", n=athlete["age"])]
+            if athlete["plan_name"]:
+                parts.append(athlete["plan_name"])
+            if row.get("belt"):
+                parts.append(say(lang, "overview.belt", belt=self.belt_text(row["belt"])))
+            parts.append(self.certificate_text(athlete["certificate"], athlete["certificate_expires_on"]))
+            parts.append(say(lang, "overview.month", n=row.get("attendances_month", 0)))
+            who = say(lang, "profile.you") if athlete["is_self"] else athlete["first_name"]
+            lines.append(f"• {who}: {', '.join(parts)}")
+        totals = money["totals"]
+        lines.append("")
+        lines.append(say(lang, "overview.paid", year=money["year"], amount=euro(totals["paid_year_cents"], lang)))
+        lines.append(self.owed_line(totals))
+        if money["wallet_balance_cents"]:
+            lines.append(say(lang, "paid.wallet", amount=euro(money["wallet_balance_cents"], lang)))
+        lines.append("")
+        lines.append(say(lang, "overview.more"))
+        return Reply("\n".join(lines), actions=[nav(lang, "accounts", "act.accounts")],
+                     quick_replies=self.personal_suggestions(), intent="overview")
 
     # --- Judogi -----------------------------------------------------------------------------------
 

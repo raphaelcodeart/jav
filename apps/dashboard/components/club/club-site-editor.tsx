@@ -27,7 +27,13 @@ import { useI18n } from "@/lib/i18n/provider";
 const BASE = "/api/proxy/club/admin/site";
 
 interface GalleryItem { url: string; caption: string | null }
-interface Coach { name: string; role: string | null; photo_url: string | null }
+interface Coach { name: string; role: string | null; photo_url: string | null; grade?: string | null; bio?: string | null }
+interface Highlight { value: string; label: string }
+interface HistoryStep { year: number | string; title: string; text: string | null }
+interface Pillar { title: string; text: string | null }
+interface NewsPost { date: string; title: string; text: string | null; image_url: string | null; link_url: string | null }
+/** Nell'editor un video è il link che si incolla; l'API salva solo l'id. */
+interface VideoRow { url: string; caption: string | null }
 
 interface SiteAdmin {
   name: string;
@@ -54,6 +60,13 @@ interface SiteAdmin {
   brand_primary: string | null;
   brand_secondary: string | null;
   brand_accent: string | null;
+  founded_year: number | null;
+  venue: string | null;
+  highlights: Highlight[];
+  history: HistoryStep[];
+  pillars: Pillar[];
+  news: NewsPost[];
+  videos: { youtube_id: string; caption: string | null }[];
 }
 
 const BRAND_KEYS = ["brand_primary", "brand_secondary", "brand_accent"] as const;
@@ -73,7 +86,7 @@ interface AthleteStatus {
 }
 
 const TEXT_KEYS = [
-  "tagline", "city", "about", "contact_phone", "contact_email", "address", "map_url",
+  "tagline", "city", "venue", "about", "contact_phone", "contact_email", "address", "map_url",
   "instagram_url", "facebook_url", "youtube_url", "website_url",
 ] as const;
 type TextKey = (typeof TEXT_KEYS)[number];
@@ -84,7 +97,7 @@ async function send<T>(path: string, init: RequestInit): Promise<T> {
   return res.json();
 }
 
-async function uploadImage(slot: "hero" | "logo" | "gallery" | "coach", file: File): Promise<{ url: string; site: SiteAdmin }> {
+async function uploadImage(slot: "hero" | "logo" | "gallery" | "coach" | "news", file: File): Promise<{ url: string; site: SiteAdmin }> {
   const form = new FormData();
   form.append("slot", slot);
   form.append("file", file);
@@ -128,6 +141,14 @@ function SiteForm({ site }: { site: SiteAdmin }) {
   const [logo, setLogo] = useState(site.logo_url);
   const [gallery, setGallery] = useState<GalleryItem[]>(site.gallery);
   const [coaches, setCoaches] = useState<Coach[]>(site.coaches);
+  const [foundedYear, setFoundedYear] = useState(site.founded_year ? String(site.founded_year) : "");
+  const [highlights, setHighlights] = useState<Highlight[]>(site.highlights ?? []);
+  const [history, setHistory] = useState<HistoryStep[]>(site.history ?? []);
+  const [pillars, setPillars] = useState<Pillar[]>(site.pillars ?? []);
+  const [news, setNews] = useState<NewsPost[]>(site.news ?? []);
+  const [videos, setVideos] = useState<VideoRow[]>(
+    () => (site.videos ?? []).map((v) => ({ url: `https://www.youtube.com/watch?v=${v.youtube_id}`, caption: v.caption })),
+  );
   const [colors, setColors] = useState<Record<BrandKey, string>>(
     () => Object.fromEntries(BRAND_KEYS.map((k) => [k, site[k] ?? ""])) as Record<BrandKey, string>,
   );
@@ -151,6 +172,12 @@ function SiteForm({ site }: { site: SiteAdmin }) {
         body: JSON.stringify({
           ...Object.fromEntries(TEXT_KEYS.map((k) => [k, text[k].trim() || null])),
           hero_image_url: hero, logo_url: logo, gallery, coaches: coaches.filter((c) => c.name.trim()),
+          founded_year: foundedYear.trim() ? Number(foundedYear) : null,
+          highlights: highlights.filter((h) => h.value.trim() && h.label.trim()),
+          history: history.filter((h) => String(h.year).trim() && h.title.trim()).map((h) => ({ ...h, year: Number(h.year) })),
+          pillars: pillars.filter((p) => p.title.trim()),
+          news: news.filter((n) => n.date && n.title.trim()),
+          videos: videos.filter((v) => v.url.trim()),
           ...Object.fromEntries(BRAND_KEYS.map((k) => [k, colors[k].trim() || null])),
         }),
       });
@@ -255,6 +282,13 @@ function SiteForm({ site }: { site: SiteAdmin }) {
           <Field label={t("siteEditor.city")} htmlFor="site-city">
             <Input id="site-city" maxLength={120} value={text.city} onChange={set("city")} />
           </Field>
+          <Field label={t("siteEditor.venue")} htmlFor="site-venue" hint={t("siteEditor.venueHint")}>
+            <Input id="site-venue" maxLength={160} value={text.venue} onChange={set("venue")} />
+          </Field>
+          <Field label={t("siteEditor.foundedYear")} htmlFor="site-founded" hint={t("siteEditor.foundedYearHint")}>
+            <Input id="site-founded" type="number" inputMode="numeric" min={1882} max={2100} value={foundedYear}
+              onChange={(e) => { setFoundedYear(e.target.value); setDirty(true); }} />
+          </Field>
           <div className="sm:col-span-2">
             <Field label={t("siteEditor.about")} htmlFor="site-about" hint={t("siteEditor.aboutHint")}>
               <Textarea id="site-about" rows={8} maxLength={8000} value={text.about} onChange={set("about")} />
@@ -357,6 +391,12 @@ function SiteForm({ site }: { site: SiteAdmin }) {
                     <Field label={t("siteEditor.coachRole")} htmlFor={`coach-role-${i}`}>
                       <Input id={`coach-role-${i}`} maxLength={120} placeholder={t("siteEditor.coachRolePlaceholder")} value={coach.role ?? ""} onChange={(e) => update({ role: e.target.value || null })} />
                     </Field>
+                    <Field label={t("siteEditor.coachGrade")} htmlFor={`coach-grade-${i}`}>
+                      <Input id={`coach-grade-${i}`} maxLength={60} placeholder={t("siteEditor.coachGradePlaceholder")} value={coach.grade ?? ""} onChange={(e) => update({ grade: e.target.value || null })} />
+                    </Field>
+                    <Field label={t("siteEditor.coachBio")} htmlFor={`coach-bio-${i}`}>
+                      <Input id={`coach-bio-${i}`} maxLength={400} value={coach.bio ?? ""} onChange={(e) => update({ bio: e.target.value || null })} />
+                    </Field>
                   </div>
                   <Button size="sm" variant="ghost" className="text-rose-600" onClick={() => { setCoaches((list) => list.filter((_, j) => j !== i)); setDirty(true); }}>
                     {t("siteEditor.remove")}
@@ -367,6 +407,75 @@ function SiteForm({ site }: { site: SiteAdmin }) {
           </ul>
         )}
       </Card>
+
+      {/* --- Il mini-sito: numeri, punti di forza, storia, novità, video --- */}
+      <RowsCard
+        title={t("siteEditor.highlightsTitle")} hint={t("siteEditor.highlightsHint")} max={6} items={highlights}
+        onChange={(items) => { setHighlights(items); setDirty(true); }} make={() => ({ value: "", label: "" })}
+        render={(h, update, i) => (
+          <div className="grid flex-1 gap-3 sm:grid-cols-[8rem_1fr]">
+            <Field label={t("siteEditor.highlightValue")} htmlFor={`hl-value-${i}`}><Input id={`hl-value-${i}`} maxLength={12} placeholder="40+" value={h.value} onChange={(e) => update({ value: e.target.value })} /></Field>
+            <Field label={t("siteEditor.highlightLabel")} htmlFor={`hl-label-${i}`}><Input id={`hl-label-${i}`} maxLength={60} placeholder={t("siteEditor.highlightLabelPlaceholder")} value={h.label} onChange={(e) => update({ label: e.target.value })} /></Field>
+          </div>
+        )}
+      />
+      <RowsCard
+        title={t("siteEditor.pillarsTitle")} hint={t("siteEditor.pillarsHint")} max={6} items={pillars}
+        onChange={(items) => { setPillars(items); setDirty(true); }} make={() => ({ title: "", text: null })}
+        render={(p, update, i) => (
+          <div className="grid flex-1 gap-3">
+            <Field label={t("siteEditor.rowTitle")} htmlFor={`pl-title-${i}`}><Input id={`pl-title-${i}`} maxLength={60} value={p.title} onChange={(e) => update({ title: e.target.value })} /></Field>
+            <Field label={t("siteEditor.rowText")} htmlFor={`pl-text-${i}`}><Textarea id={`pl-text-${i}`} rows={2} maxLength={300} value={p.text ?? ""} onChange={(e) => update({ text: e.target.value || null })} /></Field>
+          </div>
+        )}
+      />
+      <RowsCard
+        title={t("siteEditor.historyTitle")} hint={t("siteEditor.historyHint")} max={20} items={history}
+        onChange={(items) => { setHistory(items); setDirty(true); }} make={() => ({ year: "", title: "", text: null })}
+        render={(h, update, i) => (
+          <div className="grid flex-1 gap-3 sm:grid-cols-[7rem_1fr]">
+            <Field label={t("siteEditor.historyYear")} htmlFor={`hs-year-${i}`}><Input id={`hs-year-${i}`} type="number" min={1882} max={2100} value={String(h.year)} onChange={(e) => update({ year: e.target.value })} /></Field>
+            <Field label={t("siteEditor.rowTitle")} htmlFor={`hs-title-${i}`}><Input id={`hs-title-${i}`} maxLength={120} value={h.title} onChange={(e) => update({ title: e.target.value })} /></Field>
+            <div className="sm:col-span-2">
+              <Field label={t("siteEditor.rowText")} htmlFor={`hs-text-${i}`}><Textarea id={`hs-text-${i}`} rows={2} maxLength={600} value={h.text ?? ""} onChange={(e) => update({ text: e.target.value || null })} /></Field>
+            </div>
+          </div>
+        )}
+      />
+      <RowsCard
+        title={t("siteEditor.newsTitle")} hint={t("siteEditor.newsHint")} max={30} items={news} addFirst
+        onChange={(items) => { setNews(items); setDirty(true); }}
+        make={() => ({ date: new Date().toISOString().slice(0, 10), title: "", text: null, image_url: null, link_url: null })}
+        render={(n, update, i) => (
+          <div className="flex flex-1 flex-col gap-3 sm:flex-row">
+            <ImageSlot
+              label={t("siteEditor.newsImage")} url={n.image_url} compact
+              onUpload={async (file) => { const r = await uploadImage("news", file); update({ image_url: r.url }); }}
+              onRemove={() => update({ image_url: null })}
+            />
+            <div className="grid flex-1 gap-3 sm:grid-cols-[10rem_1fr]">
+              <Field label={t("siteEditor.newsDate")} htmlFor={`nw-date-${i}`}><Input id={`nw-date-${i}`} type="date" value={n.date} onChange={(e) => update({ date: e.target.value })} /></Field>
+              <Field label={t("siteEditor.rowTitle")} htmlFor={`nw-title-${i}`}><Input id={`nw-title-${i}`} maxLength={140} value={n.title} onChange={(e) => update({ title: e.target.value })} /></Field>
+              <div className="sm:col-span-2">
+                <Field label={t("siteEditor.rowText")} htmlFor={`nw-text-${i}`}><Textarea id={`nw-text-${i}`} rows={3} maxLength={2000} value={n.text ?? ""} onChange={(e) => update({ text: e.target.value || null })} /></Field>
+              </div>
+              <div className="sm:col-span-2">
+                <Field label={t("siteEditor.newsLink")} htmlFor={`nw-link-${i}`}><Input id={`nw-link-${i}`} type="url" placeholder="https://..." value={n.link_url ?? ""} onChange={(e) => update({ link_url: e.target.value || null })} /></Field>
+              </div>
+            </div>
+          </div>
+        )}
+      />
+      <RowsCard
+        title={t("siteEditor.videosTitle")} hint={t("siteEditor.videosHint")} max={12} items={videos}
+        onChange={(items) => { setVideos(items); setDirty(true); }} make={() => ({ url: "", caption: null })}
+        render={(v, update, i) => (
+          <div className="grid flex-1 gap-3 sm:grid-cols-2">
+            <Field label={t("siteEditor.videoUrl")} htmlFor={`vd-url-${i}`}><Input id={`vd-url-${i}`} type="url" placeholder="https://www.youtube.com/watch?v=..." value={v.url} onChange={(e) => update({ url: e.target.value })} /></Field>
+            <Field label={t("siteEditor.caption")} htmlFor={`vd-cap-${i}`}><Input id={`vd-cap-${i}`} maxLength={200} value={v.caption ?? ""} onChange={(e) => update({ caption: e.target.value || null })} /></Field>
+          </div>
+        )}
+      />
 
       {/* --- Contatti e social --- */}
       <Card>
@@ -389,6 +498,46 @@ function SiteForm({ site }: { site: SiteAdmin }) {
         </Button>
       </div>
     </>
+  );
+}
+
+/** Una lista che la segreteria compila a righe (numeri, storia, novità,
+ *  video): aggiungi, togli, sposta. Le righe vuote non si salvano. */
+function RowsCard<T>({ title, hint, items, max, make, render, onChange, addFirst = false }: {
+  title: string; hint: string; items: T[]; max: number; make: () => T; addFirst?: boolean;
+  render: (item: T, update: (patch: Partial<T>) => void, i: number) => ReactNode; onChange: (items: T[]) => void;
+}) {
+  const { t } = useI18n();
+  const move = (i: number, delta: number) => {
+    const j = i + delta;
+    if (j < 0 || j >= items.length) return;
+    const next = [...items];
+    [next[i], next[j]] = [next[j] as T, next[i] as T];
+    onChange(next);
+  };
+  return (
+    <Card>
+      <CardHeader
+        title={title} subtitle={hint}
+        action={<Button size="sm" variant="secondary" disabled={items.length >= max} onClick={() => onChange(addFirst ? [make(), ...items] : [...items, make()])}>{t("siteEditor.addRow")} <span className="font-normal text-ink-500">({items.length}/{max})</span></Button>}
+      />
+      {items.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-ink-200 p-5 text-center text-sm text-ink-500">{t("siteEditor.rowsEmpty")}</p>
+      ) : (
+        <ul className="space-y-3">
+          {items.map((item, i) => (
+            <li key={i} className="flex flex-col gap-3 rounded-2xl border border-ink-900/10 bg-white p-3 sm:flex-row sm:items-start">
+              {render(item, (patch) => onChange(items.map((x, j) => (j === i ? { ...x, ...patch } : x))), i)}
+              <div className="flex gap-1 sm:flex-col">
+                <Button size="sm" variant="ghost" disabled={i === 0} onClick={() => move(i, -1)} aria-label={t("siteEditor.moveUp")}>↑</Button>
+                <Button size="sm" variant="ghost" disabled={i === items.length - 1} onClick={() => move(i, 1)} aria-label={t("siteEditor.moveDown")}>↓</Button>
+                <Button size="sm" variant="ghost" className="text-rose-600" onClick={() => onChange(items.filter((_, j) => j !== i))} aria-label={t("siteEditor.remove")}>✕</Button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   );
 }
 

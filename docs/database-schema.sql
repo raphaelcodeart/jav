@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict 6A1bDblq0vSy4P7VrUUoh9DRGaZSbSgaGPW8de31cxISPm5QwlK9V5AXjbFuavh
+\restrict cyKBz6yu707apAiARg840btgYyJtRKwBrpJAvfNd55IAnlzvz8e7TaxjEcggkN9
 
 -- Dumped from database version 16.15
 -- Dumped by pg_dump version 16.15
@@ -165,6 +165,23 @@ CREATE TABLE public.carts (
 
 
 --
+-- Name: club_athlete_login_codes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.club_athlete_login_codes (
+    organization_id uuid NOT NULL,
+    athlete_id uuid NOT NULL,
+    token_hash character varying(64) NOT NULL,
+    created_by_user_id uuid NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    revoked_at timestamp with time zone,
+    last_used_at timestamp with time zone,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
 -- Name: club_athlete_media; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -234,6 +251,7 @@ CREATE TABLE public.club_athletes (
     club_id uuid NOT NULL,
     social_tier character varying(1),
     adapted_judo boolean DEFAULT false NOT NULL,
+    user_id uuid,
     CONSTRAINT ck_club_athletes_sex CHECK (((sex)::text = ANY ((ARRAY['M'::character varying, 'F'::character varying])::text[]))),
     CONSTRAINT ck_club_athletes_social_tier CHECK (((social_tier IS NULL) OR ((social_tier)::text = ANY ((ARRAY['A'::character varying, 'B'::character varying, 'C'::character varying])::text[])))),
     CONSTRAINT ck_club_athletes_status CHECK (((status)::text = ANY ((ARRAY['ACTIVE'::character varying, 'SUSPENDED'::character varying, 'LEFT'::character varying])::text[]))),
@@ -471,12 +489,16 @@ CREATE TABLE public.club_fees (
     course_id uuid,
     coach_user_id uuid,
     coach_share_pct numeric(5,2),
+    payment_method character varying(16),
+    cash_received_by_user_id uuid,
+    cash_received_by_name character varying(120),
     CONSTRAINT ck_club_fees_absence_adjustment CHECK (((absence_adjustment IS NULL) OR ((absence_adjustment)::text = ANY ((ARRAY['HALF'::character varying, 'FULL'::character varying])::text[])))),
     CONSTRAINT ck_club_fees_amount_non_negative CHECK ((amount_cents >= 0)),
     CONSTRAINT ck_club_fees_coach_share_pct_range CHECK (((coach_share_pct IS NULL) OR ((coach_share_pct >= (0)::numeric) AND (coach_share_pct <= (100)::numeric)))),
     CONSTRAINT ck_club_fees_discount_non_negative CHECK ((discount_cents >= 0)),
     CONSTRAINT ck_club_fees_kind CHECK (((kind)::text = ANY ((ARRAY['MONTHLY'::character varying, 'ENROLLMENT'::character varying, 'COMPETITION'::character varying, 'MEMBERSHIP'::character varying])::text[]))),
     CONSTRAINT ck_club_fees_owner CHECK (((((kind)::text = 'MEMBERSHIP'::text) AND (athlete_id IS NULL) AND (guardian_user_id IS NOT NULL)) OR (((kind)::text <> 'MEMBERSHIP'::text) AND (athlete_id IS NOT NULL)))),
+    CONSTRAINT ck_club_fees_payment_method CHECK (((payment_method IS NULL) OR ((payment_method)::text = ANY ((ARRAY['BANK_TRANSFER'::character varying, 'CASH'::character varying, 'CARD'::character varying, 'WALLET'::character varying])::text[])))),
     CONSTRAINT ck_club_fees_status CHECK (((status)::text = ANY ((ARRAY['DUE'::character varying, 'PAID'::character varying, 'WAIVED'::character varying])::text[])))
 );
 
@@ -550,9 +572,14 @@ CREATE TABLE public.club_payment_proofs (
     created_at timestamp with time zone NOT NULL,
     club_id uuid NOT NULL,
     credit_cents bigint DEFAULT 0 NOT NULL,
+    method character varying(16) DEFAULT 'BANK_TRANSFER'::character varying NOT NULL,
+    cash_received_by_user_id uuid,
+    cash_received_by_name character varying(120),
     CONSTRAINT ck_club_payment_proofs_amount_non_negative CHECK ((amount_cents >= 0)),
+    CONSTRAINT ck_club_payment_proofs_cash_receiver CHECK ((((method)::text <> 'CASH'::text) OR (cash_received_by_user_id IS NOT NULL) OR (cash_received_by_name IS NOT NULL))),
     CONSTRAINT ck_club_payment_proofs_credit_range CHECK (((credit_cents >= 0) AND (credit_cents <= amount_cents))),
-    CONSTRAINT ck_club_payment_proofs_file_or_credit CHECK (((storage_key IS NOT NULL) OR (credit_cents = amount_cents))),
+    CONSTRAINT ck_club_payment_proofs_file_or_credit CHECK (((storage_key IS NOT NULL) OR (credit_cents = amount_cents) OR ((method)::text = 'CASH'::text))),
+    CONSTRAINT ck_club_payment_proofs_method CHECK (((method)::text = ANY ((ARRAY['BANK_TRANSFER'::character varying, 'CASH'::character varying])::text[]))),
     CONSTRAINT ck_club_payment_proofs_status CHECK (((status)::text = ANY ((ARRAY['ACCEPTED'::character varying, 'REJECTED'::character varying])::text[])))
 );
 
@@ -642,6 +669,25 @@ CREATE TABLE public.club_reminders_sent (
 
 
 --
+-- Name: club_school_letters; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.club_school_letters (
+    organization_id uuid NOT NULL,
+    club_id uuid NOT NULL,
+    entry_id uuid NOT NULL,
+    competition_id uuid NOT NULL,
+    athlete_id uuid NOT NULL,
+    body_text text NOT NULL,
+    storage_key character varying(500) NOT NULL,
+    generated_at timestamp with time zone NOT NULL,
+    generated_by_user_id uuid NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
 -- Name: club_sites; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -671,9 +717,17 @@ CREATE TABLE public.club_sites (
     brand_primary character varying(7),
     brand_secondary character varying(7),
     brand_accent character varying(7),
+    founded_year smallint,
+    venue character varying(160),
+    highlights jsonb DEFAULT '[]'::jsonb NOT NULL,
+    history jsonb DEFAULT '[]'::jsonb NOT NULL,
+    pillars jsonb DEFAULT '[]'::jsonb NOT NULL,
+    news jsonb DEFAULT '[]'::jsonb NOT NULL,
+    videos jsonb DEFAULT '[]'::jsonb NOT NULL,
     CONSTRAINT ck_club_sites_brand_accent CHECK (((brand_accent IS NULL) OR ((brand_accent)::text ~ '^#[0-9A-F]{6}$'::text))),
     CONSTRAINT ck_club_sites_brand_primary CHECK (((brand_primary IS NULL) OR ((brand_primary)::text ~ '^#[0-9A-F]{6}$'::text))),
-    CONSTRAINT ck_club_sites_brand_secondary CHECK (((brand_secondary IS NULL) OR ((brand_secondary)::text ~ '^#[0-9A-F]{6}$'::text)))
+    CONSTRAINT ck_club_sites_brand_secondary CHECK (((brand_secondary IS NULL) OR ((brand_secondary)::text ~ '^#[0-9A-F]{6}$'::text))),
+    CONSTRAINT ck_club_sites_founded_year CHECK (((founded_year IS NULL) OR ((founded_year >= 1882) AND (founded_year <= 2100))))
 );
 
 
@@ -2009,7 +2063,8 @@ CREATE TABLE public.users (
     residence_country character varying(2) NOT NULL,
     id uuid NOT NULL,
     created_at timestamp with time zone NOT NULL,
-    club_id uuid
+    club_id uuid,
+    username character varying(40)
 );
 
 
@@ -2119,6 +2174,14 @@ ALTER TABLE ONLY public.cart_items
 
 ALTER TABLE ONLY public.carts
     ADD CONSTRAINT pk_carts PRIMARY KEY (id);
+
+
+--
+-- Name: club_athlete_login_codes pk_club_athlete_login_codes; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_athlete_login_codes
+    ADD CONSTRAINT pk_club_athlete_login_codes PRIMARY KEY (id);
 
 
 --
@@ -2287,6 +2350,14 @@ ALTER TABLE ONLY public.club_recurring_expenses
 
 ALTER TABLE ONLY public.club_reminders_sent
     ADD CONSTRAINT pk_club_reminders_sent PRIMARY KEY (id);
+
+
+--
+-- Name: club_school_letters pk_club_school_letters; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_school_letters
+    ADD CONSTRAINT pk_club_school_letters PRIMARY KEY (id);
 
 
 --
@@ -2914,6 +2985,14 @@ ALTER TABLE ONLY public.carts
 
 
 --
+-- Name: club_athlete_login_codes uq_club_athlete_login_codes_token_hash; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_athlete_login_codes
+    ADD CONSTRAINT uq_club_athlete_login_codes_token_hash UNIQUE (token_hash);
+
+
+--
 -- Name: club_athlete_media uq_club_athlete_media_athlete_youtube; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2927,6 +3006,14 @@ ALTER TABLE ONLY public.club_athlete_media
 
 ALTER TABLE ONLY public.club_athlete_public_profiles
     ADD CONSTRAINT uq_club_athlete_public_profiles_athlete_id UNIQUE (athlete_id);
+
+
+--
+-- Name: club_athletes uq_club_athletes_user_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_athletes
+    ADD CONSTRAINT uq_club_athletes_user_id UNIQUE (user_id);
 
 
 --
@@ -3023,6 +3110,14 @@ ALTER TABLE ONLY public.club_platform_fees
 
 ALTER TABLE ONLY public.club_reminders_sent
     ADD CONSTRAINT uq_club_reminders_sent_kind_entity_stage UNIQUE (kind, entity_id, stage);
+
+
+--
+-- Name: club_school_letters uq_club_school_letters_entry_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_school_letters
+    ADD CONSTRAINT uq_club_school_letters_entry_id UNIQUE (entry_id);
 
 
 --
@@ -3339,6 +3434,20 @@ CREATE INDEX ix_carts_customer_user_id ON public.carts USING btree (customer_use
 --
 
 CREATE INDEX ix_carts_organization_id ON public.carts USING btree (organization_id);
+
+
+--
+-- Name: ix_club_athlete_login_codes_athlete_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_club_athlete_login_codes_athlete_id ON public.club_athlete_login_codes USING btree (athlete_id);
+
+
+--
+-- Name: ix_club_athlete_login_codes_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_club_athlete_login_codes_organization_id ON public.club_athlete_login_codes USING btree (organization_id);
 
 
 --
@@ -3801,6 +3910,34 @@ CREATE INDEX ix_club_recurring_expenses_organization_id ON public.club_recurring
 --
 
 CREATE INDEX ix_club_reminders_sent_organization_id ON public.club_reminders_sent USING btree (organization_id);
+
+
+--
+-- Name: ix_club_school_letters_athlete_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_club_school_letters_athlete_id ON public.club_school_letters USING btree (athlete_id);
+
+
+--
+-- Name: ix_club_school_letters_club_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_club_school_letters_club_id ON public.club_school_letters USING btree (club_id);
+
+
+--
+-- Name: ix_club_school_letters_competition_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_club_school_letters_competition_id ON public.club_school_letters USING btree (competition_id);
+
+
+--
+-- Name: ix_club_school_letters_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_club_school_letters_organization_id ON public.club_school_letters USING btree (organization_id);
 
 
 --
@@ -4889,6 +5026,13 @@ CREATE UNIQUE INDEX uq_shop_categories_organization_id_shop_name ON public.shop_
 
 
 --
+-- Name: uq_users_org_username; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uq_users_org_username ON public.users USING btree (organization_id, username) WHERE (username IS NOT NULL);
+
+
+--
 -- Name: addresses fk_addresses_customer_id_customers; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5073,6 +5217,30 @@ ALTER TABLE ONLY public.carts
 
 
 --
+-- Name: club_athlete_login_codes fk_club_athlete_login_codes_athlete_id_club_athletes; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_athlete_login_codes
+    ADD CONSTRAINT fk_club_athlete_login_codes_athlete_id_club_athletes FOREIGN KEY (athlete_id) REFERENCES public.club_athletes(id);
+
+
+--
+-- Name: club_athlete_login_codes fk_club_athlete_login_codes_created_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_athlete_login_codes
+    ADD CONSTRAINT fk_club_athlete_login_codes_created_by_user_id_users FOREIGN KEY (created_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: club_athlete_login_codes fk_club_athlete_login_codes_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_athlete_login_codes
+    ADD CONSTRAINT fk_club_athlete_login_codes_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
 -- Name: club_athlete_media fk_club_athlete_media_athlete_id_club_athletes; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5166,6 +5334,14 @@ ALTER TABLE ONLY public.club_athletes
 
 ALTER TABLE ONLY public.club_athletes
     ADD CONSTRAINT fk_club_athletes_plan_id_club_plans FOREIGN KEY (plan_id) REFERENCES public.club_plans(id);
+
+
+--
+-- Name: club_athletes fk_club_athletes_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_athletes
+    ADD CONSTRAINT fk_club_athletes_user_id_users FOREIGN KEY (user_id) REFERENCES public.users(id);
 
 
 --
@@ -5409,6 +5585,14 @@ ALTER TABLE ONLY public.club_fees
 
 
 --
+-- Name: club_fees fk_club_fees_cash_received_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_fees
+    ADD CONSTRAINT fk_club_fees_cash_received_by_user_id_users FOREIGN KEY (cash_received_by_user_id) REFERENCES public.users(id);
+
+
+--
 -- Name: club_fees fk_club_fees_club_id_clubs; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5561,6 +5745,14 @@ ALTER TABLE ONLY public.club_payment_proof_fees
 
 
 --
+-- Name: club_payment_proofs fk_club_payment_proofs_cash_received_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_payment_proofs
+    ADD CONSTRAINT fk_club_payment_proofs_cash_received_by_user_id_users FOREIGN KEY (cash_received_by_user_id) REFERENCES public.users(id);
+
+
+--
 -- Name: club_payment_proofs fk_club_payment_proofs_club_id_clubs; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5662,6 +5854,54 @@ ALTER TABLE ONLY public.club_recurring_expenses
 
 ALTER TABLE ONLY public.club_reminders_sent
     ADD CONSTRAINT fk_club_reminders_sent_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: club_school_letters fk_club_school_letters_athlete_id_club_athletes; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_school_letters
+    ADD CONSTRAINT fk_club_school_letters_athlete_id_club_athletes FOREIGN KEY (athlete_id) REFERENCES public.club_athletes(id);
+
+
+--
+-- Name: club_school_letters fk_club_school_letters_club_id_clubs; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_school_letters
+    ADD CONSTRAINT fk_club_school_letters_club_id_clubs FOREIGN KEY (club_id) REFERENCES public.clubs(id);
+
+
+--
+-- Name: club_school_letters fk_club_school_letters_competition_id_club_competitions; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_school_letters
+    ADD CONSTRAINT fk_club_school_letters_competition_id_club_competitions FOREIGN KEY (competition_id) REFERENCES public.club_competitions(id);
+
+
+--
+-- Name: club_school_letters fk_club_school_letters_entry_id_club_competition_entries; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_school_letters
+    ADD CONSTRAINT fk_club_school_letters_entry_id_club_competition_entries FOREIGN KEY (entry_id) REFERENCES public.club_competition_entries(id);
+
+
+--
+-- Name: club_school_letters fk_club_school_letters_generated_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_school_letters
+    ADD CONSTRAINT fk_club_school_letters_generated_by_user_id_users FOREIGN KEY (generated_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: club_school_letters fk_club_school_letters_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_school_letters
+    ADD CONSTRAINT fk_club_school_letters_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
 
 
 --
@@ -7316,5 +7556,5 @@ ALTER TABLE ONLY public.wallets
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 6A1bDblq0vSy4P7VrUUoh9DRGaZSbSgaGPW8de31cxISPm5QwlK9V5AXjbFuavh
+\unrestrict cyKBz6yu707apAiARg840btgYyJtRKwBrpJAvfNd55IAnlzvz8e7TaxjEcggkN9
 

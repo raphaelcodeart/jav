@@ -1727,8 +1727,10 @@ La specifica completa è `club-portal.md`; qui le regole che non si negoziano.
   (`club_athletes.guardian_user_id`); un adulto che si allena è un genitore
   con un atleta `is_self`. Ogni lettura e scrittura del genitore verifica la
   famiglia lato server: ciò che non è suo risulta "non trovato".
-- **Il piano lo sceglie l'età al 1° settembre** della stagione, come nelle
-  categorie federali; la segreteria può fissarlo a mano (`plan_locked`).
+- **Il piano lo sceglie l'età federale** (anni compiuti entro il 31
+  dicembre): a gennaio chi entra nella fascia del gruppo dopo paga già la
+  mensilità del gruppo nuovo; la segreteria può fissarlo a mano
+  (`plan_locked`).
 - **Le quote si generano da sole** (il 1° del mese per i mesi fatturati del
   piano, l'iscrizione a inizio stagione o alla creazione dell'atleta) e sono
   UNIQUE per (atleta, tipo, periodo): un job ripetuto non crea doppioni.
@@ -1736,8 +1738,10 @@ La specifica completa è `club-portal.md`; qui le regole che non si negoziano.
 - **La prova di pagamento segna subito le quote come pagate.** Una prova
   copre una o più quote (un bonifico per due figli). La segreteria può
   rifiutarla con un motivo: le quote tornano da pagare e il genitore riceve
-  notifica ed email. Può anche segnare pagata a mano una quota (contanti),
-  condonarla o riaprirla.
+  notifica ed email. Può anche segnare pagata a mano una quota (dicendo come:
+  contanti e a chi, carta al POS, bonifico), condonarla o riaprirla. Il
+  genitore può dichiarare i contanti indicando a chi li ha dati: niente foto,
+  quella persona viene avvisata. Ogni quota pagata registra il metodo.
 - **Certificato agonistico valido alla data della gara** per le gare che lo
   richiedono, controllato dal server all'iscrizione. Avvisi automatici a 30
   e 7 giorni dalla scadenza e a certificato scaduto, una volta sola per

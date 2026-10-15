@@ -155,6 +155,11 @@ class FeeRead(BaseModel):
     paid_at: datetime | None
     paid_via_proof_id: uuid.UUID | None
     payment_note: str | None
+    #: BANK_TRANSFER / CASH / CARD / WALLET; None se da pagare o segnata
+    #: pagata prima che il metodo si registrasse.
+    payment_method: str | None = None
+    #: Per i contanti: a chi sono stati consegnati.
+    cash_received_by_name: str | None = None
     waive_reason: str | None
     competition_id: uuid.UUID | None
     #: Nei corsi JAV: il corso a cui la mensilità è attribuita (NULL = senza corso).
@@ -191,6 +196,8 @@ class AthleteCardRead(BaseModel):
     birth_date: date
     age: int
     season_age: int
+    #: Gli anni compiuti entro il 31 dicembre di quest'anno: decidono il gruppo.
+    federal_age: int = 0
     sex: str
     photo_url: str | None
     is_self: bool
@@ -282,6 +289,9 @@ class ProofRead(BaseModel):
     rejection_reason: str | None
     reviewed_at: datetime | None
     uploaded_by_user_id: uuid.UUID
+    #: BANK_TRANSFER (con la ricevuta) o CASH (consegnati a qualcuno).
+    method: str = "BANK_TRANSFER"
+    cash_received_by_name: str | None = None
     fees: list[FeeRead]
 
 
@@ -295,6 +305,21 @@ class FamilyRead(BaseModel):
     paid_season_cents: int
     recent_proofs: list[ProofRead]
     open_competitions: int
+    season_months: list["AthleteSeasonMonthsRead"] = []
+
+
+class AthleteSeasonMonthsRead(BaseModel):
+    """Le mensilità della stagione di un atleta, in numeri: il grafico della
+    pagina della famiglia."""
+
+    athlete_id: uuid.UUID
+    first_name: str
+    paid_cents: int
+    due_cents: int
+    overdue_cents: int
+    months_paid: int
+    months_due: int
+    months_overdue: int
 
 
 class UrlRead(BaseModel):
@@ -307,6 +332,63 @@ class ReasonWrite(BaseModel):
 
 class NoteWrite(BaseModel):
     note: str | None = Field(default=None, max_length=500)
+
+
+class MarkPaidWrite(NoteWrite):
+    """La segreteria segna pagata una quota: come, e per i contanti a chi
+    (una persona dello staff, o un nome scritto)."""
+
+    method: str = Field(pattern="^(BANK_TRANSFER|CASH|CARD)$")
+    cash_received_by_user_id: uuid.UUID | None = None
+    cash_received_by_name: str | None = Field(default=None, max_length=120)
+
+
+class CashReceiverRead(BaseModel):
+    user_id: uuid.UUID
+    name: str
+
+
+class MonthProofRead(BaseModel):
+    id: uuid.UUID
+    method: str
+    has_file: bool
+    status: str
+    created_at: datetime
+
+
+class MonthRead(BaseModel):
+    period: str
+    year: int
+    month: int
+    #: club/months.py::MONTH_STATES
+    state: str
+    current: bool
+    federal_age: int
+    group_name: str | None
+    #: Solo per i mesi futuri: la previsione, con il gruppo di quell'anno.
+    expected_cents: int | None
+    fee: FeeRead | None
+    proof: MonthProofRead | None
+    attendances: int
+
+
+class MonthsSummaryRead(BaseModel):
+    paid_cents: int
+    due_cents: int
+    overdue_cents: int
+    upcoming_cents: int
+    months_paid: int
+    months_due: int
+    months_overdue: int
+    months_upcoming: int
+    attendances: int
+
+
+class SeasonMonthsRead(BaseModel):
+    season: int
+    season_label: str
+    months: list[MonthRead]
+    summary: MonthsSummaryRead
 
 
 class JobResultRead(BaseModel):
@@ -404,6 +486,9 @@ class AthleteEligibilityRead(BaseModel):
     entry_status: str | None
     category: str | None
     placement: int | None
+    #: La segreteria ha generato la giustificazione per la scuola: il
+    #: titolare la può scaricare.
+    school_letter_ready: bool = False
 
 
 class FamilyCompetitionRead(CompetitionRead):
@@ -428,6 +513,8 @@ class EntryRead(BaseModel):
     placement: int | None
     points: int
     fee_status: str | None
+    #: Quando è stata generata la giustificazione per la scuola, se c'è.
+    school_letter_at: datetime | None = None
 
 
 class ResultWrite(BaseModel):
@@ -753,6 +840,17 @@ class TransportRequestWrite(BaseModel):
     to_email: str = Field(min_length=3, max_length=255)
     subject: str = Field(min_length=3, max_length=300)
     body_text: str = Field(min_length=10, max_length=20000)
+
+
+class SchoolLetterRead(BaseModel):
+    entry_id: uuid.UUID
+    athlete_name: str
+    body_text: str
+    generated_at: datetime | None
+
+
+class SchoolLetterWrite(BaseModel):
+    body_text: str = Field(min_length=20, max_length=6000)
 
 
 # --- Persone, staff, cartellino, presenze, taxa de falta ------------------------------------------

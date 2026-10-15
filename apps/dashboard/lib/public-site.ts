@@ -95,7 +95,15 @@ export interface Coach {
   name: string;
   role: string | null;
   photo_url: string | null;
+  grade?: string | null;
+  bio?: string | null;
 }
+
+export interface Highlight { value: string; label: string }
+export interface HistoryStep { year: number; title: string; text: string | null }
+export interface Pillar { title: string; text: string | null }
+export interface NewsPost { date: string; title: string; text: string | null; image_url: string | null; link_url: string | null }
+export interface ClubVideo { youtube_id: string; caption: string | null }
 
 export interface ScheduleDay {
   weekday: number;
@@ -129,6 +137,13 @@ export interface SiteContent {
   brand_primary: string | null;
   brand_secondary: string | null;
   brand_accent: string | null;
+  founded_year: number | null;
+  venue: string | null;
+  highlights: Highlight[];
+  history: HistoryStep[];
+  pillars: Pillar[];
+  news: NewsPost[];
+  videos: ClubVideo[];
 }
 
 /** Un gruppo del club (un piano attivo), come lo dice anche JAVBOT: età e
@@ -275,6 +290,7 @@ export const publicSite = {
   clubs: () => get<ClubCard[]>("/clubs"),
   courses: () => get<PublicCourses>("/courses"),
   club: (slug: string) => get<ClubPage>(`/clubs/${encodeURIComponent(slug)}`),
+  clubVideos: (slug: string) => get<ChannelVideo[]>(`/clubs/${encodeURIComponent(slug)}/videos`),
   judoka: (id: string) => get<JudokaProfile>(`/judoka/${encodeURIComponent(id)}`),
   events: (filters: { club?: string; kind?: string; when?: string }) => get<PublicEvent[]>(`/events${query(filters)}`),
   event: (id: string) => get<EventDetail>(`/events/${encodeURIComponent(id)}`),

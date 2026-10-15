@@ -26,6 +26,7 @@ import { AbsencePanel, DayLogPanel, PeoplePanel, WorkHoursPanel } from "@/compon
 import { CalendarPanel } from "@/components/club/coach-tools";
 import { BeltAwardPanel } from "@/components/club/staff-tools";
 import { CoursesManager } from "@/components/club/jav-courses";
+import { SeasonMonthsPanel } from "@/components/club/season-months";
 import { useI18n } from "@/lib/i18n/provider";
 import { shareOrCopyLink } from "@/lib/share-link";
 import {
@@ -42,6 +43,7 @@ import {
   type AdminAthlete,
   type AdminCertificate,
   type AdminProof,
+  type CashReceiver,
   type ClubStats,
   type Competition,
   type Course,
@@ -49,7 +51,9 @@ import {
   type Fee,
   type Plan,
   type Pricing,
+  type SchoolLetter,
   type TransportRequest,
+  PAYMENT_METHOD_ICONS,
 } from "@/lib/club";
 
 export type ClubSection =
@@ -226,7 +230,7 @@ function Athletes() {
               const cert = CERTIFICATE_LABELS[a.certificate.status] ?? CERTIFICATE_LABELS.MISSING!;
               return (
                 <TR key={a.id} onClick={() => setEditing(a)} className="cursor-pointer">
-                  <TD><p className="font-semibold text-ink-900">{fullName(a)}</p><p className="text-xs text-ink-500">{a.season_age} anni · {a.sex === "F" ? "F" : "M"}</p></TD>
+                  <TD><p className="font-semibold text-ink-900">{fullName(a)}</p><p className="text-xs text-ink-500"><span title="Età federale: gli anni compiuti entro il 31 dicembre">{a.federal_age ?? a.season_age} anni fed.</span> · {a.sex === "F" ? "F" : "M"}</p></TD>
                   <TD><BeltBadge belt={a.belt} size="sm" /></TD>
                   <TD>{a.plan?.name ?? <Badge tone="warning">Da assegnare</Badge>}{a.plan_locked && <span title="Piano bloccato" className="ml-1">🔒</span>}</TD>
                   <TD className="text-xs">{a.guardian_email ?? "—"}</TD>
@@ -244,6 +248,7 @@ function Athletes() {
 }
 
 function AthleteAdminModal({ athlete, plans, onClose }: { athlete: AdminAthlete; plans: Plan[]; onClose: () => void }) {
+  const [paying, setPaying] = useState<Fee | null>(null);
   const [planId, setPlanId] = useState(athlete.plan?.id ?? "");
   const [locked, setLocked] = useState(athlete.plan_locked);
   const [status, setStatus] = useState(athlete.status);
@@ -268,7 +273,7 @@ function AthleteAdminModal({ athlete, plans, onClose }: { athlete: AdminAthlete;
     if (ok) onClose();
   }
   return (
-    <Modal open onClose={onClose} title={fullName(athlete)} subtitle={`Genitore: ${athlete.guardian_email ?? "—"}`} footer={<><Button variant="ghost" onClick={onClose}>Annulla</Button><Button loading={busy} onClick={save}>Salva</Button></>}>
+    <Modal open onClose={onClose} size="xl" title={fullName(athlete)} subtitle={`Genitore: ${athlete.guardian_email ?? "—"}`} footer={<><Button variant="ghost" onClick={onClose}>Annulla</Button><Button loading={busy} onClick={save}>Salva</Button></>}>
       <div className="space-y-4">
         <Field label="Piano" hint="Scegliendo un piano a mano lo blocchi: il cambio stagione non lo ricalcolerà più per età." htmlFor="adm-plan">
           <Select id="adm-plan" value={planId} onChange={(e) => { setPlanId(e.target.value); setLocked(true); }}>
@@ -305,7 +310,12 @@ function AthleteAdminModal({ athlete, plans, onClose }: { athlete: AdminAthlete;
         </div>
         {/* La scheda sul sito ha i suoi salvataggi: non aspetta "Salva". */}
         <AthletePublicPageSection athleteId={athlete.id} />
+        {/* Le mensilità mese per mese: anche queste non aspettano "Salva". */}
+        <div className="rounded-2xl ring-1 ring-ink-200 p-4">
+          <SeasonMonthsPanel athleteId={athlete.id} mode="admin" onMarkPaid={setPaying} />
+        </div>
       </div>
+      {paying && <MarkPaidModal fee={paying} onClose={() => setPaying(null)} />}
     </Modal>
   );
 }
@@ -394,6 +404,7 @@ function Fees() {
   const qs = new URLSearchParams({ ...(status ? { status } : {}), ...(kind ? { kind } : {}), ...(period ? { period } : {}) }).toString();
   const { data, isLoading } = useQuery({ queryKey: ["club", "admin", "fees", qs], queryFn: () => clubGet<Fee[]>(A(`/fees?${qs}`)) });
   const run = useRun();
+  const [paying, setPaying] = useState<Fee | null>(null);
   const total = (data ?? []).reduce((s, f) => s + f.amount_cents, 0);
   return (
     <div className="space-y-4">
@@ -420,12 +431,16 @@ function Fees() {
                   {f.discount_note && <p className="text-[11px] text-emerald-700">{f.discount_note}</p>}
                 </TD>
                 <TD>{shortDate(f.due_date)}</TD>
-                <TD><FeeStatusPill status={f.status} overdue={f.overdue} />{f.waive_reason && <p className="text-[11px] text-ink-500 mt-1">{f.waive_reason}</p>}</TD>
+                <TD>
+                  <FeeStatusPill status={f.status} overdue={f.overdue} />
+                  {f.waive_reason && <p className="text-[11px] text-ink-500 mt-1">{f.waive_reason}</p>}
+                  <PaidHow fee={f} />
+                </TD>
                 <TD className="text-right font-semibold">{euro(f.amount_cents)}</TD>
                 <TD className="text-right whitespace-nowrap">
                   {f.status === "DUE" ? (
                     <>
-                      <Button size="sm" variant="secondary" onClick={() => { const note = window.prompt("Nota (es. contanti in segreteria)") ?? undefined; void run(() => clubSend(A(`/fees/${f.id}/mark-paid`), "POST", { note: note || null }), "Quota segnata pagata"); }}>Pagata</Button>{" "}
+                      <Button size="sm" variant="secondary" onClick={() => setPaying(f)}>Pagata</Button>{" "}
                       <Button size="sm" variant="ghost" onClick={() => { const reason = window.prompt("Motivo del condono"); if (reason && reason.length >= 3) void run(() => clubSend(A(`/fees/${f.id}/waive`), "POST", { reason }), "Quota condonata"); }}>Condona</Button>
                     </>
                   ) : (
@@ -437,7 +452,76 @@ function Fees() {
           </TBody>
         </Table>
       )}
+      {paying && <MarkPaidModal fee={paying} onClose={() => setPaying(null)} />}
     </div>
+  );
+}
+
+const METHOD_LABELS: Record<string, string> = {
+  BANK_TRANSFER: "Bonifico", CASH: "Contanti", CARD: "Carta", WALLET: "Credito del wallet",
+};
+
+/** Come è stata pagata una quota, in una riga sotto lo stato. */
+function PaidHow({ fee }: { fee: Fee }) {
+  if (fee.status !== "PAID" || !fee.payment_method) return null;
+  return (
+    <p className="text-[11px] text-ink-600 mt-1">
+      {PAYMENT_METHOD_ICONS[fee.payment_method]} {METHOD_LABELS[fee.payment_method] ?? fee.payment_method}
+      {fee.cash_received_by_name ? ` · a ${fee.cash_received_by_name}` : ""}
+    </p>
+  );
+}
+
+/** "Pagata": la segreteria dice come (bonifico arrivato, contanti, carta al
+ *  POS) e, per i contanti, a chi sono stati dati: a una persona dello staff
+ *  o a un nome scritto (il presidente, un allenatore senza account). */
+function MarkPaidModal({ fee, onClose }: { fee: Fee; onClose: () => void }) {
+  const [method, setMethod] = useState<"CASH" | "CARD" | "BANK_TRANSFER">("CASH");
+  const [receiver, setReceiver] = useState("");
+  const [otherName, setOtherName] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const run = useRun();
+  const { data: receivers } = useQuery({ queryKey: ["club", "admin", "cash-receivers"], queryFn: () => clubGet<CashReceiver[]>(A("/cash-receivers")) });
+  const ready = method !== "CASH" || (receiver === "other" ? otherName.trim().length >= 2 : receiver !== "");
+  async function save() {
+    setBusy(true);
+    const ok = await run(() => clubSend(A(`/fees/${fee.id}/mark-paid`), "POST", {
+      method, note: note.trim() || null,
+      cash_received_by_user_id: method === "CASH" && receiver !== "other" ? receiver : null,
+      cash_received_by_name: method === "CASH" && receiver === "other" ? otherName.trim() : null,
+    }), "Quota segnata pagata");
+    setBusy(false);
+    if (ok) onClose();
+  }
+  return (
+    <Modal open onClose={onClose} title="Segna pagata" subtitle={`${fee.athlete_name ?? "Quota socio"} · ${fee.description} · ${euro(fee.amount_cents)}`}
+      footer={<><Button variant="ghost" onClick={onClose}>Annulla</Button><Button loading={busy} disabled={!ready} onClick={save}>Segna pagata</Button></>}>
+      <div className="space-y-4">
+        <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Come è stata pagata">
+          {(["CASH", "CARD", "BANK_TRANSFER"] as const).map((m) => (
+            <button key={m} type="button" role="radio" aria-checked={method === m} onClick={() => setMethod(m)}
+              className={`rounded-2xl p-3 text-center ring-1 cursor-pointer ${method === m ? "bg-brand-50 ring-2 ring-brand-400" : "bg-white ring-ink-200 hover:ring-ink-300"}`}>
+              <span className="block text-2xl" aria-hidden="true">{PAYMENT_METHOD_ICONS[m]}</span>
+              <span className="block text-sm font-semibold text-ink-900">{METHOD_LABELS[m]}</span>
+            </button>
+          ))}
+        </div>
+        {method === "CASH" && (
+          <Field label="A chi sono stati consegnati i contanti" htmlFor="mp-receiver">
+            <Select id="mp-receiver" value={receiver} onChange={(e) => setReceiver(e.target.value)}>
+              <option value="">Scegli la persona</option>
+              {(receivers ?? []).map((r) => <option key={r.user_id} value={r.user_id}>{r.name}</option>)}
+              <option value="other">{"Un'altra persona…"}</option>
+            </Select>
+          </Field>
+        )}
+        {method === "CASH" && receiver === "other" && (
+          <Field label="Nome di chi li ha ricevuti" htmlFor="mp-other"><Input id="mp-other" value={otherName} onChange={(e) => setOtherName(e.target.value)} maxLength={120} /></Field>
+        )}
+        <Field label="Nota (facoltativa)" htmlFor="mp-note"><Input id="mp-note" value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder="es. ricevuta n. 123" /></Field>
+      </div>
+    </Modal>
   );
 }
 
@@ -458,7 +542,7 @@ function Proofs() {
   }
   return (
     <div className="space-y-4">
-      <p className="text-sm text-ink-500">Le quote risultano pagate appena il genitore carica la ricevuta. Controlla quando vuoi: se una prova non è valida, rifiutala e le quote tornano da pagare (il genitore riceve il motivo).</p>
+      <p className="text-sm text-ink-500">Le quote risultano pagate appena il genitore carica la ricevuta del bonifico o dice a chi ha dato i contanti (quella persona riceve un avviso). Controlla quando vuoi: se una prova non è valida, rifiutala e le quote tornano da pagare (il genitore riceve il motivo).</p>
       <Tabs value={status || "ALL"} onChange={(k) => setStatus(k === "ALL" ? "" : k)} items={[{ key: "ACCEPTED", label: "Registrate" }, { key: "REJECTED", label: "Rifiutate" }, { key: "ALL", label: "Tutte" }]} />
       {isLoading ? <Skeleton className="h-64" /> : (data ?? []).length === 0 ? <EmptyState title="Nessuna prova" /> : (
         <div className="grid md:grid-cols-2 gap-4">
@@ -472,10 +556,11 @@ function Proofs() {
                 <Badge tone={p.status === "REJECTED" ? "danger" : "success"} dot>{p.status === "REJECTED" ? "Rifiutata" : "Registrata"}</Badge>
               </div>
               <ul className="text-sm text-ink-700 space-y-0.5">{p.fees.map((f) => <li key={f.id}>• {f.athlete_name}: {f.description} ({euro(f.amount_cents)})</li>)}</ul>
+              {p.method === "CASH" && <p className="text-sm font-semibold text-ink-800">💶 Contanti consegnati a {p.cash_received_by_name ?? "—"}</p>}
               {p.note && <p className="text-xs text-ink-500 italic">“{p.note}”</p>}
               {p.rejection_reason && <p className="text-xs text-rose-600">Motivo: {p.rejection_reason}</p>}
               <div className="flex gap-2">
-                <Button size="sm" variant="secondary" onClick={() => open(p.id)}>Vedi ricevuta ↗</Button>
+                {p.original_filename && <Button size="sm" variant="secondary" onClick={() => open(p.id)}>Vedi ricevuta ↗</Button>}
                 {p.status !== "REJECTED" && (
                   <Button size="sm" variant="ghost" onClick={() => { const reason = window.prompt("Perché la prova non è valida? Il genitore leggerà questo testo."); if (reason && reason.length >= 3) void run(() => clubSend(A(`/payment-proofs/${p.id}/reject`), "POST", { reason }), "Prova rifiutata, quote riaperte"); }}>Rifiuta</Button>
                 )}
@@ -748,6 +833,7 @@ function ResultsModal({ competition: c, onClose }: { competition: Competition; o
   const { data, isLoading } = useQuery({ queryKey: ["club", "admin", "entries", c.id], queryFn: () => clubGet<Entry[]>(A(`/competitions/${c.id}/entries`)) });
   const [placements, setPlacements] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const [letterFor, setLetterFor] = useState<Entry | null>(null);
   const run = useRun();
   const value = (e: Entry) => placements[e.id] ?? (e.placement != null ? String(e.placement) : "");
   async function save() {
@@ -767,6 +853,11 @@ function ResultsModal({ competition: c, onClose }: { competition: Competition; o
                 <p className="text-sm font-semibold text-ink-900">{e.athlete_name}</p>
                 <p className="text-xs text-ink-500">{e.category ?? "Categoria da definire"}{e.weight_kg ? ` · ${e.weight_kg} kg` : ""}{e.fee_status ? ` · quota ${e.fee_status === "PAID" ? "pagata" : e.fee_status === "DUE" ? "da pagare" : e.fee_status.toLowerCase()}` : ""}{e.status === "WITHDRAWN" ? " · ritirato" : ""}</p>
               </div>
+              {e.status === "REGISTERED" && (
+                <Button size="sm" variant="secondary" onClick={() => setLetterFor(e)} title="Giustificazione delle assenze per la scuola">
+                  🏫 {e.school_letter_at ? "Giustificazione ✓" : "Giustificazione"}
+                </Button>
+              )}
               <Select value={value(e)} onChange={(ev) => setPlacements((p) => ({ ...p, [e.id]: ev.target.value }))} className="sm:w-48" aria-label={`Risultato di ${e.athlete_name}`} disabled={e.status === "WITHDRAWN"}>
                 <option value="">— nessun risultato —</option>
                 {PLACEMENT_OPTIONS.map((pl) => <option key={pl} value={pl}>{PLACEMENT_LABELS[pl]}</option>)}
@@ -775,6 +866,87 @@ function ResultsModal({ competition: c, onClose }: { competition: Competition; o
           ))}
         </div>
       )}
+      {letterFor && <SchoolLetterModal competition={c} entry={letterFor} onClose={() => setLetterFor(null)} />}
+    </Modal>
+  );
+}
+
+/** La giustificazione per la scuola: il testo proposto si corregge (la
+ *  classe, il nome della scuola, una riga in più), poi si genera il PDF su
+ *  carta intestata. Il file resta nell'area privata: si apre con un link
+ *  che scade dopo pochi minuti. */
+function SchoolLetterModal({ competition: c, entry, onClose }: { competition: Competition; entry: Entry; onClose: () => void }) {
+  const base = A(`/competitions/${c.id}/entries/${entry.id}/school-letter`);
+  const { data, isLoading } = useQuery({ queryKey: ["club", "admin", "school-letter", entry.id], queryFn: () => clubGet<SchoolLetter>(base) });
+  if (isLoading || !data) {
+    return <Modal open onClose={onClose} size="lg" title="Giustificazione per la scuola"><Skeleton className="h-64" /></Modal>;
+  }
+  // La chiave rimonta l'editor quando arriva un testo nuovo (proposta da
+  // capo): il campo riparte da lì invece di sincronizzarsi con un effetto.
+  return <SchoolLetterEditor key={data.body_text} base={base} competition={c} letter={data} onClose={onClose} />;
+}
+
+function SchoolLetterEditor({ base, competition: c, letter, onClose }: { base: string; competition: Competition; letter: SchoolLetter; onClose: () => void }) {
+  const [body, setBody] = useState(letter.body_text);
+  const [busy, setBusy] = useState<"generate" | "open" | "fresh" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const toast = useToast();
+
+  async function act(kind: "generate" | "open" | "fresh") {
+    setBusy(kind);
+    setError(null);
+    // La finestra si apre subito, nel clic: aperta dopo l'await, il browser
+    // la bloccherebbe come popup.
+    const tab = kind === "fresh" ? null : window.open("", "_blank");
+    if (tab) tab.opener = null;
+    try {
+      if (kind === "fresh") {
+        const fresh = await clubGet<SchoolLetter>(`${base}?fresh=true`);
+        queryClient.setQueryData(["club", "admin", "school-letter", letter.entry_id], fresh);
+        return;
+      }
+      const { url } = kind === "generate"
+        ? await clubSend<{ url: string }>(base, "POST", { body_text: body })
+        : await clubGet<{ url: string }>(`${base}/url`);
+      if (tab) tab.location.href = url;
+      else window.location.href = url;
+      if (kind === "generate") {
+        await queryClient.invalidateQueries({ queryKey: ["club", "admin", "entries", c.id] });
+        await queryClient.invalidateQueries({ queryKey: ["club", "admin", "school-letter", letter.entry_id] });
+        toast({ tone: "success", title: "Giustificazione pronta", text: "Il PDF è salvato nell'area privata del club." });
+      }
+    } catch (e) {
+      tab?.close();
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose} size="xl" title={`Giustificazione per la scuola · ${letter.athlete_name}`}
+      subtitle={letter.generated_at ? `Ultimo PDF generato il ${shortDate(letter.generated_at)}` : `${c.name} · ${shortDate(c.starts_on)}`}
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>Chiudi</Button>
+        {letter.generated_at && <Button variant="secondary" loading={busy === "open"} onClick={() => act("open")}>{"Scarica l'ultimo PDF ↗"}</Button>}
+        <Button loading={busy === "generate"} disabled={body.trim().length < 20} onClick={() => act("generate")}>
+          {letter.generated_at ? "Rigenera e scarica il PDF" : "Genera e scarica il PDF"}
+        </Button>
+      </>}
+    >
+      <div className="space-y-3">
+        <p className="text-sm text-ink-500">
+          {"Rileggi il testo e aggiungi quello che serve (la classe, la scuola, gli orari del viaggio). Il PDF esce su carta intestata del club e resta salvato nell'area privata: anche il genitore lo può scaricare dalla sua pagina delle gare."}
+        </p>
+        <Field label="Testo" hint="Una riga vuota separa i paragrafi." htmlFor="sl-body">
+          <Textarea id="sl-body" value={body} onChange={(e) => setBody(e.target.value)} rows={18} maxLength={6000} className="text-sm leading-relaxed" />
+        </Field>
+        <Button size="sm" variant="ghost" loading={busy === "fresh"} onClick={() => window.confirm("Ripartire dal testo proposto? Le tue correzioni non salvate si perdono.") && act("fresh")}>
+          ↺ Riparti dal testo proposto
+        </Button>
+        {error && <Badge tone="danger">{error}</Badge>}
+      </div>
     </Modal>
   );
 }

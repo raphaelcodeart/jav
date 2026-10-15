@@ -122,6 +122,9 @@ async def load(db: AsyncSession, slug: str, *, apply: bool, replace_logo: bool =
 
 
 async def main(argv: list[str]) -> None:
+    # Tutti i modelli registrati (come nell'API): l'audit punta a tabelle di
+    # altri domini, e senza di loro SQLAlchemy non sa ordinare gli INSERT.
+    import app.main  # noqa: F401
     from app.core.db import AsyncSessionLocal
 
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])

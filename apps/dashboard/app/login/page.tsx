@@ -33,6 +33,7 @@ function safeNext(next: string | null, roles: string[], adminRoles: string[]): s
   if (next.startsWith("/admin")) return roles.some((r) => adminRoles.includes(r)) ? next : null;
   if (next.startsWith("/staff")) return roles.includes("INSTRUCTOR") ? next : null;
   if (next.startsWith("/club")) return roles.includes("SECRETARY") ? next : null;
+  if (next.startsWith("/atleta")) return roles.includes("ATHLETE") || roles.includes("CUSTOMER") ? next : null;
   return null;
 }
 
@@ -81,6 +82,8 @@ export default function LoginPage() {
         router.push("/customer");
       } else if (roles.includes("INSTRUCTOR")) {
         router.push("/staff");
+      } else if (roles.includes("ATHLETE")) {
+        router.push("/atleta");
       } else {
         router.push("/promoter");
       }
@@ -95,11 +98,14 @@ export default function LoginPage() {
   return (
     <AuthLayout title={t("login.title")} subtitle={t("login.subtitle")}>
       <form onSubmit={handleSubmit} className="space-y-5">
-        <Field label="Email" htmlFor="email">
+        <Field label={t("login.identifier")} htmlFor="email">
           <Input
             id="email"
-            type="email"
-            autoComplete="email"
+            type="text"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            autoComplete="username"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder={t("login.emailPlaceholder")}

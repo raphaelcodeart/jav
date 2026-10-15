@@ -9,6 +9,7 @@ from app.core.rate_limit import rate_limit
 from app.domains.auth import service as auth_service
 from app.domains.auth.schemas import (
     ForgotPasswordRequest,
+    LoginCodeRequest,
     LoginRequest,
     MeRead,
     RegisterFamilyRequest,
@@ -58,7 +59,11 @@ async def get_me(current_user: CurrentUser = Depends(get_current_user), db: Asyn
     return MeRead(
         roles=roles,
         email_verified=user is not None and user.email_verified_at is not None,
-        profile_complete=user is not None and users_service.is_profile_complete(user),
+        # Un accesso da atleta (un figlio) non ha codice fiscale né residenza
+        # da chiedere: il cancello del profilo vale per chi paga.
+        profile_complete=user is not None and (
+            users_service.is_profile_complete(user) or ("ATHLETE" in roles and "CUSTOMER" not in roles)
+        ),
         privacy_accepted=user is not None and user.privacy_accepted_at is not None,
         club_id=str(club.id) if club else None,
         club_name=club.name if club else None,
@@ -217,6 +222,31 @@ async def login(
     except auth_service.AuthenticationError as exc:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc)) from exc
 
+    _set_refresh_cookie(response, refresh_token)
+    return TokenResponse(access_token=access_token)
+
+
+@router.post(
+    "/login-code", response_model=TokenResponse,
+    dependencies=[Depends(rate_limit("login-code", max_requests=10, window_seconds=60))],
+)
+async def login_with_code(
+    payload: LoginCodeRequest, request: Request, response: Response, db: AsyncSession = Depends(get_db)
+) -> TokenResponse:
+    """Il QR dell'atleta (club/athlete_access.py): il codice vale come
+    nome utente e password insieme, finché il titolare non lo revoca."""
+    from app.domains.club import athlete_access
+
+    organization_id = await _organization_id(db, payload.organization_id)
+    try:
+        user = await athlete_access.user_for_code(db, organization_id=organization_id, code=payload.code)
+    except athlete_access.LoginCodeError as exc:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc)) from exc
+    access_token, refresh_token = await auth_service.issue_session(
+        db, user=user, organization_id=organization_id,
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"), action="login.qr",
+    )
     _set_refresh_cookie(response, refresh_token)
     return TokenResponse(access_token=access_token)
 

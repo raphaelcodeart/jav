@@ -183,3 +183,18 @@ Scelte fatte senza il titolare, da confermare:
 - **Orario di Albufeira**: non lo conosciamo, quindi niente corsi; la
   pagina dice "orari a breve".
 - **Instagram** dei tre club: non trovato; il campo resta vuoto.
+
+## 16. Mensilità, contanti e file personali (sessione 13)
+
+- **Foto degli atleti nel bucket pubblico.** `club_athletes.photo_url` sta nel
+  bucket media (pubblico per oggetto, con chiave casuale non elencabile),
+  perché la pagina pubblica del judoca la mostra quando c'è il consenso. Se
+  il titolare vuole che anche le foto siano "area protetta", vanno spostate
+  nel bucket privato con URL presigned nell'area riservata, e la pagina
+  pubblica userebbe una copia separata solo con il consenso.
+- **Le fasce del Jav Ranking** contano ancora l'età al 1° settembre: da
+  decidere se passare anche loro all'età federale.
+- **Età minima/massima di una gara** si controlla ancora con l'età vera al
+  giorno della gara, non con quella federale.
+- **Carta online**: il bottone è spento; serve un account Stripe per club
+  (o della piattaforma) prima di accenderlo.

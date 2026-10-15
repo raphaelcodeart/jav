@@ -285,6 +285,12 @@ h1, h2, h3, .font-display {
 .animate-light-sweep { animation: light-sweep 6s ease-in-out infinite; }
 .animate-marquee { animation: marquee 40s linear infinite; }
 .animate-ring-pulse { animation: ring-pulse 4s ease-out infinite; }
+/* La copertina del club che respira piano, come un video fermo. */
+@keyframes ken-burns {
+  0% { transform: scale(1.04) translate3d(0, 0, 0); }
+  100% { transform: scale(1.14) translate3d(-1.5%, -1%, 0); }
+}
+.animate-ken-burns { animation: ken-burns 24s ease-in-out infinite alternate; transform-origin: 60% 40%; }
 @media (prefers-reduced-motion: reduce) {
-  .animate-aurora, .animate-light-sweep, .animate-marquee, .animate-ring-pulse { animation: none; }
+  .animate-aurora, .animate-light-sweep, .animate-marquee, .animate-ring-pulse, .animate-ken-burns { animation: none; }
 }

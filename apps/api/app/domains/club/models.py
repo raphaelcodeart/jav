@@ -70,6 +70,12 @@ CLUB_FUNCTIONS = ("COACH", "ASSISTANT_COACH", "MONITOR", "ASSISTANT_MONITOR")
 ABSENCE_ADJUSTMENTS = ("HALF", "FULL")
 FEE_STATUSES = ("DUE", "PAID", "WAIVED")
 PROOF_STATUSES = ("ACCEPTED", "REJECTED")
+#: Come è stata pagata una quota. BANK_TRANSFER e CASH li può dichiarare il
+#: genitore (la ricevuta del bonifico, o a chi ha dato i contanti); CARD
+#: solo la segreteria (POS in palestra) finché il pagamento online non c'è;
+#: WALLET quando il credito del wallet copre tutto.
+PAYMENT_METHODS = ("BANK_TRANSFER", "CASH", "CARD", "WALLET")
+PROOF_METHODS = ("BANK_TRANSFER", "CASH")
 CERTIFICATE_TYPES = ("NON_AGONISTIC", "AGONISTIC")
 COMPETITION_LEVELS = ("CLUB", "REGIONAL", "NATIONAL", "INTERNATIONAL")
 COMPETITION_STATUSES = ("OPEN", "CLOSED", "DONE")
@@ -161,9 +167,10 @@ class ClubPlan(UUIDPKMixin, TimestampMixin, Base):
 
 
 class ClubAthlete(UUIDPKMixin, TimestampMixin, Base):
-    """Un atleta. Non ha un account: lo gestisce il genitore
-    (`guardian_user_id`), che è l'unico ad accedere. Un adulto che si allena è
-    un genitore con un atleta `is_self`."""
+    """Un atleta. Lo gestisce il titolare del conto (`guardian_user_id`): il
+    genitore, o l'adulto stesso con l'atleta `is_self`. Può avere in più un
+    suo accesso (`user_id`, ruolo ATHLETE) per la sua area: lezioni,
+    presenze, quote in lettura, formazione (club/athlete_access.py)."""
 
     __tablename__ = "club_athletes"
     __table_args__ = (
@@ -183,6 +190,11 @@ class ClubAthlete(UUIDPKMixin, TimestampMixin, Base):
     )
     club_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("clubs.id"), index=True)
     guardian_user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), index=True)
+    #: L'accesso dell'atleta alla sua area, se il titolare gliel'ha creato.
+    #: Per un atleta `is_self` è il titolare stesso.
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, unique=True
+    )
     first_name: Mapped[str] = mapped_column(String(80))
     last_name: Mapped[str] = mapped_column(String(80))
     birth_date: Mapped[date] = mapped_column(Date)
@@ -221,8 +233,16 @@ class ClubPaymentProof(UUIDPKMixin, TimestampMixin, Base):
         CheckConstraint(f"status IN ({_in(PROOF_STATUSES)})", name="status"),
         CheckConstraint("amount_cents >= 0", name="amount_non_negative"),
         CheckConstraint("credit_cents >= 0 AND credit_cents <= amount_cents", name="credit_range"),
-        # Senza foto solo se il credito paga tutto.
-        CheckConstraint("storage_key IS NOT NULL OR credit_cents = amount_cents", name="file_or_credit"),
+        CheckConstraint(f"method IN ({_in(PROOF_METHODS)})", name="method"),
+        # Senza foto solo se il credito paga tutto, o se sono contanti: lì la
+        # prova è la persona che li ha ricevuti.
+        CheckConstraint(
+            "storage_key IS NOT NULL OR credit_cents = amount_cents OR method = 'CASH'", name="file_or_credit"
+        ),
+        CheckConstraint(
+            "method <> 'CASH' OR cash_received_by_user_id IS NOT NULL OR cash_received_by_name IS NOT NULL",
+            name="cash_receiver",
+        ),
     )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
@@ -248,6 +268,15 @@ class ClubPaymentProof(UUIDPKMixin, TimestampMixin, Base):
     )
     reviewed_at: Mapped[datetime | None] = mapped_column(nullable=True)
     rejection_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    #: Bonifico (la foto della ricevuta) o contanti consegnati a qualcuno del
+    #: club (niente foto: chi li ha presi è avvisato e può dire di no).
+    method: Mapped[str] = mapped_column(String(16), default="BANK_TRANSFER", server_default="BANK_TRANSFER")
+    cash_received_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    #: Il nome di chi ha ricevuto i contanti, congelato: resta leggibile
+    #: anche se l'account cambia nome o se ne va.
+    cash_received_by_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
 
 class ClubCompetition(UUIDPKMixin, TimestampMixin, Base):
@@ -369,6 +398,9 @@ class ClubFee(UUIDPKMixin, TimestampMixin, Base):
             "coach_share_pct IS NULL OR (coach_share_pct >= 0 AND coach_share_pct <= 100)",
             name="coach_share_pct_range",
         ),
+        CheckConstraint(
+            f"payment_method IS NULL OR payment_method IN ({_in(PAYMENT_METHODS)})", name="payment_method"
+        ),
     )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
@@ -414,6 +446,14 @@ class ClubFee(UUIDPKMixin, TimestampMixin, Base):
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
     payment_note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    #: Come è stata pagata (PAYMENT_METHODS) e, per i contanti, a chi sono
+    #: stati dati. NULL finché è da pagare, e per le quote segnate pagate
+    #: prima che il metodo si registrasse.
+    payment_method: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    cash_received_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    cash_received_by_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     waived_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
@@ -678,6 +718,32 @@ class ClubCompetitionEntry(UUIDPKMixin, TimestampMixin, Base):
     placement: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
 
 
+class ClubSchoolLetter(UUIDPKMixin, TimestampMixin, Base):
+    """La giustificazione per la scuola di un atleta iscritto a una gara: il
+    club dichiara di averlo selezionato e chiede di giustificare le assenze.
+    La segreteria ne corregge il testo e genera il PDF, che resta nel bucket
+    privato dei documenti (dati di un minore). Una per iscrizione:
+    rigenerarla sostituisce testo e file."""
+
+    __tablename__ = "club_school_letters"
+    __table_args__ = (UniqueConstraint("entry_id", name="uq_club_school_letters_entry_id"),)
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id"), index=True
+    )
+    club_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("clubs.id"), index=True)
+    entry_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("club_competition_entries.id"))
+    competition_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("club_competitions.id"), index=True
+    )
+    athlete_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("club_athletes.id"), index=True)
+    #: Il testo esattamente come è stato stampato.
+    body_text: Mapped[str] = mapped_column(Text)
+    storage_key: Mapped[str] = mapped_column(String(500))
+    generated_at: Mapped[datetime] = mapped_column()
+    generated_by_user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+
+
 class ClubReminderSent(UUIDPKMixin, TimestampMixin, Base):
     """Un promemoria automatico già inviato. Il job giornaliero può girare due
     volte: il vincolo fa sì che il genitore riceva l'avviso una volta sola."""
@@ -842,3 +908,22 @@ class ClubPlatformFee(UUIDPKMixin, TimestampMixin, Base):
     set_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
+
+
+class ClubAthleteLoginCode(UUIDPKMixin, TimestampMixin, Base):
+    """Il QR per entrare al volo nell'area dell'atleta (i più piccoli non
+    ricordano una password). Lo crea il titolare; vale finché scade o finché
+    lui lo revoca, e si salva solo la sua impronta (sha256): chi legge il
+    database non può entrare."""
+
+    __tablename__ = "club_athlete_login_codes"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id"), index=True
+    )
+    athlete_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("club_athletes.id"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+    expires_at: Mapped[datetime] = mapped_column()
+    revoked_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(nullable=True)

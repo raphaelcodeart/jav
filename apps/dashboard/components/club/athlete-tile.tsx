@@ -29,7 +29,7 @@ export function AthleteTile({ athlete, onOpen }: { athlete: AthleteCardData; onO
           photoUrl={athlete.photo_url}
           level={athlete.level}
           points={athlete.ranking_points}
-          subtitle={`${t("club.yearsOld", { n: athlete.season_age })} · ${athlete.plan?.name ?? t("club.noPlan")}`}
+          subtitle={`${t("club.yearsOld", { n: athlete.age })} · ${athlete.plan?.name ?? t("club.noPlan")}`}
           belt={features.belts ? <BeltBadge belt={athlete.belt} /> : undefined}
           footer={
             <div className="space-y-3">

@@ -56,8 +56,11 @@ questa stagione e le ultime prove caricate.
 ### 2.2 Aggiungere un figlio
 
 Nome, cognome, data di nascita, sesso: basta. **Il piano lo sceglie il
-sistema dall'età** (calcolata al 1° settembre, come nelle categorie
-federali). Appena aggiunto compaiono la quota d'iscrizione della stagione e
+sistema dall'età federale**: gli anni che il ragazzo compie entro il 31
+dicembre (chi è nato a novembre conta già con l'età che avrà a novembre). A
+gennaio l'età federale sale di uno: se il ragazzo entra nella fascia del
+gruppo dopo, dalla mensilità di gennaio paga quella del gruppo nuovo, e ti
+arriva un avviso. Appena aggiunto compaiono la quota d'iscrizione della stagione e
 la quota del mese.
 
 Nei **corsi JAV nelle scuole** si sceglie anche il corso (la scuola): se
@@ -95,6 +98,22 @@ famiglia che hai invitato paga una mensilità, ricevi credito nel wallet.
 bonifico, fai il bonifico alle coordinate dello Shop che vedi lì e allega la
 ricevuta. L'ordine parte quando il pagamento è confermato.
 
+**Contanti.** Se hai dato i soldi a qualcuno del club, nella stessa finestra
+scegli **Contanti** e indica a chi (o scrivi il nome). Niente foto: la quota
+risulta pagata e quella persona riceve un avviso. **Carta online** c'è ma è
+spenta: arriverà quando il club avrà il pagamento online.
+
+**Le mensilità mese per mese.** Nella scheda di ogni figlio, scheda
+**Quote**, c'è il calendario della stagione: dodici caselle da settembre ad
+agosto. Verde pagata, giallo da pagare, **rosso scaduta**, tratteggiata la
+prevista (con l'importo che avrà, compreso il cambio di gruppo a gennaio).
+Tocca un mese per il dettaglio — gruppo ed età federale, scadenza, sconti,
+quando e come è stata pagata, la ricevuta — e per pagarlo. Sopra, due
+grafici: quanto della stagione è pagato e le presenze di ogni mese. Nella
+pagina della famiglia una barra per figlio mostra pagato, da pagare e
+scaduto. Anche l'atleta, dalla sua area, vede il suo calendario (senza
+poter pagare).
+
 La segreteria può controllare le prove. Se una non va bene, ricevi una
 notifica e un'email con il motivo, e le quote tornano da pagare.
 
@@ -114,7 +133,13 @@ della gara non ci si può iscrivere alle gare che lo richiedono.
 **Iscrivi a una gara**: vedi le gare aperte e, per ogni figlio, se può
 iscriversi (e perché no, se non può: età, certificato, iscrizioni chiuse).
 Se la gara ha una quota, compare tra le quote da pagare e si paga come le
-altre, con la prova. Puoi ritirare l'iscrizione fino alla scadenza.
+altre, con la prova. Puoi ritirare l'iscrizione fino alla scadenza; dopo la
+scadenza nessuno può più iscriversi.
+
+**Giustificazione per la scuola.** Se la gara cade in un giorno di scuola,
+la segreteria prepara la giustificazione delle assenze: quando è pronta,
+accanto al nome di tuo figlio compare **Giustificazione per la scuola**, che
+scarica il PDF da portare a scuola.
 
 ### 2.6 Jav Ranking, cinture, medaglie
 
@@ -146,6 +171,11 @@ Lo stato dell'ordine lo vedi in "I miei Ordini".
 - **Contabilità**: tutti i tuoi movimenti, in euro e in JavCash, con il
   dettaglio di ciascuno.
 - **Assistenza**: apri una richiesta alla segreteria e segui la risposta.
+- **JAVBOT** (il bottone rosso in basso a destra): conosce la tua
+  situazione. Chiedigli «quanto ho pagato?», «ho debiti?», «cosa sai di
+  me?», «i miei dati», «che cintura ha Luca?», «quante presenze?» o
+  «quanti punti ho nel ranking?»: risponde con i tuoi numeri, gli stessi di
+  «I miei conti» e della scheda dell'atleta. Vede solo la tua famiglia.
 - **Invita un amico**: il tuo link personale e chi si è iscritto con quello;
   ogni 5 amici con un contratto attivo puoi richiedere un omaggio, che
   consegna la segreteria.
@@ -161,17 +191,29 @@ proprio club**: entrando, l'area si apre direttamente sul club. Le sezioni:
   sospeso, uscito), registrare il tesseramento federale.
 - **Piani**: le fasce d'età con quota mensile, iscrizione annuale, giorno di
   scadenza e mesi fatturati. Un piano in uso non si cancella.
-- **Quote**: elenco con filtri. Su una quota: **segna pagata** (contanti),
-  **condona**, **riapri**. Si possono anche generare a mano le quote di un
+- **Quote**: elenco con filtri. Su una quota: **segna pagata** — scegli come
+  (contanti, carta, bonifico) e, per i contanti, a chi sono stati dati (una
+  persona dello staff o un nome scritto) —, **condona**, **riapri**. Sotto
+  lo stato di ogni quota pagata c'è come è stata pagata. Nella scheda di un
+  atleta (sezione Atleti) c'è il suo calendario delle mensilità, mese per
+  mese, da cui segnarle pagate. Si possono anche generare a mano le quote di un
   mese (lo fa comunque il sistema il 1° del mese).
-- **Prove caricate**: le prove dei genitori, già accettate. Se una non va,
-  **rifiutala** con un motivo: le quote tornano da pagare e il genitore viene
+- **Prove caricate**: le prove dei genitori, già accettate: ricevute di
+  bonifico, o contanti dichiarati con il nome di chi li ha presi (quella
+  persona riceve un avviso). Se una non va (per esempio i contanti non sono
+  mai arrivati), **rifiutala** con un motivo: le quote tornano da pagare e il genitore viene
   avvisato.
 - **Certificati**: chi è in scadenza o scaduto.
 - **Gare & risultati**: crea la gara (data, luogo, livello, scadenza,
   quota, età, certificato agonistico richiesto), segui gli iscritti, chiudi o
   riapri le iscrizioni, inserisci i piazzamenti a gara finita: il ranking si
-  aggiorna da solo.
+  aggiorna da solo. In **Iscritti e risultati**, accanto a ogni iscritto,
+  🏫 **Giustificazione**: il sistema propone la lettera alla scuola (il club
+  ha selezionato l'atleta per la gara, si chiede di giustificare le assenze)
+  con i suoi dati e quelli della gara; la correggi (la classe, la scuola) e
+  premi **Genera e scarica il PDF**. Il PDF è su carta intestata del club,
+  resta salvato nell'area privata e il genitore lo scarica dalla sua pagina
+  delle gare. Rigenerarla sostituisce la precedente.
 - **Corsi & presenze**: corsi, orari, istruttori, iscritti.
 - **Gare e stage, trasporto**: un evento può essere una gara o uno stage
   (che non dà punti). Spunta "Chiedere il trasporto" e indica ente, email,
@@ -199,6 +241,18 @@ fatto poche lezioni nel mese, con un clic metà mensilità o niente. **Ore
 dello staff** e **Registro presenze**: il cartellino e chi è venuto. **Sito
 del club**: testi, foto, contatti, judoka pubblicati (solo con il consenso
 della famiglia), pulsante Pubblica.
+
+**La pagina del club, un piccolo sito.** In **Sito del club**, oltre a
+testi, foto, colori e contatti: *Sede degli allenamenti* e *Anno di
+fondazione* (sul sito: "desde 2004" e gli anni di judo); **Il club in
+numeri** (fino a 6: un numero e che cosa, es. *3 · títulos nacionais*);
+**Perché allenarsi con noi** (fino a 6 punti di forza); **La storia** (le
+tappe, il sito le mette in ordine di anno); **Novità** (come i post di
+Facebook: data, titolo, testo, una foto, un link; la più recente in alto);
+**Video scelti** (link di YouTube). Per ogni allenatore anche il **grado**
+e due righe. Una parte lasciata vuota non compare sul sito. Se il link
+YouTube del club è un canale (`youtube.com/channel/...`) gli ultimi video
+compaiono da soli. Ricorda **Salva** in fondo.
 
 **La pagina pubblica di un judoka.** Ogni judoka sul sito ha la sua pagina,
 come le schede della Federazione Internazionale: foto, cintura e passaggi,

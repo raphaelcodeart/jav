@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const SESSION_COOKIE = "jav_session";
-const PROTECTED_PREFIXES = ["/customer", "/promoter", "/admin", "/staff", "/club"];
+const PROTECTED_PREFIXES = ["/customer", "/promoter", "/admin", "/staff", "/club", "/atleta"];
 
 export function proxy(request: NextRequest) {
   const isProtected = PROTECTED_PREFIXES.some((p) => request.nextUrl.pathname.startsWith(p));
@@ -20,5 +20,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/customer/:path*", "/promoter/:path*", "/admin/:path*", "/staff/:path*", "/club/:path*"],
+  matcher: ["/customer/:path*", "/promoter/:path*", "/admin/:path*", "/staff/:path*", "/club/:path*", "/atleta/:path*"],
 };

@@ -60,11 +60,28 @@ async def channel_id_for(db: AsyncSession) -> str:
 
     settings = (await db.execute(select(Organization.settings).limit(1))).scalar_one_or_none() or {}
     value = (settings or {}).get("youtube_channel_id") or DEFAULT_CHANNEL_ID
-    return value if re.match(r"^UC[A-Za-z0-9_-]{22}$", value) else DEFAULT_CHANNEL_ID
+    return value if _CHANNEL_ID.match(value) else DEFAULT_CHANNEL_ID
+
+
+_CHANNEL_ID = re.compile(r"^UC[A-Za-z0-9_-]{22}$")
+
+
+def channel_id_from_url(url: str | None) -> str | None:
+    """L'id del canale dal link YouTube di un club, se è un link
+    /channel/UC...: un @nome o un /c/nome non si risolvono senza le API di
+    Google, e allora la pagina mostra solo il bottone verso il canale."""
+    match = re.match(r"^https://(?:www\.|m\.)?youtube\.com/channel/(UC[A-Za-z0-9_-]{22})(?:[/?#]|$)", url or "")
+    return match.group(1) if match else None
 
 
 async def latest_videos(db: AsyncSession, *, now: float | None = None) -> list[dict]:
-    channel_id = await channel_id_for(db)
+    return await channel_videos(await channel_id_for(db), now=now)
+
+
+async def channel_videos(channel_id: str, *, now: float | None = None) -> list[dict]:
+    """Gli ultimi video di un canale, dalla cache di mezz'ora."""
+    if not _CHANNEL_ID.match(channel_id):
+        return []
     now = now or time.monotonic()
     cached = _cache.get(channel_id)
     if cached and now - cached[0] < CACHE_SECONDS:

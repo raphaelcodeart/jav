@@ -62,9 +62,15 @@ from app.domains.club.site_models import ClubAthleteMedia, ClubAthletePublicProf
 #: Quante foto può avere la galleria di un club: una pagina, non un archivio.
 MAX_GALLERY = 24
 MAX_COACHES = 12
+#: Le liste del mini-sito: abbastanza per raccontarsi, non un archivio.
+MAX_HIGHLIGHTS = 6
+MAX_HISTORY = 20
+MAX_PILLARS = 6
+MAX_NEWS = 30
+MAX_CLUB_VIDEOS = 12
 #: I campi di testo della pagina che la segreteria scrive così come sono.
 TEXT_FIELDS = (
-    "tagline", "about", "city", "contact_phone", "contact_email", "address",
+    "tagline", "about", "city", "contact_phone", "contact_email", "address", "venue",
 )
 #: I campi che devono essere un indirizzo web (http/https).
 URL_FIELDS = ("hero_image_url", "logo_url", "map_url", "website_url")
@@ -76,7 +82,7 @@ SOCIAL_HOSTS = {
     "instagram_url": ("Instagram", ("instagram.com", "www.instagram.com")),
     "youtube_url": ("YouTube", ("youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be")),
 }
-IMAGE_SLOTS = ("hero", "logo", "gallery", "coach")
+IMAGE_SLOTS = ("hero", "logo", "gallery", "coach", "news")
 #: Quante foto e quanti video può avere la scheda di un judoca: una
 #: vetrina, non l'archivio delle gare del club.
 MAX_ATHLETE_PHOTOS = 24
@@ -398,6 +404,14 @@ def _site_content(site: ClubSite) -> dict:
         "brand_primary": site.brand_primary,
         "brand_secondary": site.brand_secondary,
         "brand_accent": site.brand_accent,
+        "founded_year": site.founded_year,
+        "venue": site.venue,
+        "highlights": list(site.highlights or []),
+        "history": list(site.history or []),
+        "pillars": list(site.pillars or []),
+        # Dal più recente: è il diario del club, come una pagina Facebook.
+        "news": sorted(site.news or [], key=lambda n: n.get("date") or "", reverse=True),
+        "videos": list(site.videos or []),
     }
 
 
@@ -854,7 +868,86 @@ def _clean_coaches(items: list[dict]) -> list[dict]:
             "name": name,
             "role": (item.get("role") or "").strip()[:120] or None,
             "photo_url": _check_url(item.get("photo_url"), field="foto allenatore"),
+            "grade": (item.get("grade") or "").strip()[:60] or None,
+            "bio": (item.get("bio") or "").strip()[:400] or None,
         })
+    return out
+
+
+def _too_many(items: list, limit: int, what: str) -> None:
+    if len(items) > limit:
+        raise ClubValidationError(f"{what}: al massimo {limit}.")
+
+
+def _text(item: dict, key: str, limit: int) -> str | None:
+    return (item.get(key) or "").strip()[:limit] or None
+
+
+def _clean_highlights(items: list[dict]) -> list[dict]:
+    _too_many(items, MAX_HIGHLIGHTS, "I numeri del club")
+    out = []
+    for item in items:
+        value, label = _text(item, "value", 12), _text(item, "label", 60)
+        if value and label:
+            out.append({"value": value, "label": label})
+    return out
+
+
+def _clean_history(items: list[dict]) -> list[dict]:
+    _too_many(items, MAX_HISTORY, "Le tappe della storia")
+    out = []
+    for item in items:
+        title = _text(item, "title", 120)
+        if title and item.get("year"):
+            out.append({"year": int(item["year"]), "title": title, "text": _text(item, "text", 600)})
+    # Una storia si legge dal principio: l'ordine lo decide l'anno, non chi scrive.
+    return sorted(out, key=lambda h: h["year"])
+
+
+def _clean_pillars(items: list[dict]) -> list[dict]:
+    _too_many(items, MAX_PILLARS, "I punti di forza")
+    out = []
+    for item in items:
+        title = _text(item, "title", 60)
+        if title:
+            out.append({"title": title, "text": _text(item, "text", 300)})
+    return out
+
+
+def _clean_news(items: list[dict]) -> list[dict]:
+    _too_many(items, MAX_NEWS, "Le novità")
+    out = []
+    for item in items:
+        title = _text(item, "title", 140)
+        when = item.get("date")
+        if not title or not when:
+            continue
+        out.append({
+            "date": when.isoformat() if isinstance(when, date) else str(when)[:10],
+            "title": title,
+            "text": _text(item, "text", 2000),
+            "image_url": _check_url(item.get("image_url"), field="foto della novità"),
+            "link_url": _check_url(item.get("link_url"), field="link della novità"),
+        })
+    return sorted(out, key=lambda n: n["date"], reverse=True)
+
+
+def _clean_club_videos(items: list[dict]) -> list[dict]:
+    """I video del club come quelli della scheda di un judoca: si scrive il
+    link, si salva solo l'id (un iframe verso un sito qualsiasi non si può
+    mettere). Un id già pulito (11 caratteri) si accetta così com'è."""
+    _too_many(items, MAX_CLUB_VIDEOS, "I video")
+    out: list[dict] = []
+    seen: set[str] = set()
+    for item in items:
+        raw = (item.get("url") or item.get("youtube_id") or "").strip()
+        if not raw:
+            continue
+        video_id = raw if _YOUTUBE_ID.match(raw) else youtube_id_from_url(raw)
+        if video_id in seen:
+            continue
+        seen.add(video_id)
+        out.append({"youtube_id": video_id, "caption": _text(item, "caption", 200)})
     return out
 
 
@@ -882,6 +975,14 @@ async def update_site(
         site.gallery = _clean_gallery(changes["gallery"] or [])
     if "coaches" in changes:
         site.coaches = _clean_coaches(changes["coaches"] or [])
+    if "founded_year" in changes:
+        site.founded_year = changes["founded_year"]
+    for field, clean in (
+        ("highlights", _clean_highlights), ("history", _clean_history), ("pillars", _clean_pillars),
+        ("news", _clean_news), ("videos", _clean_club_videos),
+    ):
+        if field in changes:
+            setattr(site, field, clean(changes[field] or []))
     if "published" in changes and changes["published"] is not None:
         site.published = bool(changes["published"])
     if "show_prices" in changes and changes["show_prices"] is not None:

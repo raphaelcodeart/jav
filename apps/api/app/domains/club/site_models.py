@@ -16,7 +16,7 @@ del club, e basta che una delle due manchi perché l'atleta sparisca.
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, CheckConstraint, ForeignKey, String, Text, UniqueConstraint, text
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, SmallInteger, String, Text, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -68,11 +68,32 @@ class ClubSite(UUIDPKMixin, TimestampMixin, Base):
     brand_primary: Mapped[str | None] = mapped_column(String(7), nullable=True)
     brand_secondary: Mapped[str | None] = mapped_column(String(7), nullable=True)
     brand_accent: Mapped[str | None] = mapped_column(String(7), nullable=True)
+    # Il mini-sito del club (docs/club-portal.md, "La pagina del club"):
+    # tutto scritto dalla segreteria, ogni lista ripulita da site.update_site.
+    #: L'anno di fondazione ("dal 1985"); il CHECK tiene fuori gli anni assurdi.
+    founded_year: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    #: Dove si allena ("Pavilhão Municipal de Lagos"); l'indirizzo resta a parte.
+    venue: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    #: [{"value": "40+", "label": "anos de judo"}]: i numeri che il club vuole
+    #: dire di sé, accanto a quelli che il portale conta da solo.
+    highlights: Mapped[list] = mapped_column(JSONB, default=list, server_default=text("'[]'::jsonb"))
+    #: [{"year": 1985, "title": ..., "text": ...}]: la storia, dal più vecchio.
+    history: Mapped[list] = mapped_column(JSONB, default=list, server_default=text("'[]'::jsonb"))
+    #: [{"title": ..., "text": ...}]: perché allenarsi qui.
+    pillars: Mapped[list] = mapped_column(JSONB, default=list, server_default=text("'[]'::jsonb"))
+    #: [{"date": "2026-05-10", "title", "text", "image_url", "link_url"}]: le
+    #: novità, come i post di una pagina Facebook, dal più recente.
+    news: Mapped[list] = mapped_column(JSONB, default=list, server_default=text("'[]'::jsonb"))
+    #: [{"youtube_id": ..., "caption": ...}]: solo l'id, l'iframe lo costruisce il sito.
+    videos: Mapped[list] = mapped_column(JSONB, default=list, server_default=text("'[]'::jsonb"))
     updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
 
-    __table_args__ = tuple(
-        CheckConstraint(f"{column} IS NULL OR {column} ~ '^#[0-9A-F]{{6}}$'", name=column)
-        for column in ("brand_primary", "brand_secondary", "brand_accent")
+    __table_args__ = (
+        *(
+            CheckConstraint(f"{column} IS NULL OR {column} ~ '^#[0-9A-F]{{6}}$'", name=column)
+            for column in ("brand_primary", "brand_secondary", "brand_accent")
+        ),
+        CheckConstraint("founded_year IS NULL OR founded_year BETWEEN 1882 AND 2100", name="founded_year"),
     )
 
 

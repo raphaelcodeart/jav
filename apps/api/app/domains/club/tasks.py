@@ -195,7 +195,7 @@ async def close_expired_competitions(db: AsyncSession, *, scope: ClubScope, toda
 
 async def run_monthly_fees(db: AsyncSession, *, scope: ClubScope, today: date | None = None) -> int:
     today = today or utcnow().date()
-    return await club_service.generate_monthly_fees(db, scope=scope, period=seasons.period_of(today))
+    return await club_service.generate_monthly_fees(db, scope=scope, period=seasons.period_of(today), today=today)
 
 
 async def run_new_year(db: AsyncSession, *, scope: ClubScope, today: date | None = None) -> int:

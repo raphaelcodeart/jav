@@ -8,11 +8,11 @@ import { Badge, FeeStatusPill } from "@/components/ui/badge";
 import { CountUp } from "@/components/ui/count-up";
 import { CameraUploadButton } from "@/components/ui/gamification";
 import { Modal } from "@/components/ui/modal";
-import { Textarea } from "@/components/ui/field";
+import { Input, Select, Textarea } from "@/components/ui/field";
 import { useToast } from "@/components/ui/toast";
 import { friendlyApiError } from "@/lib/api-error";
 import { celebrate } from "@/lib/motion";
-import { clubSend, FEE_KIND_LABELS, type Fee } from "@/lib/club";
+import { clubGet, clubSend, FEE_KIND_LABELS, type CashReceiver, type Fee } from "@/lib/club";
 import { useI18n } from "@/lib/i18n/provider";
 import { useClubPaymentInfo, usePaymentInfo, type PaymentInfo } from "@/components/club/payment-info";
 import { JavCashConfirmCode } from "@/components/javcash-confirm-code";
@@ -127,6 +127,26 @@ function ReceiptPicker({ file, onFile }: { file: File | null; onFile: (f: File |
   );
 }
 
+function HowTile({ icon, title, text, on, disabled = false, onClick }: { icon: string; title: string; text: string; on: boolean; disabled?: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={on}
+      aria-disabled={disabled}
+      disabled={disabled}
+      onClick={onClick}
+      className={`flex flex-col items-center gap-1 rounded-2xl p-3 text-center ring-1 transition-colors ${
+        on ? "bg-brand-50 ring-brand-400 ring-2" : "bg-white ring-ink-200 enabled:hover:ring-ink-300"
+      } enabled:cursor-pointer disabled:opacity-50`}
+    >
+      <span className="text-2xl" aria-hidden="true">{icon}</span>
+      <span className="text-sm font-semibold text-ink-900">{title}</span>
+      <span className="text-[11px] leading-tight text-ink-500">{text}</span>
+    </button>
+  );
+}
+
 function StepFooter({ onBack, onClose, children }: { onBack?: () => void; onClose: () => void; children: React.ReactNode }) {
   const { t } = useI18n();
   return (
@@ -143,7 +163,11 @@ function StepFooter({ onBack, onClose, children }: { onBack?: () => void; onClos
  *  quote risultano pagate nel momento in cui la foto arriva. Il credito del
  *  wallet (gli sconti degli inviti) si può usare per una parte o per tutto:
  *  si conferma con il PIN o il codice via email, come ogni spesa di JavCash,
- *  e se copre tutto la ricevuta non serve. */
+ *  e se copre tutto la ricevuta non serve.
+ *
+ *  Oppure contanti: niente foto, si dice a chi del club sono stati dati (lo
+ *  si avvisa). La carta online c'è ma è spenta finché il club non ha un
+ *  pagamento online. */
 function FeesStep({ open, onClose, onBack, fees, preselect }: { open: boolean; onClose: () => void; onBack?: () => void; fees: Fee[]; preselect?: string[] }) {
   const [selected, setSelected] = useState<Set<string>>(() => new Set(preselect ?? fees.map((f) => f.id)));
   const [file, setFile] = useState<File | null>(null);
@@ -153,9 +177,17 @@ function FeesStep({ open, onClose, onBack, fees, preselect }: { open: boolean; o
   const [useCredit, setUseCredit] = useState(false);
   const [code, setCode] = useState("");
   const [codeRequested, setCodeRequested] = useState(false);
+  const [how, setHow] = useState<"BANK_TRANSFER" | "CASH">("BANK_TRANSFER");
+  const [receiver, setReceiver] = useState("");
+  const [otherName, setOtherName] = useState("");
   const queryClient = useQueryClient();
   const toast = useToast();
   const { data: bank } = useClubPaymentInfo();
+  const { data: receivers } = useQuery({
+    queryKey: ["club", "cash-receivers"],
+    queryFn: () => clubGet<CashReceiver[]>("/cash-receivers"),
+    enabled: how === "CASH",
+  });
   const { data: wallet } = useQuery({
     queryKey: ["wallet", "me"],
     queryFn: async (): Promise<{ balance_cents: number }> => {
@@ -168,9 +200,13 @@ function FeesStep({ open, onClose, onBack, fees, preselect }: { open: boolean; o
 
   const total = useMemo(() => fees.filter((f) => selected.has(f.id)).reduce((s, f) => s + f.amount_cents, 0), [fees, selected]);
   const balance = wallet?.balance_cents ?? 0;
-  const credit = useCredit ? Math.min(balance, total) : 0;
-  const needsFile = credit < total;
-  const ready = selected.size > 0 && (!needsFile || !!file) && (credit === 0 || code.trim().length >= 4);
+  const cash = how === "CASH";
+  const credit = useCredit && !cash ? Math.min(balance, total) : 0;
+  const needsFile = !cash && credit < total;
+  const receiverChosen = receiver === "other" ? otherName.trim().length >= 2 : receiver !== "";
+  const ready = selected.size > 0 && (cash
+    ? receiverChosen
+    : (!needsFile || !!file) && (credit === 0 || code.trim().length >= 4));
   const byAthlete = useMemo(() => {
     const map = new Map<string, Fee[]>();
     for (const f of fees) map.set(f.athlete_name ?? "", [...(map.get(f.athlete_name ?? "") ?? []), f]);
@@ -195,6 +231,11 @@ function FeesStep({ open, onClose, onBack, fees, preselect }: { open: boolean; o
       if (file && needsFile) form.append("file", file);
       for (const id of selected) form.append("fee_ids", id);
       if (note.trim()) form.append("note", note.trim());
+      form.append("method", how);
+      if (cash) {
+        if (receiver === "other") form.append("cash_received_by_name", otherName.trim());
+        else form.append("cash_received_by_user_id", receiver);
+      }
       if (credit > 0) {
         form.append("credit_cents", String(credit));
         form.append("spend_code", code.trim());
@@ -222,13 +263,23 @@ function FeesStep({ open, onClose, onBack, fees, preselect }: { open: boolean; o
       footer={
         <StepFooter onBack={onBack} onClose={onClose}>
           <Button onClick={submit} loading={busy} disabled={!ready}>
-            {t("pay.send")} · {euro(total)}
+            {cash ? t("pay.cashSend") : t("pay.send")} · {euro(total)}
           </Button>
         </StepFooter>
       }
     >
       <div className="space-y-5">
-        <BankBox bank={bank} label={t("pay.bankDetails")} />
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wide text-ink-500 mb-2">{t("pay.howTitle")}</p>
+          <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label={t("pay.howTitle")}>
+            <HowTile icon="🏦" title={t("pay.howTransfer")} text={t("pay.howTransferText")} on={how === "BANK_TRANSFER"} onClick={() => setHow("BANK_TRANSFER")} />
+            <HowTile icon="💶" title={t("pay.howCash")} text={t("pay.howCashText")} on={how === "CASH"} onClick={() => setHow("CASH")} />
+            {/* Spento finché il club non ha un pagamento online (Stripe). */}
+            <HowTile icon="💳" title={t("pay.howCard")} text={t("pay.howCardText")} on={false} disabled onClick={() => undefined} />
+          </div>
+        </div>
+
+        {!cash && <BankBox bank={bank} label={t("pay.bankDetails")} />}
 
         <div className="space-y-4">
           {fees.length === 0 && <p className="text-sm text-ink-500">{t("pay.nothingDue")}</p>}
@@ -281,7 +332,22 @@ function FeesStep({ open, onClose, onBack, fees, preselect }: { open: boolean; o
           </span>
         </div>
 
-        {balance > 0 && total > 0 && (
+        {cash && (
+          <div className="rounded-2xl ring-1 ring-ink-200 bg-white p-4 space-y-3">
+            <label htmlFor="pay-cash-to" className="block text-sm font-semibold text-ink-900">{t("pay.cashTo")}</label>
+            <Select id="pay-cash-to" value={receiver} onChange={(e) => setReceiver(e.target.value)}>
+              <option value="">{t("pay.cashPick")}</option>
+              {(receivers ?? []).map((r) => <option key={r.user_id} value={r.user_id}>{r.name}</option>)}
+              <option value="other">{t("pay.cashOther")}</option>
+            </Select>
+            {receiver === "other" && (
+              <Input placeholder={t("pay.cashOtherName")} aria-label={t("pay.cashOtherName")} value={otherName} onChange={(e) => setOtherName(e.target.value)} maxLength={120} />
+            )}
+            <p className="text-xs text-ink-500">{t("pay.cashHint")}</p>
+          </div>
+        )}
+
+        {!cash && balance > 0 && total > 0 && (
           <div className="rounded-2xl ring-1 ring-emerald-200 bg-emerald-50 p-4 space-y-3">
             <label className="flex items-start gap-3 cursor-pointer">
               <input type="checkbox" checked={useCredit} onChange={(e) => setUseCredit(e.target.checked)} className="mt-1 h-4 w-4 accent-brand-500" />

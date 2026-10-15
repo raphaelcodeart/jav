@@ -1,9 +1,14 @@
 """Stagioni ed età, come le conta il judo.
 
 La stagione va dal 1° settembre al 31 agosto e si chiama con l'anno in cui
-comincia (la stagione 2026 è settembre 2026 – agosto 2027). L'età che decide
-il piano è quella **al 1° settembre**: un bambino non cambia piano a metà
-anno perché compie gli anni a febbraio.
+comincia (la stagione 2026 è settembre 2026 – agosto 2027).
+
+L'età che decide il gruppo (il piano, e quindi la mensilità) è l'**età
+federale**: gli anni che l'atleta compie entro il 31 dicembre dell'anno
+solare, cioè anno meno anno di nascita. Chi nasce a novembre 2016 ha 10 anni
+federali per tutto il 2026, anche se a settembre ne ha ancora 9; e a gennaio
+2027 ne ha 11, a metà stagione: se entra nella fascia del gruppo dopo, dalla
+mensilità di gennaio paga quella del gruppo nuovo.
 """
 
 from datetime import date
@@ -35,8 +40,15 @@ def age_on(birth_date: date, day: date) -> int:
 
 
 def season_age(birth_date: date, season: int) -> int:
-    """L'età con cui l'atleta conta per tutta la stagione."""
+    """L'età al 1° settembre: le fasce del Jav Ranking contano con questa,
+    una sola per tutta la stagione."""
     return age_on(birth_date, season_start(season))
+
+
+def federal_age(birth_date: date, year: int) -> int:
+    """Gli anni che si compiono entro il 31 dicembre di `year`: l'età che
+    decide il gruppo e la mensilità di ogni mese di quell'anno."""
+    return year - birth_date.year
 
 
 def parse_period(period: str) -> tuple[int, int]:

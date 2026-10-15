@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { LanguageSwitcher } from "@/components/language-switcher";
-import { linkButton } from "@/components/site/link-button";
 import { cn } from "@/lib/cn";
 import { useI18n } from "@/lib/i18n/provider";
 
@@ -16,12 +15,13 @@ const ABOUT = [
   { href: "/quem-somos", key: "site.nav.about", hint: "site.nav.aboutHint" },
   { href: "/visao", key: "site.nav.vision", hint: "site.nav.visionHint" },
   { href: "/projeto", key: "site.nav.project", hint: "site.nav.projectHint" },
+  // I corsi nelle scuole stanno qui e non nella barra: il menu resta corto.
+  { href: "/cursos", key: "site.nav.courses", hint: "site.nav.coursesHint" },
   { href: "/contactos", key: "site.nav.contacts", hint: "site.nav.contactsHint" },
 ] as const;
 
 const NAV = [
   { href: "/clubes", key: "site.nav.clubs" },
-  { href: "/cursos", key: "site.nav.courses" },
   { href: "/eventos", key: "site.nav.events" },
   { href: "/ranking", key: "site.nav.ranking" },
 ] as const;
@@ -118,8 +118,15 @@ export function SiteHeader({ loggedIn }: { loggedIn: boolean }) {
             ★ {t(SPONSOR.key)}
           </Link>
           <LanguageSwitcher />
-          <Link href={account.href} className={linkButton({ variant: loggedIn ? "secondary" : "primary", size: "sm" })}>
+          {/* L'ingresso all'area riservata: rosso del club, il bottone che si
+              deve trovare per primo. */}
+          <Link href={account.href}
+            className="group inline-flex items-center gap-2 rounded-xl bg-gradient-to-br from-brand-500 via-brand-600 to-brand-800 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-brand-600/30 ring-1 ring-white/20 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-brand-600/40 motion-reduce:transition-none motion-reduce:hover:translate-y-0">
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} aria-hidden="true">
+              <circle cx="12" cy="8" r="4" /><path strokeLinecap="round" d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" />
+            </svg>
             {account.label}
+            <span aria-hidden="true" className="transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none">→</span>
           </Link>
           <button
             type="button"

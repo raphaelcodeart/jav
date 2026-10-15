@@ -2,9 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { CSSProperties, ReactNode } from "react";
-import { Avatar, Container, EmptyNote, EventCard, JudokaCard, MedalList, RankingTable, ScheduleGrid, SectionHeading } from "@/components/site/blocks";
+import { Avatar, Container, EmptyNote, EventCard, JudokaCard, MedalList, RankingTable, SectionHeading } from "@/components/site/blocks";
 import { TatamiBackdrop } from "@/components/site/club-carousel";
-import { ClubSectionNav } from "@/components/site/club-section-nav";
+import { CountUp, NextTraining } from "@/components/site/club-live";
+import { ClubMap, ClubVideos, MobileClubBar, NewsFeed, type PlayableVideo } from "@/components/site/club-media";
+import { ClubTabs, TabLink, type ClubTab } from "@/components/site/club-tabs";
 import { ContactForm } from "@/components/site/contact-form";
 import { Gallery } from "@/components/site/gallery";
 import { ageRange, siteI18n } from "@/components/site/i18n";
@@ -14,7 +16,7 @@ import { SocialIcons, type SocialLink } from "@/components/site/social-icons";
 import { themeStyle } from "@/lib/brand";
 import { cn } from "@/lib/cn";
 import type { Formatters, Translator } from "@/lib/i18n/translate";
-import { publicSite, type ClubGroup, type ClubPage } from "@/lib/public-site";
+import { publicSite, type ChannelVideo, type ClubGroup, type ClubPage, type Coach, type ScheduleDay } from "@/lib/public-site";
 
 type Params = { params: Promise<{ slug: string }> };
 
@@ -48,7 +50,12 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
  *  ciò che può essere pubblico. */
 export default async function ClubLandingPage({ params }: Params) {
   const { slug } = await params;
-  const [{ t, fmt }, club] = await Promise.all([siteI18n(), publicSite.club(slug)]);
+  const [{ t, fmt }, club, channel] = await Promise.all([
+    siteI18n(), publicSite.club(slug),
+    // Il canale del club: un video nuovo su YouTube compare qui da solo. Se
+    // YouTube non risponde la pagina c'è lo stesso, senza quei video.
+    publicSite.clubVideos(slug).catch((): ChannelVideo[] => []),
+  ]);
   if (!club) notFound();
 
   const medals = club.judoka.reduce((n, j) => n + j.gold + j.silver + j.bronze, 0);
@@ -59,6 +66,15 @@ export default async function ClubLandingPage({ params }: Params) {
     { kind: "youtube", url: club.youtube_url, label: "YouTube" },
     { kind: "website", url: club.website_url, label: t("site.club.website") },
   ] as const).filter((s) => Boolean(s.url)).map((s) => ({ ...s, url: s.url as string }));
+  // I video: prima quelli scelti dal club, poi gli ultimi del suo canale.
+  const videos: PlayableVideo[] = [
+    ...club.videos.map((v, i) => ({ youtube_id: v.youtube_id, title: v.caption ?? t("site.fan.videoOf", { club: club.name, n: i + 1 }) })),
+    ...(channel ?? []).map((v) => ({ youtube_id: v.id, title: v.title, published: v.published })),
+  ].filter((v, i, all) => all.findIndex((w) => w.youtube_id === v.youtube_id) === i).slice(0, 9);
+  const mapQuery = [club.venue, club.address, club.city].filter(Boolean).join(", ");
+  const since = club.founded_year ? new Date().getFullYear() - club.founded_year : 0;
+  const prices = club.groups.map((g) => g.monthly_price_cents).filter((c): c is number => c !== null);
+  const fromPrice = prices.length > 0 ? Math.min(...prices) : null;
   // I numeri del club, contati e mai scritti a mano; quelli a zero non si dicono.
   const facts = [
     { value: club.athletes_active, label: t("site.fan.factAthletes") },
@@ -67,16 +83,232 @@ export default async function ClubLandingPage({ params }: Params) {
     { value: club.coaches.length, label: t("site.fan.factCoaches") },
     { value: medals, label: t("site.fan.factMedals") },
   ].filter((f) => f.value > 0);
-  const tabs = [
-    { id: "sobre", label: t("site.fan.tabAbout"), show: true },
-    { id: "grupos", label: t("site.fan.tabGroups"), show: true },
-    { id: "horario", label: t("site.fan.tabSchedule"), show: true },
-    { id: "treinadores", label: t("site.fan.tabCoaches"), show: club.coaches.length > 0 },
-    { id: "fotos", label: t("site.fan.tabPhotos"), show: club.gallery.length > 0 || Boolean(club.youtube_url) },
-    { id: "provas", label: t("site.fan.tabEvents"), show: true },
-    { id: "ranking", label: t("site.fan.tabRanking"), show: true },
-    { id: "mensagem", label: t("site.fan.tabMessage"), show: true },
-  ].filter((s) => s.show).map(({ id, label }) => ({ id, label }));
+
+  const tabs: (ClubTab & { show: boolean })[] = [
+    { id: "inicio", label: t("site.fan.tabHome"), icon: <Icon d="M3 11.5 12 4l9 7.5M5.5 9.5V20h13V9.5" />, show: true },
+    { id: "horarios", label: t("site.fan.tabPrices"), icon: <Icon d="M4 6.5h16M4 6.5V20h16V6.5M8 3v5M16 3v5M8 12h3M8 16h6" />, aliases: ["grupos", "horario"], show: true },
+    { id: "equipa", label: t("site.fan.tabCoaches"), icon: <Icon d="M16 19v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 17.5V19M10 10.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM20 19v-1.5a3.5 3.5 0 0 0-2.5-3.35M15.5 4.6a3 3 0 0 1 0 5.8" />, aliases: ["treinadores"], show: club.coaches.length > 0 },
+    { id: "galeria", label: t("site.fan.tabMedia"), icon: <Icon d="M4 5h16v14H4zM4 15l4.5-4.5 4 4L16 11l4 4M15 8.5h.01" />, aliases: ["fotos", "videos"], show: club.gallery.length > 0 || videos.length > 0 || Boolean(club.youtube_url) },
+    { id: "novidades", label: t("site.fan.tabNews"), icon: <Icon d="M5 4h11l3 3v13H5zM8.5 9h7M8.5 13h7M8.5 17h4" />, aliases: ["historia"], show: club.news.length > 0 || club.history.length > 0 },
+    { id: "competicao", label: t("site.fan.tabCompetition"), icon: <Icon d="M8 4h8v5a4 4 0 0 1-8 0V4ZM8 6H5v1.5A3.5 3.5 0 0 0 8.5 11M16 6h3v1.5a3.5 3.5 0 0 1-3.5 3.5M12 13v4M8.5 20h7" />, aliases: ["provas", "ranking"], show: true },
+    { id: "contactos", label: t("site.fan.tabMessage"), icon: <Icon d="M4 6h16v12H4zM4.5 6.5 12 13l7.5-6.5" />, aliases: ["mensagem", "onde"], show: true },
+  ];
+  const visibleTabs = tabs.filter((tab) => tab.show).map(({ show: _show, ...tab }) => tab);
+
+  const panels: Record<string, ReactNode> = {
+    inicio: (
+      <Container className="space-y-14 py-10 sm:py-14">
+        <div className="grid gap-10 lg:grid-cols-[1fr_22rem]">
+          <Panel eyebrow={t("site.club.aboutEyebrow")} title={t("site.club.about", { club: club.name })}>
+            {club.about ? (
+              <div className="max-w-3xl space-y-4 text-lg leading-relaxed text-ink-700">
+                {club.about.split(/\n\s*\n/).map((para, i) => (
+                  <p key={i} className={cn("whitespace-pre-line", i === 0 && "first-letter:float-left first-letter:mr-2 first-letter:font-display first-letter:text-6xl first-letter:leading-[0.85] first-letter:text-club-ink")}>{para}</p>
+                ))}
+              </div>
+            ) : (
+              <EmptyNote>{t("site.fan.aboutEmpty")}</EmptyNote>
+            )}
+          </Panel>
+          {/* Le scorciatoie: le cose per cui si apre la pagina di un club. */}
+          <div className="space-y-4">
+            <TabLink to="horarios" className="group block overflow-hidden rounded-3xl bg-gradient-to-br from-club-cover-from to-club-cover-to p-6 text-white shadow-lift transition hover:-translate-y-1 motion-reduce:transition-none">
+              <p className="text-xs font-bold uppercase tracking-[0.22em] text-club-glow">{t("site.fan.tabPrices")}</p>
+              {fromPrice !== null ? (
+                <p className="mt-3 font-display text-4xl leading-none">
+                  <span className="text-base font-sans text-white/80">{t("site.fan.from")} </span>{fmt.euro(fromPrice, { maximumFractionDigits: 0 })}
+                  <span className="text-base font-sans text-white/80">{t("site.fan.perMonth")}</span>
+                </p>
+              ) : (
+                <p className="mt-3 text-2xl font-semibold">{t("site.fan.groupsCount", { n: club.groups.length })}</p>
+              )}
+              <p className="mt-2 text-sm text-white/85">{t("site.fan.pricesTeaser", { n: club.groups.length, classes: weeklyClasses })}</p>
+              <span className="mt-5 inline-flex items-center gap-2 rounded-xl bg-club-accent px-4 py-2 text-sm font-semibold text-club-on-accent">
+                {t("site.fan.seePrices")} <span aria-hidden="true" className="transition-transform group-hover:translate-x-1">→</span>
+              </span>
+            </TabLink>
+            <InfoCard club={club} socials={socials} t={t} />
+          </div>
+        </div>
+
+        {(club.highlights.length > 0 || since > 0) && (
+          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4" aria-label={t("site.fan.highlightsLabel")}>
+            {since > 0 && <Highlight value={String(since)} label={t("site.fan.yearsOfJudo")} />}
+            {club.highlights.map((h) => <Highlight key={`${h.value}-${h.label}`} value={h.value} label={h.label} />)}
+          </ul>
+        )}
+
+        {club.pillars.length > 0 && (
+          <Panel eyebrow={club.name} title={t("site.fan.pillarsTitle")}>
+            <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {club.pillars.map((p, i) => (
+                <li key={p.title} className="glass-card group relative overflow-hidden rounded-3xl p-6">
+                  <span className="absolute -right-3 -top-6 font-display text-8xl text-club/10 transition-transform duration-500 group-hover:-translate-y-1 motion-reduce:transition-none" aria-hidden="true">{String(i + 1).padStart(2, "0")}</span>
+                  <span className="mb-3 block h-1 w-10 rounded-full bg-club" aria-hidden="true" />
+                  <h3 className="relative text-lg text-ink-900">{p.title}</h3>
+                  {p.text && <p className="relative mt-2 text-sm leading-relaxed text-ink-600">{p.text}</p>}
+                </li>
+              ))}
+            </ul>
+          </Panel>
+        )}
+
+        {club.news[0] && (
+          <Panel eyebrow={t("site.fan.newsEyebrow")} title={t("site.fan.latestNews")}
+            action={<TabLink to="novidades" className={btn("secondary", "sm")}>{t("site.fan.allNews")}</TabLink>}>
+            <div className="max-w-2xl">
+              <NewsFeed posts={club.news.slice(0, 1)} clubName={club.name} logoUrl={club.logo_url} initials={initials(club.name)} />
+            </div>
+          </Panel>
+        )}
+      </Container>
+    ),
+
+    horarios: (
+      <Container className="space-y-14 py-10 sm:py-14">
+        <Panel eyebrow={t("site.fan.groupsEyebrow")} title={t("site.fan.groupsTitle")}
+          text={club.show_prices ? t("site.fan.groupsText") : t("site.fan.groupsTextNoPrices")}>
+          {club.groups.length > 0 ? (
+            <ul className="grid gap-5 lg:grid-cols-3">
+              {club.groups.map((g, i) => <li key={g.name}><GroupCard group={g} index={i} slug={club.slug} t={t} fmt={fmt} /></li>)}
+            </ul>
+          ) : (
+            <EmptyNote>{t("site.fan.groupsEmpty")}</EmptyNote>
+          )}
+        </Panel>
+        <Panel eyebrow={t("site.club.scheduleEyebrow", { season: club.season_label })} title={t("site.fan.weekTitle")} text={t("site.club.scheduleText")}>
+          {club.schedule.length > 0 ? <WeekTimetable schedule={club.schedule} t={t} /> : <EmptyNote>{t("site.club.scheduleEmpty")}</EmptyNote>}
+        </Panel>
+        <JoinBanner club={club} t={t} />
+      </Container>
+    ),
+
+    equipa: (
+      <Container className="py-10 sm:py-14">
+        <Panel eyebrow={t("site.club.coachesEyebrow")} title={t("site.club.coaches")}>
+          <ul className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+            {club.coaches.map((c) => <li key={c.name}><CoachCard coach={c} /></li>)}
+          </ul>
+        </Panel>
+      </Container>
+    ),
+
+    galeria: (
+      <Container className="space-y-14 py-10 sm:py-14">
+        {club.gallery.length > 0 && (
+          <Panel eyebrow={t("site.club.galleryEyebrow")} title={t("site.fan.photosTitle")}>
+            <Gallery items={club.gallery} clubName={club.name} />
+          </Panel>
+        )}
+        {(videos.length > 0 || club.youtube_url) && (
+          <Panel eyebrow={t("site.fan.videosEyebrow")} title={t("site.fan.videosSectionTitle")}>
+            <ClubVideos videos={videos} />
+            {club.youtube_url && (
+              <a href={club.youtube_url} target="_blank" rel="noopener noreferrer"
+                className="mt-6 flex items-center gap-4 rounded-2xl bg-ink-950 p-5 text-white shadow-soft transition hover:-translate-y-0.5">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-club text-xl text-club-on" aria-hidden="true">▶</span>
+                <span>
+                  <span className="block font-semibold">{t("site.fan.videosTitle")}</span>
+                  <span className="block text-sm text-white/70">{t("site.fan.videosText", { club: club.name })}</span>
+                </span>
+              </a>
+            )}
+          </Panel>
+        )}
+      </Container>
+    ),
+
+    novidades: (
+      <Container className="grid gap-14 py-10 sm:py-14 lg:grid-cols-[1.3fr_1fr]">
+        {club.news.length > 0 && (
+          <Panel eyebrow={t("site.fan.newsEyebrow")} title={t("site.fan.newsTitle")}>
+            <NewsFeed posts={club.news} clubName={club.name} logoUrl={club.logo_url} initials={initials(club.name)} />
+          </Panel>
+        )}
+        {club.history.length > 0 && (
+          <Panel eyebrow={t("site.fan.historyEyebrow")} title={t("site.fan.historyTitle", { club: club.name })}>
+            <ol className="relative ml-3 border-l-2 border-club/25">
+              {club.history.map((h) => (
+                <li key={`${h.year}-${h.title}`} className="relative pb-8 pl-8 last:pb-0">
+                  <span className="absolute -left-[9px] top-1.5 h-4 w-4 rounded-full bg-club ring-4 ring-white" aria-hidden="true" />
+                  <p className="font-display text-2xl text-club-ink">{h.year}</p>
+                  <h3 className="mt-0.5 text-lg text-ink-900">{h.title}</h3>
+                  {h.text && <p className="mt-1 max-w-2xl text-ink-600">{h.text}</p>}
+                </li>
+              ))}
+            </ol>
+          </Panel>
+        )}
+      </Container>
+    ),
+
+    competicao: (
+      <Container className="space-y-14 py-10 sm:py-14">
+        <Panel eyebrow={t("site.events.eyebrow")} title={t("site.fan.eventsTitle")}
+          action={<Link href={`/eventos?club=${club.slug}`} className={btn("secondary", "sm")}>{t("site.events.all")}</Link>}>
+          {club.upcoming_events.length > 0 ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              {club.upcoming_events.map((e) => <EventCard key={e.id} event={e} t={t} fmt={fmt} />)}
+            </div>
+          ) : (
+            <EmptyNote>{t("site.events.empty")}</EmptyNote>
+          )}
+        </Panel>
+        <Panel eyebrow={t("site.fan.rankingEyebrow", { season: club.season_label })} title={t("site.fan.rankingTitle")} text={t("site.club.judokaText")}
+          action={<Link href={`/ranking?club=${club.slug}`} className={btn("secondary", "sm")}>{t("site.ranking.full")}</Link>}>
+          {club.ranking.length > 0 ? (
+            <RankingTable rows={club.ranking} t={t} showClub={false} />
+          ) : club.judoka.length > 0 ? (
+            <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+              {club.judoka.map((j) => <li key={j.id}><JudokaCard judoka={j} t={t} showClub={false} /></li>)}
+            </ul>
+          ) : (
+            <EmptyNote>{t("site.club.judokaEmpty")}</EmptyNote>
+          )}
+          {club.recent_medals.length > 0 && (
+            <div className="mt-8">
+              <h3 className="mb-3 text-lg text-ink-900">{t("site.medals.title")}</h3>
+              <div className="glass-card rounded-2xl px-4"><MedalList medals={club.recent_medals} t={t} fmt={fmt} showClub={false} /></div>
+            </div>
+          )}
+        </Panel>
+      </Container>
+    ),
+
+    contactos: (
+      <>
+        <Container className="grid gap-8 py-10 sm:py-14 lg:grid-cols-[22rem_1fr]">
+          <InfoCard club={club} socials={socials} t={t} />
+          {mapQuery && (club.address || club.venue) ? (
+            <div>
+              <SectionHeading eyebrow={t("site.fan.whereEyebrow")} title={t("site.fan.whereTitle")} />
+              <ClubMap query={mapQuery} mapUrl={club.map_url} />
+            </div>
+          ) : <span />}
+        </Container>
+        <section id="mensagem" aria-labelledby="mensagem-title" className="relative isolate overflow-hidden bg-gradient-to-br from-club-cover-from to-club-cover-to py-16 text-white sm:py-20">
+          <div className="pointer-events-none absolute -right-24 -top-24 -z-10 h-96 w-96 rounded-full bg-club-2/25 blur-[100px] animate-aurora" aria-hidden="true" />
+          <Container className="grid items-start gap-10 lg:grid-cols-[1fr_1.3fr]">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.25em] text-club-glow">{t("site.fan.messageEyebrow")}</p>
+              <h2 id="mensagem-title" className="mt-2 text-3xl sm:text-4xl">{t("site.fan.messageTitle")}</h2>
+              <p className="mt-4 max-w-md text-white/85">{t("site.fan.messageText", { club: club.name })}</p>
+              <div className="mt-8 rounded-3xl bg-white/10 p-6 ring-1 ring-white/20 backdrop-blur">
+                <h3 className="text-xl">{t("site.club.joinTitle", { club: club.name })}</h3>
+                <p className="mt-2 text-sm text-white/85">{t("site.club.joinText")}</p>
+                <Link href={`/c/${club.slug}`} className="mt-5 inline-flex h-12 items-center justify-center rounded-2xl bg-club-accent px-6 font-semibold text-club-on-accent shadow-soft transition hover:-translate-y-px">
+                  {t("site.fan.join")}
+                </Link>
+              </div>
+            </div>
+            <div className="text-ink-900">
+              <ContactForm target={{ kind: "club", slug: club.slug, name: club.name }} />
+            </div>
+          </Container>
+        </section>
+      </>
+    ),
+  };
 
   return (
     <SiteShell>
@@ -85,8 +317,8 @@ export default async function ClubLandingPage({ params }: Params) {
         <Cover club={club} t={t} />
 
         {/* --- Il profilo: logo che sporge dalla copertina, nome, numeri, azioni --- */}
-        <Container className="relative z-10">
-          <div className="-mt-20 flex flex-col items-center gap-5 text-center sm:-mt-24 md:flex-row md:items-end md:text-left">
+        <Container className="relative z-10 pb-6">
+          <div className="-mt-20 flex flex-col items-center gap-5 text-center sm:-mt-24 md:flex-row md:items-start md:text-left">
             <Reveal className="shrink-0">
               <div className="flex h-36 w-36 items-center justify-center overflow-hidden rounded-full bg-white shadow-lift ring-[6px] ring-white sm:h-44 sm:w-44">
                 {club.logo_url ? (
@@ -99,157 +331,128 @@ export default async function ClubLandingPage({ params }: Params) {
                 )}
               </div>
             </Reveal>
-            <Reveal delay={0.05} className="min-w-0 flex-1 md:pb-3">
-              {club.city && <p className="text-xs font-bold uppercase tracking-[0.25em] text-club-ink">{club.city}</p>}
-              <h1 className="mt-1 text-3xl text-ink-900 sm:text-5xl">{club.name}</h1>
+            <Reveal delay={0.05} className="min-w-0 flex-1 md:pt-28">
+              <p className="text-xs font-bold uppercase tracking-[0.25em] text-club-ink">
+                {[club.city, club.founded_year ? t("site.fan.since", { year: club.founded_year }) : null].filter(Boolean).join(" · ")}
+              </p>
+              <h1 className="mt-1 flex flex-wrap items-center justify-center gap-x-3 text-3xl text-ink-900 sm:text-5xl md:justify-start">
+                {club.name}
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-club text-club-on sm:h-8 sm:w-8" title={t("site.fan.networkBadge")}>
+                  <svg viewBox="0 0 24 24" className="h-4 w-4 sm:h-5 sm:w-5" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>
+                  <span className="sr-only">{t("site.fan.networkBadge")}</span>
+                </span>
+              </h1>
+              {club.venue && <p className="mt-1 text-sm text-ink-500">{club.venue}</p>}
               {facts.length > 0 && (
                 <ul className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1 text-sm text-ink-600 md:justify-start" aria-label={t("site.fan.factsLabel")}>
                   {facts.map((f) => (
-                    <li key={f.label}><strong className="font-display text-ink-900">{f.value}</strong> {f.label}</li>
+                    <li key={f.label}><strong className="font-display text-ink-900"><CountUp value={f.value} /></strong> {f.label}</li>
                   ))}
                 </ul>
               )}
             </Reveal>
-            <Reveal delay={0.1} className="flex flex-col items-center gap-3 md:items-end md:pb-3">
+            <Reveal delay={0.1} className="flex flex-col items-center gap-3 md:items-end md:pt-28">
               <div className="flex flex-wrap justify-center gap-2">
                 <Link href={`/c/${club.slug}`} className={btn("primary")}>{t("site.fan.join")}</Link>
-                <a href="#mensagem" className={btn("secondary")}>
+                <TabLink to="contactos" className={btn("secondary")}>
                   <span aria-hidden="true">✉</span> {t("site.fan.sendMessage")}
-                </a>
+                </TabLink>
               </div>
               <SocialIcons links={socials} />
             </Reveal>
           </div>
-          {club.tagline && (
-            <Reveal delay={0.15}>
-              <p className="mx-auto mt-6 max-w-3xl text-center text-lg text-ink-600 md:mx-0 md:text-left">“{club.tagline}”</p>
+          {(club.tagline || club.schedule.length > 0) && (
+            <Reveal delay={0.15} className="mt-6 flex flex-col items-center gap-4 md:flex-row md:justify-between">
+              {club.tagline ? (
+                <p className="max-w-3xl text-center text-lg text-ink-600 md:text-left">“{club.tagline}”</p>
+              ) : <span />}
+              <NextTraining schedule={club.schedule} />
             </Reveal>
           )}
         </Container>
 
-        <div className="mt-8">
-          <ClubSectionNav items={tabs} label={t("site.fan.tabsLabel")} />
-        </div>
-
-        <Container className="grid gap-10 py-10 lg:grid-cols-[1fr_20rem]">
-          {/* --- Il riquadro "Informações", come l'introduzione di una pagina Facebook --- */}
-          <aside className="order-first lg:order-last lg:sticky lg:top-44 lg:self-start">
-            <Reveal>
-              <InfoCard club={club} socials={socials} t={t} />
-            </Reveal>
-          </aside>
-
-          <div className="min-w-0 space-y-16">
-            <Section id="sobre" eyebrow={t("site.club.aboutEyebrow")} title={t("site.club.about", { club: club.name })}>
-              {club.about ? (
-                <div className="max-w-3xl whitespace-pre-line text-lg leading-relaxed text-ink-700">{club.about}</div>
-              ) : (
-                <EmptyNote>{t("site.fan.aboutEmpty")}</EmptyNote>
-              )}
-            </Section>
-
-            <Section id="grupos" eyebrow={t("site.fan.groupsEyebrow")} title={t("site.fan.groupsTitle")}
-              text={club.show_prices ? t("site.fan.groupsText") : t("site.fan.groupsTextNoPrices")}>
-              {club.groups.length > 0 ? (
-                <ul className="grid gap-4 md:grid-cols-2">
-                  {club.groups.map((g) => <li key={g.name}><GroupCard group={g} t={t} fmt={fmt} /></li>)}
-                </ul>
-              ) : (
-                <EmptyNote>{t("site.fan.groupsEmpty")}</EmptyNote>
-              )}
-            </Section>
-
-            <Section id="horario" eyebrow={t("site.club.scheduleEyebrow", { season: club.season_label })} title={t("site.club.schedule")} text={t("site.club.scheduleText")}>
-              {club.schedule.length > 0 ? <ScheduleGrid schedule={club.schedule} t={t} /> : <EmptyNote>{t("site.club.scheduleEmpty")}</EmptyNote>}
-            </Section>
-
-            {club.coaches.length > 0 && (
-              <Section id="treinadores" eyebrow={t("site.club.coachesEyebrow")} title={t("site.club.coaches")}>
-                <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                  {club.coaches.map((c) => (
-                    <li key={c.name} className="glass-card flex items-center gap-4 rounded-2xl p-4">
-                      <Avatar name={c.name} photoUrl={c.photo_url} size="lg" />
-                      <div className="min-w-0">
-                        <p className="font-semibold text-ink-900">{c.name}</p>
-                        {c.role && <p className="text-sm text-club-ink">{c.role}</p>}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </Section>
-            )}
-
-            {(club.gallery.length > 0 || club.youtube_url) && (
-              <Section id="fotos" eyebrow={t("site.club.galleryEyebrow")} title={t("site.fan.photosTitle")}>
-                {club.gallery.length > 0 && <Gallery items={club.gallery} clubName={club.name} />}
-                {club.youtube_url && (
-                  <a href={club.youtube_url} target="_blank" rel="noopener noreferrer"
-                    className="mt-6 flex items-center gap-4 rounded-2xl bg-ink-950 p-5 text-white shadow-soft transition hover:-translate-y-0.5">
-                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-club text-xl text-club-on" aria-hidden="true">▶</span>
-                    <span>
-                      <span className="block font-semibold">{t("site.fan.videosTitle")}</span>
-                      <span className="block text-sm text-white/70">{t("site.fan.videosText", { club: club.name })}</span>
-                    </span>
-                  </a>
-                )}
-              </Section>
-            )}
-
-            <Section id="provas" eyebrow={t("site.events.eyebrow")} title={t("site.fan.eventsTitle")}
-              action={<Link href={`/eventos?club=${club.slug}`} className={btn("secondary", "sm")}>{t("site.events.all")}</Link>}>
-              {club.upcoming_events.length > 0 ? (
-                <div className="grid gap-4 md:grid-cols-2">
-                  {club.upcoming_events.map((e) => <EventCard key={e.id} event={e} t={t} fmt={fmt} />)}
-                </div>
-              ) : (
-                <EmptyNote>{t("site.events.empty")}</EmptyNote>
-              )}
-            </Section>
-
-            <Section id="ranking" eyebrow={t("site.fan.rankingEyebrow", { season: club.season_label })} title={t("site.fan.rankingTitle")} text={t("site.club.judokaText")}
-              action={<Link href={`/ranking?club=${club.slug}`} className={btn("secondary", "sm")}>{t("site.ranking.full")}</Link>}>
-              {club.ranking.length > 0 ? (
-                <RankingTable rows={club.ranking} t={t} showClub={false} />
-              ) : club.judoka.length > 0 ? (
-                <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                  {club.judoka.map((j) => <li key={j.id}><JudokaCard judoka={j} t={t} showClub={false} /></li>)}
-                </ul>
-              ) : (
-                <EmptyNote>{t("site.club.judokaEmpty")}</EmptyNote>
-              )}
-              {club.recent_medals.length > 0 && (
-                <div className="mt-8">
-                  <h3 className="mb-3 text-lg text-ink-900">{t("site.medals.title")}</h3>
-                  <div className="glass-card rounded-2xl px-4"><MedalList medals={club.recent_medals} t={t} fmt={fmt} showClub={false} /></div>
-                </div>
-              )}
-            </Section>
-          </div>
-        </Container>
-
-        {/* --- In fondo: scrivere al club --- */}
-        <section id="mensagem" aria-labelledby="mensagem-title" className="relative isolate scroll-mt-40 overflow-hidden bg-gradient-to-br from-club-cover-from to-club-cover-to py-16 text-white sm:py-20">
-          <div className="pointer-events-none absolute -right-24 -top-24 -z-10 h-96 w-96 rounded-full bg-club-2/25 blur-[100px] animate-aurora" aria-hidden="true" />
-          <Container className="grid items-start gap-10 lg:grid-cols-[1fr_1.3fr]">
-            <Reveal>
-              <p className="text-xs font-bold uppercase tracking-[0.25em] text-club-glow">{t("site.fan.messageEyebrow")}</p>
-              <h2 id="mensagem-title" className="mt-2 text-3xl sm:text-4xl">{t("site.fan.messageTitle")}</h2>
-              <p className="mt-4 max-w-md text-white/85">{t("site.fan.messageText", { club: club.name })}</p>
-              <div className="mt-8 rounded-3xl bg-white/10 p-6 ring-1 ring-white/20 backdrop-blur">
-                <h3 className="text-xl">{t("site.club.joinTitle", { club: club.name })}</h3>
-                <p className="mt-2 text-sm text-white/85">{t("site.club.joinText")}</p>
-                <Link href={`/c/${club.slug}`} className="mt-5 inline-flex h-12 items-center justify-center rounded-2xl bg-club-accent px-6 font-semibold text-club-on-accent shadow-soft transition hover:-translate-y-px">
-                  {t("site.fan.join")}
-                </Link>
-              </div>
-            </Reveal>
-            <Reveal delay={0.1} className="text-ink-900">
-              <ContactForm target={{ kind: "club", slug: club.slug, name: club.name }} />
-            </Reveal>
-          </Container>
-        </section>
+        <ClubTabs tabs={visibleTabs} panels={panels} label={t("site.fan.tabsLabel")} />
+        <MobileClubBar joinHref={`/c/${club.slug}`} joinLabel={t("site.fan.join")} messageLabel={t("site.fan.messageShort")} />
       </div>
     </SiteShell>
+  );
+}
+
+/** Le icone delle schede: un tratto solo, nel colore del testo. */
+function Icon({ d }: { d: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={d} />
+    </svg>
+  );
+}
+
+function Panel({ eyebrow, title, text, action, children }: { eyebrow: string; title: string; text?: string; action?: ReactNode; children: ReactNode }) {
+  return (
+    <section>
+      <SectionHeading eyebrow={eyebrow} title={title} text={text} action={action} />
+      {children}
+    </section>
+  );
+}
+
+/** I tre stili dei gruppi, gli stessi nelle card e nell'orario: così "il
+ *  verde è il mio gruppo" si capisce senza leggere. */
+const GROUP_STYLES = [
+  { solid: "bg-club text-club-on", soft: "bg-club/10 text-club-ink ring-club/30" },
+  { solid: "bg-club-accent text-club-on-accent", soft: "bg-club-accent/25 text-ink-900 ring-club-accent/60" },
+  { solid: "bg-ink-900 text-white", soft: "bg-ink-900/10 text-ink-900 ring-ink-900/25" },
+];
+
+/** L'orario della settimana come un calendario: una colonna per giorno,
+ *  un blocco per allenamento, colorato come il suo gruppo. */
+function WeekTimetable({ schedule, t }: { schedule: ScheduleDay[]; t: Translator }) {
+  const courses = [...new Set(schedule.flatMap((d) => d.slots.map((s) => s.course)))];
+  const days = [...schedule].sort((a, b) => a.weekday - b.weekday);
+  return (
+    <div>
+      <ul className="mb-4 flex flex-wrap gap-2" aria-label={t("site.fan.legend")}>
+        {courses.map((c, i) => (
+          <li key={c} className={cn("inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ring-1", GROUP_STYLES[i % 3]?.soft)}>
+            <span className={cn("h-2.5 w-2.5 rounded-full", GROUP_STYLES[i % 3]?.solid)} aria-hidden="true" />{c}
+          </li>
+        ))}
+      </ul>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(9rem,1fr))]">
+        {days.map((d) => (
+          <div key={d.weekday} className="overflow-hidden rounded-3xl bg-white shadow-soft ring-1 ring-ink-900/5">
+            <p className="bg-ink-950 px-4 py-2.5 text-sm font-bold uppercase tracking-[0.18em] text-white">{t.dyn(`site.weekday.${d.weekday}`, String(d.weekday))}</p>
+            <ul className="space-y-2 p-3">
+              {[...d.slots].sort((a, b) => a.starts_at.localeCompare(b.starts_at)).map((s, i) => (
+                <li key={i} className={cn("rounded-2xl p-3", GROUP_STYLES[courses.indexOf(s.course) % 3]?.solid)}>
+                  <p className="font-display text-lg leading-none">{s.starts_at}<span className="opacity-70">–{s.ends_at}</span></p>
+                  <p className="mt-1.5 text-xs font-semibold leading-snug opacity-90">{s.course}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** In fondo alla scheda dei prezzi: il passo successivo, grande. */
+function JoinBanner({ club, t }: { club: ClubPage; t: Translator }) {
+  return (
+    <div className="relative isolate overflow-hidden rounded-[2rem] bg-gradient-to-br from-club-cover-from to-club-cover-to p-8 text-white shadow-lift sm:p-10">
+      <div className="pointer-events-none absolute -right-16 -top-16 -z-10 h-64 w-64 rounded-full bg-club-2/30 blur-3xl" aria-hidden="true" />
+      <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 className="text-2xl sm:text-3xl">{t("site.fan.trialTitle")}</h2>
+          <p className="mt-2 max-w-xl text-white/85">{t("site.fan.trialText", { club: club.name })}</p>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <Link href={`/c/${club.slug}`} className="inline-flex h-12 items-center justify-center rounded-2xl bg-club-accent px-6 font-semibold text-club-on-accent shadow-soft transition hover:-translate-y-px">{t("site.fan.join")}</Link>
+          <TabLink to="contactos" className="inline-flex h-12 items-center justify-center rounded-2xl px-6 font-semibold text-white ring-1 ring-white/50 transition hover:bg-white/10">{t("site.fan.askQuestion")}</TabLink>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -272,14 +475,14 @@ function btn(kind: "primary" | "secondary", size: "md" | "sm" = "md"): string {
  *  c'è solo testo bianco, e il tema garantisce che si legga. */
 function Cover({ club, t }: { club: ClubPage; t: Translator }) {
   return (
-    <section className="relative isolate h-64 overflow-hidden bg-club-cover-to sm:h-80 lg:h-[24rem]" aria-label={t("site.fan.coverLabel", { club: club.name })}>
+    <section className="relative isolate h-72 overflow-hidden bg-club-cover-to sm:h-96 lg:h-[30rem]" aria-label={t("site.fan.coverLabel", { club: club.name })}>
       {club.hero_image_url ? (
         // eslint-disable-next-line @next/next/no-img-element -- copertina caricata dal club
-        <img src={club.hero_image_url} alt="" className="absolute inset-0 -z-20 h-full w-full object-cover" />
+        <img src={club.hero_image_url} alt="" className="absolute inset-0 -z-20 h-full w-full object-cover animate-ken-burns" />
       ) : (
         <TatamiBackdrop className="-z-20" />
       )}
-      <div className="absolute inset-0 -z-10 bg-gradient-to-br from-club-cover-from/80 via-club-cover-from/45 to-club-cover-to/90" aria-hidden="true" />
+      <div className="absolute inset-0 -z-10 bg-gradient-to-br from-club-cover-from/75 via-club-cover-from/25 to-club-cover-to/90" aria-hidden="true" />
       <div className="pointer-events-none absolute -left-20 -top-24 -z-10 h-80 w-80 rounded-full bg-club-2/30 blur-[90px] animate-aurora" aria-hidden="true" />
       <Container className="pt-6">
         <nav aria-label={t("site.breadcrumb")} className="text-sm text-white/80">
@@ -330,59 +533,88 @@ function Info({ icon, label, children }: { icon: string; label: string; children
   );
 }
 
-/** Un gruppo: età, allenamenti (i corsi la cui età lo tocca, come li dice
- *  JAVBOT) e, se il club li mostra, i prezzi. Senza prezzi, l'invito a
- *  chiederli al club con il modulo in fondo. */
-function GroupCard({ group, t, fmt }: { group: ClubGroup; t: Translator; fmt: Formatters }) {
+/** Un gruppo come un listino: il numero del gruppo, l'età grande, la
+ *  mensilità grandissima, gli allenamenti e il bottone per iscriversi.
+ *  Senza prezzi, l'invito a chiederli al club. */
+function GroupCard({ group, index, slug, t, fmt }: { group: ClubGroup; index: number; slug: string; t: Translator; fmt: Formatters }) {
   const ages = ageRange(t, group.min_age, group.max_age);
+  const number = group.name.match(/\d+/)?.[0] ?? String(index + 1);
+  const title = group.name.replace(/^Grupos?\s*[\d\s e]+·\s*/i, "");
+  const style = GROUP_STYLES[index % 3];
+  const featured = index === 1;
   return (
-    <article className="glass-card flex h-full flex-col rounded-3xl p-6">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="text-lg leading-snug text-ink-900">{group.name}</h3>
-          {ages && <p className="mt-1 inline-flex rounded-full bg-club/10 px-2.5 py-0.5 text-xs font-semibold text-club-ink">{ages}</p>}
-        </div>
-        {group.monthly_price_cents !== null && (
-          <p className="shrink-0 text-right">
-            <span className="block font-display text-2xl text-club-ink">{fmt.euro(group.monthly_price_cents)}</span>
-            <span className="block text-xs text-ink-500">{t("site.fan.perMonth")}</span>
-          </p>
-        )}
+    <article className={cn("relative flex h-full flex-col overflow-hidden rounded-[2rem] bg-white shadow-soft ring-1 ring-ink-900/5 transition hover:-translate-y-1 hover:shadow-lift motion-reduce:transition-none", featured && "ring-2 ring-club lg:-translate-y-2")}>
+      <div className={cn("relative px-6 pb-6 pt-5", style?.solid)}>
+        <p className="text-xs font-bold uppercase tracking-[0.22em] opacity-80">{t("site.fan.groupN", { n: number })}</p>
+        <h3 className="mt-1 text-xl leading-snug">{title}</h3>
+        {ages && <p className="mt-3 inline-flex rounded-full bg-white/90 px-3 py-1 text-sm font-bold text-ink-900">{ages}</p>}
+        <span className="pointer-events-none absolute -bottom-5 right-4 font-display text-[7rem] leading-none opacity-15" aria-hidden="true">{number}</span>
       </div>
-      {group.slots.length > 0 ? (
-        <ul className="mt-4 flex flex-wrap gap-2" aria-label={t("site.fan.trainings")}>
-          {group.slots.map((s, i) => (
-            <li key={i} className="rounded-xl bg-ink-50 px-3 py-1.5 text-sm text-ink-700">
-              <strong className="font-semibold text-ink-900">{t.dyn(`site.weekdayShort.${s.weekday}`, String(s.weekday))}</strong> {s.starts_at}–{s.ends_at}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="mt-4 text-sm text-ink-500">{t("site.fan.noTrainings")}</p>
-      )}
-      {(group.enrollment_price_cents || group.due_day) ? (
-        <p className="mt-4 text-sm text-ink-600">
-          {[
-            group.enrollment_price_cents ? t("site.fan.enrollment", { amount: fmt.euro(group.enrollment_price_cents) }) : null,
-            group.due_day ? t("site.fan.dueDay", { day: group.due_day }) : null,
-          ].filter(Boolean).join(" · ")}
-        </p>
-      ) : null}
-      {group.description && <p className="mt-2 text-sm text-ink-500">{group.description}</p>}
-      {group.monthly_price_cents === null && (
-        <a href="#mensagem" className="mt-auto pt-4 text-sm font-semibold text-club-ink hover:underline">{t("site.fan.askPrices")}</a>
-      )}
+      <div className="flex flex-1 flex-col p-6">
+        {group.monthly_price_cents !== null ? (
+          <p className="flex items-end gap-1">
+            <span className="font-display text-5xl leading-none text-ink-900">{fmt.euro(group.monthly_price_cents, { maximumFractionDigits: 0 })}</span>
+            <span className="pb-1 text-sm text-ink-500">{t("site.fan.perMonth")}</span>
+          </p>
+        ) : (
+          <TabLink to="contactos" className="text-sm font-semibold text-club-ink hover:underline">{t("site.fan.askPrices")}</TabLink>
+        )}
+        {group.slots.length > 0 ? (
+          <ul className="mt-5 space-y-2" aria-label={t("site.fan.trainings")}>
+            {group.slots.map((s, i) => (
+              <li key={i} className="flex items-center justify-between gap-3 rounded-xl bg-ink-50 px-3 py-2 text-sm">
+                <strong className="font-semibold text-ink-900">{t.dyn(`site.weekday.${s.weekday}`, String(s.weekday))}</strong>
+                <span className="font-mono text-ink-700">{s.starts_at}–{s.ends_at}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-5 rounded-xl bg-ink-50 px-3 py-2 text-sm text-ink-500">{t("site.fan.noTrainings")}</p>
+        )}
+        {(group.enrollment_price_cents || group.due_day || group.description) ? (
+          <ul className="mt-4 space-y-1 text-xs text-ink-500">
+            {group.enrollment_price_cents ? <li>• {t("site.fan.enrollment", { amount: fmt.euro(group.enrollment_price_cents) })}</li> : null}
+            {group.due_day ? <li>• {t("site.fan.dueDay", { day: group.due_day })}</li> : null}
+            {group.description ? <li>• {group.description}</li> : null}
+          </ul>
+        ) : null}
+        <div className="mt-auto pt-6">
+          <Link href={`/c/${slug}`} className={cn("flex h-12 items-center justify-center rounded-2xl font-semibold transition hover:-translate-y-px", featured ? "bg-club text-club-on shadow-soft" : "bg-ink-950 text-white")}>
+            {t("site.fan.joinGroup")}
+          </Link>
+        </div>
+      </div>
     </article>
   );
 }
 
-function Section({ id, eyebrow, title, text, action, children }: { id: string; eyebrow: string; title: string; text?: string; action?: ReactNode; children: ReactNode }) {
+/** Un numero grande nel colore del club ("40+ · anos de judo"). */
+function Highlight({ value, label }: { value: string; label: string }) {
   return (
-    <section id={id} aria-labelledby={`${id}-title`} className="scroll-mt-40">
-      <Reveal>
-        <SectionHeading id={`${id}-title`} eyebrow={eyebrow} title={title} text={text} action={action} />
-        {children}
-      </Reveal>
-    </section>
+    <li className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-club-cover-from to-club-cover-to p-5 text-white shadow-soft">
+      <span className="pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full bg-club-2/30 blur-2xl" aria-hidden="true" />
+      <p className="relative font-display text-4xl leading-none text-club-glow sm:text-5xl">{value}</p>
+      <p className="relative mt-2 text-sm font-semibold text-white/90">{label}</p>
+    </li>
+  );
+}
+
+/** Un allenatore: foto (o iniziali), nome, ruolo, grado su una striscia
+ *  nera come la cintura, e due righe. Tutto scritto dal club. */
+function CoachCard({ coach }: { coach: Coach }) {
+  return (
+    <article className="glass-card flex h-full gap-4 rounded-3xl p-5">
+      <Avatar name={coach.name} photoUrl={coach.photo_url} size="lg" className="ring-4 ring-club/20" />
+      <div className="min-w-0">
+        <h3 className="text-lg leading-snug text-ink-900">{coach.name}</h3>
+        {coach.role && <p className="text-sm font-semibold text-club-ink">{coach.role}</p>}
+        {coach.grade && (
+          <p className="mt-2 inline-flex items-center gap-2 rounded-md bg-ink-950 px-2.5 py-1 text-xs font-semibold text-white">
+            <span className="h-2 w-5 rounded-sm bg-club-accent" aria-hidden="true" />{coach.grade}
+          </p>
+        )}
+        {coach.bio && <p className="mt-2 text-sm leading-relaxed text-ink-600">{coach.bio}</p>}
+      </div>
+    </article>
   );
 }

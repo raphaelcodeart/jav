@@ -68,6 +68,11 @@ export interface Fee {
   paid_at: string | null;
   paid_via_proof_id: string | null;
   payment_note: string | null;
+  /** Come è stata pagata: BANK_TRANSFER, CASH, CARD, WALLET (null se da
+   *  pagare, o segnata pagata prima che il metodo si registrasse). */
+  payment_method?: PaymentMethod | null;
+  /** Per i contanti: a chi sono stati consegnati. */
+  cash_received_by_name?: string | null;
   waive_reason: string | null;
   competition_id: string | null;
   /** Corsi JAV: il corso a cui la mensilità è attribuita (null = senza corso). */
@@ -99,6 +104,8 @@ export interface AthleteCard {
   birth_date: string;
   age: number;
   season_age: number;
+  /** Gli anni compiuti entro il 31 dicembre: decidono il gruppo. */
+  federal_age?: number;
   sex: "M" | "F" | string;
   photo_url: string | null;
   is_self: boolean;
@@ -185,6 +192,9 @@ export interface Proof {
   rejection_reason: string | null;
   reviewed_at: string | null;
   uploaded_by_user_id: string;
+  /** BANK_TRANSFER (con la ricevuta) o CASH (consegnati a qualcuno). */
+  method?: "BANK_TRANSFER" | "CASH";
+  cash_received_by_name?: string | null;
   fees: Fee[];
 }
 
@@ -202,6 +212,72 @@ export interface Family {
   paid_season_cents: number;
   recent_proofs: Proof[];
   open_competitions: number;
+  season_months?: AthleteSeasonMonths[];
+}
+
+/** Le mensilità della stagione di un atleta, in numeri (grafico famiglia). */
+export interface AthleteSeasonMonths {
+  athlete_id: string;
+  first_name: string;
+  paid_cents: number;
+  due_cents: number;
+  overdue_cents: number;
+  months_paid: number;
+  months_due: number;
+  months_overdue: number;
+}
+
+export type PaymentMethod = "BANK_TRANSFER" | "CASH" | "CARD" | "WALLET";
+
+export const PAYMENT_METHOD_ICONS: Record<string, string> = {
+  BANK_TRANSFER: "🏦", CASH: "💶", CARD: "💳", WALLET: "🎁",
+};
+
+/** Lo stato di una casella del calendario (club/months.py). */
+export type MonthState = "PAID" | "WAIVED" | "DUE" | "OVERDUE" | "UPCOMING" | "NOT_BILLED" | "NOT_ENROLLED" | "NONE";
+
+export interface SeasonMonth {
+  period: string;
+  year: number;
+  month: number;
+  state: MonthState;
+  current: boolean;
+  federal_age: number;
+  group_name: string | null;
+  /** Solo nei mesi futuri: la previsione con il gruppo di quell'anno. */
+  expected_cents: number | null;
+  fee: Fee | null;
+  proof: { id: string; method: string; has_file: boolean; status: string; created_at: string } | null;
+  attendances: number;
+}
+
+export interface SeasonMonths {
+  season: number;
+  season_label: string;
+  months: SeasonMonth[];
+  summary: {
+    paid_cents: number;
+    due_cents: number;
+    overdue_cents: number;
+    upcoming_cents: number;
+    months_paid: number;
+    months_due: number;
+    months_overdue: number;
+    months_upcoming: number;
+    attendances: number;
+  };
+}
+
+export interface CashReceiver {
+  user_id: string;
+  name: string;
+}
+
+export interface SchoolLetter {
+  entry_id: string;
+  athlete_name: string;
+  body_text: string;
+  generated_at: string | null;
 }
 
 export interface Competition {
@@ -271,6 +347,8 @@ export interface AthleteEligibility {
   entry_status: string | null;
   category: string | null;
   placement: number | null;
+  /** La segreteria ha generato la giustificazione per la scuola. */
+  school_letter_ready?: boolean;
 }
 
 export interface FamilyCompetition extends Competition {
@@ -289,6 +367,8 @@ export interface Entry {
   placement: number | null;
   points: number;
   fee_status: string | null;
+  /** Quando è stata generata la giustificazione per la scuola. */
+  school_letter_at?: string | null;
 }
 
 export interface RankingRow {

@@ -42,8 +42,10 @@ from app.domains.club import courses as courses_service
 from app.domains.club import family as family_service
 from app.domains.club import jav_courses as jav_courses_service
 from app.domains.club import lessons as lessons_service
+from app.domains.club import months as months_service
 from app.domains.club import people as people_service
 from app.domains.club import referrals as referrals_service
+from app.domains.club import school_letters as school_letters_service
 from app.domains.club import seasons
 from app.domains.club import service as club_service
 from app.domains.club import transport as transport_service
@@ -67,6 +69,7 @@ from app.domains.club.schemas import (
     BeltAward,
     BeltHistoryRead,
     BeltRead,
+    CashReceiverRead,
     CertificateRead,
     ClockRead,
     ClockWrite,
@@ -102,10 +105,10 @@ from app.domains.club.schemas import (
     InviteRead,
     JobResultRead,
     LessonRead,
+    MarkPaidWrite,
     MoveResultRead,
     MoveTargetRead,
     MoveToClubWrite,
-    NoteWrite,
     PersonCardRead,
     PersonRead,
     PlanRead,
@@ -119,6 +122,9 @@ from app.domains.club.schemas import (
     ReasonWrite,
     ResultsWrite,
     RosterRead,
+    SchoolLetterRead,
+    SchoolLetterWrite,
+    SeasonMonthsRead,
     SlotRead,
     SlotWrite,
     StaffHoursRead,
@@ -158,6 +164,13 @@ def _raise(exc: club_service.ClubError) -> None:
 
 def _today() -> date:
     return utcnow().date()
+
+
+#: Perché una prova non ha un file da aprire.
+_NO_RECEIPT = {
+    False: "Pagamento fatto con il credito del wallet: non c'è una ricevuta.",
+    True: "Pagamento in contanti: non c'è una ricevuta da aprire.",
+}
 
 
 # --- Configurazione (tutti) -----------------------------------------------------------------------
@@ -251,6 +264,30 @@ async def get_my_athlete(
     return AthleteDetailRead(**await family_service.athlete_detail(db, athlete=athlete))
 
 
+@router.get("/athletes/{athlete_id}/months", response_model=SeasonMonthsRead)
+async def get_my_athlete_months(
+    athlete_id: uuid.UUID,
+    season: int | None = Query(default=None, ge=2000, le=2100),
+    current_user: ClubUser = Depends(require_club_permission(FAMILY)),
+    db: AsyncSession = Depends(get_db),
+) -> SeasonMonthsRead:
+    """Le mensilità dell'atleta mese per mese (club/months.py)."""
+    athlete = await _my_athlete(db, current_user, athlete_id)
+    today = _today()
+    return SeasonMonthsRead(**await months_service.season_months(
+        db, athlete=athlete, season=season or seasons.season_of(today), today=today,
+    ))
+
+
+@router.get("/cash-receivers", response_model=list[CashReceiverRead])
+async def list_cash_receivers(
+    current_user: ClubUser = Depends(require_club_permission(FAMILY)), db: AsyncSession = Depends(get_db)
+) -> list[CashReceiverRead]:
+    """A chi del club si possono dare i contanti: lo sceglie il genitore
+    quando dice di aver pagato così."""
+    return [CashReceiverRead(**r) for r in await club_service.cash_receivers(db, scope=current_user.scope)]
+
+
 @router.patch("/athletes/{athlete_id}", response_model=AthleteDetailRead)
 async def update_my_athlete(
     athlete_id: uuid.UUID,
@@ -321,20 +358,25 @@ async def upload_my_payment_proof(
     note: str | None = Form(default=None, max_length=500),
     credit_cents: int = Form(default=0, ge=0),
     spend_code: str | None = Form(default=None, max_length=12),
+    method: str = Form(default="BANK_TRANSFER", pattern="^(BANK_TRANSFER|CASH)$"),
+    cash_received_by_user_id: uuid.UUID | None = Form(default=None),
+    cash_received_by_name: str | None = Form(default=None, max_length=120),
     current_user: ClubUser = Depends(require_club_permission(FAMILY)),
     db: AsyncSession = Depends(get_db),
 ) -> ProofRead:
     """La foto del pagamento: le quote indicate risultano pagate subito
     (docs/club-portal.md, regola di autogestione). `credit_cents` è la parte
     pagata con il credito del wallet, confermata con `spend_code`; se copre
-    tutto, la foto non serve."""
+    tutto, la foto non serve. Con `method=CASH` niente foto: si dice a chi
+    sono stati dati i contanti."""
     try:
         proof = await club_service.upload_payment_proof(
             db, scope=current_user.scope, guardian_user_id=current_user.user_id,
             fee_ids=fee_ids, file_bytes=await file.read() if file is not None else None,
             content_type=file.content_type if file is not None else None,
             original_filename=(file.filename or "pagamento") if file is not None else None, note=note,
-            credit_cents=credit_cents, spend_code=spend_code,
+            credit_cents=credit_cents, spend_code=spend_code, method=method,
+            cash_received_by_user_id=cash_received_by_user_id, cash_received_by_name=cash_received_by_name,
         )
     except club_service.ClubError as exc:
         _raise(exc)
@@ -415,7 +457,7 @@ async def get_my_payment_proof_url(
     if proof.uploaded_by_user_id != current_user.user_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Prova di pagamento non trovata.")
     if proof.storage_key is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Pagamento fatto con il credito del wallet: non c'è una ricevuta.")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _NO_RECEIPT[proof.method == "CASH"])
     return UrlRead(url=club_service.presigned_url(proof.storage_key))
 
 
@@ -504,6 +546,7 @@ async def list_family_competitions(
         db, competition_ids=[c.id for c in comps], athlete_ids=[a.id for a in athletes]
     ) if comps and athletes else []
     by_key = {(e.competition_id, e.athlete_id): e for e in entries}
+    letters = await school_letters_service.letters_by_entry(db, entry_ids=[e.id for e in entries])
     out = []
     for comp in comps:
         rows = []
@@ -516,6 +559,7 @@ async def list_family_competitions(
                 athlete_id=athlete.id, first_name=athlete.first_name, eligible=ok, reason=reason,
                 entry_status=entry.status if entry else None, category=entry.category if entry else None,
                 placement=entry.placement if entry else None,
+                school_letter_ready=entry is not None and entry.status == "REGISTERED" and entry.id in letters,
             ))
         out.append(FamilyCompetitionRead(
             **CompetitionRead.model_validate(comp).model_dump(),
@@ -525,7 +569,9 @@ async def list_family_competitions(
     return out
 
 
-async def _entry_read(db: AsyncSession, entry: ClubCompetitionEntry, athlete: ClubAthlete, comp) -> EntryRead:
+async def _entry_read(
+    db: AsyncSession, entry: ClubCompetitionEntry, athlete: ClubAthlete, comp, letters: dict | None = None,
+) -> EntryRead:
     fee = (
         await db.execute(
             select(ClubFee.status).where(
@@ -540,6 +586,7 @@ async def _entry_read(db: AsyncSession, entry: ClubCompetitionEntry, athlete: Cl
         points=competitions_service.points_for(placement=entry.placement, level=comp.level)
         if entry.status == "REGISTERED" else 0,
         fee_status=fee,
+        school_letter_at=letters[entry.id].generated_at if letters and entry.id in letters else None,
     )
 
 
@@ -582,6 +629,35 @@ async def withdraw_my_athlete(
     except club_service.ClubError as exc:
         _raise(exc)
     return await _entry_read(db, entry, athlete, comp)
+
+
+@router.get("/competitions/{competition_id}/entries/{athlete_id}/school-letter/url", response_model=UrlRead)
+async def my_school_letter_url(
+    competition_id: uuid.UUID,
+    athlete_id: uuid.UUID,
+    current_user: ClubUser = Depends(require_club_permission(FAMILY)),
+    db: AsyncSession = Depends(get_db),
+) -> UrlRead:
+    """La giustificazione per la scuola che la segreteria ha generato: il
+    titolare la scarica e la porta a scuola."""
+    athlete = await _my_athlete(db, current_user, athlete_id)
+    entry = (
+        await db.execute(
+            select(ClubCompetitionEntry).where(
+                ClubCompetitionEntry.competition_id == competition_id, ClubCompetitionEntry.athlete_id == athlete.id,
+                ClubCompetitionEntry.status == "REGISTERED",
+            )
+        )
+    ).scalar_one_or_none()
+    if entry is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Iscrizione non trovata.")
+    try:
+        letter = await school_letters_service.letter_for(
+            db, scope=current_user.scope, competition_id=competition_id, entry_id=entry.id
+        )
+    except club_service.ClubError as exc:
+        _raise(exc)
+    return UrlRead(url=club_service.presigned_url(letter.storage_key))
 
 
 @router.get("/ranking", response_model=RankingRead)
@@ -910,18 +986,43 @@ async def admin_waive_fee(
 @admin_router.post("/fees/{fee_id}/mark-paid", response_model=FeeRead)
 async def admin_mark_fee_paid(
     fee_id: uuid.UUID,
-    payload: NoteWrite,
+    payload: MarkPaidWrite,
     current_user: ClubUser = Depends(require_club_permission(MANAGE)),
     db: AsyncSession = Depends(get_db),
 ) -> FeeRead:
     try:
         fee = await club_service.mark_fee_paid(
             db, scope=current_user.scope, fee_id=fee_id, actor_user_id=current_user.user_id,
-            note=payload.note,
+            note=payload.note, method=payload.method, cash_received_by_user_id=payload.cash_received_by_user_id,
+            cash_received_by_name=payload.cash_received_by_name,
         )
     except club_service.ClubError as exc:
         _raise(exc)
     return FeeRead(**family_service.fee_dict(fee, today=_today()))
+
+
+@admin_router.get("/cash-receivers", response_model=list[CashReceiverRead])
+async def admin_list_cash_receivers(
+    current_user: ClubUser = Depends(require_club_permission(MANAGE)), db: AsyncSession = Depends(get_db)
+) -> list[CashReceiverRead]:
+    return [CashReceiverRead(**r) for r in await club_service.cash_receivers(db, scope=current_user.scope)]
+
+
+@admin_router.get("/athletes/{athlete_id}/months", response_model=SeasonMonthsRead)
+async def admin_athlete_months(
+    athlete_id: uuid.UUID,
+    season: int | None = Query(default=None, ge=2000, le=2100),
+    current_user: ClubUser = Depends(require_club_permission(MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> SeasonMonthsRead:
+    try:
+        athlete = await club_service.get_athlete(db, scope=current_user.scope, athlete_id=athlete_id)
+    except club_service.ClubError as exc:
+        _raise(exc)
+    today = _today()
+    return SeasonMonthsRead(**await months_service.season_months(
+        db, athlete=athlete, season=season or seasons.season_of(today), today=today,
+    ))
 
 
 @admin_router.post("/fees/{fee_id}/reopen", response_model=FeeRead)
@@ -948,7 +1049,7 @@ async def admin_generate_monthly_fees(
     """La stessa funzione del job del 1° del mese. Rilanciarla è innocuo."""
     try:
         created = await club_service.generate_monthly_fees(
-            db, scope=current_user.scope, period=period or seasons.period_of(_today())
+            db, scope=current_user.scope, period=period or seasons.period_of(_today()), today=_today(),
         )
     except club_service.ClubError as exc:
         _raise(exc)
@@ -1008,7 +1109,7 @@ async def admin_get_proof_url(
     except club_service.ClubError as exc:
         _raise(exc)
     if proof.storage_key is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Pagamento fatto con il credito del wallet: non c'è una ricevuta.")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _NO_RECEIPT[proof.method == "CASH"])
     return UrlRead(url=club_service.presigned_url(proof.storage_key))
 
 
@@ -1124,7 +1225,68 @@ async def admin_list_entries(
         a.id: a
         for a in (await db.execute(select(ClubAthlete).where(ClubAthlete.id.in_({e.athlete_id for e in entries})))).scalars()
     } if entries else {}
-    return [await _entry_read(db, e, athletes[e.athlete_id], comp) for e in entries]
+    letters = await school_letters_service.letters_by_entry(db, entry_ids=[e.id for e in entries])
+    return [await _entry_read(db, e, athletes[e.athlete_id], comp, letters) for e in entries]
+
+
+# --- Giustificazione per la scuola (club/school_letters.py) ----------------------------------------
+
+
+@admin_router.get("/competitions/{competition_id}/entries/{entry_id}/school-letter", response_model=SchoolLetterRead)
+async def admin_school_letter_draft(
+    competition_id: uuid.UUID,
+    entry_id: uuid.UUID,
+    fresh: bool = False,
+    current_user: ClubUser = Depends(require_club_permission(MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> SchoolLetterRead:
+    """Il testo da correggere prima di generare il PDF: quello già stampato,
+    o la proposta (`fresh=true`: la proposta in ogni caso)."""
+    fn = school_letters_service.proposal if fresh else school_letters_service.draft
+    try:
+        data = await fn(db, scope=current_user.scope, competition_id=competition_id, entry_id=entry_id, today=_today())
+    except club_service.ClubError as exc:
+        _raise(exc)
+    return SchoolLetterRead(**data)
+
+
+@admin_router.post(
+    "/competitions/{competition_id}/entries/{entry_id}/school-letter", response_model=UrlRead,
+    dependencies=[Depends(rate_limit("club-school-letter", max_requests=30, window_seconds=300))],
+)
+async def admin_generate_school_letter(
+    competition_id: uuid.UUID,
+    entry_id: uuid.UUID,
+    payload: SchoolLetterWrite,
+    current_user: ClubUser = Depends(require_club_permission(MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> UrlRead:
+    """Genera (o rigenera) il PDF con il testo corretto e restituisce il
+    link per scaricarlo, valido pochi minuti."""
+    try:
+        letter = await school_letters_service.generate(
+            db, scope=current_user.scope, competition_id=competition_id, entry_id=entry_id,
+            body_text=payload.body_text, actor_user_id=current_user.user_id,
+        )
+    except club_service.ClubError as exc:
+        _raise(exc)
+    return UrlRead(url=club_service.presigned_url(letter.storage_key))
+
+
+@admin_router.get("/competitions/{competition_id}/entries/{entry_id}/school-letter/url", response_model=UrlRead)
+async def admin_school_letter_url(
+    competition_id: uuid.UUID,
+    entry_id: uuid.UUID,
+    current_user: ClubUser = Depends(require_club_permission(MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> UrlRead:
+    try:
+        letter = await school_letters_service.letter_for(
+            db, scope=current_user.scope, competition_id=competition_id, entry_id=entry_id
+        )
+    except club_service.ClubError as exc:
+        _raise(exc)
+    return UrlRead(url=club_service.presigned_url(letter.storage_key))
 
 
 @admin_router.put("/competitions/{competition_id}/results", response_model=CompetitionRead)

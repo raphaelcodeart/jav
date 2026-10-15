@@ -14,5 +14,6 @@ export default async function MyArea() {
   if (roles.includes("SECRETARY")) redirect("/club");
   if (roles.includes("CUSTOMER")) redirect("/customer");
   if (roles.includes("INSTRUCTOR")) redirect("/staff");
+  if (roles.includes("ATHLETE")) redirect("/atleta");
   redirect("/promoter");
 }

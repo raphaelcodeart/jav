@@ -56,6 +56,17 @@ async def public_videos(db: AsyncSession = Depends(get_db)) -> list[dict]:
     """Gli ultimi video del canale YouTube di JudoArteVida (club/videos.py)."""
     return await videos_service.latest_videos(db)
 
+@public_site_router.get("/clubs/{slug}/videos")
+async def public_club_videos(slug: str, db: AsyncSession = Depends(get_db)) -> list[dict]:
+    """Gli ultimi video del canale YouTube di un club pubblico, se il suo link
+    YouTube è quello di un canale (/channel/UC...); altrimenti nessuno."""
+    try:
+        _, site = await site_service.public_club_by_slug(db, slug)
+    except club_service.ClubError as exc:
+        _raise(exc)
+    channel_id = videos_service.channel_id_from_url(site.youtube_url)
+    return await videos_service.channel_videos(channel_id) if channel_id else []
+
 FAMILY = "club.family"
 MANAGE = "club.manage"
 

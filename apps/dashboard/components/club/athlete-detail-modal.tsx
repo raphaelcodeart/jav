@@ -1,5 +1,6 @@
 "use client";
 
+import { AthleteAccess } from "@/components/club/athlete-access";
 import { PublicProfileConsent } from "@/components/club/public-profile-consent";
 import { motion } from "motion/react";
 import { useState } from "react";
@@ -16,6 +17,8 @@ import { Tabs } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toast";
 import { AthleteFormModal } from "@/components/club/athlete-form-modal";
 import { useClubFeatures } from "@/components/club/jav-courses";
+import { PayModal } from "@/components/club/pay-modal";
+import { SeasonMonthsPanel } from "@/components/club/season-months";
 import {
   ACHIEVEMENT_ICONS,
   CERTIFICATE_LABELS,
@@ -25,18 +28,20 @@ import {
   clubGet,
   clubSend,
   type AthleteDetail,
+  type Fee,
 } from "@/lib/club";
 import { useI18n } from "@/lib/i18n/provider";
 
-type Tab = "path" | "certificates" | "fees" | "competitions";
+type Tab = "path" | "certificates" | "fees" | "competitions" | "access";
 
 /** Everything about one athlete: the judo path (belts, medals, traguardi),
  *  the medical certificate, the fees, the competitions. */
-export function AthleteDetailModal({ athleteId, onClose }: { athleteId: string | null; onClose: () => void }) {
-  const [tab, setTab] = useState<Tab>("path");
+export function AthleteDetailModal({ athleteId, onClose, initialTab = "path" }: { athleteId: string | null; onClose: () => void; initialTab?: Tab }) {
+  const [tab, setTab] = useState<Tab>(initialTab);
   // Nei corsi JAV niente cinture, punti, gare né sito: si mostra il resto.
   const features = useClubFeatures();
   const [editing, setEditing] = useState(false);
+  const [payFee, setPayFee] = useState<Fee | null>(null);
   const queryClient = useQueryClient();
   const toast = useToast();
   const { t, fmt } = useI18n();
@@ -85,7 +90,7 @@ export function AthleteDetailModal({ athleteId, onClose }: { athleteId: string |
               <div className="min-w-0 flex-1">
                 <h2 className="text-2xl">{a.first_name} {a.last_name}</h2>
                 <p className="text-sm text-white/80 mt-0.5">
-                  {t("club.yearsOld", { n: a.season_age })} · {a.plan?.name ?? t("club.noPlan")}
+                  {t("club.yearsOld", { n: a.age })} · {a.plan?.name ?? t("club.noPlan")}
                   {a.plan ? ` · ${t("athlete.perMonth", { amount: euro(a.plan.monthly_fee_cents) })}` : ""}
                 </p>
                 {features.belts && (
@@ -125,6 +130,7 @@ export function AthleteDetailModal({ athleteId, onClose }: { athleteId: string |
                 { key: "certificates", label: t("athlete.tabCertificate") },
                 { key: "fees", label: t("athlete.tabFees"), count: a.fees.filter((f) => f.status === "DUE").length },
                 ...(features.competitions ? [{ key: "competitions", label: t("athlete.tabCompetitions") }] : []),
+                { key: "access", label: t("athleteAccess.tab") },
               ]}
             />
             <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>✏️ {t("athlete.editData")}</Button>
@@ -168,23 +174,33 @@ export function AthleteDetailModal({ athleteId, onClose }: { athleteId: string |
 
           {tab === "certificates" && <CertificatesTab athlete={a} />}
 
+          {tab === "access" && <AthleteAccess athleteId={a.id} firstName={a.first_name} />}
+
           {tab === "fees" && (
-            <div className="space-y-2">
-              {a.fees.length === 0 && <p className="text-sm text-ink-500">{t("athlete.noFees")}</p>}
-              {a.fees.map((f) => (
-                <div key={f.id} className="flex items-center justify-between gap-3 rounded-2xl bg-white ring-1 ring-ink-100 px-4 py-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-ink-900">{f.description}</p>
-                    <p className="text-xs text-ink-500">
-                      {f.status === "PAID" && f.paid_at ? t("club.paidOn", { date: shortDate(f.paid_at) }) : t("club.dueOnCap", { date: shortDate(f.due_date) })}
-                    </p>
+            <div className="space-y-6">
+              <SeasonMonthsPanel athleteId={a.id} mode="family" onPay={setPayFee} />
+              {/* Iscrizione, gare, quota socio: non sono mesi, restano in lista. */}
+              {a.fees.some((f) => f.kind !== "MONTHLY") && (
+                <section>
+                  <h3 className="text-sm text-ink-900 mb-2">{t("months.otherFees")}</h3>
+                  <div className="space-y-2">
+                    {a.fees.filter((f) => f.kind !== "MONTHLY").map((f) => (
+                      <div key={f.id} className="flex items-center justify-between gap-3 rounded-2xl bg-white ring-1 ring-ink-100 px-4 py-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-ink-900">{f.description}</p>
+                          <p className="text-xs text-ink-500">
+                            {f.status === "PAID" && f.paid_at ? t("club.paidOn", { date: shortDate(f.paid_at) }) : t("club.dueOnCap", { date: shortDate(f.due_date) })}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-display text-ink-900">{euro(f.amount_cents)}</p>
+                          <FeeStatusPill status={f.status} overdue={f.overdue} />
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <div className="text-right">
-                    <p className="font-display text-ink-900">{euro(f.amount_cents)}</p>
-                    <FeeStatusPill status={f.status} overdue={f.overdue} />
-                  </div>
-                </div>
-              ))}
+                </section>
+              )}
             </div>
           )}
 
@@ -218,6 +234,7 @@ export function AthleteDetailModal({ athleteId, onClose }: { athleteId: string |
         </div>
       )}
       {a && editing && <AthleteFormModal open={editing} onClose={() => setEditing(false)} athlete={a} />}
+      {payFee && <PayModal open onClose={() => setPayFee(null)} fees={[payFee]} preselect={[payFee.id]} />}
     </Modal>
   );
 }

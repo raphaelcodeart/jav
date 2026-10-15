@@ -144,6 +144,21 @@ def upload_media(*, file_bytes: bytes, content_type: str, key_prefix: str) -> st
     return f"{settings.public_app_base_url}/media/{key}"
 
 
+def read_media_url(url: str) -> bytes | None:
+    """I byte di un'immagine del bucket pubblico a partire dal suo URL
+    (quello che upload_media() ha restituito), letti lato server: il logo
+    del club da stampare in un PDF. None se l'URL non è dei nostri media o
+    l'oggetto non c'è più."""
+    marker = "/media/"
+    if not url or marker not in url:
+        return None
+    key = url.split(marker, 1)[1]
+    try:
+        return _get_client().get_object(Bucket=settings.s3_bucket_media, Key=key)["Body"].read()
+    except ClientError:
+        return None
+
+
 def upload_documentation_attachment(
     *, file_bytes: bytes, content_type: str, key_prefix: str, allowed_content_types: set[str] | None = None
 ) -> str:

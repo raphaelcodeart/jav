@@ -15,7 +15,9 @@ def _strip(v: object) -> object:
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    #: L'email **o** il nome utente di un atleta (club/athlete_access.py):
+    #: il campo si chiama ancora "email" perché lo mandano tutti i client.
+    email: str = Field(min_length=1, max_length=255)
     password: str
     organization_id: str | None = None
 
@@ -28,6 +30,13 @@ class LoginRequest(BaseModel):
     @classmethod
     def strip_whitespace(cls, v: object) -> object:
         return _strip(v)
+
+
+class LoginCodeRequest(BaseModel):
+    """Il QR dell'atleta: il codice che c'è nel link."""
+
+    code: str = Field(min_length=20, max_length=100)
+    organization_id: str | None = None
 
 
 class TokenResponse(BaseModel):

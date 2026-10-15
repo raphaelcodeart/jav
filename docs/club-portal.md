@@ -19,14 +19,50 @@ sbagliata.
 
 | Chi | Ruolo | Cosa fa |
 |---|---|---|
-| Genitore (o atleta adulto) | `CUSTOMER` | Gestisce la famiglia: figli, quote, prove di pagamento, certificati, gare, ordini di materiale |
+| Genitore (o atleta adulto) | `CUSTOMER` | Il **titolare** del conto: figli, quote, prove di pagamento, certificati, gare, ordini di materiale |
+| Atleta con il suo accesso | `ATHLETE` | La sua area (`/atleta`): lezioni del mese, "Estou cá", cintura e traguardi, quote in lettura, formazione |
 | Segreteria del club | `SECRETARY` | Piani, gare, risultati, eccezioni sui pagamenti, staff e IBAN del club — solo del suo club |
 | Istruttore | `INSTRUCTOR` | Corsi, presenze, passaggi di cintura — solo del suo club |
 | Superadmin della piattaforma | `SUPER_ADMIN` | Crea i club, ci entra per sistemarli, gestisce lo Shop |
 
-**Solo il genitore accede.** I figli sono *atleti* senza account: non hanno
-email né password. Un adulto che si allena è un genitore con un atleta
-"me stesso" (`Athlete.is_self`).
+**Il titolare gestisce, l'atleta vede.** Ogni atleta ha un titolare
+(`guardian_user_id`): il genitore di un minore, o l'adulto stesso con
+l'atleta "me stesso" (`Athlete.is_self`). Un genitore che si allena è
+titolare di sé e dei figli, e passa dall'una all'altra area in `/atleta`.
+
+### Il conto dell'atleta
+
+(`club/athlete_access.py`, `club/athlete_router.py`, migrazione 0013)
+
+- **L'accesso lo crea il titolare**, dalla scheda dell'atleta → *Acesso*:
+  **nome utente** (minuscolo, unico nell'organizzazione, `users.username`)
+  e password di almeno 6 caratteri, e l'email del ragazzo se ce l'ha. Al
+  login si scrive "email ou nome de utilizador" (`LoginRequest.email`
+  accetta anche un nome utente: senza "@" si cerca per `username`).
+  L'account ha il ruolo `ATHLETE` (permesso `club.athlete`) e niente
+  cancelli dell'adulto (email verificata, privacy e profilo li ha già il
+  titolare). Un atleta senza email ha `<username>@atleta.invalid`: la posta
+  non parte (`core/email.py::is_placeholder_address`), la password nuova
+  gliela scrive il titolare. *Desligar o acesso* lo congela, chiude le
+  sessioni e revoca il QR.
+- **Il QR** (`club_athlete_login_codes`): un link `/entrar/<codice>` che
+  vale come nome utente e password, 90 giorni, uno solo alla volta,
+  revocabile; del codice si salva solo lo sha256 e il QR (SVG disegnato
+  dall'API con reportlab) si vede una volta, appena creato.
+- **L'area** (`GET /club/athlete-area/{id}`, `club.athlete`, che ha anche
+  `CUSTOMER`): la vedono l'atleta e il suo titolare, nessun altro. Le
+  lezioni del mese dei corsi a cui è iscritto con lo stato (presente,
+  assente, oggi, da fare), **"Estou cá!"** per le lezioni di oggi (le stesse
+  regole del genitore: solo oggi, una presenza dello staff non si toglie),
+  cintura, livello e traguardi, **le quote in lettura** (paga il titolare),
+  e il posto per la formazione (tecniche, regole, giochi: in arrivo).
+- **A 18 anni**: l'atleta con il suo accesso vede "torna-te titular da tua
+  conta" (mai automatico, solo lui può farlo, serve un'email vera): diventa
+  `is_self` e titolare di sé, riceve `CUSTOMER`, e da lì paga da solo. Le
+  quote già emesse restano al titolare di prima; il genitore non lo vede
+  più tra i suoi.
+- Gli atleti "me stesso" che esistevano prima hanno `user_id` = il
+  titolare (migrazione): la loro area è già la loro.
 
 ## Più club
 
@@ -70,8 +106,9 @@ Tutte le tabelle hanno `organization_id` e `club_id` (vedi "Più club").
 - `first_name`, `last_name`, `birth_date`, `sex` (`M`/`F`), `fiscal_code` (facoltativo),
   `photo_url` (bucket pubblico media, come le foto profilo).
 - `is_self`: l'atleta è il titolare stesso dell'account.
-- `plan_id` → piano assegnato. **Calcolato dall'età** alla creazione e a ogni
-  inizio stagione; la segreteria può forzarlo (`plan_locked = true`).
+- `plan_id` → piano assegnato. **Calcolato dall'età federale** alla
+  creazione, a ogni inizio stagione e a ogni mensilità emessa (vedi sotto);
+  la segreteria può forzarlo (`plan_locked = true`).
 - `status`: `ACTIVE` / `SUSPENDED` / `LEFT`.
 - `weight_kg` (facoltativo, per le categorie di gara).
 - `federation_number`, `federation_expires_on`: tesseramento federale.
@@ -87,9 +124,20 @@ Tutte le tabelle hanno `organization_id` e `club_id` (vedi "Più club").
   ogni anno.
 - Se più piani coprono un'età vince **il più stretto** ("Agonisti 14–17"
   batte "Tutti 4+").
-- **L'età si calcola al 1° settembre** della stagione in corso, come nelle
-  categorie federali: un bambino non cambia piano a metà anno perché compie
-  gli anni a febbraio.
+- **L'età è quella federale** (`seasons.federal_age`): gli anni che l'atleta
+  compie entro il 31 dicembre dell'anno solare, cioè anno meno anno di
+  nascita. Chi è nato a novembre 2016 ha 10 anni federali per tutto il 2026,
+  anche se a settembre ne ha ancora 9.
+- **Il gruppo cambia a gennaio**, non a settembre: il 1° gennaio l'età
+  federale sale di uno. Il job delle mensilità (`generate_monthly_fees`)
+  sceglie il piano di ogni mese con l'età federale di quell'anno; se l'atleta
+  entra nella fascia del gruppo dopo, la mensilità di gennaio è già quella
+  del gruppo nuovo, il suo `plan_id` passa al gruppo nuovo e il titolare
+  riceve una notifica (`CLUB_PLAN_CHANGED`). Le mensilità già emesse non
+  cambiano (prezzo congelato); rigenerare un mese passato usa il gruppo di
+  quell'anno ma non riporta indietro `plan_id`. Se nessun piano copre la
+  nuova età si resta nel piano di prima. Un piano scelto a mano
+  (`plan_locked`) non si muove mai.
 
 ### Quota — `club_fees`
 - `athlete_id`, `kind`: `MONTHLY` / `ENROLLMENT` / `COMPETITION` / `MEMBERSHIP`.
@@ -99,9 +147,15 @@ Tutte le tabelle hanno `organization_id` e `club_id` (vedi "Più club").
 - `gross_amount_cents` (listino), `discount_cents`, `discount_note` (gli
   sconti in parole): congelati con il prezzo.
 - `status`: `DUE` → `PAID` (oppure `WAIVED`, condonata dalla segreteria).
-  La segreteria può anche segnarla pagata a mano (contanti in palestra) e
-  riaprire un condono o un "pagata a mano" sbagliato; una quota pagata con
-  una prova si riapre solo rifiutando la prova.
+  La segreteria può anche segnarla pagata a mano e riaprire un condono o un
+  "pagata a mano" sbagliato; una quota pagata con una prova si riapre solo
+  rifiutando la prova.
+- `payment_method` (migrazione 0014): come è stata pagata — `BANK_TRANSFER`,
+  `CASH`, `CARD` (POS in palestra, solo la segreteria), `WALLET` (il credito
+  ha coperto tutto) — e per i contanti a chi sono stati dati
+  (`cash_received_by_user_id`, e il nome congelato `cash_received_by_name`).
+  NULL finché è da pagare; riaprire o rifiutare la prova lo cancella. Le
+  quote segnate pagate a mano prima della 0014 non hanno il metodo.
 - Una quota mensile si emette solo per i mesi in cui l'atleta era iscritto
   (non prima di `joined_on`, non dopo `left_on`). Alla creazione di un atleta
   si emettono subito l'iscrizione dell'anno (a pro rata), la quota del mese in
@@ -149,12 +203,51 @@ I parametri stanno in `clubs.settings["pricing"]` e li imposta la segreteria
   spesa di JavCash. Se copre tutto, la ricevuta non serve. Se la prova viene
   rifiutata, il credito torna nel wallet.
 
+### Come si paga una mensilità
+
+Ogni mensilità è dell'atleta (`club_fees.athlete_id`): ognuno ha le sue,
+pagate e da pagare. Il titolare la paga in tre modi, dalla stessa finestra:
+
+- **Bonifico**: la foto della ricevuta (sotto, "Prova di pagamento").
+- **Contanti**: niente foto; si dice **a chi** sono stati dati — una persona
+  dello staff del club (`GET /club/cash-receivers`: segreteria e istruttori
+  attivi) o un nome scritto a mano. È una prova con `method = CASH`: segna
+  subito pagato (regola di autogestione), e la persona indicata riceve una
+  notifica (`CLUB_CASH_DECLARED`). Se i soldi non sono arrivati, la
+  segreteria rifiuta la prova come ogni altra.
+- **Carta online**: il bottone c'è ed è **spento** finché il club non ha un
+  pagamento online (Stripe). La carta al POS del club la segna la
+  segreteria.
+
+La segreteria segna pagata una quota a mano (`POST /club/admin/fees/{id}/
+mark-paid`) dicendo sempre il metodo (`CASH`, `CARD`, `BANK_TRANSFER`) e,
+per i contanti, a chi.
+
+### Il calendario delle mensilità (`club/months.py`)
+
+Le dodici mensilità della stagione di un atleta, da settembre ad agosto
+(`GET /club/athletes/{id}/months` il titolare, `/club/athlete-area/{id}/
+months` l'atleta, `/club/admin/athletes/{id}/months` la segreteria). Ogni
+mese ha uno stato: `PAID`, `WAIVED`, `DUE`, `OVERDUE` (scaduta: in rosso),
+`UPCOMING` (futuro), `NOT_BILLED` (il gruppo non lo fattura), `NOT_ENROLLED`,
+`NONE` (passato, senza quota). Per ogni mese: gruppo ed età federale di
+quell'anno, la quota con il metodo di pagamento e la prova, le presenze. Per
+i mesi futuri un importo **previsto** calcolato dal server con il gruppo di
+quell'anno e gli sconti di oggi: il genitore vede in anticipo che a gennaio
+la mensilità sale. La quota vera la congela il job del 1° del mese.
+
+Nella pagina della famiglia (`FamilyRead.season_months`) i totali della
+stagione per atleta: pagato, da pagare, scaduto.
+
 ### Prova di pagamento — `club_payment_proofs`
 - Il file (foto o PDF) nel bucket privato documenti, come le prove dei bonifici
   degli ordini. Si scatta dal telefono (`<input capture="environment">`).
 - Una prova copre **una o più quote** (`club_payment_proof_fees`): un genitore
   con due figli fa un bonifico solo.
 - `status`: `ACCEPTED` / `REJECTED`, `reviewed_by_user_id`, `rejection_reason`.
+- `method`: `BANK_TRANSFER` (con il file, o senza se il credito copre tutto)
+  o `CASH` (senza file, con `cash_received_by_user_id` o
+  `cash_received_by_name`: un CHECK lo impone).
 
 **Regola di autogestione**: caricare la prova **segna subito le quote come
 pagate**. La segreteria ha una lista "Prove caricate" che *può* controllare;
@@ -202,12 +295,33 @@ cosa* si è pagato, perché le due cose vanno in posti diversi:
 - Iscrizione: atleta, categoria (età/peso, testo), stato `REGISTERED` /
   `WITHDRAWN`, e il risultato: `placement` (1, 2, 3, 5, 7, oppure
   partecipazione), inserito dalla segreteria a gara finita.
+- **Dopo la scadenza nessuno si iscrive più** (`eligibility`: né la
+  famiglia né la segreteria), anche se la gara è ancora `OPEN`.
 - Iscriversi crea la quota `COMPETITION` (se la gara ha una quota), che si
   paga con la stessa prova di pagamento di tutto il resto. Ritirarsi entro la
   scadenza condona la quota non pagata; reiscriversi la riapre.
 - **Gara o stage** (`kind`): lo stage (allenamento collegiale) si gestisce
   come una gara (iscrizioni, quota, certificato) ma non ha piazzamenti e non
   dà punti né medaglie.
+
+### La giustificazione per la scuola — `club_school_letters` (`club/school_letters.py`)
+- Per ogni iscritto (`REGISTERED`) la segreteria apre "Giustificazione":
+  il sistema propone il testo nella lingua delle lettere del club
+  (`letters_language`): il club dichiara che l'atleta (nome, data di
+  nascita, numero di tesseramento se c'è; al maschile o al femminile) è
+  stato selezionato per le sue capacità per rappresentare il club alla gara
+  (nome, luogo, date), e chiede alla scuola di giustificare le assenze. La
+  segreteria lo corregge e genera il PDF: carta intestata del club (logo,
+  nome, recapiti della pagina del club, colore del club).
+- Il PDF ha i dati di un minore: sta nel **bucket privato** dei documenti
+  (`club-school-letters/<club>/<gara>/…`) e si apre solo con un URL
+  presigned di 5 minuti. Lo scaricano la segreteria e il titolare
+  dell'atleta (`GET /club/competitions/{id}/entries/{athlete}/school-letter/
+  url`, quando `school_letter_ready`).
+- Una lettera per iscrizione (UNIQUE `entry_id`): rigenerarla sostituisce
+  testo e file, e il file vecchio si cancella. Il testo salvato è quello
+  stampato, e riaprendo la lettera si riparte da lì. Un atleta ritirato non
+  ha giustificazione.
 
 ### Trasporto — `club_transport_requests` (`club/transport.py`)
 - Su un evento la segreteria può chiedere il trasporto: ente (di solito il
@@ -280,9 +394,9 @@ Nessun termine tecnico, nessun passaggio che si possa evitare.
 
 | Quando | Cosa |
 |---|---|
-| 1° del mese, 03:00 | Genera le quote mensili di ogni atleta `ACTIVE` dal suo piano |
+| 1° del mese, 03:00 | Genera le quote mensili di ogni atleta `ACTIVE` con il piano dell'età federale di quell'anno (a gennaio il cambio di gruppo, con l'avviso al titolare) |
 | 1° gennaio, 03:30 | Anno nuovo: iscrizioni dell'anno e quote socio dei genitori |
-| 1° settembre, 03:30 | Nuova stagione: ricalcola i piani per età (salvo `plan_locked`) |
+| 1° settembre, 03:30 | Nuova stagione: ricalcola i piani per età federale (salvo `plan_locked`) |
 | Ogni giorno, 08:00 | Avvisi: quote scadute, certificati in scadenza/scaduti, tesseramenti in scadenza, scadenze iscrizioni gare |
 | Ogni giorno, 01:00 | Chiude le iscrizioni alle gare con scadenza passata e prepara (o manda) la richiesta di trasporto |
 | Ogni giorno, 03:10 | I costi fissi del club diventano le spese del mese in corso (vedi "Contabilità") |
@@ -388,10 +502,17 @@ altrove sarebbe un inganno.
   allenatori, medaglie: contati, mai scritti; quelli a zero non si dicono),
   i bottoni **Inscrever** (`/c/<slug>`) e **Enviar mensagem** (scende al
   modulo), le icone dei social;
-- **le schede** che restano in alto mentre si scorre: Sobre, Grupos e
-  preços, Horário, Treinadores, Fotos e vídeos, Provas, Ranking, Contactos;
-  accanto, il riquadro "Informações" (città, indirizzo, telefono, email,
-  mappa, social);
+- **le schede** (`components/site/club-tabs.tsx`): una barra di bottoni
+  grandi con icona che resta in alto, e sotto **una scheda alla volta**:
+  Início (presentazione, "desde 35 €/mês", Informações, numeri, pilastri,
+  l'ultima novità), **Horários e preços** (una card per gruppo: numero,
+  età, mensilità in grande, allenamenti, "Inscrever neste grupo"; poi la
+  settimana come calendario, colorata per gruppo), Treinadores, Fotos e
+  vídeos, Novidades (post e storia), Competição (provas, ranking,
+  medaglie), Contactos (informazioni, mappa, modulo). Una scheda vuota non
+  c'è. La scheda sta nell'indirizzo (`#horarios`; i vecchi `#mensagem`,
+  `#grupos`, `#fotos`... aprono la scheda giusta) e "indietro" torna alla
+  precedente; tutte le schede sono nell'HTML, nascoste, non caricate dopo;
 - **Grupos e preços** sono i gruppi di JAVBOT: ogni piano attivo con la sua
   fascia d'età e gli allenamenti dei corsi la cui età lo tocca
   (`site.plan_slots`, la stessa funzione del bot); mensilità, iscrizione,
@@ -403,6 +524,32 @@ altrove sarebbe un inganno.
   lo stesso calcolo di `/ranking` (stesse regole: solo judoca con consenso
   e pubblicati, mai gli atleti dei corsi JAV), ognuno con il link alla sua
   scheda; poi le ultime medaglie;
+- **il mini-sito** (migrazione 0012, tutto scritto dalla segreteria
+  nell'editor; una parte vuota non compare, e nemmeno la sua scheda):
+  anno di fondazione (`founded_year`, dal 1882: diventa "desde 2004" e il
+  riquadro "anos de judo") e sede (`venue`); **i numeri del club**
+  (`highlights`, al massimo 6, "40+ · anos de judo": quelli che il club dice
+  di sé, accanto a quelli che il portale conta); **Porquê treinar connosco**
+  (`pillars`, 6); **la storia** (`history`, 20 tappe, sempre in ordine di
+  anno); **le novità** (`news`, 30, come i post di Facebook: data, titolo,
+  testo, foto caricata con lo slot `news`, link http(s); dalla più
+  recente); **i video** (`videos`, 12: si incolla il link di YouTube, si
+  salva solo l'id, come nella scheda del judoca). Gli allenatori hanno anche
+  **grado** e **due righe**. `site._clean_*` ripulisce tutto (righe vuote
+  tolte, limiti, indirizzi);
+- **i video del canale**: se il link YouTube del club è un canale
+  (`/channel/UC...`), gli ultimi video compaiono da soli dopo quelli scelti
+  (`GET /public-site/clubs/{slug}/videos`, lo stesso feed con cache di
+  mezz'ora del portale, `club/videos.py`); un `@nome` non si risolve senza
+  le API di Google e resta solo il bottone verso il canale;
+- **"Próximo treino"**: sotto la frase, il prossimo allenamento (o "a
+  decorrer agora") calcolato nel browser dall'orario del club, all'ora di
+  Lisbona; sul server non si disegna, così non c'è un'ora sbagliata;
+- **la mappa si carica solo se la si chiede** ("Mostrar o mapa"): un iframe
+  di Google all'apertura manderebbe a Google ogni visitatore senza
+  consenso. Prima c'è l'indirizzo con "Como chegar";
+- **sul telefono**, dopo la copertina, una barra in basso con "Inscrever" e
+  "Mensagem", che sparisce quando si arriva al modulo;
 - **in fondo, "Envie uma mensagem ao clube"**: il modulo che scrive al club
   (vedi "Messaggi dal sito");
 - SEO: titolo, descrizione (la frase del club), indirizzo canonico,
@@ -518,6 +665,11 @@ Nell'area privata (`/api/javbot/...`, qualsiasi utente con una sessione):
 | Chiede | Risponde / fa |
 |---|---|
 | "Quanto devo pagare?" | Le quote da pagare per figlio (più la quota socio), quelle scadute, la prossima scadenza, IBAN e intestatario del club, il bottone "Carica un pagamento" |
+| "Quanto ho pagato?" | Pagato nell'anno e da sempre, per persona, gli ultimi 6 pagamenti con data, lo Shop dell'anno, i risparmi, quanto resta da pagare (scaduto compreso) e il credito — gli stessi numeri di "I miei conti" (`accounting.personal_account`), con il bottone per aprirli |
+| "Ho debiti?" / "Estou em dívida?" | Come "Quanto devo pagare?": un genitore senza `club.manage` che usa parole della segreteria ("em dívida") riceve le sue quote, non l'elenco dei morosi |
+| "Cosa sai di me?" | Il riepilogo: ogni atleta in una riga (età, piano, cintura, certificato, allenamenti del mese), pagato nell'anno, da pagare, credito |
+| "I miei dati" | Nome, email, telefono, codice fiscale e residenza dell'utente; per ogni atleta nascita ed età, piano e mensilità, tessera federale, peso, iscritto dal, certificato. Chi non ha `club.family` vede solo i suoi dati |
+| Cinture, presenze, ranking | Cintura attuale e da quando; allenamenti del mese, della stagione e da sempre; punti della stagione, medaglie, livello, traguardi, prossima gara. Un nome nella domanda ("che cintura ha Luca?") restringe a quell'atleta. Nei corsi JAV niente cinture né gare |
 | "Come carico la ricevuta?" / "non funziona" | Prima chiede *che cosa* si è pagato (quote del club o ordine dello Shop), poi i passi; controlla i casi tipici: niente da pagare, nessun ordine in attesa di bonifico, file non JPG/PNG/PDF o oltre 15 MB, foto HEIC dell'iPhone, bottone grigio |
 | "Voglio un judogi" | Per quale figlio (se più d'uno) → altezza → taglia (tabella in `javbot/sizes.py`: la decina di cm sopra, tra 100 e 200) → il judogi del catalogo in quella taglia (o una sopra) con il **prezzo calcolato da `jav_market.get_quote`** → indirizzo dal profilo → **"Confermi?"** → l'ordine (`jav_market.create_order`, bonifico, per quell'atleta). Senza judogi nel catalogo propone di avvisare la segreteria |
 | Certificati, gare aperte, lezioni di oggi | Stato del certificato per figlio; gare con iscrizioni aperte e chi può iscriversi; lezioni di oggi con il bottone "Segna presente" (`lessons.family_mark`, solo oggi) |

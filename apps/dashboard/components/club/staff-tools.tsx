@@ -112,7 +112,7 @@ export function BeltAwardPanel() {
               <button key={a.id} onClick={() => setSelected(a)} className={`w-full flex items-center justify-between gap-3 px-4 py-3 text-left cursor-pointer hover:bg-ink-50 ${selected?.id === a.id ? "bg-brand-50" : ""}`}>
                 <span className="min-w-0">
                   <span className="block text-sm font-semibold text-ink-900 truncate">{fullName(a)}</span>
-                  <span className="block text-xs text-ink-500">{a.season_age} anni</span>
+                  <span className="block text-xs text-ink-500">{a.federal_age ?? a.season_age} anni (età federale)</span>
                 </span>
                 <BeltBadge belt={a.belt} size="sm" showLabel={false} />
               </button>

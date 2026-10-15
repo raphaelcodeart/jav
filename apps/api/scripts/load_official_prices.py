@@ -208,6 +208,7 @@ async def load(db: AsyncSession, slug: str, *, apply: bool, show_prices: bool = 
 
 
 async def main(argv: list[str]) -> None:
+    import app.main  # noqa: F401  (tutti i modelli registrati, vedi load_club_branding)
     from app.core.db import AsyncSessionLocal
 
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])

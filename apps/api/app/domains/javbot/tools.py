@@ -406,6 +406,168 @@ async def wallet_balance(ctx: ToolContext, _args: dict) -> dict:
     return {"balance_cents": wallet.balance_cents if wallet else 0}
 
 
+# --- Famiglia: conti, dati, percorso ---------------------------------------------------------------
+#
+# "Quanto ho pagato?", "che dati avete di me?", "che cintura ha Luca?": le
+# stesse cifre delle pagine "I miei conti" e della figurina dell'atleta,
+# lette dalle stesse funzioni, così il bot e lo schermo non si
+# contraddicono mai.
+
+#: Quanti pagamenti recenti racconta il bot: il resto è in "I miei conti".
+RECENT_PAYMENTS = 6
+
+
+async def family_payments(ctx: ToolContext, _args: dict) -> dict:
+    """Quanto ha pagato la famiglia (quest'anno, da sempre, per persona),
+    gli ultimi pagamenti, lo Shop, il credito e quanto resta da pagare
+    (accounting.personal_account)."""
+    from app.domains.club import accounting
+    from app.domains.club import service as club_service
+
+    scope = ctx.require(FAMILY)
+    account = await accounting.personal_account(
+        ctx.db, scope=scope, user_id=ctx.user_id, year=ctx.today.year, today=ctx.today,
+    )
+    athletes = await club_service.list_family_athletes(
+        ctx.db, scope=scope, guardian_user_id=ctx.user_id, include_left=True,
+    )
+    by_id = {a.id: a for a in athletes}
+    paid = [
+        f for f in await club_service.list_fees(
+            ctx.db, scope=scope, athlete_ids=list(by_id), guardian_user_id=ctx.user_id, status="PAID",
+        )
+        if f.paid_at is not None
+    ]
+    paid.sort(key=lambda f: f.paid_at, reverse=True)
+    return {
+        "year": account["year"],
+        "totals": account["totals"],
+        "people": [
+            {"first_name": p["name"].split(" ")[0] if p["name"] else None, "paid_year_cents": p["paid_year_cents"]}
+            for p in account["people"]
+        ],
+        "recent": [
+            {
+                "kind": f.kind, "period": f.period, "description": f.description, "amount_cents": f.amount_cents,
+                "paid_on": f.paid_at.date(),
+                "first_name": by_id[f.athlete_id].first_name if f.athlete_id in by_id else None,
+            }
+            for f in paid[:RECENT_PAYMENTS]
+        ],
+        "paid_count": len(paid),
+        "shop": account["shop"],
+        "wallet_balance_cents": account["wallet"]["balance_cents"],
+    }
+
+
+async def my_profile(ctx: ToolContext, _args: dict) -> dict:
+    """I dati di chi chiede (nome, email, telefono, codice fiscale,
+    residenza) e, per una famiglia del club, la scheda di ogni atleta:
+    piano, tessera federale, peso, certificato, iscritto dal. Solo i suoi."""
+    from app.domains.club import family as family_service
+    from app.domains.club import service as club_service
+    from app.domains.club.models import Club
+    from app.domains.customers.models import Customer, CustomerProfile
+    from app.domains.users.models import User
+
+    if ctx.user_id is None:
+        raise ToolDenied("denied.family")
+    user = await ctx.db.get(User, ctx.user_id)
+    customer = (await ctx.db.execute(select(Customer).where(Customer.user_id == ctx.user_id))).scalars().first()
+    profile = await ctx.db.get(CustomerProfile, customer.id) if customer else None
+    out = {
+        "first_name": profile.first_name if profile else None,
+        "last_name": profile.last_name if profile else None,
+        "email": user.email if user else None,
+        "phone": customer.phone if customer else None,
+        "fiscal_code": user.fiscal_code if user else None,
+        "address": {
+            "street": user.residence_street, "postal_code": user.residence_postal_code,
+            "city": user.residence_city, "province": user.residence_province,
+        } if user and user.residence_street else None,
+        "club_name": None,
+        "athletes": [],
+    }
+    if ctx.scope is None or FAMILY not in ctx.permissions:
+        return out
+    club = await ctx.db.get(Club, ctx.scope.club_id)
+    out["club_name"] = club.name if club else None
+    athletes = await club_service.list_family_athletes(ctx.db, scope=ctx.scope, guardian_user_id=ctx.user_id)
+    joined = {a.id: a.joined_on for a in athletes}
+    for card in await family_service.athlete_cards(ctx.db, athletes=athletes, today=ctx.today):
+        out["athletes"].append({
+            "first_name": card["first_name"], "last_name": card["last_name"], "is_self": card["is_self"],
+            "birth_date": card["birth_date"], "age": card["age"], "status": card["status"],
+            "plan_name": card["plan"]["name"] if card["plan"] else None,
+            "monthly_fee_cents": card["plan"]["monthly_fee_cents"] if card["plan"] else None,
+            "fiscal_code": card["fiscal_code"], "federation_number": card["federation_number"],
+            "federation_expires_on": card["federation_expires_on"],
+            "weight_kg": card["weight_kg"], "joined_on": joined[card["id"]],
+            "certificate": card["certificate"]["status"], "certificate_expires_on": card["certificate"]["expires_on"],
+        })
+    return out
+
+
+async def family_progress(ctx: ToolContext, _args: dict) -> dict:
+    """Il percorso di ogni atleta della famiglia: cintura attuale e da
+    quando, presenze (da sempre, nel mese, nella stagione), punti del
+    ranking della stagione, medaglie, livello, prossima gara. Nei corsi JAV
+    cinture e gare non ci sono (club/kinds.py) e restano None."""
+    from app.domains.club import family as family_service
+    from app.domains.club import kinds, seasons
+    from app.domains.club import service as club_service
+    from app.domains.club.models import ClubAttendance, ClubBeltGrade
+
+    scope = ctx.require(FAMILY)
+    rules = await kinds.club_rules(ctx.db, club_id=scope.club_id)
+    athletes = await club_service.list_family_athletes(ctx.db, scope=scope, guardian_user_id=ctx.user_id)
+    ids = [a.id for a in athletes]
+    season = seasons.season_of(ctx.today)
+    first, last = seasons.season_start(season), seasons.season_end(season)
+    month_start = ctx.today.replace(day=1)
+    month = {a: 0 for a in ids}
+    in_season = {a: 0 for a in ids}
+    awarded: dict[tuple[uuid.UUID, str], date] = {}
+    if ids:
+        for athlete_id, on in (
+            await ctx.db.execute(
+                select(ClubAttendance.athlete_id, ClubAttendance.date).where(
+                    ClubAttendance.athlete_id.in_(ids), ClubAttendance.present.is_(True),
+                    ClubAttendance.date >= min(month_start, first),
+                )
+            )
+        ).all():
+            month[athlete_id] += on >= month_start
+            in_season[athlete_id] += first <= on <= last
+        for athlete_id, grade, awarded_on in (
+            await ctx.db.execute(
+                select(ClubBeltGrade.athlete_id, ClubBeltGrade.grade, ClubBeltGrade.awarded_on)
+                .where(ClubBeltGrade.athlete_id.in_(ids))
+            )
+        ).all():
+            awarded[(athlete_id, grade)] = awarded_on
+    out = []
+    for card in await family_service.athlete_cards(ctx.db, athletes=athletes, today=ctx.today):
+        belt = card["belt"]["code"] if card["belt"] and rules.has_belts else None
+        out.append({
+            "first_name": card["first_name"],
+            "belt": belt,
+            "belt_since": awarded.get((card["id"], belt)) if belt else None,
+            "attendances": card["attendances"],
+            "attendances_month": month[card["id"]],
+            "attendances_season": in_season[card["id"]],
+            "ranking_points": card["ranking_points"] if rules.has_competitions else None,
+            "medals": card["medals"] if rules.has_competitions else None,
+            "level": card["level"],
+            "achievements_earned": card["achievements_earned"],
+            "next_competition": card["next_competition"] if rules.has_competitions else None,
+        })
+    return {
+        "season_label": seasons.season_label(season), "has_belts": rules.has_belts,
+        "has_competitions": rules.has_competitions, "athletes": out,
+    }
+
+
 async def club_contacts(ctx: ToolContext, _args: dict) -> dict:
     """Come raggiungere la segreteria del club: email dalle impostazioni,
     telefono ed email della pagina pubblica."""
@@ -693,6 +855,12 @@ for _tool in (
     Tool("invite_link", "Il link personale per invitare un amico nel club.", _schema(), invite_link,
          required_permission=FAMILY),
     Tool("wallet_balance", "Il saldo del wallet (credito) dell'utente.", _schema(), wallet_balance),
+    Tool("family_payments", "Quanto ha pagato la famiglia (anno, da sempre, per persona), gli ultimi pagamenti, "
+         "lo Shop, il credito e quanto resta da pagare.", _schema(), family_payments, required_permission=FAMILY),
+    Tool("my_profile", "I dati personali dell'utente e la scheda anagrafica di ogni atleta della famiglia.",
+         _schema(), my_profile),
+    Tool("family_progress", "Cintura, presenze, punti del ranking, medaglie, livello e prossima gara di ogni "
+         "atleta della famiglia.", _schema(), family_progress, required_permission=FAMILY),
     Tool("club_contacts", "Email, telefono e indirizzo della segreteria del club.", _schema(), club_contacts),
     Tool("send_club_message", "Manda un messaggio alla segreteria del club. Solo dopo conferma.",
          _schema({"text": {"type": "string", "maxLength": 1000}, "task_id": _UUID}, ["text", "task_id"]),

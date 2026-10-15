@@ -158,13 +158,14 @@ def pick_plan(plans: list[ClubPlan], *, age: int) -> ClubPlan | None:
     return min(fitting, key=lambda p: ((p.max_age if p.max_age is not None else 200) - p.min_age, -p.min_age))
 
 
-async def assign_plan(db: AsyncSession, *, athlete: ClubAthlete, season: int) -> ClubPlan | None:
-    """Assegna il piano per età, salvo che la segreteria l'abbia scelto a
-    mano. Non committa."""
+async def assign_plan(db: AsyncSession, *, athlete: ClubAthlete, year: int) -> ClubPlan | None:
+    """Assegna il piano per l'età federale dell'anno solare `year`
+    (seasons.federal_age), salvo che la segreteria l'abbia scelto a mano.
+    Non committa."""
     if athlete.plan_locked:
         return await db.get(ClubPlan, athlete.plan_id) if athlete.plan_id else None
     plans = await list_plans(db, scope=scope_of(athlete), only_active=True)
-    plan = pick_plan(plans, age=seasons.season_age(athlete.birth_date, season))
+    plan = pick_plan(plans, age=seasons.federal_age(athlete.birth_date, year))
     athlete.plan_id = plan.id if plan else None
     return plan
 
@@ -274,8 +275,7 @@ async def create_athlete(
     db.add(athlete)
     await db.flush()
 
-    season = seasons.season_of(today)
-    plan = await assign_plan(db, athlete=athlete, season=season)
+    plan = await assign_plan(db, athlete=athlete, year=today.year)
     if rules.has_belts:
         give_starting_belt(db, athlete=athlete, on=today, belt=belt)
     if course is not None:
@@ -365,7 +365,7 @@ async def update_athlete(
     # Una data di nascita corretta, o un piano sbloccato, rimettono in
     # gioco il piano per età.
     if not athlete.plan_locked and ("birth_date" in changes or "plan_locked" in changes):
-        await assign_plan(db, athlete=athlete, season=seasons.season_of(today))
+        await assign_plan(db, athlete=athlete, year=today.year)
 
     await audit_service.record(
         db, organization_id=athlete.organization_id, actor_user_id=actor_user_id,
@@ -571,22 +571,29 @@ async def ensure_family_membership(
         )
 
 
-async def generate_monthly_fees(db: AsyncSession, *, scope: ClubScope, period: str) -> int:
+async def generate_monthly_fees(
+    db: AsyncSession, *, scope: ClubScope, period: str, today: date | None = None,
+) -> int:
     """Le quote del mese per ogni atleta attivo. Idempotente: rilanciarla
-    non crea doppioni (vincolo UNIQUE). Restituisce quante quote ha creato."""
+    non crea doppioni (vincolo UNIQUE). Restituisce quante quote ha creato.
+
+    Il gruppo di ogni mese lo decide l'età federale di quell'anno
+    (seasons.federal_age), salvo i piani scelti a mano: a gennaio chi entra
+    nella fascia del gruppo dopo paga già la mensilità del gruppo nuovo, e il
+    genitore riceve un avviso. Il piano dell'atleta segue solo il mese in
+    corso o uno futuro: rigenerare un mese passato non lo riporta indietro."""
     try:
         year, month = seasons.parse_period(period)
     except ValueError as exc:
         raise ClubValidationError("Il mese deve essere nel formato AAAA-MM.") from exc
+    today = today or utcnow().date()
     plans = {p.id: p for p in await list_plans(db, scope=scope)}
+    active_plans = [p for p in plans.values() if p.active]
     pricing = await club_pricing(db, club_id=scope.club_id)
     sizes = await family_sizes(db, club_id=scope.club_id)
     athletes = (
         await db.execute(
-            select(ClubAthlete).where(
-                ClubAthlete.club_id == scope.club_id, ClubAthlete.status == "ACTIVE",
-                ClubAthlete.plan_id.is_not(None),
-            )
+            select(ClubAthlete).where(ClubAthlete.club_id == scope.club_id, ClubAthlete.status == "ACTIVE")
         )
     ).scalars().all()
     before = await _count_fees(db, scope=scope, kind="MONTHLY", period=period)
@@ -594,10 +601,35 @@ async def generate_monthly_fees(db: AsyncSession, *, scope: ClubScope, period: s
         await primary_courses(db, athlete_ids=[a.id for a in athletes])
         if (await kinds.club_rules(db, club_id=scope.club_id)).coach_paid_by_share else {}
     )
+    follows_plan = period >= seasons.period_of(today)
+    moved: list[tuple[ClubAthlete, ClubPlan]] = []
     for athlete in athletes:
+        current = plans.get(athlete.plan_id) if athlete.plan_id else None
+        plan = current
+        if not athlete.plan_locked:
+            # Se nessun piano copre la nuova età si resta dove si era: meglio
+            # la mensilità di prima che nessuna.
+            plan = pick_plan(active_plans, age=seasons.federal_age(athlete.birth_date, year)) or current
+        if plan is None:
+            continue
+        if follows_plan and plan is not current:
+            athlete.plan_id = plan.id
+            if current is not None:
+                moved.append((athlete, plan))
         await ensure_monthly_fee(
-            db, athlete=athlete, plan=plans[athlete.plan_id], year=year, month=month, pricing=pricing,
+            db, athlete=athlete, plan=plan, year=year, month=month, pricing=pricing,
             family_size=sizes.get(athlete.guardian_user_id, 1), course=courses.get(athlete.id),
+        )
+    for athlete, plan in moved:
+        await notifications_service.notify_user(
+            db, organization_id=scope.organization_id, user_id=athlete.guardian_user_id,
+            type_="CLUB_PLAN_CHANGED", entity_type="club_athlete", entity_id=athlete.id,
+            title=f"{athlete.first_name} passa al gruppo «{plan.name}»",
+            body=(
+                f"Da {seasons.month_label(year, month)} {athlete.first_name} ha "
+                f"{seasons.federal_age(athlete.birth_date, year)} anni federali: la mensilità del nuovo gruppo "
+                f"è di {plan.monthly_fee_cents / 100:.2f} € (prima degli sconti)."
+            ),
         )
     await db.commit()
     return await _count_fees(db, scope=scope, kind="MONTHLY", period=period) - before
@@ -615,7 +647,7 @@ async def start_season(db: AsyncSession, *, scope: ClubScope, season: int) -> in
     changed = 0
     for athlete in athletes:
         before = athlete.plan_id
-        await assign_plan(db, athlete=athlete, season=season)
+        await assign_plan(db, athlete=athlete, year=season)
         changed += athlete.plan_id != before
     await db.commit()
     return changed
@@ -722,10 +754,58 @@ async def waive_fee(
     return fee
 
 
+async def cash_receivers(db: AsyncSession, *, scope: ClubScope) -> list[dict]:
+    """Chi nel club può ricevere contanti: la segreteria e gli istruttori
+    attivi, con il nome da mostrare a un genitore."""
+    from app.domains.club.clubs import CLUB_STAFF_ROLES
+    from app.domains.club.people import _names
+    from app.domains.rbac.models import Role, UserRole
+
+    ids = set(
+        (
+            await db.execute(
+                select(User.id)
+                .join(UserRole, UserRole.user_id == User.id)
+                .join(Role, Role.id == UserRole.role_id)
+                .where(User.club_id == scope.club_id, Role.code.in_(CLUB_STAFF_ROLES), User.status == "ACTIVE")
+            )
+        ).scalars()
+    )
+    names = await _names(db, ids)
+    return sorted(({"user_id": uid, "name": names.get(uid, "")} for uid in ids), key=lambda r: r["name"].lower())
+
+
+async def _cash_receiver(
+    db: AsyncSession, *, scope: ClubScope, user_id: uuid.UUID | None, name: str | None,
+) -> tuple[uuid.UUID | None, str]:
+    """(account, nome congelato) di chi ha preso i contanti: una persona
+    dello staff del club, oppure un nome scritto a mano (un allenatore senza
+    account, il presidente)."""
+    if user_id is not None:
+        match = next((r for r in await cash_receivers(db, scope=scope) if r["user_id"] == user_id), None)
+        if match is None:
+            raise ClubValidationError("Questa persona non fa parte dello staff del club.")
+        return user_id, match["name"][:120]
+    name = (name or "").strip()
+    if len(name) < 2:
+        raise ClubValidationError("Scrivi a chi sono stati consegnati i contanti.")
+    return None, name[:120]
+
+
 async def mark_fee_paid(
-    db: AsyncSession, *, scope: ClubScope, fee_id: uuid.UUID, actor_user_id: uuid.UUID, note: str | None
+    db: AsyncSession, *, scope: ClubScope, fee_id: uuid.UUID, actor_user_id: uuid.UUID, note: str | None,
+    method: str, cash_received_by_user_id: uuid.UUID | None = None,
+    cash_received_by_name: str | None = None,
 ) -> ClubFee:
-    """Pagata in palestra (contanti, POS): la segreteria la segna a mano."""
+    """Pagata fuori dal portale: la segreteria la segna a mano e dice come
+    (bonifico arrivato in banca, contanti e a chi, carta al POS)."""
+    if method not in ("BANK_TRANSFER", "CASH", "CARD"):
+        raise ClubValidationError("Scegli come è stata pagata: bonifico, contanti o carta.")
+    receiver_id, receiver_name = (None, None)
+    if method == "CASH":
+        receiver_id, receiver_name = await _cash_receiver(
+            db, scope=scope, user_id=cash_received_by_user_id, name=cash_received_by_name
+        )
     fee = await _get_fee(db, scope=scope, fee_id=fee_id)
     if fee.status != "DUE":
         raise ClubValidationError("Questa quota non è da pagare.")
@@ -733,14 +813,24 @@ async def mark_fee_paid(
     fee.paid_at = utcnow()
     fee.paid_by_user_id = actor_user_id
     fee.payment_note = note
+    fee.payment_method = method
+    fee.cash_received_by_user_id = receiver_id
+    fee.cash_received_by_name = receiver_name
     await audit_service.record(
         db, organization_id=scope.organization_id, actor_user_id=actor_user_id,
         action="club.fee_marked_paid", entity_type="club_fee", entity_id=str(fee.id), reason=note,
+        new_value={"method": method, "cash_received_by": receiver_name},
     )
     await db.commit()
     await db.refresh(fee)
     await referrals.on_fee_paid(db, fee=fee)
     return fee
+
+
+def _clear_payment(fee: ClubFee) -> None:
+    fee.paid_at = fee.paid_by_user_id = fee.payment_note = None
+    fee.paid_via_proof_id = None
+    fee.payment_method = fee.cash_received_by_user_id = fee.cash_received_by_name = None
 
 
 async def reopen_fee(db: AsyncSession, *, scope: ClubScope, fee_id: uuid.UUID, actor_user_id: uuid.UUID) -> ClubFee:
@@ -754,7 +844,7 @@ async def reopen_fee(db: AsyncSession, *, scope: ClubScope, fee_id: uuid.UUID, a
         raise ClubValidationError("Questa quota è stata pagata con una prova di pagamento: rifiuta la prova.")
     was_paid = fee.status == "PAID"
     fee.status = "DUE"
-    fee.paid_at = fee.paid_by_user_id = fee.payment_note = None
+    _clear_payment(fee)
     fee.waived_at = fee.waived_by_user_id = fee.waive_reason = None
     await audit_service.record(
         db, organization_id=scope.organization_id, actor_user_id=actor_user_id,
@@ -782,10 +872,17 @@ async def upload_payment_proof(
     note: str | None = None,
     credit_cents: int = 0,
     spend_code: str | None = None,
+    method: str = "BANK_TRANSFER",
+    cash_received_by_user_id: uuid.UUID | None = None,
+    cash_received_by_name: str | None = None,
 ) -> ClubPaymentProof:
     """Il genitore carica la foto del pagamento e indica cosa copre. Le
     quote risultano pagate subito: è la regola di autogestione
     (docs/club-portal.md). La segreteria può rifiutarla dopo.
+
+    Con `method="CASH"` non c'è una foto: il genitore dice a chi ha dato i
+    contanti, e quella persona riceve un avviso (se non li ha avuti, la
+    segreteria rifiuta la prova come ogni altra).
 
     `credit_cents` è la parte pagata con il credito del wallet (sconti
     invito): si conferma con il PIN o il codice via email, come ogni spesa
@@ -798,6 +895,16 @@ async def upload_payment_proof(
     fee_ids = list(dict.fromkeys(fee_ids))
     if not fee_ids:
         raise ClubValidationError("Scegli almeno una quota da pagare.")
+    if method not in ("BANK_TRANSFER", "CASH"):
+        raise ClubValidationError("Scegli come hai pagato: bonifico o contanti.")
+    receiver_id, receiver_name = (None, None)
+    if method == "CASH":
+        if credit_cents:
+            raise ClubValidationError("Il credito del wallet non si usa insieme ai contanti.")
+        receiver_id, receiver_name = await _cash_receiver(
+            db, scope=scope, user_id=cash_received_by_user_id, name=cash_received_by_name
+        )
+        file_bytes = None
     rows = (
         await db.execute(
             select(ClubFee, ClubAthlete)
@@ -838,7 +945,7 @@ async def upload_payment_proof(
             )
         except UploadValidationError as exc:
             raise ClubValidationError("Carica una foto (JPG o PNG) o un PDF, di massimo 15 MB.") from exc
-    elif credit_cents < total:
+    elif credit_cents < total and method != "CASH":
         raise ClubValidationError("Carica la foto o il PDF della ricevuta del bonifico.")
 
     proof = ClubPaymentProof(
@@ -851,6 +958,9 @@ async def upload_payment_proof(
         credit_cents=credit_cents,
         note=note,
         status="ACCEPTED",
+        method=method,
+        cash_received_by_user_id=receiver_id,
+        cash_received_by_name=receiver_name,
     )
     db.add(proof)
     await db.flush()
@@ -861,11 +971,27 @@ async def upload_payment_proof(
         fee.paid_at = now
         fee.paid_via_proof_id = proof.id
         fee.paid_by_user_id = guardian_user_id
+        fee.payment_method = "WALLET" if credit_cents == total and total > 0 else method
+        fee.cash_received_by_user_id = receiver_id
+        fee.cash_received_by_name = receiver_name
     await audit_service.record(
         db, organization_id=scope.organization_id, actor_user_id=guardian_user_id,
         action="club.payment_proof_uploaded", entity_type="club_payment_proof", entity_id=str(proof.id),
-        new_value={"fee_ids": [str(f) for f in fee_ids], "amount_cents": total, "credit_cents": credit_cents},
+        new_value={
+            "fee_ids": [str(f) for f in fee_ids], "amount_cents": total, "credit_cents": credit_cents,
+            "method": method, "cash_received_by": receiver_name,
+        },
     )
+    if receiver_id is not None:
+        await notifications_service.notify_user(
+            db, organization_id=scope.organization_id, user_id=receiver_id, type_="CLUB_CASH_DECLARED",
+            entity_type="club_payment_proof", entity_id=proof.id,
+            title=f"Contanti consegnati a te: {total / 100:.2f} €",
+            body=(
+                ", ".join(f"{a.first_name if a else 'Quota socio'}: {f.description}" for f, a in rows)[:400]
+                + ". Se non li hai ricevuti, avvisa la segreteria."
+            ),
+        )
     if wallet is not None:
         # L'addebito committa tutto insieme: prova, quote pagate, credito
         # scalato. Se il saldo nel frattempo non basta, non resta niente.
@@ -940,9 +1066,7 @@ async def reject_proof(
     ).scalars().all()
     for fee in reopened:
         fee.status = "DUE"
-        fee.paid_at = None
-        fee.paid_via_proof_id = None
-        fee.paid_by_user_id = None
+        _clear_payment(fee)
     await audit_service.record(
         db, organization_id=scope.organization_id, actor_user_id=actor_user_id,
         action="club.payment_proof_rejected", entity_type="club_payment_proof", entity_id=str(proof.id),

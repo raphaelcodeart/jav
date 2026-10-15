@@ -45,6 +45,45 @@ INTENTS: tuple[Intent, ...] = (
         "comprovativo", "comprovante", "carregar", "enviar o comprovativo", "talao",
         "proof", "receipt", "upload", "uploading",
     ), {"it": ("prova",)}),
+    # Prima delle domande sui soldi da dare: "quanto ho pagato" non è "quanto
+    # devo". "Ho pagato ma non riesco a caricare la ricevuta" resta alla
+    # ricevuta (a pari punteggio vince upload_proof, che viene prima).
+    Intent("payments_made", (
+        "quanto ho pagato", "cosa ho pagato", "ho pagato", "ho gia pagato", "quanto ho speso", "ho speso",
+        "storico pagamenti", "storico dei pagamenti", "ultimi pagamenti", "pagamenti fatti",
+        "quanto paguei", "o que paguei", "quanto gastei", "gastei", "historico de pagamentos",
+        "ultimos pagamentos", "pagamentos feitos", "pagamentos efetuados",
+        "how much have i paid", "how much did i pay", "what have i paid", "have i paid", "i paid", "i've paid",
+        "payment history", "past payments", "last payments", "spent",
+    )),
+    # "Che cosa sai di me?": il riepilogo di tutto, prima dei dati anagrafici.
+    Intent("overview", (
+        "cosa sai di me", "che sai di me", "cosa sai su di me", "tutto su di me", "riepilogo", "la mia situazione",
+        "situazione", "o que sabes de mim", "o que sabes sobre mim", "tudo sobre mim", "resumo",
+        "a minha situacao", "situacao", "what do you know about me", "everything about me", "summary", "overview",
+        "my situation",
+    )),
+    Intent("my_profile", (
+        "i miei dati", "miei dati", "dati personali", "il mio profilo", "profilo", "chi sono", "anagrafica",
+        "la mia email", "il mio indirizzo", "codice fiscale", "tessera", "tesseramento", "il mio piano", "che piano",
+        "data di nascita", "peso",
+        "os meus dados", "meus dados", "dados pessoais", "o meu perfil", "perfil", "quem sou", "o meu email",
+        "a minha morada", "morada", "nif", "contribuinte", "o meu plano", "que plano", "federado", "licenca",
+        "data de nascimento",
+        "my data", "my details", "personal data", "personal details", "my profile", "profile", "who am i",
+        "my email", "my address", "tax number", "my plan", "which plan", "membership card", "date of birth",
+        "weight",
+    )),
+    Intent("belts", (
+        "cintura", "cinture", "esame di cintura", "passaggio di grado", "che grado", "kyu", "dan",
+        "cinto", "cintos", "graduacao", "exame de graduacao",
+        "belt", "belts", "grading",
+    )),
+    Intent("ranking", (
+        "ranking", "classifica", "punti", "punteggio", "medaglie", "medaglia", "livello", "conquiste", "traguardi",
+        "risultati", "classificacao", "pontos", "pontuacao", "medalhas", "medalha", "nivel", "conquistas",
+        "resultados", "points", "medals", "medal", "level", "achievements", "results", "standings",
+    )),
     Intent("judogi", (
         "judogi", "kimono", "quimono", "judo gi", "fato de judo", "divisa", "taglia del judogi", "uniform",
         "dogi",
@@ -66,6 +105,13 @@ INTENTS: tuple[Intent, ...] = (
         "marcar presenca", "marcar a presenca", "marca presenca",
         "mark attendance", "mark present", "check in",
     )),
+    # Il conto delle presenze, prima delle lezioni di oggi: "quante presenze"
+    # pesa due, "presenze" da sola uno.
+    Intent("attendance_stats", (
+        "quante presenze", "quanti allenamenti", "quante lezioni", "quante volte", "frequenza", "assiduita",
+        "quantas presencas", "quantos treinos", "quantas aulas", "quantas vezes", "assiduidade",
+        "how many trainings", "how many lessons", "how many classes", "how many times", "attendance record",
+    )),
     Intent("lessons_today", (
         "lezione", "lezioni", "allenamento", "allenamenti", "oggi", "presenza", "presenze",
         "aula", "aulas", "treino", "treinos", "hoje", "presenca", "presencas",
@@ -85,10 +131,13 @@ INTENTS: tuple[Intent, ...] = (
     )),
     Intent("fees_due", (
         "quanto devo", "devo pagare", "da pagare", "quote", "quota", "mensilita", "pagare", "pagamento", "pagamenti",
-        "iban", "scadut*", "dovuto",
+        "iban", "scadut*", "dovuto", "debito", "debiti", "in debito", "arretrati", "in regola", "sono in regola",
+        "devo ancora",
         "quanto devo pagar", "tenho de pagar", "tenho que pagar", "mensalidade", "mensalidades", "quotas",
-        "pagar", "pagamentos", "em atraso",
-        "how much do i owe", "owe", "fees", "fee", "pay", "payment", "payments", "due", "overdue",
+        "pagar", "pagamentos", "em atraso", "divida", "dividas", "tenho dividas", "estou em divida", "em dia",
+        "ainda devo",
+        "how much do i owe", "owe", "fees", "fee", "pay", "payment", "payments", "due", "overdue", "debt", "in debt",
+        "up to date",
     )),
     Intent("help", (
         "aiuto", "cosa sai fare", "cosa puoi fare", "menu", "ajuda", "o que sabes fazer", "o que podes fazer",

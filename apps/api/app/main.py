@@ -31,6 +31,7 @@ from app.domains.club.contact_router import (
     contact_platform_router,
     contact_public_router,
 )
+from app.domains.club.athlete_router import router as club_athlete_router
 from app.domains.club.router import admin_router as club_admin_router
 from app.domains.club.router import clubs_router
 from app.domains.club.router import router as club_router
@@ -113,6 +114,7 @@ app.include_router(catalog_router, prefix="/api")
 app.include_router(carts_router, prefix="/api")
 app.include_router(club_router, prefix="/api")
 app.include_router(club_admin_router, prefix="/api")
+app.include_router(club_athlete_router, prefix="/api")
 app.include_router(club_staff_router, prefix="/api")
 app.include_router(clubs_router, prefix="/api")
 app.include_router(admin_accounting_router, prefix="/api")
