@@ -43,7 +43,12 @@ export function AuthLayout({ children, title, subtitle }: { children: ReactNode;
       </div>
       {/* Un velo chiaro dietro la scheda: il testo si legge su qualunque fotogramma. */}
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(60%_55%_at_50%_45%,rgba(255,255,255,0.92),rgba(255,255,255,0.55)_60%,rgba(255,255,255,0.15))]" aria-hidden="true" />
-      <LanguageSwitcher className="fixed right-4 top-4 z-30" />
+      {/* Il contenitore fisso fuori dal selettore: il selettore è già `relative`
+          e `fixed` passato come classe perderebbe (la bandiera finiva a sinistra,
+          tagliata fuori dallo schermo). */}
+      <div className="fixed right-3 top-3 z-30 sm:right-4 sm:top-4">
+        <LanguageSwitcher />
+      </div>
 
       <div className="relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-md flex-col items-center justify-center px-4 py-10">
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-6 flex items-center gap-3">
