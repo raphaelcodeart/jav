@@ -365,6 +365,11 @@ export function JavMarketProductModal({ product, onClose }: { product: JavMarket
                   </div>
                 </div>
 
+                {product.purchasable === false ? (
+                  <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900 ring-1 ring-amber-200">
+                    🛍️ Gli acquisti dei prodotti JudoArteVida apriranno presto: per ora il prodotto è solo in vetrina.
+                  </p>
+                ) : (
                 <div className="space-y-2">
                   <button
                     type="button"
@@ -402,6 +407,7 @@ export function JavMarketProductModal({ product, onClose }: { product: JavMarket
                     </p>
                   )}
                 </div>
+                )}
 
                 {product.producer && (
                   <div className="p-3 rounded-xl bg-slate-900/5 border border-slate-200">

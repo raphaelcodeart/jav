@@ -64,3 +64,9 @@ async def test_the_club_shop_works_with_the_jav_shop_switched_off(db, scope):
     with pytest.raises(market.JavMarketValidationError):
         await market.get_quote(db, organization_id=org, customer_user_id=customer.id,
                                lines=[((await _variants(db, pane))[0].id, 1)])
+    # Nell'area, come sul sito pubblico, i prodotti di JudoArteVida restano
+    # in vetrina anche a shop spento: si guardano, non si comprano.
+    showcase = await market.customer_products_page(db, organization_id=org, viewer_club_id=scope.club_id, showcase=True)
+    cards = {i["name"]: i for i in showcase["items"]}
+    assert showcase["jav_open"] is False
+    assert cards["T-shirt"]["purchasable"] is True and cards["Pane di segale"]["purchasable"] is False

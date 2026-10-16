@@ -1424,7 +1424,8 @@ segreteria la sezione **👥 Personale** (che comprende il cartellino).
   **shop unico di JudoArteVida** si guarda senza account (mai i prodotti dei
   club), con ricerca, categorie e «Mostra altri prodotti»; i prezzi sono
   **IVA compresa**. La vetrina si vede anche a negozio spento (si guarda
-  soltanto); l'interruttore dello Shop chiude solo lo shop nell'area.
+  soltanto), qui come nell'area: l'interruttore dello Shop chiude solo gli
+  acquisti.
 - «Acquista» porta a `/loja/comprar`: per comprare bisogna essere soci di un
   club della rete. Chi è socio entra (e trova lo Shop nella sua area); gli
   altri scelgono un club (`/c/<slug>`) o vanno a «Crea il tuo club».
@@ -1487,5 +1488,9 @@ sessioni scadute.
 
 Lo Shop di JudoArteVida si presenta come **«I prodotti dei nostri partner e
 amici»**, sul sito (`/loja`) e nell'area (riquadro sopra la vetrina). La
-vetrina pubblica si vede anche a negozio spento; l'interruttore chiude solo lo
-shop dell'area.
+vetrina si vede anche a negozio spento, sul sito e nell'area
+(`/jav-market/products/mine/page` con `showcase`): l'interruttore chiude solo
+gli acquisti. A negozio spento le schede di JudoArteVida hanno
+`purchasable: false` e la pagina `jav_open: false`; l'area mostra «Gli acquisti
+apriranno presto» al posto di «Acquista» e «Aggiungi al carrello», e il
+checkout le rifiuta comunque. Lo shop del club vende sempre.

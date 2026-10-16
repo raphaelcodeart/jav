@@ -1128,6 +1128,8 @@ export type JavMarketProducerRead = JavMarketProducerPublic & {
 export type JavMarketProductRead = MarketProductRead & {
   /** Chi vende: lo shop del club (club_id) o quello di JudoArteVida (null). */
   seller?: { club_id: string | null; name: string } | null;
+  /** Falso quando lo shop di JudoArteVida è spento: il prodotto è solo in vetrina. */
+  purchasable?: boolean;
   producer: JavMarketProducerPublic | null;
   /** Solo «Fai la Spesa»: le regole dell'ordine, per dirle prima del checkout. */
   shipping_flat_cents?: number;
@@ -1343,6 +1345,8 @@ export interface ShopProductPage<T> {
   next_offset: number | null;
   /** Le categorie che hanno almeno un prodotto in vetrina. */
   category_ids: string[];
+  /** Lo shop di JudoArteVida vende; falso: i suoi prodotti si guardano e basta. */
+  jav_open?: boolean;
 }
 
 // --- PIN dei JavCash (Session 87) ---------------------------------------

@@ -258,10 +258,13 @@ async def page_my_jav_market_products(
 ) -> dict:
     """La vetrina a pagine («Mostra altri prodotti»), con ricerca e
     categoria filtrate sul server: vedi marketplaces/paging.py. Lo shop di
-    JudoArteVida e quello del club di chi compra (`seller` per uno solo)."""
+    JudoArteVida e quello del club di chi compra (`seller` per uno solo).
+    Con lo shop di JudoArteVida spento i suoi prodotti restano in vetrina
+    come sul sito pubblico, ma non si comprano (`purchasable`, `jav_open`)."""
     return await service.customer_products_page(
         db, organization_id=current_user.organization_id, offset=offset, limit=limit,
         search=q, category_id=category_id, viewer_club_id=await _viewer_club(db, current_user.user_id), seller=seller,
+        showcase=True,
     )
 
 

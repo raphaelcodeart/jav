@@ -110,6 +110,7 @@ function useShopPages<T>(
   return {
     items: data?.items ?? [],
     shopTotal: data?.shop_total ?? 0,
+    javOpen: data?.jav_open ?? true,
     total,
     categoryIds: data?.category_ids ?? [],
     page,
@@ -408,6 +409,11 @@ export function CustomerProductsPanel({
             Integratori, abbigliamento e attrezzatura scelti dai partner e dagli amici della rete JudoArteVida, insieme ai prodotti del tuo club.
           </p>
         </div>
+      )}
+      {showShopTab && activeTab === "JAV_MARKET" && !javMarketShop.javOpen && (
+        <p className="rounded-2xl bg-amber-50 p-3 text-sm text-amber-900 ring-1 ring-amber-200">
+          🛍️ Gli acquisti dei prodotti JudoArteVida apriranno presto: per ora puoi guardarli e scegliere.
+        </p>
       )}
 
       {onOpenProductRequests && (

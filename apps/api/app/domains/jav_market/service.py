@@ -597,6 +597,8 @@ async def shop_card(
         "producer": producer_public_dict(producer),
         #: Chi vende: il club (il suo shop) o JudoArteVida.
         "seller": (sellers or {}).get(product.club_id) if product.club_id else {"club_id": None, "name": "JudoArteVida"},
+        #: Con lo shop di JudoArteVida spento i suoi prodotti si guardano e basta.
+        "purchasable": product.club_id is not None or settings.enabled,
         "variants": [
             {
                 "id": v.id, "label": v.label, "image_url": v.image_url,
@@ -677,8 +679,10 @@ async def customer_products_page(
     """La vetrina a pagine («Mostra altri prodotti»), come tutti
     i Marketplace: vedi marketplaces/paging.py. Lo shop di JudoArteVida e
     quello del club di chi guarda (`seller` per uno solo dei due).
-    `showcase`: la vetrina del sito pubblico, che si guarda soltanto e
-    quindi mostra i prodotti anche a negozio spento."""
+    `showcase`: la vetrina che si guarda soltanto e quindi mostra i prodotti
+    anche a negozio spento (il sito pubblico, e l'area: lì le schede hanno
+    `purchasable` falso e il checkout le rifiuta). `jav_open` dice se lo
+    shop di JudoArteVida vende."""
     from app.domains.shop_categories import service as shop_categories_service
 
     row = await get_settings_row(db, organization_id=organization_id)
@@ -702,11 +706,12 @@ async def customer_products_page(
             for product in products
         ]
 
-    return await paging.customer_page(
+    page = await paging.customer_page(
         db, model=JavMarketProduct, shop=SHOP, organization_id=organization_id, build_cards=cards,
         offset=offset, limit=limit, search=search, category_id=category_id,
         scope_filters=seller_filters(viewer_club_id=viewer_club_id, seller=seller),
     )
+    return {**page, "jav_open": row.enabled}
 
 
 # --- Checkout -------------------------------------------------------------------------------------
