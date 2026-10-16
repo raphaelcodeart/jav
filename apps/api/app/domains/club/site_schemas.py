@@ -338,6 +338,9 @@ class PublicJudokaProfile(PublicJudoka):
 class PublicParticipant(BaseModel):
     athlete_id: uuid.UUID
     display_name: str
+    #: La scheda pubblica (/judocas/<id>) c'è solo con il consenso della famiglia.
+    has_page: bool = False
+    club: PublicClubRef | None = None
     photo_url: str | None
     belt: str | None
     age_band: str
@@ -349,7 +352,7 @@ class PublicParticipant(BaseModel):
 class PublicEventDetail(PublicEvent):
     description: str | None
     categories: str | None
-    #: Tutti gli iscritti, anche quelli senza consenso: solo il numero.
+    #: Tutti gli iscritti dei club pubblici, come in classifica («Nome I.»).
     participants_count: int
     participants: list[PublicParticipant]
 

@@ -774,22 +774,25 @@ async def event_detail(db: AsyncSession, *, event_id: uuid.UUID, today: date | N
             )
         )).scalars()
     )
-    # Solo i judoca pubblici: gli altri iscritti contano nel totale ma non
-    # hanno un nome sul sito.
-    # Un evento della rete ha iscritti di tutti i club pubblici.
+    # Come nelle classifiche (_ranking_athletes): tutti gli iscritti dei club
+    # pubblici come «Nome I.», club e cintura; foto e pagina solo per chi ha
+    # il consenso. Un evento della rete ha iscritti di tutti i club pubblici.
     club_ids = [comp.club_id] if comp.club_id is not None else list(clubs)
-    public = await _public_athletes(db, club_ids=club_ids, athlete_ids=[e.athlete_id for e in entries])
-    by_id = {a.id: (a, p) for a, p in public}
+    wanted = {e.athlete_id for e in entries}
+    by_id = {a.id: (a, p) for a, p in await _ranking_athletes(db, club_ids=club_ids) if a.id in wanted}
     belts = await current_belts(db, athlete_ids=list(by_id))
     participants = []
     for entry in entries:
         if entry.athlete_id not in by_id:
             continue
         athlete, profile = by_id[entry.athlete_id]
+        club, site = clubs.get(athlete.club_id, (None, None))
         participants.append({
             "athlete_id": athlete.id,
             "display_name": display_name(athlete),
-            "photo_url": athlete.photo_url if profile.show_photo else None,
+            "has_page": profile is not None,
+            "club": _club_ref(club, site) if club else None,
+            "photo_url": athlete.photo_url if profile is not None and profile.show_photo else None,
             "belt": belts.get(athlete.id),
             "age_band": competitions_service.age_band_for(competitions_service.ranking_age(athlete.birth_date, season)).code,
             "category": entry.category,

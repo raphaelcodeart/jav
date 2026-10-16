@@ -596,8 +596,9 @@ con la pagina pubblicata. Per il sito un club non pubblicato non esiste:
   contatti, quote, certificati. Il servizio costruisce le risposte campo per
   campo e gli schemi pubblici (`club/site_schemas.py`) non dichiarano quei
   campi: un dato in più non può arrivare al browser per sbaglio;
-- negli eventi, gli iscritti senza consenso contano nel totale ma non hanno
-  nome;
+- negli eventi, come in classifica, tutti gli iscritti dei club pubblici
+  compaiono come «Nome I.» con club, fascia e cintura; foto e link alla
+  scheda solo per chi ha il consenso (`has_page`);
 - le pagine dei judoca non si indicizzano (`noindex`): un minore non deve
   finire nei motori di ricerca con il suo nome;
 - ogni consenso, ritiro e pubblicazione va nell'audit con chi l'ha deciso
@@ -1422,7 +1423,8 @@ segreteria la sezione **👥 Personale** (che comprende il cartellino).
 - `/loja` (`jav_market/public_router.py`, `GET /public-site/shop`): lo
   **shop unico di JudoArteVida** si guarda senza account (mai i prodotti dei
   club), con ricerca, categorie e «Mostra altri prodotti»; i prezzi sono
-  **IVA compresa**. A negozio spento la pagina dice che apre presto.
+  **IVA compresa**. La vetrina si vede anche a negozio spento (si guarda
+  soltanto); l'interruttore dello Shop chiude solo lo shop nell'area.
 - «Acquista» porta a `/loja/comprar`: per comprare bisogna essere soci di un
   club della rete. Chi è socio entra (e trova lo Shop nella sua area); gli
   altri scelgono un club (`/c/<slug>`) o vanno a «Crea il tuo club».

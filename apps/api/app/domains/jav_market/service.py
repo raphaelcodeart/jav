@@ -672,14 +672,17 @@ async def customer_products_page(
     category_id: uuid.UUID | None = None,
     viewer_club_id: uuid.UUID | None = None,
     seller: str | None = None,
+    showcase: bool = False,
 ) -> dict:
     """La vetrina a pagine («Mostra altri prodotti»), come tutti
     i Marketplace: vedi marketplaces/paging.py. Lo shop di JudoArteVida e
-    quello del club di chi guarda (`seller` per uno solo dei due)."""
+    quello del club di chi guarda (`seller` per uno solo dei due).
+    `showcase`: la vetrina del sito pubblico, che si guarda soltanto e
+    quindi mostra i prodotti anche a negozio spento."""
     from app.domains.shop_categories import service as shop_categories_service
 
     row = await get_settings_row(db, organization_id=organization_id)
-    if not row.enabled:
+    if not row.enabled and not showcase:
         # Lo shop di JudoArteVida è spento: resta quello del club.
         if viewer_club_id is None or seller == "JAV":
             return paging.empty_page(offset, limit)

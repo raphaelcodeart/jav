@@ -1,7 +1,8 @@
 """Lo Shop JAV sul sito pubblico (jav_market/public_router.py).
 
 Le promesse: si vedono solo i prodotti di JudoArteVida (mai quelli dei
-club), con il prezzo IVA compresa; a negozio spento la vetrina è vuota.
+club), con il prezzo IVA compresa; la vetrina resta anche a negozio spento,
+che chiude solo lo shop dell'area.
 """
 
 from app.domains.jav_market import public_router
@@ -32,4 +33,5 @@ async def test_public_shop_shows_only_jav_products_with_vat(db, scope, monkeypat
 
     row = await market.get_settings_row(db, organization_id=org)
     await market.update_settings(db, row=row, actor_user_id=admin.id, updates={"enabled": False})
-    assert (await public_router.public_shop(offset=0, limit=24, q=None, category_id=None, db=db))["items"] == []
+    assert "Whey 1kg" in {i["name"] for i in (await public_router.public_shop(offset=0, limit=24, q=None, category_id=None, db=db))["items"]}
+    assert (await market.customer_products_page(db, organization_id=org, seller="JAV"))["items"] == []

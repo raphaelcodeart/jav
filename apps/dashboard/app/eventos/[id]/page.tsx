@@ -109,8 +109,10 @@ export default async function EventPage({ params }: Params) {
                     )}
                     <Avatar name={p.display_name} photoUrl={p.photo_url} size="sm" />
                     <div className="min-w-0 flex-1">
-                      <Link href={`/judocas/${p.athlete_id}`} className="font-semibold text-ink-900 hover:text-brand-700">{p.display_name}</Link>
-                      <p className="text-xs text-ink-500">{[ageBandLabel(t, p.age_band), p.category].filter(Boolean).join(" · ")}</p>
+                      {p.has_page ? (
+                        <Link href={`/judocas/${p.athlete_id}`} className="font-semibold text-ink-900 hover:text-brand-700">{p.display_name}</Link>
+                      ) : <span className="font-semibold text-ink-900">{p.display_name}</span>}
+                      <p className="text-xs text-ink-500">{[ageBandLabel(t, p.age_band), p.category, p.club?.name].filter(Boolean).join(" · ")}</p>
                     </div>
                     {p.belt && <span className="hidden sm:inline-flex"><BeltBadge code={p.belt} size="sm" showLabel={false} /></span>}
                     {p.placement !== null && (

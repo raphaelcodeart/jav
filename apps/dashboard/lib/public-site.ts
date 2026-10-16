@@ -227,6 +227,9 @@ export interface EventDetail extends PublicEvent {
   participants: {
     athlete_id: string;
     display_name: string;
+    /** La scheda /judocas/<id> c'è solo con il consenso della famiglia. */
+    has_page: boolean;
+    club: { name: string; slug: string; logo_url: string | null } | null;
     photo_url: string | null;
     belt: string | null;
     age_band: string;

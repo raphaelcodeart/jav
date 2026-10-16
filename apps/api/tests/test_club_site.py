@@ -186,7 +186,10 @@ async def test_public_payloads_carry_only_what_may_be_public(db, scope, monkeypa
 
     detail = await site_service.event_detail(db, event_id=past.id, today=TODAY)
     assert detail["participants_count"] == 2
-    assert [p["display_name"] for p in detail["participants"]] == ["Tiago M."]
+    # Come in classifica: tutti gli iscritti come «Nome I.»; foto e pagina
+    # solo per chi ha il consenso.
+    assert [(p["display_name"], p["has_page"]) for p in detail["participants"]] == [("Tiago M.", True), ("Rita S.", False)]
+    assert next(p for p in detail["participants"] if not p["has_page"])["photo_url"] is None
 
     # La foto compare solo con il permesso della famiglia.
     await site_service.update_consent(db, athlete=shown, actor_user_id=parent.id, changes={"show_photo": True})

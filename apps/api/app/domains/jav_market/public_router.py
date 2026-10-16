@@ -2,7 +2,8 @@
 shop della rete"). Chi non ha un account vede i prodotti di JudoArteVida
 (non quelli dei club) con il prezzo finale, IVA compresa; per comprare deve
 essere socio di un club della rete, e la pagina lo porta all'elenco dei club.
-Con lo shop spento la vetrina è vuota, come per i clienti.
+La vetrina si vede anche con lo shop spento (si guarda soltanto: per
+comprare si entra da soci, e nell'area lo shop segue l'interruttore).
 """
 
 import uuid
@@ -35,7 +36,8 @@ async def public_shop(
 
     org = await resolve_organization_id(db, None)
     page = await service.customer_products_page(
-        db, organization_id=org, offset=offset, limit=limit, search=q, category_id=category_id, seller="JAV",
+        db, organization_id=org, offset=offset, limit=limit, search=q, category_id=category_id,
+        seller="JAV", showcase=True,
     )
     vat = await rules.get_vat_percentage(db, organization_id=org)
     items = [{
