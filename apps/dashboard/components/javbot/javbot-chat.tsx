@@ -7,6 +7,7 @@ import { cn } from "@/lib/cn";
 import { useI18n } from "@/lib/i18n/provider";
 import type { BotAction, BotMessage } from "@/lib/javbot";
 import { usePrefersReducedMotion } from "@/lib/motion";
+import { MAX_SECONDS, useVoiceInput } from "@/components/javbot/use-voice-input";
 
 /** La chat di JAVBOT: il bottone che galleggia e il pannello. Non sa da dove
  *  arrivano le risposte: l'area privata (components/javbot/javbot.tsx) e il
@@ -33,6 +34,8 @@ export interface JavbotChatProps {
   /** Se un bottone si può mostrare (una sezione che in quest'area non c'è, no). */
   actionAvailable?: (action: BotAction) => boolean;
   onReset?: () => void;
+  /** Dove mandare la voce da trascrivere (il microfono). Senza, niente microfono. */
+  transcribeUrl?: string;
   open: boolean;
   setOpen: (open: boolean) => void;
 }
@@ -106,8 +109,19 @@ function BotAvatar({ size = "md" }: { size?: "sm" | "md" }) {
 
 function ChatPanel(props: JavbotChatProps & { reduced: boolean; onClose: () => void }) {
   const { messages, busy, error, reduced, onClose, onSend, onAction, actionAvailable, onReset, maxLength } = props;
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [draft, setDraft] = useState("");
+  const voice = useVoiceInput({
+    url: props.transcribeUrl,
+    lang: locale,
+    onText: (text) => {
+      // Si aggiunge a quello che c'era: si può parlare in più volte.
+      setDraft((d) => (d.trim() ? `${d.trimEnd()} ${text}` : text).slice(0, maxLength));
+      requestAnimationFrame(() => inputRef.current?.focus());
+    },
+  });
+  const listening = voice.state === "recording";
+  const transcribing = voice.state === "transcribing";
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -135,6 +149,11 @@ function ChatPanel(props: JavbotChatProps & { reduced: boolean; onClose: () => v
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+    if (e.key === "Escape" && listening) {
+      e.stopPropagation();
+      voice.cancel();
+      return;
+    }
     if (e.key === "Escape") {
       e.stopPropagation();
       onClose();
@@ -224,6 +243,28 @@ function ChatPanel(props: JavbotChatProps & { reduced: boolean; onClose: () => v
         </div>
       )}
 
+      {(listening || transcribing || voice.error) && (
+        <div className="flex items-center gap-2 border-t border-ink-100 bg-white px-4 pt-2.5 text-xs" aria-live="polite">
+          {listening && (
+            <>
+              <span className="h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-rose-500" aria-hidden="true" />
+              <span className="flex-1 font-semibold text-rose-700">{t("javbot.mic.listening")}</span>
+              <span className="tabular-nums text-ink-500">0:{String(voice.seconds).padStart(2, "0")} / {MAX_SECONDS / 60}:00</span>
+              <button type="button" onClick={voice.cancel} className="cursor-pointer font-semibold text-ink-500 underline hover:text-ink-800">{t("javbot.mic.cancel")}</button>
+            </>
+          )}
+          {transcribing && (
+            <>
+              <span className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-brand-200 border-t-brand-600" aria-hidden="true" />
+              <span className="flex-1 font-semibold text-brand-700">{t("javbot.mic.transcribing")}</span>
+            </>
+          )}
+          {!listening && !transcribing && voice.error && (
+            <p role="alert" className="flex-1 text-rose-700">{t(`javbot.mic.${voice.error}`)}</p>
+          )}
+        </div>
+      )}
+
       <form onSubmit={submit} className="flex items-end gap-2 border-t border-ink-100 bg-white px-3 pt-3 pb-[max(env(safe-area-inset-bottom),12px)]">
         <label className="sr-only" htmlFor={`${titleId}-input`}>{props.placeholder}</label>
         <textarea
@@ -234,9 +275,34 @@ function ChatPanel(props: JavbotChatProps & { reduced: boolean; onClose: () => v
           maxLength={maxLength}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={onComposerKey}
-          placeholder={props.placeholder}
+          placeholder={listening ? t("javbot.mic.speakNow") : props.placeholder}
           className="max-h-32 min-h-11 flex-1 resize-none rounded-2xl bg-ink-50 px-4 py-2.5 text-[15px] text-ink-900 ring-1 ring-ink-200 placeholder:text-ink-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-400"
         />
+        {voice.supported && (
+          <motion.button
+            type="button"
+            onClick={() => (listening ? voice.stop() : void voice.start())}
+            disabled={transcribing}
+            whileTap={reduced ? undefined : { scale: 0.92 }}
+            aria-label={listening ? t("javbot.mic.stop") : t("javbot.mic.start")}
+            aria-pressed={listening}
+            title={listening ? t("javbot.mic.stop") : `${t("javbot.mic.start")} · ${t("javbot.mic.privacy")}`}
+            className={cn(
+              "relative flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full ring-1 transition-colors disabled:cursor-wait disabled:opacity-50",
+              listening ? "bg-rose-500 text-white ring-rose-500" : "bg-white text-brand-600 ring-ink-200 hover:bg-brand-50",
+            )}
+          >
+            {listening && !reduced && <span className="absolute inset-0 animate-ping rounded-full bg-rose-400/40" aria-hidden="true" />}
+            {listening ? (
+              <svg className="relative h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+            ) : (
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="9" y="3" width="6" height="11" rx="3" />
+                <path d="M5 11a7 7 0 0014 0M12 18v3M9 21h6" />
+              </svg>
+            )}
+          </motion.button>
+        )}
         <motion.button
           type="submit"
           disabled={busy || !draft.trim()}

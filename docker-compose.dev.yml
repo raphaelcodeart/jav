@@ -120,6 +120,20 @@ services:
     healthcheck:
       disable: true
 
+  # La voce di JAVBOT in testo (apps/stt, docs/javbot.md): Whisper qui, mai
+  # fuori. Solo nella rete dei container: lo chiama l'API, non il browser.
+  stt:
+    build:
+      context: ./apps/stt
+    restart: unless-stopped
+    mem_limit: 1200m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
   dashboard:
     build:
       context: .

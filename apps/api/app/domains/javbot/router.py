@@ -15,7 +15,7 @@ inoltra in `X-Forwarded-For`.
 import uuid
 
 import redis.asyncio as redis
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db, utcnow
@@ -23,7 +23,7 @@ from app.core.deps import CurrentUser, get_current_user
 from app.core.rate_limit import _get_redis, rate_limit
 from app.domains.club.scope import CLUB_HEADER
 from app.domains.javbot import public as public_bot
-from app.domains.javbot import service
+from app.domains.javbot import service, voice
 from app.domains.javbot.schemas import (
     BotMessageRead,
     ConversationRead,
@@ -41,22 +41,54 @@ public_router = APIRouter(prefix="/public-site", tags=["public-site"])
 
 #: Messaggi al minuto per utente: una persona che scrive, non uno script.
 USER_MAX_PER_MINUTE = 30
+#: Messaggi a voce al minuto per utente: la trascrizione costa CPU.
+VOICE_MAX_PER_MINUTE = 8
 
 
-async def _user_rate_limit(current_user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+async def _count_per_minute(user_id: uuid.UUID, kind: str, limit: int) -> None:
     """Come core/rate_limit.py, ma per utente. Se Redis non risponde si
     lascia passare: l'assistente non deve spegnersi per un contatore."""
-    key = f"ratelimit:javbot:{current_user.user_id}:{utcnow().strftime('%Y%m%d%H%M')}"
+    key = f"ratelimit:{kind}:{user_id}:{utcnow().strftime('%Y%m%d%H%M')}"
     try:
         client = _get_redis()
         count = await client.incr(key)
         if count == 1:
             await client.expire(key, 70)
     except redis.RedisError:
-        return current_user
-    if count > USER_MAX_PER_MINUTE:
+        return
+    if count > limit:
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Troppi messaggi in poco tempo: aspetta un minuto e riprova.")
+
+
+async def _user_rate_limit(current_user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    await _count_per_minute(current_user.user_id, "javbot", USER_MAX_PER_MINUTE)
     return current_user
+
+
+async def _voice_rate_limit(current_user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    await _count_per_minute(current_user.user_id, "javbot-voice", VOICE_MAX_PER_MINUTE)
+    return current_user
+
+
+async def _transcribed(audio: UploadFile, lang: str) -> dict:
+    data = await audio.read(voice.MAX_AUDIO_BYTES + 1)
+    try:
+        text = await voice.transcribe(data, content_type=audio.content_type or "", lang=lang_of(lang))
+    except voice.VoiceError as exc:
+        code = {"too_long": 413, "unreadable": 422, "busy": 503, "unavailable": 503}[exc.kind]
+        raise HTTPException(code, voice.MESSAGES[exc.kind]) from None
+    return {"text": text}
+
+
+@router.post("/transcribe")
+async def transcribe_voice(
+    audio: UploadFile = File(...),
+    lang: str = Form(""),
+    _user: CurrentUser = Depends(_voice_rate_limit),
+) -> dict:
+    """Il microfono della chat: la voce in testo (voice.py). Il testo torna
+    nel campo, non parte da solo: chi parla lo rilegge e lo invia."""
+    return await _transcribed(audio, lang)
 
 
 async def _context(request: Request, db: AsyncSession, current_user: CurrentUser, lang: str | None) -> ToolContext:
@@ -150,3 +182,12 @@ async def public_bot_answer(payload: PublicBotWrite, db: AsyncSession = Depends(
     )
     reply = await public_bot.answer(ctx, payload.text, club_slug=(payload.club_slug or "").strip().lower() or None)
     return PublicBotRead(text=reply.text, actions=reply.actions, quick_replies=reply.quick_replies)
+
+
+@public_router.post(
+    "/bot/transcribe",
+    dependencies=[Depends(rate_limit("public-bot-voice", max_requests=12, window_seconds=300))],
+)
+async def public_bot_transcribe(audio: UploadFile = File(...), lang: str = Form("")) -> dict:
+    """Il microfono di JAVBOT sul sito: come /javbot/transcribe, per IP."""
+    return await _transcribed(audio, lang)

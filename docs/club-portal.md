@@ -834,6 +834,30 @@ apposta:
   (`javbot/planner.py`) resta per i percorsi guidati che scrivono e come
   rete di sicurezza.
 
+### Il microfono
+
+Nei due JAVBOT, accanto al campo di testo, c'è il bottone 🎤: si parla
+invece di scrivere. Il browser registra (al massimo un minuto, `MediaRecorder`:
+opus su Chrome/Firefox/Android, mp4 su Safari/iPhone), l'audio va a
+`POST /javbot/transcribe` (area, 8 al minuto per utente) o
+`POST /public-site/bot/transcribe` (sito, 12 ogni 5 minuti per IP), e l'API
+lo gira al servizio **`stt`** (`apps/stt`): Whisper `small` int8 sul nostro
+server, nella sola rete dei container. Il testo torna **nel campo**, non
+parte da solo: chi parla lo rilegge, lo corregge e lo invia.
+
+- **La voce non si salva**: resta in memoria per la durata della richiesta,
+  né l'API né `stt` scrivono file o il contenuto nei log. Nessun fornitore
+  esterno. È nella Política de Privacidade.
+- **Lingua**: quella dell'interfaccia (pt/it/en) come indizio a Whisper.
+- **Velocità** (2 CPU): circa 1,5 secondi di attesa per secondo di voce;
+  una trascrizione per volta, le altre in fila fino a 20 secondi, poi «riprova».
+  Il modello si cambia con l'argomento di build `WHISPER_MODEL` (`base` è tre
+  volte più veloce e sbaglia di più).
+- **Memoria**: circa 750 MB, limite del container 1,2 GB.
+- `STT_URL` (predefinito `http://stt:8001`) vuoto spegne il microfono (le
+  rotte rispondono «non disponibile»). Codice: `javbot/voice.py`,
+  `components/javbot/use-voice-input.ts`. Test: `tests/test_javbot_voice.py`.
+
 ### Che cosa sa fare
 
 Nell'area privata (`/api/javbot/...`, qualsiasi utente con una sessione):

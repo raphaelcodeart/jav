@@ -122,6 +122,7 @@ export function Javbot({ navKeys, onNavigate }: { navKeys: string[]; onNavigate:
 
   return (
     <JavbotChat
+      transcribeUrl={"/api/proxy/javbot/transcribe"}
       open={open}
       setOpen={setOpen}
       onOpen={() => void load()}

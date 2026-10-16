@@ -89,6 +89,7 @@ export function PublicJavbot() {
 
   return (
     <JavbotChat
+      transcribeUrl={"/api/public/bot/transcribe"}
       open={open}
       setOpen={setOpen}
       // Il messaggio vuoto è il saluto: solo la prima volta che si apre.

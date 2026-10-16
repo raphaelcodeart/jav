@@ -36,6 +36,7 @@ titolare stanno in un posto solo: `apps/dashboard/lib/legal.ts`.
 | Staff: ore, tariffe, compiti, messaggi, firme pulizie | `club_work_sessions`, `club_staff_*`, `club_cleaning_logs` | contratto, obbligo | 10 anni; messaggi 2 anni |
 | Messaggi dal sito (ip_hash, UA) | `contact_messages` | pre-contrattuale, legittimo interesse | 24 mesi |
 | JAVBOT | `javbot_*` | contratto | 90 giorni di inattività |
+| Voce dettata a JAVBOT | mai salvata (`javbot/voice.py`, `apps/stt`) | richiesta dell'utente | nessuna: trascritta sul server e scartata |
 | Sessioni, audit (IP, UA) | `sessions`, `audit_log` | legittimo interesse | 30 giorni; 2 anni |
 | Promoter, contratti, IBAN, KYC | `contracts`, `documents`, provvigioni | contratto, obbligo | 10 anni dopo il contratto |
 | Giochi | schema `game` | contratto | conta |

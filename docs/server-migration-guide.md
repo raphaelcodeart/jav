@@ -160,6 +160,9 @@ Variabili che vanno adattate al nuovo server (non generate a caso):
   (predefinito `low`) la regolano. Dopo averla cambiata vanno ricreati
   `api` e i due worker (`up -d --force-recreate api celery-worker
   celery-beat`): il `.env` si legge all'avvio.
+- `STT_URL` — opzionale, predefinito `http://stt:8001`: il servizio Whisper
+  del microfono di JAVBOT (container `stt`, circa 750 MB di RAM). Vuoto,
+  il microfono risponde «non disponibile».
 
 **Mai committare `.env` nel repository.** È già in `.gitignore`; se `git status`
 lo mostra come modificabile, fermati e controlla prima di fare qualsiasi `git add`.
@@ -175,7 +178,7 @@ Le migrazioni Alembic girano **automaticamente** all'avvio del container `api`
 (vedi il `command` del servizio `api` in `docker-compose.dev.yml`) — non serve
 lanciarle a mano la prima volta.
 
-Verifica che tutti gli 8 container siano `healthy` (aspetta 30-60 secondi):
+Verifica che tutti i 9 container (compreso `stt`, il microfono di JAVBOT) siano `healthy` (aspetta 30-60 secondi):
 
 ```bash
 docker compose -f docker-compose.dev.yml ps

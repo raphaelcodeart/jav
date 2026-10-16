@@ -756,3 +756,9 @@ l'opposizione della famiglia (`basis`, `opted_out_at`); pagine
 `/privacidade`, `/cookies`, `/termos`, banner dei cookie e contenuti di terzi
 solo con consenso; job di conservazione. Analisi: docs/legal.md. Test:
 `tests/test_data_retention.py`, test del sito aggiornati alla nuova regola.
+
+Poi: lo Shop JudoArteVida in vetrina anche nell'area a shop spento
+(`purchasable`, `jav_open`), e acceso. **Microfono di JAVBOT**: bottone 🎤
+nelle due chat, la voce trascritta dal nuovo servizio `stt` (Whisper `small`
+sul nostro server, l'audio non si salva), il testo nel campo da rileggere.
+Vedi club-portal.md, «Il microfono». Test: `tests/test_javbot_voice.py`.

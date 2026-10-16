@@ -75,6 +75,12 @@ services:
     healthcheck:
       disable: true
 
+  # La voce di JAVBOT in testo (apps/stt): solo nella rete interna.
+  stt:
+    image: ${REGISTRY:-jav}/stt:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    mem_limit: 1200m
+
   dashboard:
     image: ${REGISTRY:-jav}/dashboard:${IMAGE_TAG:-latest}
     restart: unless-stopped

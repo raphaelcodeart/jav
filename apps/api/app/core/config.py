@@ -66,6 +66,9 @@ class Settings(BaseSettings):
     # Quanto ragiona prima di rispondere: per una chat "low" basta, e
     # costa meno; "medium" per risposte più ragionate sui documenti.
     javbot_effort: str = "low"
+    # Il microfono di JAVBOT: il servizio Whisper interno (apps/stt). Vuoto
+    # = niente microfono (il bottone non compare).
+    stt_url: str = "http://stt:8001"
 
 
 @lru_cache
