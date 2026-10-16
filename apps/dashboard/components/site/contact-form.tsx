@@ -2,7 +2,7 @@
 
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { useState, type FormEvent } from "react";
-import { Field, Input, Textarea } from "@/components/ui/field";
+import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { friendlyApiError } from "@/lib/api-error";
 import { cn } from "@/lib/cn";
 import { useI18n } from "@/lib/i18n/provider";
@@ -16,15 +16,29 @@ import { useI18n } from "@/lib/i18n/provider";
 
 type Target = { kind: "club"; slug: string; name: string } | { kind: "jav" };
 
+/** Gli argomenti (contact_models.CONTACT_TOPICS): la casella li mostra e filtra. */
+const TOPICS = ["GENERAL", "SPONSOR", "ENROLMENT", "EVENTS", "OTHER"] as const;
+
 const EMPTY = { name: "", email: "", phone: "", message: "", consent: false, website: "" };
 
-export function ContactForm({ target, className }: { target: Target; className?: string }) {
+/** `recipients`: su /contactos chi scrive sceglie se scrivere a JudoArteVida
+ *  o a un club (il messaggio va allora nella casella di quel club, e lo
+ *  staff della piattaforma lo vede in «Tutti i club»). `topic` fisso (es.
+ *  SPONSOR su /patrocinadores) o, con `chooseTopic`, scelto da chi scrive. */
+export function ContactForm({ target, className, recipients, topic: fixedTopic, chooseTopic = false }: {
+  target: Target; className?: string; recipients?: { slug: string; name: string }[];
+  topic?: (typeof TOPICS)[number]; chooseTopic?: boolean;
+}) {
   const { t, locale } = useI18n();
   const [form, setForm] = useState(EMPTY);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
-  const endpoint = target.kind === "club" ? `/api/public/club/${encodeURIComponent(target.slug)}/message` : "/api/public/contact";
+  const [recipient, setRecipient] = useState("");
+  const [topic, setTopic] = useState<string>(fixedTopic ?? "GENERAL");
+  const chosenClub = recipients?.find((r) => r.slug === recipient);
+  const effective: Target = chosenClub ? { kind: "club", slug: chosenClub.slug, name: chosenClub.name } : target;
+  const endpoint = effective.kind === "club" ? `/api/public/club/${encodeURIComponent(effective.slug)}/message` : "/api/public/contact";
   const set = (key: "name" | "email" | "phone" | "message" | "website") =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
@@ -40,7 +54,7 @@ export function ContactForm({ target, className }: { target: Target; className?:
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, phone: form.phone.trim() || null, locale }),
+        body: JSON.stringify({ ...form, phone: form.phone.trim() || null, locale, topic }),
       });
       if (res.status === 429) throw new Error(t("site.contactForm.tooMany"));
       if (!res.ok) throw new Error(await friendlyApiError(res));
@@ -66,7 +80,7 @@ export function ContactForm({ target, className }: { target: Target; className?:
               <span className="flex h-16 w-16 items-center justify-center rounded-full bg-club text-3xl text-club-on animate-pop" aria-hidden="true">✓</span>
               <h3 className="mt-4 text-xl text-ink-900">{t("site.contactForm.sentTitle")}</h3>
               <p className="mt-2 max-w-sm text-ink-600">
-                {target.kind === "club" ? t("site.contactForm.sentClub", { club: target.name }) : t("site.contactForm.sentJav")}
+                {effective.kind === "club" ? t("site.contactForm.sentClub", { club: effective.name }) : t("site.contactForm.sentJav")}
               </p>
               <button type="button" onClick={() => setSent(false)} className="mt-6 cursor-pointer text-sm font-semibold text-club-ink hover:underline">
                 {t("site.contactForm.another")}
@@ -79,6 +93,25 @@ export function ContactForm({ target, className }: { target: Target; className?:
               className="space-y-4 rounded-3xl bg-white p-6 shadow-soft ring-1 ring-ink-900/5 sm:p-8"
               aria-describedby={error ? "contact-error" : undefined}
             >
+              {(recipients?.length || chooseTopic) ? (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {recipients && recipients.length > 0 && (
+                    <Field label={t("site.contactForm.to")} htmlFor="contact-to">
+                      <Select id="contact-to" value={recipient} onChange={(e) => setRecipient(e.target.value)}>
+                        <option value="">🌍 JudoArteVida</option>
+                        {recipients.map((r) => <option key={r.slug} value={r.slug}>🏯 {r.name}</option>)}
+                      </Select>
+                    </Field>
+                  )}
+                  {chooseTopic && (
+                    <Field label={t("site.contactForm.topic")} htmlFor="contact-topic">
+                      <Select id="contact-topic" value={topic} onChange={(e) => setTopic(e.target.value)}>
+                        {TOPICS.map((k) => <option key={k} value={k}>{t(`site.contactForm.topic.${k}`)}</option>)}
+                      </Select>
+                    </Field>
+                  )}
+                </div>
+              ) : null}
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label={t("site.contactForm.name")} htmlFor="contact-name">
                   <Input id="contact-name" name="name" autoComplete="name" required minLength={2} maxLength={120} value={form.name} onChange={set("name")} />
@@ -93,7 +126,7 @@ export function ContactForm({ target, className }: { target: Target; className?:
               <Field label={t("site.contactForm.message")} htmlFor="contact-message">
                 <Textarea
                   id="contact-message" name="message" rows={5} required minLength={10} maxLength={4000}
-                  placeholder={target.kind === "club" ? t("site.contactForm.placeholderClub") : t("site.contactForm.placeholderJav")}
+                  placeholder={topic === "SPONSOR" ? t("site.contactForm.placeholderSponsor") : effective.kind === "club" ? t("site.contactForm.placeholderClub") : t("site.contactForm.placeholderJav")}
                   value={form.message} onChange={set("message")}
                 />
               </Field>
@@ -109,7 +142,7 @@ export function ContactForm({ target, className }: { target: Target; className?:
                   checked={form.consent} onChange={(e) => setForm((f) => ({ ...f, consent: e.target.checked }))}
                 />
                 <span className="text-sm text-ink-700">
-                  {target.kind === "club" ? t("site.contactForm.consentClub", { club: target.name }) : t("site.contactForm.consentJav")}
+                  {effective.kind === "club" ? t("site.contactForm.consentClub", { club: effective.name }) : t("site.contactForm.consentJav")}
                 </span>
               </label>
               {error && <p id="contact-error" role="alert" className="rounded-xl bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{error}</p>}

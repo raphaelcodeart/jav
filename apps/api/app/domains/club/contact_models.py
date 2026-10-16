@@ -17,6 +17,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.core.db import Base, TimestampMixin, UUIDPKMixin
 
 CONTACT_STATUSES = ("NEW", "READ", "ARCHIVED")
+#: Di che cosa scrive: una domanda qualunque, diventare sponsor, iscriversi,
+#: gare ed eventi, altro. Lo sceglie chi scrive; la casella lo mostra e filtra.
+CONTACT_TOPICS = ("GENERAL", "SPONSOR", "ENROLMENT", "EVENTS", "NEW_CLUB", "OTHER")
 
 
 class ContactMessage(UUIDPKMixin, TimestampMixin, Base):
@@ -28,6 +31,7 @@ class ContactMessage(UUIDPKMixin, TimestampMixin, Base):
     __tablename__ = "contact_messages"
     __table_args__ = (
         CheckConstraint("status IN ('NEW', 'READ', 'ARCHIVED')", name="status"),
+        CheckConstraint("topic IN ('GENERAL', 'SPONSOR', 'ENROLMENT', 'EVENTS', 'NEW_CLUB', 'OTHER')", name="topic"),
         # Il limite per mittente (contact.py, quanti messaggi in un'ora) si
         # legge da qui: niente scansione della tabella a ogni invio.
         Index("ix_contact_messages_ip_hash_created_at", "ip_hash", "created_at"),
@@ -44,6 +48,7 @@ class ContactMessage(UUIDPKMixin, TimestampMixin, Base):
     email: Mapped[str] = mapped_column(String(255))
     phone: Mapped[str | None] = mapped_column(String(40), nullable=True)
     message: Mapped[str] = mapped_column(Text)
+    topic: Mapped[str] = mapped_column(String(16), default="GENERAL", server_default=text("'GENERAL'"))
     #: La lingua del sito quando ha scritto: in quella gli si risponde.
     locale: Mapped[str] = mapped_column(String(5), default="pt", server_default=text("'pt'"))
     status: Mapped[str] = mapped_column(String(10), default="NEW", server_default=text("'NEW'"), index=True)

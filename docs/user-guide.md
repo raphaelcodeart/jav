@@ -152,6 +152,13 @@ scarica il PDF da portare a scuola.
 - **Livello e medaglie**: crescono con presenze, cinture e gare (prima gara,
   primo podio, 50 e 100 presenze, …).
 
+### 2.6 bis Bacheca
+
+Le notizie del club (foto, video, link) e i documenti che il club condivide
+con te (regolamento, calendario): li apri con un tocco. Quelle uscite dopo
+la tua ultima visita hanno «Nuovo». Anche l'atleta con il suo accesso la
+vede nella sua area.
+
 ### 2.7 Corsi
 
 L'elenco dei corsi con giorni e orari; puoi iscrivere o togliere un figlio da
@@ -218,7 +225,9 @@ proprio club**: entrando, l'area si apre direttamente sul club. Le sezioni:
   premi **Genera e scarica il PDF**. Il PDF è su carta intestata del club,
   resta salvato nell'area privata e il genitore lo scarica dalla sua pagina
   delle gare. Rigenerarla sostituisce la precedente.
-- **Corsi & presenze**: corsi, orari, istruttori, iscritti.
+- **Corsi & presenze**: corsi, orari, istruttori, iscritti. Per correggere
+  un orario (es. finisce alle 19:00 e non alle 18:30) **tocca l'orario ✎**:
+  giorno, ore e sala si cambiano senza toglierlo e rifarlo.
 - **Gare e stage, trasporto**: un evento può essere una gara o uno stage
   (che non dà punti). Spunta "Chiedere il trasporto" e indica ente, email,
   partenza e accompagnatori: quando le iscrizioni si chiudono la lettera al
@@ -234,7 +243,14 @@ proprio club**: entrando, l'area si apre direttamente sul club. Le sezioni:
 - **Documenti del club**: certidões delle Finanze e della Segurança Social,
   atas, rivalidazione alla federazione, assicurazioni, statuto. Con la
   scadenza, ricevi un avviso 30 giorni prima. Li vedi solo tu e
-  JudoArteVida.
+  JudoArteVida, a meno che spunti **«Condividi con atleti e famiglie»**
+  (regolamento, calendario della stagione): allora compaiono anche nella
+  loro **Bacheca**.
+- **📰 Notizie**: scrivi una notizia come un post — titolo, testo, una
+  foto, un video (YouTube o Vimeo si vedono dentro la notizia) o un link —
+  e compare nella **Bacheca** di atleti e famiglie (non sul sito pubblico).
+  Con l'anteprima mentre scrivi; puoi metterla in evidenza in cima,
+  salvarla come bozza, nasconderla o eliminarla.
 - **JAVBOT**: che cosa sa l'assistente dei tuoi soci. Carica i **PDF del
   club** (regolamento interno, orari speciali, materiale, procedure: PDF con
   testo, fino a 15 MB; una scansione compare come «Senza testo» e non si
@@ -251,8 +267,12 @@ proprio club**: entrando, l'area si apre direttamente sul club. Le sezioni:
 
 **Persone**: atleti, genitori, segreteria, treinador e monitor in un elenco,
 ognuno con il suo simbolo (🥋 atleta, 👪 genitore, 🗂️ segreteria, 🧑‍🏫 treinador,
-🤝 treinador adjunto, 🎽 monitor, 🎗️ monitor adjunto). Tocca un nome: debiti,
-pagamenti, risultati, investimenti e la funzione. **Taxa de falta**: chi ha
+🤝 treinador adjunto, 🎽 monitor, 🎗️ monitor adjunto, 🧑‍⚖️ árbitro). Chi è più
+cose ha più simboli (un adulto che si allena, ha figli, insegna e arbitra:
+🥋 👪 🧑‍🏫 🧑‍⚖️), e gli stessi simboli piccoli compaiono accanto ai nomi negli
+altri elenchi (atleti, quote, certificati, iscritti alle gare, presenze).
+Tocca un nome: debiti, pagamenti, risultati, investimenti, la funzione e la
+casella «È anche árbitro». **Taxa de falta**: chi ha
 fatto poche lezioni nel mese, con un clic metà mensilità o niente. **Ore
 dello staff** e **Registro presenze**: il cartellino e chi è venuto. **Sito
 del club**: testi, foto, contatti, judoka pubblicati (solo con il consenso
@@ -448,6 +468,13 @@ c'è **I miei guadagni**: per ogni mese e ogni tuo corso, quanto è entrato
 dalle mensilità e quanto ti spetta (la tua percentuale), più quanto arriverà
 quando le famiglie avranno pagato le quote già emesse.
 
+**Il mio lavoro**: le tue ore del mese, la tua tariffa e quanto valgono; sotto
+scrivi i **compiti** che hai svolto (montato il tatami, accompagnato alla
+gara…) con data e, se vuoi, i minuti. Finché non sono pagati puoi toglierli.
+**Messaggi**: due conversazioni, con la **segreteria del club** (turni,
+assenze, materiale) e con **JudoArteVida** (formazione, rete, portale); ti
+arriva una notifica quando ti rispondono.
+
 ## 4bis. Per gli istruttori (vecchia sezione)
 
 Ruolo **Istruttore**. Vedi i tuoi corsi:
@@ -491,3 +518,80 @@ mano.
 
 **"Posso usarlo dal telefono?"** Sì: il portale è pensato prima di tutto per
 il telefono, compresa la foto della ricevuta e del certificato.
+
+## Sito pubblico: ranking, coppa dei club, sponsor, messaggi
+
+- **Ranking** (`/ranking`): scegli *Anno* (quello che conta), *Mese* o
+  *Sempre*, l'anno e il mese; cerca un judoca o un club nella casella e
+  tocca un nome per aprire la sua scheda (completa se la famiglia l'ha
+  pubblicata, ridotta altrimenti). La scheda **Taça dos Clubes** mette in
+  fila i club per i punti dei loro atleti: a fine anno il primo vince la
+  coppa, e l'albo d'oro ricorda i vincitori.
+- **Sponsor** (console → 🤝 Sponsor): aggiungi nome, logo, sito, colore e
+  descrizione; compaiono nella barra di loghi della home e ognuno ha la sua
+  pagina con il bottone verso il suo sito. «Nascondi» lo toglie dal sito.
+- **Messaggi**: da `/contactos` chi scrive sceglie se scrivere a
+  JudoArteVida o a un club e l'argomento; da `/patrocinadores` arrivano le
+  richieste di sponsorizzazione. Tutto finisce in **Messaggi** (della
+  console o della segreteria del club) anche se l'email non parte; filtra
+  per argomento, rispondi con ↩.
+
+## Il mese: chi deve ancora pagare
+
+- **Segreteria**: in **Panoramica** e in **Quote → 📅 Il mese** trovi il mese
+  corrente in grande, la barra di quanto è già incassato e un riquadro per
+  ogni atleta: gruppo, quanto paga e se ha pagato. Parti da «Da pagare»:
+  tocca **✓ Segna pagato**, scegli come (contanti e a chi, MB Way, bonifico,
+  carta) e il riquadro passa in «Pagati». Se la persona deve anche mesi
+  vecchi, una gara o un judogi, li vedi nel riquadro e li chiudi insieme.
+  Con ‹ › vai ai mesi prima e dopo; filtra per gruppo o cerca un nome.
+  L'elenco di tutte le quote resta in **Quote → 📋 Tutte le quote**.
+- **Famiglia**: in cima alla pagina c'è «Questo mese», con la mensilità di
+  ogni figlio (pagata o da pagare) e il totale; **Paga** apre il pagamento
+  con quelle quote già scelte.
+- **Prove**: nella gara (Modifica) puoi caricare una foto o la locandina;
+  senza, accanto al nome c'è l'icona del tipo.
+
+
+## L'area dell'atleta
+
+- A sinistra il menu: Home, Lezioni, **Gare e stage**, Bacheca, Quote,
+  Certificato medico, Traguardi, Giochi, Invita un amico.
+- **Gare e stage**: le prove in arrivo. Ti piacerebbe andare? Premi
+  **🙋 Voglio partecipare**: chi ti iscrive (il titolare del conto) riceve
+  un'email e una notifica. Il titolare vede invece **Iscrivi**.
+- In Home il riquadro dei **soldi**: saldo del wallet della famiglia, quanto
+  il club ha pagato per l'atleta (trasporto, materiale, gare, esami, stage) e
+  gli investimenti del club.
+- **Invita un amico**: il tuo link con i bottoni WhatsApp, Facebook,
+  Telegram, X, email e «Copia».
+
+## Segreteria: aiuto del club, avvisi, personale
+
+- **Aiuto del club**: Persone → l'atleta → 💚 Aiuto del club. Scegli che cosa
+  (trasporto, materiale, iscrizione a una prova, esame, stage, altro),
+  l'importo e la data. La famiglia lo vede nel wallet e nella scheda
+  dell'atleta; il saldo non cambia.
+- **Avvisi della mensilità e multa**: Impostazioni → ⏰. Accesi, il 1°, il 10
+  e il 15 alle 9:00 parte un'email a chi non ha pagato la mensilità del mese;
+  il 16 alle 9:00 si aggiunge la multa (15 € o quella che scrivi).
+- **👥 Personale**: «Il mese» con ore, costo delle ore, compiti e lavoretti e
+  il totale; **Lavoretto o compito** per scrivere un lavoro (anche di chi non
+  ha un account) con il costo; **Paga** lo mette nella contabilità come
+  spesa. «Cartellino» sono le ore di sempre; «Messaggi» le conversazioni con
+  lo staff.
+- **Calendario**: accanto a «Scarica PDF» scegli il mese e premi **🎨 Scarica
+  flyer del mese**: una pagina con il logo JAV da appendere o mandare.
+
+## Sito: shop e «Crea il tuo club»
+
+- **Loja** (`/loja`): lo shop di JudoArteVida si guarda senza account, con
+  ricerca e categorie e i prezzi IVA compresa. «Comprar» spiega che bisogna
+  essere soci di un club e mostra i club della rete. Lo shop va acceso dalla
+  console (Shop → impostazioni).
+- **Crea il tuo club** (`/criar-clube`): chi ha già un club e vuole il
+  portale, o chi vuole partire da zero con il Judo Team Matias Luwawa (solo in
+  Portogallo), manda la richiesta. Arriva in console → Messaggi con
+  l'argomento «Creare un club».
+- **Console → 💬 Messaggi dello staff**: i messaggi che treinadores, monitor
+  e segreterie dei club scrivono a JudoArteVida, con la risposta.

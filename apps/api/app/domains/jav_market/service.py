@@ -298,7 +298,8 @@ def variant_sellable(variant: JavMarketVariant) -> bool:
 
 
 async def create_product(
-    db: AsyncSession, *, organization_id: uuid.UUID, actor_user_id: uuid.UUID, payload: dict
+    db: AsyncSession, *, organization_id: uuid.UUID, actor_user_id: uuid.UUID, payload: dict,
+    club_id: uuid.UUID | None = None,
 ) -> JavMarketProduct:
     """Un prodotto nuovo, con le sue varianti. Almeno una: un prodotto senza
     varianti non sarebbe comprabile, e crearlo per poi scoprirlo al primo
@@ -316,7 +317,7 @@ async def create_product(
             raise JavMarketNotFoundError("Azienda produttrice non trovata.")
 
     product = JavMarketProduct(
-        organization_id=organization_id, created_by_user_id=actor_user_id, name=name,
+        organization_id=organization_id, club_id=club_id, created_by_user_id=actor_user_id, name=name,
         description=(payload.get("description") or "").strip(),
         image_url=payload.get("image_url"), images=payload.get("images") or [],
         status=payload.get("status") or "ACTIVE",
@@ -349,10 +350,11 @@ def _add_variant(db: AsyncSession, *, product_id: uuid.UUID, payload: dict) -> N
 
 
 async def update_product(
-    db: AsyncSession, *, organization_id: uuid.UUID, product_id: uuid.UUID, payload: dict
+    db: AsyncSession, *, organization_id: uuid.UUID, product_id: uuid.UUID, payload: dict,
+    club_id: uuid.UUID | None = None,
 ) -> JavMarketProduct:
     product = await db.get(JavMarketProduct, product_id)
-    if product is None or product.organization_id != organization_id:
+    if product is None or product.organization_id != organization_id or product.club_id != club_id:
         raise JavMarketNotFoundError("Prodotto non trovato.")
     if "credit_discount_percentage" in payload and payload["credit_discount_percentage"] is not None:
         rules.check_credit_percentage(int(payload["credit_discount_percentage"]))
@@ -379,11 +381,12 @@ async def update_product(
 
 
 async def update_variant(
-    db: AsyncSession, *, organization_id: uuid.UUID, variant_id: uuid.UUID, payload: dict
+    db: AsyncSession, *, organization_id: uuid.UUID, variant_id: uuid.UUID, payload: dict,
+    club_id: uuid.UUID | None = None,
 ) -> JavMarketVariant:
     variant = await db.get(JavMarketVariant, variant_id)
     product = await db.get(JavMarketProduct, variant.product_id) if variant else None
-    if variant is None or product is None or product.organization_id != organization_id:
+    if variant is None or product is None or product.organization_id != organization_id or product.club_id != club_id:
         raise JavMarketNotFoundError("Variante non trovata.")
     if "price_cents" in payload and payload["price_cents"] is not None and int(payload["price_cents"]) <= 0:
         raise JavMarketValidationError("Il prezzo deve essere maggiore di zero.")
@@ -396,10 +399,11 @@ async def update_variant(
 
 
 async def add_variant(
-    db: AsyncSession, *, organization_id: uuid.UUID, product_id: uuid.UUID, payload: dict
+    db: AsyncSession, *, organization_id: uuid.UUID, product_id: uuid.UUID, payload: dict,
+    club_id: uuid.UUID | None = None,
 ) -> JavMarketProduct:
     product = await db.get(JavMarketProduct, product_id)
-    if product is None or product.organization_id != organization_id:
+    if product is None or product.organization_id != organization_id or product.club_id != club_id:
         raise JavMarketNotFoundError("Prodotto non trovato.")
     _add_variant(db, product_id=product.id, payload=payload)
     await db.commit()
@@ -407,12 +411,17 @@ async def add_variant(
     return product
 
 
-async def list_products(db: AsyncSession, *, organization_id: uuid.UUID) -> list[JavMarketProduct]:
-    rows = await db.execute(
-        select(JavMarketProduct)
-        .where(JavMarketProduct.organization_id == organization_id)
-        .order_by(JavMarketProduct.created_at.desc())
-    )
+async def list_products(
+    db: AsyncSession, *, organization_id: uuid.UUID, club_id: uuid.UUID | None = None, any_seller: bool = False,
+) -> list[JavMarketProduct]:
+    """I prodotti di un venditore: lo shop di un club (`club_id`) o quello
+    di JudoArteVida (None). `any_seller`: tutti (la vetrina li filtra da sé)."""
+    query = select(JavMarketProduct).where(JavMarketProduct.organization_id == organization_id)
+    if not any_seller:
+        query = query.where(
+            JavMarketProduct.club_id == club_id if club_id is not None else JavMarketProduct.club_id.is_(None)
+        )
+    rows = await db.execute(query.order_by(JavMarketProduct.created_at.desc()))
     return list(rows.scalars().all())
 
 
@@ -484,12 +493,12 @@ def supplier_brief(producer: JavMarketProducer | None) -> dict | None:
     return {"id": producer.id, "name": producer.name, "email": producer.email, "active": producer.active}
 
 
-async def admin_products_read(db: AsyncSession, *, organization_id: uuid.UUID) -> list[dict]:
-    """L'elenco del catalogo in amministrazione, con fornitore risolto e
-    categorie lette in blocco per tutta la lista."""
+async def admin_products_read(db: AsyncSession, *, organization_id: uuid.UUID, club_id: uuid.UUID | None = None) -> list[dict]:
+    """L'elenco del catalogo in amministrazione (di JudoArteVida, o del club
+    `club_id`), con fornitore risolto e categorie lette in blocco."""
     from app.domains.shop_categories import service as shop_categories_service
 
-    products = await list_products(db, organization_id=organization_id)
+    products = await list_products(db, organization_id=organization_id, club_id=club_id)
     suppliers = await resolve_suppliers(db, organization_id=organization_id, products=products)
     categories = await shop_categories_service.category_ids_by_product(
         db, organization_id=organization_id, shop=SHOP, product_ids=[p.id for p in products],
@@ -516,6 +525,7 @@ async def product_read_dict(
         "images": product.images or [],
         "status": product.status,
         "credit_discount_percentage": product.credit_discount_percentage,
+        "club_id": product.club_id,
         "producer": producer_read_dict(producer) if admin else producer_public_dict(producer),
         "variants": [
             {
@@ -553,6 +563,7 @@ async def product_read_dict(
 async def shop_card(
     db: AsyncSession, *, product: JavMarketProduct, settings: JavMarketSettings,
     bank_transfer_discount_percentage: int, category_ids: list[uuid.UUID] | None = None,
+    sellers: dict | None = None,
 ) -> dict | None:
     """La scheda nella griglia del cliente: la stessa forma che la vetrina
     a pagine (`marketplaces/paging.py`) si aspetta da ogni negozio."""
@@ -584,6 +595,8 @@ async def shop_card(
         "bank_transfer_discount_percentage": bank_transfer_discount_percentage,
         "in_stock": any(variant_sellable(v) for v in variants),
         "producer": producer_public_dict(producer),
+        #: Chi vende: il club (il suo shop) o JudoArteVida.
+        "seller": (sellers or {}).get(product.club_id) if product.club_id else {"club_id": None, "name": "JudoArteVida"},
         "variants": [
             {
                 "id": v.id, "label": v.label, "image_url": v.image_url,
@@ -594,17 +607,55 @@ async def shop_card(
     }
 
 
-async def customer_products(db: AsyncSession, *, organization_id: uuid.UUID) -> list[dict]:
+def seller_filters(*, viewer_club_id: uuid.UUID | None, seller: str | None = None) -> list:
+    """Che cosa vede chi compra: lo shop di JudoArteVida e quello del suo
+    club (mai lo shop di un altro club). `seller`: "CLUB" o "JAV" per uno solo."""
+    from sqlalchemy import or_
+
+    if seller == "JAV" or viewer_club_id is None:
+        return [JavMarketProduct.club_id.is_(None)]
+    if seller == "CLUB":
+        return [JavMarketProduct.club_id == viewer_club_id]
+    return [or_(JavMarketProduct.club_id.is_(None), JavMarketProduct.club_id == viewer_club_id)]
+
+
+async def club_payee(db: AsyncSession, club_id: uuid.UUID | None) -> dict | None:
+    """A chi si fa il bonifico di un ordine dello shop di un club: il club
+    (IBAN e istruzioni delle sue impostazioni). None = JudoArteVida (i dati
+    dell'organizzazione, /organizations/me/payment-info)."""
+    from app.domains.club.models import Club
+
+    if club_id is None:
+        return None
+    club = await db.get(Club, club_id)
+    settings = (club.settings or {}) if club else {}
+    return {"iban": settings.get("bank_iban"), "holder": settings.get("bank_account_holder") or (club.name if club else ""),
+            "instructions": settings.get("bank_transfer_instructions")}
+
+
+async def seller_names(db: AsyncSession, club_ids: set) -> dict:
+    from app.domains.club.models import Club
+
+    ids = {c for c in club_ids if c}
+    if not ids:
+        return {}
+    return {cid: {"club_id": cid, "name": name} for cid, name in (await db.execute(
+        select(Club.id, Club.name).where(Club.id.in_(ids)))).all()}
+
+
+async def customer_products(db: AsyncSession, *, organization_id: uuid.UUID, viewer_club_id: uuid.UUID | None = None) -> list[dict]:
     row = await get_settings_row(db, organization_id=organization_id)
-    if not row.enabled:
-        return []
     discount = await rules.get_bank_transfer_discount_percentage(db, organization_id=organization_id)
     out = []
-    for product in await list_products(db, organization_id=organization_id):
+    # Con lo shop di JudoArteVida spento resta quello del club.
+    products = [p for p in await list_products(db, organization_id=organization_id, any_seller=True)
+                if (p.club_id is None and row.enabled) or (p.club_id is not None and p.club_id == viewer_club_id)]
+    sellers = await seller_names(db, {p.club_id for p in products})
+    for product in products:
         if product.status != "ACTIVE":
             continue
         card = await shop_card(
-            db, product=product, settings=row, bank_transfer_discount_percentage=discount
+            db, product=product, settings=row, bank_transfer_discount_percentage=discount, sellers=sellers,
         )
         if card is not None:
             out.append(card)
@@ -619,24 +670,31 @@ async def customer_products_page(
     limit: int = paging.PAGE_SIZE,
     search: str | None = None,
     category_id: uuid.UUID | None = None,
+    viewer_club_id: uuid.UUID | None = None,
+    seller: str | None = None,
 ) -> dict:
     """La vetrina a pagine («Mostra altri prodotti»), come tutti
-    i Marketplace: vedi marketplaces/paging.py."""
+    i Marketplace: vedi marketplaces/paging.py. Lo shop di JudoArteVida e
+    quello del club di chi guarda (`seller` per uno solo dei due)."""
     from app.domains.shop_categories import service as shop_categories_service
 
     row = await get_settings_row(db, organization_id=organization_id)
     if not row.enabled:
-        return paging.empty_page(offset, limit)
+        # Lo shop di JudoArteVida è spento: resta quello del club.
+        if viewer_club_id is None or seller == "JAV":
+            return paging.empty_page(offset, limit)
+        seller = "CLUB"
     discount = await rules.get_bank_transfer_discount_percentage(db, organization_id=organization_id)
 
     async def cards(products: list[JavMarketProduct]) -> list[dict | None]:
         categories = await shop_categories_service.category_ids_by_product(
             db, organization_id=organization_id, shop=SHOP, product_ids=[p.id for p in products],
         )
+        sellers = await seller_names(db, {p.club_id for p in products})
         return [
             await shop_card(
                 db, product=product, settings=row, bank_transfer_discount_percentage=discount,
-                category_ids=categories.get(product.id, []),
+                category_ids=categories.get(product.id, []), sellers=sellers,
             )
             for product in products
         ]
@@ -644,6 +702,7 @@ async def customer_products_page(
     return await paging.customer_page(
         db, model=JavMarketProduct, shop=SHOP, organization_id=organization_id, build_cards=cards,
         offset=offset, limit=limit, search=search, category_id=category_id,
+        scope_filters=seller_filters(viewer_club_id=viewer_club_id, seller=seller),
     )
 
 
@@ -743,8 +802,6 @@ async def get_quote(
     browser: la spedizione una volta per ordine, l'IVA aggiunta sulla merce,
     il tetto JavCash somma delle righe."""
     row = await get_settings_row(db, organization_id=organization_id)
-    if not row.enabled:
-        raise JavMarketValidationError("Questo shop non è disponibile al momento.")
 
     items: list[dict] = []
     seen: set[uuid.UUID] = set()
@@ -773,10 +830,21 @@ async def get_quote(
             "unit_cost_cents": product.unit_cost_cents,
             "line_total_cents": variant.price_cents * line_quantity,
             "credit_discount_percentage": product.credit_discount_percentage,
+            "club_id": product.club_id,
         })
 
+    # Un ordine è di un venditore solo: lo shop del club o quello di JudoArteVida.
+    sellers_in_cart = {i["club_id"] for i in items}
+    if len(sellers_in_cart) > 1:
+        raise JavMarketValidationError(
+            "Lo shop del club e quello di JudoArteVida si pagano separatamente: fai un ordine per ciascuno."
+        )
+    seller_club_id = next(iter(sellers_in_cart))
+    if seller_club_id is None and not row.enabled:
+        raise JavMarketValidationError("Questo shop non è disponibile al momento.")
     items_cents = sum(i["line_total_cents"] for i in items)
-    vat_percentage = await rules.get_vat_percentage(db, organization_id=organization_id)
+    # Il prezzo di un club (un'associazione) è già quello finale: niente IVA aggiunta.
+    vat_percentage = 0 if seller_club_id else await rules.get_vat_percentage(db, organization_id=organization_id)
     vat_cents = rules.vat_added_cents(net_cents=items_cents, percentage=vat_percentage)
     order_rule = order_rules(settings=row, merchandise_cents=items_cents + vat_cents)
     shipping_cents = (
@@ -795,8 +863,12 @@ async def get_quote(
     discount_percentage = await rules.get_bank_transfer_discount_percentage(db, organization_id=organization_id)
     user = await db.get(User, customer_user_id)
     first = items[0]
+    seller = (await seller_names(db, {seller_club_id})).get(seller_club_id) if seller_club_id else None
     return {
         "items": items,
+        "seller_club_id": seller_club_id,
+        "seller": seller or {"club_id": None, "name": "JudoArteVida"},
+        "payee": await club_payee(db, seller_club_id),
         "variant_id": first["variant_id"],
         "product_name": first["product_name"],
         "variant_label": first["variant_label"],
@@ -901,8 +973,11 @@ async def create_order(
         if wallet.balance_cents < credit_applied_cents:
             raise wallets_service.InsufficientBalanceError("Saldo JavCash insufficiente.")
 
+    if quote["seller_club_id"] is not None and credit_applied_cents:
+        raise JavMarketValidationError("Il credito JavCash vale solo nello shop di JudoArteVida.")
     order = JavMarketOrder(
         organization_id=organization_id,
+        club_id=quote["seller_club_id"],
         customer_user_id=customer_user_id,
         athlete_id=athlete_id,
         created_by_user_id=actor_user_id,
@@ -970,11 +1045,15 @@ async def create_order(
 
 
 async def list_orders(
-    db: AsyncSession, *, organization_id: uuid.UUID, customer_user_id: uuid.UUID | None = None
+    db: AsyncSession, *, organization_id: uuid.UUID, customer_user_id: uuid.UUID | None = None,
+    seller_club_id: uuid.UUID | None = None,
 ) -> list[JavMarketOrder]:
+    """`seller_club_id`: solo gli ordini dello shop di quel club."""
     query = select(JavMarketOrder).where(JavMarketOrder.organization_id == organization_id)
     if customer_user_id is not None:
         query = query.where(JavMarketOrder.customer_user_id == customer_user_id)
+    if seller_club_id is not None:
+        query = query.where(JavMarketOrder.club_id == seller_club_id)
     rows = await db.execute(query.order_by(JavMarketOrder.created_at.desc()))
     return list(rows.scalars().all())
 
@@ -1052,6 +1131,9 @@ async def order_read_dict(db: AsyncSession, order: JavMarketOrder, *, admin: boo
         ),
         "athlete_id": order.athlete_id,
         "athlete_name": await _athlete_name(db, order.athlete_id),
+        "seller": ((await seller_names(db, {order.club_id})).get(order.club_id) if order.club_id
+                   else {"club_id": None, "name": "JudoArteVida"}),
+        "payee": await club_payee(db, order.club_id),
         "product_name": items_summary(items) if items else "—",
         "product_image_url": None,
         "items": [

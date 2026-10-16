@@ -17,6 +17,7 @@ const ABOUT = [
   { href: "/projeto", key: "site.nav.project", hint: "site.nav.projectHint" },
   // I corsi nelle scuole stanno qui e non nella barra: il menu resta corto.
   { href: "/cursos", key: "site.nav.courses", hint: "site.nav.coursesHint" },
+  { href: "/criar-clube", key: "site.nav.newClub", hint: "site.nav.newClubHint" },
   { href: "/contactos", key: "site.nav.contacts", hint: "site.nav.contactsHint" },
 ] as const;
 
@@ -24,6 +25,7 @@ const NAV = [
   { href: "/clubes", key: "site.nav.clubs" },
   { href: "/eventos", key: "site.nav.events" },
   { href: "/ranking", key: "site.nav.ranking" },
+  { href: "/loja", key: "site.nav.shop" },
 ] as const;
 
 /** I contatti di JudoArteVida: nel menu "Chi siamo" (e quindi nel menu del
@@ -52,7 +54,7 @@ export function SiteHeader({ loggedIn }: { loggedIn: boolean }) {
   );
 
   return (
-    <header className="sticky top-0 z-40 border-b border-ink-900/5 bg-white/90 backdrop-blur-md">
+    <header className="sticky top-0 z-40 border-b border-ink-900/10 bg-white shadow-[0_1px_12px_rgba(10,10,10,0.06)]">
       <a href="#conteudo" className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-3 focus:z-50 rounded-lg bg-ink-900 px-3 py-2 text-sm font-semibold text-white">
         {t("site.skipToContent")}
       </a>

@@ -107,10 +107,12 @@ from app.domains.club.schemas import (
     JobResultRead,
     LessonRead,
     MarkPaidWrite,
+    MonthBoardRead,
     MoveResultRead,
     MoveTargetRead,
     MoveToClubWrite,
     PersonCardRead,
+    PersonKindsRead,
     PersonRead,
     PlanRead,
     PlanUpdate,
@@ -121,6 +123,8 @@ from app.domains.club.schemas import (
     PublicClubRead,
     RankingRead,
     ReasonWrite,
+    RefereeWrite,
+    SupportWrite,
     ResultsWrite,
     RosterRead,
     SchoolLetterRead,
@@ -281,10 +285,11 @@ async def get_my_athlete_months(
 
 @router.get("/cash-receivers", response_model=list[CashReceiverRead])
 async def list_cash_receivers(
-    current_user: ClubUser = Depends(require_club_permission(FAMILY)), db: AsyncSession = Depends(get_db)
+    current_user: ClubUser = Depends(require_club_permission("club.athlete")), db: AsyncSession = Depends(get_db)
 ) -> list[CashReceiverRead]:
-    """A chi del club si possono dare i contanti: lo sceglie il genitore
-    quando dice di aver pagato così."""
+    """A chi del club si possono dare i contanti: lo sceglie il genitore (o
+    l'atleta maggiorenne) quando dice di aver pagato così. `club.athlete`
+    ce l'hanno sia le famiglie sia gli atleti."""
     return [CashReceiverRead(**r) for r in await club_service.cash_receivers(db, scope=current_user.scope)]
 
 
@@ -412,9 +417,10 @@ async def request_credit_code(
 
 @router.get("/invite", response_model=InviteRead)
 async def get_my_invite(
-    current_user: ClubUser = Depends(require_club_permission(FAMILY)), db: AsyncSession = Depends(get_db)
+    current_user: ClubUser = Depends(require_club_permission("club.athlete")), db: AsyncSession = Depends(get_db)
 ) -> InviteRead:
-    """Il link personale per invitare un amico nel club (club/referrals.py)."""
+    """Il link personale per invitare un amico nel club (club/referrals.py):
+    della famiglia, o dell'atleta con il suo accesso (il credito va al suo wallet)."""
     club = await clubs_service.get_club(db, organization_id=current_user.organization_id, club_id=current_user.club_id)
     info = await referrals_service.invite_link(
         db, organization_id=current_user.organization_id, club=club, user_id=current_user.user_id
@@ -1003,6 +1009,36 @@ async def admin_mark_fee_paid(
     return FeeRead(**family_service.fee_dict(fee, today=_today()))
 
 
+@admin_router.post(
+    "/fees/pay", status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit("club-staff-payment", max_requests=120, window_seconds=600))],
+)
+async def admin_record_payment(
+    fee_ids: list[uuid.UUID] = Form(...),
+    method: str = Form(..., pattern="^(BANK_TRANSFER|MBWAY|CASH|CARD)$"),
+    note: str | None = Form(default=None, max_length=500),
+    cash_received_by_user_id: uuid.UUID | None = Form(default=None),
+    cash_received_by_name: str | None = Form(default=None, max_length=120),
+    file: UploadFile | None = File(default=None),
+    current_user: ClubUser = Depends(require_club_permission(MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """«Segna pagato» della segreteria: una o più quote della stessa
+    famiglia, come è stata pagata, e (facoltativa) la foto o il PDF della
+    prova, anche scattata con il telefono (club_service.staff_record_payment)."""
+    try:
+        proof = await club_service.staff_record_payment(
+            db, scope=current_user.scope, actor_user_id=current_user.user_id, fee_ids=fee_ids, method=method,
+            file_bytes=await file.read() if file is not None else None,
+            content_type=file.content_type if file is not None else None,
+            original_filename=file.filename if file is not None else None, note=note,
+            cash_received_by_user_id=cash_received_by_user_id, cash_received_by_name=cash_received_by_name,
+        )
+    except club_service.ClubError as exc:
+        _raise(exc)
+    return {"id": str(proof.id), "receipt_number": proof.receipt_number, "has_file": proof.storage_key is not None}
+
+
 @admin_router.get("/cash-receivers", response_model=list[CashReceiverRead])
 async def admin_list_cash_receivers(
     current_user: ClubUser = Depends(require_club_permission(MANAGE)), db: AsyncSession = Depends(get_db)
@@ -1172,6 +1208,42 @@ async def admin_update_competition(
         comp = await competitions_service.update_competition(
             db, scope=current_user.scope, competition_id=competition_id,
             actor_user_id=current_user.user_id, changes=payload.model_dump(exclude_unset=True),
+        )
+    except club_service.ClubError as exc:
+        _raise(exc)
+    return CompetitionRead.model_validate(comp)
+
+
+@admin_router.post(
+    "/competitions/{competition_id}/image", response_model=CompetitionRead,
+    dependencies=[Depends(rate_limit("club-event-image", max_requests=30, window_seconds=300))],
+)
+async def admin_competition_image(
+    competition_id: uuid.UUID,
+    file: UploadFile = File(...),
+    current_user: ClubUser = Depends(require_club_permission(MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> CompetitionRead:
+    try:
+        comp = await competitions_service.set_competition_image(
+            db, scope=current_user.scope, competition_id=competition_id, actor_user_id=current_user.user_id,
+            file_bytes=await file.read(), content_type=file.content_type or "",
+        )
+    except club_service.ClubError as exc:
+        _raise(exc)
+    return CompetitionRead.model_validate(comp)
+
+
+@admin_router.delete("/competitions/{competition_id}/image", response_model=CompetitionRead)
+async def admin_competition_image_delete(
+    competition_id: uuid.UUID,
+    current_user: ClubUser = Depends(require_club_permission(MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> CompetitionRead:
+    try:
+        comp = await competitions_service.set_competition_image(
+            db, scope=current_user.scope, competition_id=competition_id, actor_user_id=current_user.user_id,
+            file_bytes=None,
         )
     except club_service.ClubError as exc:
         _raise(exc)
@@ -1404,6 +1476,23 @@ async def admin_add_slot(
     return SlotRead.model_validate(slot)
 
 
+@admin_router.patch("/slots/{slot_id}", response_model=SlotRead)
+async def admin_update_slot(
+    slot_id: uuid.UUID,
+    payload: SlotWrite,
+    current_user: ClubUser = Depends(require_club_permission(MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> SlotRead:
+    try:
+        slot = await courses_service.update_slot(
+            db, scope=current_user.scope, slot_id=slot_id, actor_user_id=current_user.user_id,
+            **payload.model_dump(),
+        )
+    except club_service.ClubError as exc:
+        _raise(exc)
+    return SlotRead.model_validate(slot)
+
+
 @admin_router.delete("/slots/{slot_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def admin_delete_slot(
     slot_id: uuid.UUID,
@@ -1511,6 +1600,18 @@ async def _staff_course(db: AsyncSession, current_user: ClubUser, course_id: uui
         if MANAGE not in granted:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Corso non trovato.")
     return course
+
+
+@staff_router.get("/people-kinds", response_model=list[PersonKindsRead])
+async def staff_people_kinds(
+    current_user: ClubUser = Depends(require_club_permission(INSTRUCT)),
+    db: AsyncSession = Depends(get_db),
+) -> list[PersonKindsRead]:
+    """Solo i simboli delle persone (atleta, genitore, istruttore, árbitro),
+    per metterli accanto ai nomi negli elenchi: niente quote né contatti,
+    così li vede anche l'istruttore."""
+    rows = await people_service.list_people(db, scope=current_user.scope)
+    return [PersonKindsRead(kind=r["kind"], id=r["id"], user_id=r["user_id"], kinds=r["kinds"]) for r in rows]
 
 
 @staff_router.get("/courses", response_model=list[CourseRead])
@@ -1680,6 +1781,23 @@ async def admin_add_staff(
     except club_service.ClubError as exc:
         _raise(exc)
     return ClubStaffRead(user_id=user.id, email=user.email, role=payload.role, invite_link=invite_link)
+
+
+@admin_router.get("/month", response_model=MonthBoardRead)
+async def admin_month_board(
+    period: str | None = Query(default=None, max_length=7),
+    current_user: ClubUser = Depends(require_club_permission(MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> MonthBoardRead:
+    """Il quadro del mese (month_board.py): chi ha pagato la mensilità e chi no."""
+    from app.domains.club import month_board
+    from app.domains.club.lessons import club_now
+
+    today = (await club_now(db, club_id=current_user.club_id)).date()
+    try:
+        return MonthBoardRead(**await month_board.club_month(db, scope=current_user.scope, period=period, today=today))
+    except club_service.ClubError as exc:
+        _raise(exc)
 
 
 @admin_router.get("/shop-orders", response_model=list[ClubShopOrderRead])
@@ -1960,6 +2078,49 @@ async def admin_set_function(
         )
     except club_service.ClubError as exc:
         _raise(exc)
+
+
+@admin_router.put("/referees", status_code=status.HTTP_204_NO_CONTENT)
+async def admin_set_referee(
+    payload: RefereeWrite,
+    current_user: ClubUser = Depends(require_club_permission(MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    try:
+        await people_service.set_referee(
+            db, scope=current_user.scope, actor_user_id=current_user.user_id, referee=payload.referee,
+            user_id=payload.user_id, athlete_id=payload.athlete_id,
+        )
+    except club_service.ClubError as exc:
+        _raise(exc)
+
+
+@admin_router.get("/athletes/{athlete_id}/supports")
+async def admin_list_supports(
+    athlete_id: uuid.UUID, current_user: ClubUser = Depends(require_club_permission(MANAGE)), db: AsyncSession = Depends(get_db),
+) -> dict:
+    from app.domains.club import support
+
+    athlete = await db.get(ClubAthlete, athlete_id)
+    if athlete is None or athlete.club_id != current_user.club_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Atleta non trovato.")
+    return await support.money(db, athlete=athlete)
+
+
+@admin_router.post("/athletes/{athlete_id}/supports", status_code=status.HTTP_201_CREATED)
+async def admin_add_support(
+    athlete_id: uuid.UUID, payload: SupportWrite,
+    current_user: ClubUser = Depends(require_club_permission(MANAGE)), db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Un costo che il club ha pagato per l'atleta (club/support.py)."""
+    from app.domains.club import support
+
+    try:
+        row = await support.record(db, scope=current_user.scope, athlete_id=athlete_id, actor_user_id=current_user.user_id,
+                                   **payload.model_dump())
+    except club_service.ClubError as exc:
+        _raise(exc)
+    return support.support_dict(row)
 
 
 @admin_router.get("/people/athletes/{athlete_id}/card", response_model=PersonCardRead)

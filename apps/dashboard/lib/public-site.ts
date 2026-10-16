@@ -239,8 +239,83 @@ export interface EventDetail extends PublicEvent {
 export interface PublicRanking {
   season: number;
   season_label: string;
+  /** "year" (l'anno solare: il ranking che conta), "month" o "all". */
+  period: RankingPeriod;
+  month: number | null;
   clubs: ClubRef[];
   rows: RankingRow[];
+}
+
+export type RankingPeriod = "year" | "month" | "all";
+
+/** La Taça dos Clubes: i club per punti dei loro atleti. */
+export interface ClubRankingRow {
+  position: number;
+  club: ClubRef;
+  city: string | null;
+  points: number;
+  results: number;
+  gold: number;
+  silver: number;
+  bronze: number;
+  athletes: number;
+  events: number;
+}
+
+export interface ClubRanking {
+  season: number;
+  season_label: string;
+  period: RankingPeriod;
+  month: number | null;
+  /** L'anno è chiuso: il primo ha vinto la coppa. */
+  is_final: boolean;
+  rows: ClubRankingRow[];
+  winners: { year: number; club: ClubRef; points: number }[];
+}
+
+/** Il popup di un judoca della classifica: la scheda completa se la famiglia
+ *  ha dato il consenso, altrimenti solo ciò che dice una classifica. */
+export interface RankingCard {
+  has_page: boolean;
+  profile: JudokaProfile | null;
+  card: (Judoka & {
+    season_label: string;
+    season_points: number;
+    ranking: { position: number; total: number; age_band: string; points: number } | null;
+    results: { event_id: string; event_name: string; level: string; date: string; location: string | null; placement: number; points: number }[];
+  }) | null;
+}
+
+export interface Sponsor {
+  id: string;
+  name: string;
+  slug: string;
+  tagline: string | null;
+  description: string | null;
+  logo_url: string | null;
+  website_url: string | null;
+  color: string | null;
+}
+
+/** Lo Shop JAV sul sito (jav_market/public_router.py): prezzi IVA compresa. */
+export interface PublicShopProduct {
+  id: string;
+  name: string;
+  description: string;
+  image_url: string | null;
+  price_cents: number;
+  max_price_cents: number;
+  in_stock: boolean;
+  category_ids: string[];
+}
+
+export interface PublicShop {
+  items: PublicShopProduct[];
+  total: number;
+  shop_total: number;
+  offset: number;
+  next_offset: number | null;
+  categories: { id: string; name: string; count: number }[];
 }
 
 /** null quando l'API dice 404 (club non pubblicato, judoca senza consenso):
@@ -311,7 +386,13 @@ export const publicSite = {
   /** Le foto già pubblicate dai club, per le testate. */
   photos: () => get<{ url: string; club: string }[]>("/photos"),
   event: (id: string) => get<EventDetail>(`/events/${encodeURIComponent(id)}`),
-  ranking: (filters: { age_band?: string; club?: string; season?: string }) => get<PublicRanking>(`/ranking${query(filters)}`),
+  ranking: (filters: { age_band?: string; club?: string; season?: string; period?: RankingPeriod; month?: string }) =>
+    get<PublicRanking>(`/ranking${query(filters)}`),
+  clubRanking: (filters: { season?: string; period?: RankingPeriod; month?: string }) =>
+    get<ClubRanking>(`/ranking/clubs${query(filters)}`),
+  sponsors: () => get<Sponsor[]>("/sponsors"),
+  shop: (filters: { q?: string; category_id?: string; offset?: string; limit?: string }) => get<PublicShop>(`/shop${query(filters)}`),
+  sponsor: (slug: string) => get<Sponsor>(`/sponsors/${encodeURIComponent(slug)}`),
 };
 
 /** Un id che non è un UUID non arriva nemmeno all'API (che risponderebbe 422). */

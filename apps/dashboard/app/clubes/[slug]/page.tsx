@@ -2,13 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { CSSProperties, ReactNode } from "react";
-import { Avatar, Container, EmptyNote, EventCard, JudokaCard, MedalList, RankingTable, SectionHeading } from "@/components/site/blocks";
+import { Avatar, Container, EmptyNote, EventCard, JudokaCard, MedalList, SectionHeading } from "@/components/site/blocks";
 import { TatamiBackdrop } from "@/components/site/club-carousel";
 import { CountUp, NextTraining } from "@/components/site/club-live";
 import { ClubMap, ClubVideos, MobileClubBar, NewsFeed, type PlayableVideo } from "@/components/site/club-media";
 import { ClubTabs, TabLink, type ClubTab } from "@/components/site/club-tabs";
 import { ContactForm } from "@/components/site/contact-form";
 import { Gallery } from "@/components/site/gallery";
+import { AthleteRanking } from "@/components/site/ranking-explorer";
 import { ageRange, siteI18n } from "@/components/site/i18n";
 import { Reveal } from "@/components/site/reveal";
 import { SiteShell } from "@/components/site/site-shell";
@@ -257,7 +258,7 @@ export default async function ClubLandingPage({ params }: Params) {
         <Panel eyebrow={t("site.fan.rankingEyebrow", { season: club.season_label })} title={t("site.fan.rankingTitle")} text={t("site.club.judokaText")}
           action={<Link href={`/ranking?club=${club.slug}`} className={btn("secondary", "sm")}>{t("site.ranking.full")}</Link>}>
           {club.ranking.length > 0 ? (
-            <RankingTable rows={club.ranking} t={t} showClub={false} />
+            <AthleteRanking rows={club.ranking} showClub={false} />
           ) : club.judoka.length > 0 ? (
             <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3">
               {club.judoka.map((j) => <li key={j.id}><JudokaCard judoka={j} t={t} showClub={false} /></li>)}
@@ -316,60 +317,80 @@ export default async function ClubLandingPage({ params }: Params) {
       <div style={themeStyle(club.theme) as CSSProperties}>
         <Cover club={club} t={t} />
 
-        {/* --- Il profilo: logo che sporge dalla copertina, nome, numeri, azioni --- */}
-        <Container className="relative z-10 pb-6">
-          <div className="-mt-20 flex flex-col items-center gap-5 text-center sm:-mt-24 md:flex-row md:items-start md:text-left">
-            <Reveal className="shrink-0">
-              <div className="flex h-36 w-36 items-center justify-center overflow-hidden rounded-full bg-white shadow-lift ring-[6px] ring-white sm:h-44 sm:w-44">
-                {club.logo_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- logo caricato dal club
-                  <img src={club.logo_url} alt={t("site.club.logoAlt", { club: club.name })} className="h-full w-full object-contain p-3" />
-                ) : (
-                  <span className="flex h-full w-full items-center justify-center bg-club font-display text-5xl text-club-on" aria-hidden="true">
-                    {initials(club.name)}
+        {/* --- La barra del club, nel suo colore: logo che sporge dalla
+            copertina, nome, numeri, azioni. Il colore e il contrasto del
+            testo arrivano dal tema (club/brand.py): si legge sempre. --- */}
+        <section className="relative isolate overflow-hidden bg-gradient-to-r from-club via-club to-club-cover-from text-club-on shadow-lift">
+          {/* Le strisce diagonali e il riflesso che passa: decorazione. */}
+          <div className="pointer-events-none absolute inset-0 -z-10 opacity-[0.12] [background-image:repeating-linear-gradient(135deg,currentColor_0_2px,transparent_2px_22px)]" aria-hidden="true" />
+          <div className="pointer-events-none absolute inset-y-0 -left-1/3 -z-10 w-1/3 skew-x-[-20deg] bg-gradient-to-r from-transparent via-white/25 to-transparent animate-club-shine motion-reduce:hidden" aria-hidden="true" />
+          <div className="pointer-events-none absolute -right-16 -top-24 -z-10 h-72 w-72 rounded-full bg-club-accent/40 blur-[80px] animate-aurora" aria-hidden="true" />
+          <Container className="relative pb-6 pt-4 md:pb-7">
+            <div className="flex flex-col items-center gap-4 text-center md:flex-row md:items-end md:gap-6 md:text-left">
+              <Reveal className="-mt-20 shrink-0 sm:-mt-24">
+                <div className="flex h-36 w-36 items-center justify-center overflow-hidden rounded-full bg-white shadow-lift ring-[6px] ring-club-accent sm:h-44 sm:w-44">
+                  {club.logo_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- logo caricato dal club
+                    <img src={club.logo_url} alt={t("site.club.logoAlt", { club: club.name })} className="h-full w-full object-contain p-3" />
+                  ) : (
+                    <span className="flex h-full w-full items-center justify-center bg-club font-display text-5xl text-club-on" aria-hidden="true">
+                      {initials(club.name)}
+                    </span>
+                  )}
+                </div>
+              </Reveal>
+              <Reveal delay={0.05} className="min-w-0 flex-1">
+                <p className="text-xs font-bold uppercase tracking-[0.25em] opacity-85">
+                  {[club.city, club.founded_year ? t("site.fan.since", { year: club.founded_year }) : null].filter(Boolean).join(" · ")}
+                </p>
+                <h1 className="mt-1 flex flex-wrap items-center justify-center gap-x-3 font-display text-4xl leading-tight drop-shadow-sm sm:text-6xl md:justify-start">
+                  {club.name}
+                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-club-accent text-club-on-accent shadow sm:h-9 sm:w-9" title={t("site.fan.networkBadge")}>
+                    <svg viewBox="0 0 24 24" className="h-4 w-4 sm:h-5 sm:w-5" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>
+                    <span className="sr-only">{t("site.fan.networkBadge")}</span>
                   </span>
-                )}
-              </div>
-            </Reveal>
-            <Reveal delay={0.05} className="min-w-0 flex-1 md:pt-28">
-              <p className="text-xs font-bold uppercase tracking-[0.25em] text-club-ink">
-                {[club.city, club.founded_year ? t("site.fan.since", { year: club.founded_year }) : null].filter(Boolean).join(" · ")}
-              </p>
-              <h1 className="mt-1 flex flex-wrap items-center justify-center gap-x-3 text-3xl text-ink-900 sm:text-5xl md:justify-start">
-                {club.name}
-                <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-club text-club-on sm:h-8 sm:w-8" title={t("site.fan.networkBadge")}>
-                  <svg viewBox="0 0 24 24" className="h-4 w-4 sm:h-5 sm:w-5" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>
-                  <span className="sr-only">{t("site.fan.networkBadge")}</span>
-                </span>
-              </h1>
-              {club.venue && <p className="mt-1 text-sm text-ink-500">{club.venue}</p>}
-              {facts.length > 0 && (
-                <ul className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1 text-sm text-ink-600 md:justify-start" aria-label={t("site.fan.factsLabel")}>
+                </h1>
+                {club.venue && <p className="mt-1 text-sm opacity-85">📍 {club.venue}</p>}
+              </Reveal>
+              <Reveal delay={0.1} className="flex flex-col items-center gap-3 md:items-end">
+                <div className="flex flex-wrap justify-center gap-2">
+                  <Link href={`/c/${club.slug}`} className="inline-flex h-12 items-center justify-center rounded-2xl bg-club-accent px-6 font-semibold text-club-on-accent shadow-soft transition hover:-translate-y-px hover:brightness-105">
+                    {t("site.fan.join")}
+                  </Link>
+                  <TabLink to="contactos" className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-white/15 px-5 font-semibold ring-1 ring-current/30 backdrop-blur transition hover:bg-white/25">
+                    <span aria-hidden="true">✉</span> {t("site.fan.sendMessage")}
+                  </TabLink>
+                </div>
+                <SocialIcons links={socials} />
+              </Reveal>
+            </div>
+            {facts.length > 0 && (
+              <Reveal delay={0.15}>
+                <ul className="mt-5 flex flex-wrap justify-center gap-2 md:justify-start" aria-label={t("site.fan.factsLabel")}>
                   {facts.map((f) => (
-                    <li key={f.label}><strong className="font-display text-ink-900"><CountUp value={f.value} /></strong> {f.label}</li>
+                    <li key={f.label} className="inline-flex items-baseline gap-2 rounded-full bg-white/15 px-4 py-1.5 ring-1 ring-white/20 backdrop-blur">
+                      <strong className="font-display text-xl"><CountUp value={f.value} /></strong>
+                      <span className="text-xs font-semibold uppercase tracking-wide opacity-85">{f.label}</span>
+                    </li>
                   ))}
                 </ul>
-              )}
-            </Reveal>
-            <Reveal delay={0.1} className="flex flex-col items-center gap-3 md:items-end md:pt-28">
-              <div className="flex flex-wrap justify-center gap-2">
-                <Link href={`/c/${club.slug}`} className={btn("primary")}>{t("site.fan.join")}</Link>
-                <TabLink to="contactos" className={btn("secondary")}>
-                  <span aria-hidden="true">✉</span> {t("site.fan.sendMessage")}
-                </TabLink>
-              </div>
-              <SocialIcons links={socials} />
-            </Reveal>
-          </div>
-          {(club.tagline || club.schedule.length > 0) && (
-            <Reveal delay={0.15} className="mt-6 flex flex-col items-center gap-4 md:flex-row md:justify-between">
+              </Reveal>
+            )}
+          </Container>
+          {/* Il filo nel colore d'accento, come la cintura sotto il nome. */}
+          <div className="h-1.5 bg-gradient-to-r from-club-accent via-club-2 to-club-accent" aria-hidden="true" />
+        </section>
+
+        {(club.tagline || club.schedule.length > 0) && (
+          <Container className="pb-2 pt-6">
+            <Reveal className="flex flex-col items-center gap-4 md:flex-row md:justify-between">
               {club.tagline ? (
-                <p className="max-w-3xl text-center text-lg text-ink-600 md:text-left">“{club.tagline}”</p>
+                <p className="max-w-3xl border-l-4 border-club pl-4 text-center font-display text-xl text-ink-800 md:text-left">“{club.tagline}”</p>
               ) : <span />}
               <NextTraining schedule={club.schedule} />
             </Reveal>
-          )}
-        </Container>
+          </Container>
+        )}
 
         <ClubTabs tabs={visibleTabs} panels={panels} label={t("site.fan.tabsLabel")} />
         <MobileClubBar joinHref={`/c/${club.slug}`} joinLabel={t("site.fan.join")} messageLabel={t("site.fan.messageShort")} />

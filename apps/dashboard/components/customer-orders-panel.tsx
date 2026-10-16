@@ -632,20 +632,24 @@ export function CustomerOrdersPanel() {
                 )}
               </div>
 
-              {bankDetailsFor === o.id && (
+              {bankDetailsFor === o.id && (() => {
+                // Un ordine dello shop di un club si paga al club.
+                const info = (o as { payee?: { iban: string | null; holder: string; instructions: string | null } | null }).payee ?? paymentInfo;
+                return (
                 <div className="mt-4 pt-4 border-t border-slate-200 p-4 rounded-xl bg-slate-900/5 text-xs space-y-1.5">
-                  {paymentInfo?.iban ? (
+                  {info?.iban ? (
                     <>
-                      <p><span className="text-slate-500">IBAN:</span> <span className="font-mono">{paymentInfo.iban}</span></p>
-                      <p><span className="text-slate-500">Intestatario:</span> {paymentInfo.holder}</p>
-                      {paymentInfo.instructions && <p className=" text-slate-500 pt-1">{paymentInfo.instructions}</p>}
+                      <p><span className="text-slate-500">IBAN:</span> <span className="font-mono">{info.iban}</span></p>
+                      <p><span className="text-slate-500">Intestatario:</span> {info.holder}</p>
+                      {info.instructions && <p className=" text-slate-500 pt-1">{info.instructions}</p>}
                     </>
                   ) : (
                     <p className="text-slate-500">Contatta l&apos;amministrazione per le coordinate bancarie.</p>
                   )}
                   <p className="pt-1"><span className="text-slate-500">Causale consigliata:</span> <span className="font-mono text-brand-600">Ordine {orderCode(o)}</span></p>
                 </div>
-              )}
+                );
+              })()}
             </div>
           );
         })

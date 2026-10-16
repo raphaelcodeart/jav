@@ -12,11 +12,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { StatTile } from "@/components/ui/stat-tile";
 import { AthleteDetailModal } from "@/components/club/athlete-detail-modal";
 import { AthleteFormModal } from "@/components/club/athlete-form-modal";
-import { AthleteTile } from "@/components/club/athlete-tile";
+import { AthleteHealthCard } from "@/components/club/athlete-health-card";
 import { FamilyAccountingCard } from "@/components/club/family-accounting";
 import { FamilyToday } from "@/components/club/family-today";
 import { InviteCard } from "@/components/club/invite-card";
 import { useClubFeatures } from "@/components/club/jav-courses";
+import { FamilyMonthCard } from "@/components/club/month-board";
 import { PayModal } from "@/components/club/pay-modal";
 import { clubGet, type AthleteSeasonMonths, type Family } from "@/lib/club";
 import { useI18n } from "@/lib/i18n/provider";
@@ -33,6 +34,8 @@ export function FamilyHome({ onNavigate, familyOverride }: { onNavigate: (key: s
   // "choose": il genitore dice prima che cosa ha pagato (quote o ordine
   // dello Shop); "fees": arriva dalle quote, si va dritti a quelle.
   const [pay, setPay] = useState<"choose" | "fees" | null>(null);
+  // Dalla card «Questo mese»: le quote del mese già scelte.
+  const [payIds, setPayIds] = useState<string[] | null>(null);
   // Il pulsante "Carica un pagamento" di JAVBOT apre la stessa finestra.
   useJavbotPayRequest(setPay);
   const [addOpen, setAddOpen] = useState(false);
@@ -112,6 +115,11 @@ export function FamilyHome({ onNavigate, familyOverride }: { onNavigate: (key: s
         </div>
       </motion.section>
 
+      {/* Prima di tutto il mese corrente: quanto paga ogni figlio e se è pagato. */}
+      {!noAthletes && family.this_month && (
+        <FamilyMonthCard board={family.this_month} onPay={(ids) => { setPayIds(ids); setPay("fees"); }} />
+      )}
+
       {/* The three things a parent comes here to do */}
       <section className="grid sm:grid-cols-3 gap-4">
         <ActionButton icon="📸" title={t("family.actionPay")} text={t("family.actionPayText")} onClick={() => setPay("choose")} />
@@ -173,9 +181,18 @@ export function FamilyHome({ onNavigate, familyOverride }: { onNavigate: (key: s
             action={<Button size="lg" onClick={() => setAddOpen(true)}>{t("family.addFirst")}</Button>}
           />
         ) : (
-          <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-6">
+          <div className="space-y-6">
             {family.athletes.map((a) => (
-              <AthleteTile key={a.id} athlete={a} onOpen={() => { setOpenOnFees(false); setOpenAthlete(a.id); }} />
+              <div key={a.id} className="space-y-2">
+                <AthleteHealthCard athlete={a} mode="family" onAction={(code) => {
+                  if (code === "ANNUAL_FEE") { setPay("fees"); return; }
+                  if (code === "JUDOGI_COLOUR") { onNavigate("products"); return; }
+                  setOpenOnFees(false); setOpenAthlete(a.id);
+                }} />
+                <div className="flex justify-end">
+                  <Button size="sm" variant="secondary" onClick={() => { setOpenOnFees(false); setOpenAthlete(a.id); }}>{t("health.openCard")} →</Button>
+                </div>
+              </div>
             ))}
           </div>
         )}
@@ -237,9 +254,9 @@ export function FamilyHome({ onNavigate, familyOverride }: { onNavigate: (key: s
       {pay && (
         <PayModal
           open
-          onClose={() => setPay(null)}
+          onClose={() => { setPay(null); setPayIds(null); }}
           fees={family.due_fees}
-          preselect={pay === "fees" ? family.due_fees.map((f) => f.id) : undefined}
+          preselect={pay === "fees" ? (payIds ?? family.due_fees.map((f) => f.id)) : undefined}
         />
       )}
       {addOpen && <AthleteFormModal open={addOpen} onClose={() => setAddOpen(false)} />}

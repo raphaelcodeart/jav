@@ -116,11 +116,14 @@ export function ProductCheckoutModal({
   const [otpCode, setOtpCode] = useState("");
   const [otpRequested, setOtpRequested] = useState(false);
 
-  const { data: paymentInfo } = useQuery({
+  const { data: orgPaymentInfo } = useQuery({
     queryKey: ["customer", "payment-info"],
     queryFn: fetchPaymentInfo,
     enabled: step === "bank_instructions",
   });
+  // Un ordine dello shop di un club si paga al club (quote.payee), non a JudoArteVida.
+  const payee = (quote as { payee?: { iban: string | null; holder: string; instructions: string | null } | null } | undefined)?.payee;
+  const paymentInfo = payee ?? orgPaymentInfo;
 
   const maxUsableCents = quote ? Math.min(quote.max_creditable_cents, quote.customer_wallet_balance_cents) : 0;
   // Si paga solo con bonifico: se l'IBAN non è configurato non c'è modo.

@@ -14,6 +14,8 @@ import { useToast } from "@/components/ui/toast";
 import { celebrate } from "@/lib/motion";
 import { LEVEL_LABELS, PLACEMENT_LABELS, clubGet, clubSend, daysUntil, type FamilyCompetition } from "@/lib/club";
 import type { MessageKey } from "@/lib/i18n/messages/it";
+import { EventIcon } from "@/components/club/event-icon";
+import { JavCalendar } from "@/components/club/jav-calendar";
 import { useI18n } from "@/lib/i18n/provider";
 
 const LEVEL_TONES: Record<string, string> = {
@@ -32,27 +34,31 @@ const LEVEL_TONES: Record<string, string> = {
 /** The competition calendar, per family: for every competition, each child
  *  with a one-tap "Iscrivi" -- or the reason they can't (age, certificate). */
 export function CompetitionsPanel() {
-  const [when, setWhen] = useState<"next" | "past">("next");
+  const [when, setWhen] = useState<"next" | "past" | "calendar">("next");
   const { t } = useI18n();
   const { data, isLoading, error } = useQuery({
-    queryKey: ["club", "competitions", when],
+    queryKey: ["club", "competitions", when === "past" ? "past" : "next"],
     queryFn: () => clubGet<FamilyCompetition[]>(`/competitions${when === "past" ? "?include_past=true" : ""}`),
   });
   const list = (data ?? []).filter((c) => (when === "past" ? c.status === "DONE" || daysUntil(c.ends_on) < 0 : c.status !== "DONE" && daysUntil(c.ends_on) >= 0));
 
   return (
     <div>
-      <PageHeader eyebrow={t("comp.eyebrow")} title={t("nav.club-competitions")} subtitle={t("comp.subtitle")} actions={<Tabs value={when} onChange={(k) => setWhen(k as "next" | "past")} items={[{ key: "next", label: t("comp.upcoming") }, { key: "past", label: t("comp.past") }]} />} />
-      {isLoading && <div className="space-y-4"><Skeleton className="h-40" /><Skeleton className="h-40" /></div>}
-      {error && <EmptyState title={t("comp.unavailable")} text={(error as Error).message} />}
-      {!isLoading && !error && list.length === 0 && (
-        <EmptyState icon={<span className="text-3xl">🏟️</span>} title={when === "next" ? t("comp.noneUpcoming") : t("comp.nonePast")} text={t("comp.emptyText")} />
+      <PageHeader eyebrow={t("comp.eyebrow")} title={t("nav.club-competitions")} subtitle={t("comp.subtitle")} actions={<Tabs value={when} onChange={(k) => setWhen(k as "next" | "past" | "calendar")} items={[{ key: "next", label: t("comp.upcoming") }, { key: "past", label: t("comp.past") }, { key: "calendar", label: `📅 ${t("jcal.tabEvents")}` }]} />} />
+      {when === "calendar" ? <JavCalendar mode="member" /> : (
+        <>
+          {isLoading && <div className="space-y-4"><Skeleton className="h-40" /><Skeleton className="h-40" /></div>}
+          {error && <EmptyState title={t("comp.unavailable")} text={(error as Error).message} />}
+          {!isLoading && !error && list.length === 0 && (
+            <EmptyState icon={<span className="text-3xl">🏟️</span>} title={when === "next" ? t("comp.noneUpcoming") : t("comp.nonePast")} text={t("comp.emptyText")} />
+          )}
+          <div className="space-y-5">
+            {list.map((c, i) => (
+              <CompetitionCard key={c.id} competition={c} delay={i * 0.05} />
+            ))}
+          </div>
+        </>
       )}
-      <div className="space-y-5">
-        {list.map((c, i) => (
-          <CompetitionCard key={c.id} competition={c} delay={i * 0.05} />
-        ))}
-      </div>
     </div>
   );
 }
@@ -74,6 +80,7 @@ function CompetitionCard({ competition: c, delay }: { competition: FamilyCompeti
     <motion.article initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay }} className="glass-card rounded-3xl overflow-hidden">
       <div className="flex flex-col sm:flex-row">
         <div className={`sm:w-36 shrink-0 bg-gradient-to-br ${LEVEL_TONES[c.level] ?? LEVEL_TONES.CLUB} text-white p-5 flex sm:flex-col items-center sm:justify-center gap-3 sm:gap-0 text-center`}>
+          <EventIcon kind={c.kind} imageUrl={c.image_url} size="md" className="sm:mb-3" />
           <p className="font-display text-4xl leading-none">{start.getDate()}</p>
           <p className="text-sm font-bold uppercase tracking-widest">{fmt.date(start, { month: "short" })}</p>
           <p className="text-xs opacity-80 sm:mt-1">{start.getFullYear()}</p>

@@ -1,7 +1,8 @@
 import logging
+import re
 import uuid
 from datetime import UTC, datetime, timedelta
-from html import escape, unescape
+from html import unescape
 
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -484,24 +485,9 @@ async def send_verification_email(db: AsyncSession, *, user: User) -> None:
     await db.commit()
 
     verify_link = f"{settings.public_app_base_url}/verify-email?token={token}"
-    html = render_email(
-        preheader="Conferma il tuo indirizzo email per attivare il tuo account Jav",
-        heading="Benvenuto in Jav!",
-        body_html=(
-            "<p>Grazie per esserti registrato. Per attivare il tuo account e iniziare a usare la dashboard, "
-            "conferma il tuo indirizzo email cliccando il pulsante qui sotto.</p>"
-            f"<p>Il link è valido per {EMAIL_VERIFICATION_TOKEN_EXPIRE_MINUTES // 60} ore.</p>"
-        ),
-        cta_label="Conferma la mia email",
-        cta_url=verify_link,
-    )
+    mail = await _compose_for(db, user, "verify_email", {"horas": str(EMAIL_VERIFICATION_TOKEN_EXPIRE_MINUTES // 60)}, verify_link)
     try:
-        send_html_email(
-            to=user.email,
-            subject="Conferma la tua email - Jav",
-            html_body=html,
-            text_body=f"Conferma il tuo indirizzo email entro {EMAIL_VERIFICATION_TOKEN_EXPIRE_MINUTES // 60} ore: {verify_link}",
-        )
+        send_html_email(to=user.email, subject=mail.subject, html_body=mail.html, text_body=mail.text)
     except EmailNotConfiguredError:
         logger.warning("Verification email for %s (SMTP not configured) -- link: %s", user.email, verify_link)
 
@@ -550,6 +536,15 @@ class PasswordResetError(Exception):
     pass
 
 
+async def _compose_for(db: AsyncSession, user: User, key: str, values: dict[str, str], cta_url: str | None):
+    """Il testo dell'email (personalizzabile dal superadmin, domains/email_texts)
+    nella veste del club dell'account, o di JudoArteVida."""
+    from app.domains.club.email_brand import brand_for_user
+    from app.domains.email_texts.service import compose
+
+    return await compose(db, key, values=values, brand=await brand_for_user(db, user.id), cta_url=cta_url)
+
+
 async def send_account_invite_email(
     db: AsyncSession, *, user: User, invited_by_display_name: str, intro: str | None = None
 ) -> tuple[str, bool]:
@@ -571,9 +566,9 @@ async def send_account_invite_email(
     Restituisce il link e se l'email è partita: senza SMTP chi ha creato
     l'account può consegnare il link a mano (club/clubs.py::add_staff)."""
     settings = get_settings()
-    intro = escape(intro) if intro else (
-        f"{invited_by_display_name} ha creato per te un account su Jav e attivato "
-        "quanto concordato -- trovi già tutto configurato non appena accedi."
+    intro = intro or (
+        f"{invited_by_display_name} criou uma conta para si na plataforma JudoArteVida: "
+        "já encontra tudo configurado quando entrar."
     )
     token = generate_password_reset_token()
     db.add(
@@ -586,25 +581,10 @@ async def send_account_invite_email(
     await db.commit()
 
     set_password_link = f"{settings.public_app_base_url}/reset-password?token={token}"
-    html = render_email(
-        preheader="Il tuo account Jav è pronto",
-        heading="Il tuo account Jav è pronto",
-        body_html=(
-            f"<p>{intro}</p>"
-            "<p>Per accedere per la prima volta, scegli subito la tua password personale.</p>"
-        ),
-        cta_label="Imposta la tua password",
-        cta_url=set_password_link,
-    )
+    mail = await _compose_for(db, user, "account_invite", {"introducao": intro}, set_password_link)
     sent = send_html_email_best_effort(
         context=f"Account-invite email (user={user.id})",
-        to=user.email,
-        subject="Il tuo account Jav è pronto",
-        html_body=html,
-        text_body=(
-            f"{unescape(intro)}\n\n"
-            f"Imposta la tua password qui: {set_password_link}"
-        ),
+        to=user.email, subject=mail.subject, html_body=mail.html, text_body=mail.text,
     )
     return set_password_link, sent
 
@@ -645,33 +625,9 @@ async def request_password_reset(
 
     recipient = user.email
     reset_link = f"{settings.public_app_base_url}/reset-password?token={token}"
-    intro_html = "<p>Hai richiesto di reimpostare la password del tuo account Jav.</p>"
-    intro_text = "Hai richiesto di reimpostare la password del tuo account Jav.\n\n"
-    subject = "Reimposta la tua password - Jav"
-
-    html = render_email(
-        preheader="Reimposta la tua password Jav",
-        heading="Reimposta la tua password",
-        body_html=(
-            intro_html
-            + f"<p>Il link scade tra {PASSWORD_RESET_TOKEN_EXPIRE_MINUTES} minuti. Se non hai richiesto tu "
-            "questa operazione, ignora questa email: la password resterà invariata.</p>"
-        ),
-        cta_label="Scegli una nuova password",
-        cta_url=reset_link,
-    )
+    mail = await _compose_for(db, user, "password_reset", {"minutos": str(PASSWORD_RESET_TOKEN_EXPIRE_MINUTES)}, reset_link)
     try:
-        send_html_email(
-            to=recipient,
-            subject=subject,
-            html_body=html,
-            text_body=(
-                intro_text
-                + f"Apri questo link entro {PASSWORD_RESET_TOKEN_EXPIRE_MINUTES} minuti per scegliere una nuova password:\n"
-                f"{reset_link}\n\n"
-                "Se non hai richiesto tu questa operazione, ignora questa email."
-            ),
-        )
+        send_html_email(to=recipient, subject=mail.subject, html_body=mail.html, text_body=mail.text)
         delivery = "sent"
     except EmailNotConfiguredError:
         # No SMTP configured yet. The token/link is deliberately NOT written
@@ -770,22 +726,10 @@ async def request_otp(db: AsyncSession, *, user: User, purpose: str, context_lin
     )
     await db.commit()
 
-    html = render_email(
-        preheader="Il tuo codice di conferma Jav",
-        heading="Codice di conferma",
-        body_html=(
-            f"<p>{context_line}</p>"
-            f'<p style="font-size:28px; font-weight:700; letter-spacing:6px; color:#f97316; margin:20px 0;">{code}</p>'
-            f"<p>Il codice scade tra {OTP_EXPIRE_MINUTES} minuti. Se non hai richiesto tu questo codice, ignora questa email.</p>"
-        ),
-    )
+    mail = await _compose_for(db, user, "otp_code", {"contexto": unescape(re.sub(r"<[^>]+>", "", context_line)),
+                                                     "codigo": code, "minutos": str(OTP_EXPIRE_MINUTES)}, None)
     try:
-        send_html_email(
-            to=user.email,
-            subject="Il tuo codice di conferma - Jav",
-            html_body=html,
-            text_body=f"Il tuo codice di conferma: {code} (valido {OTP_EXPIRE_MINUTES} minuti)",
-        )
+        send_html_email(to=user.email, subject=mail.subject, html_body=mail.html, text_body=mail.text)
     except EmailNotConfiguredError:
         logger.warning("OTP for %s purpose=%s not sent (SMTP not configured) -- code: %s", user.email, purpose, code)
 

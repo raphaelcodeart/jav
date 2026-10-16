@@ -44,6 +44,8 @@ interface ClubDocument {
   size_bytes: number;
   status: "NONE" | "VALID" | "EXPIRING" | "EXPIRED";
   created_at: string;
+  /** Visibile nella bacheca di atleti e famiglie. */
+  shared_with_members: boolean;
 }
 
 async function call<T>(url: string, init?: RequestInit): Promise<T> {
@@ -145,6 +147,7 @@ function DocumentRow({ doc, onEdit }: { doc: ClubDocument; onEdit: () => void })
         </p>
         {doc.notes && <p className="mt-1 text-xs text-ink-600">{doc.notes}</p>}
       </div>
+      {doc.shared_with_members && <Badge tone="brand" dot>👪 {t("clubDocs.sharedBadge")}</Badge>}
       <DocStatus doc={doc} />
       <Button variant="secondary" size="sm" onClick={open}>{t("clubDocs.open")}</Button>
       <Button variant="ghost" size="sm" onClick={onEdit}>{t("clubDocs.edit")}</Button>
@@ -163,6 +166,7 @@ function DocumentModal({ doc, onClose }: { doc?: ClubDocument; onClose: () => vo
   const [issued, setIssued] = useState(doc?.issued_on ?? "");
   const [expires, setExpires] = useState(doc?.expires_on ?? "");
   const [notes, setNotes] = useState(doc?.notes ?? "");
+  const [shared, setShared] = useState(doc?.shared_with_members ?? false);
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -174,7 +178,7 @@ function DocumentModal({ doc, onClose }: { doc?: ClubDocument; onClose: () => vo
       if (doc) {
         await call(`${BASE}/${doc.id}`, {
           method: "PATCH", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ category, title, issued_on: issued || null, expires_on: expires || null, notes: notes || null }),
+          body: JSON.stringify({ category, title, issued_on: issued || null, expires_on: expires || null, notes: notes || null, shared_with_members: shared }),
         });
       } else {
         if (!file) return;
@@ -185,6 +189,7 @@ function DocumentModal({ doc, onClose }: { doc?: ClubDocument; onClose: () => vo
         if (issued) form.append("issued_on", issued);
         if (expires) form.append("expires_on", expires);
         if (notes.trim()) form.append("notes", notes.trim());
+        form.append("shared_with_members", shared ? "true" : "false");
         await call(BASE, { method: "POST", body: form });
       }
       await queryClient.invalidateQueries({ queryKey: ["club", "club-documents"] });
@@ -227,6 +232,10 @@ function DocumentModal({ doc, onClose }: { doc?: ClubDocument; onClose: () => vo
         <Field label={t("clubDocs.notes")}>
           <Textarea rows={2} value={notes} maxLength={2000} onChange={(e) => setNotes(e.target.value)} />
         </Field>
+        <label className="flex items-start gap-2 rounded-2xl bg-brand-50/60 p-3 text-sm text-ink-700 ring-1 ring-brand-100 cursor-pointer">
+          <input type="checkbox" className="mt-0.5 h-4 w-4 accent-brand-600" checked={shared} onChange={(e) => setShared(e.target.checked)} />
+          <span><span className="font-semibold text-ink-900">👪 {t("clubDocs.shareLabel")}</span><span className="block text-xs text-ink-500">{t("clubDocs.shareHint")}</span></span>
+        </label>
         {!doc && (
           <Field label={t("clubDocs.file")} hint={t("clubDocs.fileHint")}>
             <Input ref={input} type="file" accept="application/pdf,image/jpeg,image/png" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />

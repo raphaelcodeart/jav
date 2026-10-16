@@ -222,3 +222,11 @@ async def run_recurring_expenses(db: AsyncSession, *, scope: ClubScope, today: d
     from app.domains.club import accounting
 
     return await accounting.materialise_recurring(db, scope=scope, today=today or utcnow().date())
+
+
+async def run_payment_reminders(db: AsyncSession, *, scope: ClubScope, today: date | None = None) -> int:
+    """Avvisi della mensilità (1, 10, 15) e multa del 16 (club/payment_reminders.py)."""
+    from app.domains.club import payment_reminders
+
+    return await payment_reminders.run(db, scope=scope)
+

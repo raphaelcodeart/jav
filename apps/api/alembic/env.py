@@ -22,6 +22,7 @@ from app.domains.contracts import models as _contracts_models  # noqa: F401
 from app.domains.customers import models as _customers_models  # noqa: F401
 from app.domains.documentation import models as _documentation_models  # noqa: F401
 from app.domains.documents import models as _documents_models  # noqa: F401
+from app.domains.email_texts import models as _email_texts_models  # noqa: F401
 from app.domains.friend_referrals import models as _friend_referrals_models  # noqa: F401
 from app.domains.jav_market import models as _jav_market_models  # noqa: F401
 from app.domains.javbot import models as _javbot_models  # noqa: F401

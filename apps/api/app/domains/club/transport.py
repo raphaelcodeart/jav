@@ -227,12 +227,15 @@ async def send(
     request = await save(
         db, scope=scope, competition_id=competition_id, to_email=to_email, subject=subject, body_text=body_text
     )
+    from app.domains.club.email_brand import club_brand
+
     club = await db.get(Club, scope.club_id)
     contact = (club.settings or {}).get("contact_email") or None
+    brand = await club_brand(db, scope.club_id)
     try:
         send_html_email(
             to=request.to_email, subject=request.subject,
-            html_body=render_letter(subject=request.subject, body_text=request.body_text),
+            html_body=render_letter(subject=request.subject, body_text=request.body_text, brand=brand),
             text_body=request.body_text, reply_to=contact, bcc=contact,
         )
     except EmailNotConfiguredError as exc:

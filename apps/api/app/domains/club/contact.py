@@ -41,7 +41,7 @@ from app.core.db import utcnow
 from app.domains.audit import service as audit_service
 from app.domains.club import clubs as clubs_service
 from app.domains.club import site as site_service
-from app.domains.club.contact_models import CONTACT_STATUSES, ContactMessage
+from app.domains.club.contact_models import CONTACT_STATUSES, CONTACT_TOPICS, ContactMessage
 from app.domains.club.models import Club
 from app.domains.club.scope import ClubScope
 from app.domains.club.service import ClubError, ClubNotFoundError, ClubValidationError
@@ -98,8 +98,9 @@ def clean_message(data: dict) -> dict:
             "Per poterti rispondere serve il tuo consenso: spunta la casella sotto il messaggio."
         )
     locale = (data.get("locale") or "pt").lower()[:2]
+    topic = (data.get("topic") or "GENERAL").upper()
     return {"name": name, "email": email, "phone": phone, "message": message,
-            "locale": locale if locale in LOCALES else "pt"}
+            "locale": locale if locale in LOCALES else "pt", "topic": topic if topic in CONTACT_TOPICS else "GENERAL"}
 
 
 def ip_hash(ip: str | None) -> str | None:
@@ -152,7 +153,9 @@ async def submit(
         entity_type="contact_message", entity_id=str(message.id),
         new_value={"club_id": str(club.id) if club else None},
     )
-    title = f"Nuovo messaggio dal sito: {clean['name']}"
+    title = (f"Nuovo sponsor dal sito: {clean['name']}" if clean["topic"] == "SPONSOR"
+             else f"Richiesta di un nuovo club: {clean['name']}" if clean["topic"] == "NEW_CLUB"
+             else f"Nuovo messaggio dal sito: {clean['name']}")
     preview = clean["message"][:300]
     if club is not None:
         # La segreteria del club, non lo staff della piattaforma: un messaggio
@@ -170,7 +173,7 @@ async def submit(
 
     # Dopo il commit: il messaggio c'è già, l'email è una cortesia.
     to = _recipient_email(club, site)
-    if to and await asyncio.to_thread(_send_email, message, to=to, club_name=club.name if club else None):
+    if to and await asyncio.to_thread(_send_email, await _compose_email(db, message, club=club), to=to, reply_to=message.email):
         message.emailed_at = utcnow()
         await db.commit()
     return message
@@ -186,31 +189,35 @@ def _recipient_email(club: Club | None, site) -> str | None:
     return (site.contact_email if site is not None else None) or (club.settings or {}).get("contact_email") or None
 
 
-def _send_email(message: ContactMessage, *, to: str, club_name: str | None) -> bool:
-    """L'avviso via email, in portoghese come i club che lo ricevono, con
-    "Rispondi" verso chi ha scritto (Reply-To). Il testo di chi scrive passa
-    da render_letter, che fa l'escape: niente HTML dal sito."""
-    from app.core.email import send_html_email_best_effort
-    from app.core.email_templates import render_letter
+TOPIC_PT = {"GENERAL": "Pergunta", "SPONSOR": "Patrocínio", "ENROLMENT": "Inscrições e treinos",
+            "EVENTS": "Provas e eventos", "NEW_CLUB": "Criar um clube", "OTHER": "Outro"}
 
-    where = f"a página de {club_name}" if club_name else "o site JudoArteVida"
-    subject = f"Mensagem do site: {message.name}"
-    lines = [
-        f"Nova mensagem enviada através de {where}.",
-        "",
-        f"Nome: {message.name}",
-        f"Email: {message.email}",
-        *([f"Telefone: {message.phone}"] if message.phone else []),
-        "",
-        message.message,
-        "",
-        ("Para responder, use \"Responder\": a resposta vai diretamente para quem escreveu. A mensagem também "
-         f"está na área \"Mensagens\" em {get_settings().public_app_base_url}."),
-    ]
-    body = "\n".join(lines)
+
+async def _compose_email(db: AsyncSession, message: ContactMessage, *, club: Club | None):
+    """L'avviso via email (testo personalizzabile, domains/email_texts) nella
+    veste del club che lo riceve, o di JudoArteVida. Il testo di chi scrive
+    passa da text_to_html, che fa l'escape: niente HTML dal sito."""
+    from app.domains.club.email_brand import club_brand
+    from app.domains.email_texts.service import compose
+
+    mail = await compose(db, "contact_message", values={
+        "onde": f"a página de {club.name}" if club else "o site JudoArteVida",
+        "nome": message.name, "email": message.email, "telefone": message.phone or "—",
+        "assunto": TOPIC_PT.get(message.topic, message.topic), "mensagem": message.message,
+    }, brand=await club_brand(db, club.id if club else None), cta_url=f"{get_settings().public_app_base_url}/area")
+    if message.topic == "SPONSOR":
+        return type(mail)(subject=f"Patrocínio — {mail.subject}", html=mail.html, text=mail.text)
+    if message.topic == "NEW_CLUB":
+        return type(mail)(subject=f"Novo clube — {mail.subject}", html=mail.html, text=mail.text)
+    return mail
+
+
+def _send_email(mail, *, to: str, reply_to: str) -> bool:
+    from app.core.email import send_html_email_best_effort
+
     return send_html_email_best_effort(
-        context="contact_message", to=to, subject=subject, html_body=render_letter(subject=subject, body_text=body),
-        text_body=body, reply_to=message.email,
+        context="contact_message", to=to, subject=mail.subject, html_body=mail.html, text_body=mail.text,
+        reply_to=reply_to,
     )
 
 
@@ -225,6 +232,7 @@ def message_dict(message: ContactMessage, club: Club | None = None) -> dict:
         "email": message.email,
         "phone": message.phone,
         "message": message.message,
+        "topic": message.topic,
         "locale": message.locale,
         "status": message.status,
         "created_at": message.created_at,

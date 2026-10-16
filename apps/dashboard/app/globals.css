@@ -291,6 +291,20 @@ h1, h2, h3, .font-display {
   100% { transform: scale(1.14) translate3d(-1.5%, -1%, 0); }
 }
 .animate-ken-burns { animation: ken-burns 24s ease-in-out infinite alternate; transform-origin: 60% 40%; }
+/* Il riflesso che attraversa la barra del club, ogni tanto. */
+@keyframes club-shine {
+  0%, 55% { transform: translateX(0) skewX(-20deg); }
+  100% { transform: translateX(450%) skewX(-20deg); }
+}
+.animate-club-shine { animation: club-shine 7s ease-in-out infinite; }
+/* I loghi degli sponsor che scorrono; si fermano sotto il mouse. */
+@keyframes sponsor-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.animate-sponsor-marquee { animation: sponsor-marquee 32s linear infinite; }
+.animate-sponsor-marquee:hover, .animate-sponsor-marquee:focus-within { animation-play-state: paused; }
 @media (prefers-reduced-motion: reduce) {
-  .animate-aurora, .animate-light-sweep, .animate-marquee, .animate-ring-pulse, .animate-ken-burns { animation: none; }
+  .animate-aurora, .animate-light-sweep, .animate-marquee, .animate-ring-pulse, .animate-ken-burns,
+  .animate-club-shine, .animate-sponsor-marquee { animation: none; }
 }

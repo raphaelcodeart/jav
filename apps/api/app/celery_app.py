@@ -33,6 +33,7 @@ from app.domains.contracts import models as _contracts_models  # noqa: F401
 from app.domains.customers import models as _customers_models  # noqa: F401
 from app.domains.documentation import models as _documentation_models  # noqa: F401
 from app.domains.documents import models as _documents_models  # noqa: F401
+from app.domains.email_texts import models as _email_texts_models  # noqa: F401
 from app.domains.friend_referrals import models as _friend_referrals_models  # noqa: F401
 from app.domains.network import models as _network_models  # noqa: F401
 from app.domains.notifications import models as _notifications_models  # noqa: F401
@@ -87,6 +88,12 @@ celery_app.conf.update(
         "club-reminders": {
             "task": "app.celery_app.club_reminders_task",
             "schedule": crontab(hour=8, minute=0),
+        },
+        # Avvisi della mensilità e multa (club/payment_reminders.py): ogni ora,
+        # il job guarda da sé l'ora del club e manda ogni avviso una volta.
+        "club-payment-reminders": {
+            "task": "app.celery_app.club_payment_reminders_task",
+            "schedule": crontab(minute=5),
         },
         "club-close-competitions": {
             "task": "app.celery_app.club_close_competitions_task",
@@ -206,6 +213,11 @@ def club_new_season_task() -> int:
 @celery_app.task(name="app.celery_app.club_reminders_task")
 def club_reminders_task() -> int:
     return _club_run("send_reminders")
+
+
+@celery_app.task(name="app.celery_app.club_payment_reminders_task")
+def club_payment_reminders_task() -> int:
+    return _club_run("run_payment_reminders")
 
 
 @celery_app.task(name="app.celery_app.club_close_competitions_task")

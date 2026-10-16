@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/field";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { clubGet, clubSend, hoursLabel, type Clock, type Lesson } from "@/lib/club";
+import { Tabs } from "@/components/ui/tabs";
+import { JavCalendar } from "@/components/club/jav-calendar";
 import { useI18n } from "@/lib/i18n/provider";
 
 const S = (path: string) => `/staff${path}`;
@@ -23,7 +25,21 @@ const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart
 
 /** Il calendario delle lezioni a cui il treinador deve esserci: la
  *  settimana, giorno per giorno, con iscritti e presenti. */
+/** Il calendario: il Calendário JudoArteVida delle prove (con il PDF) e
+ *  le lezioni della settimana. */
 export function CalendarPanel() {
+  const { t } = useI18n();
+  const [view, setView] = useState<"events" | "lessons">("events");
+  return (
+    <div className="space-y-5">
+      <Tabs value={view} onChange={(k) => setView(k as "events" | "lessons")}
+        items={[{ key: "events", label: `🏆 ${t("jcal.tabEvents")}` }, { key: "lessons", label: `🗓️ ${t("jcal.tabLessons")}` }]} />
+      {view === "events" ? <JavCalendar mode="staff" /> : <LessonsWeek />}
+    </div>
+  );
+}
+
+function LessonsWeek() {
   const { t, fmt } = useI18n();
   const [weekStart, setWeekStart] = useState(() => mondayOf(new Date()));
   const from = iso(weekStart);

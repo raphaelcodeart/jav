@@ -21,10 +21,17 @@ import { AttendanceTool } from "@/components/club/attendance-tool";
 import { ClubAccounting, ClubMoneyHome } from "@/components/club/club-accounting";
 import { ClubSiteEditor } from "@/components/club/club-site-editor";
 import { KnowledgePanel } from "@/components/javbot/knowledge-panel";
+import { NewsAdminPanel } from "@/components/club/club-board";
+import { MonthBoardPanel } from "@/components/club/month-board";
+import { ClubShopPanel } from "@/components/club/club-shop-panel";
+import { EVENT_KIND_STYLE, EventIcon } from "@/components/club/event-icon";
 import { ClubDocumentsPanel } from "@/components/club/club-documents";
+import { AthleteMarks } from "@/components/club/person-marks";
+import { SlotEditModal } from "@/components/club/slot-edit-modal";
 import { ContactInbox } from "@/components/club/contact-inbox";
 import { AthletePublicPageSection } from "@/components/club/athlete-public-page";
-import { AbsencePanel, DayLogPanel, PeoplePanel, WorkHoursPanel } from "@/components/club/club-console";
+import { AbsencePanel, DayLogPanel, PeoplePanel } from "@/components/club/club-console";
+import { StaffManagementPanel } from "@/components/club/staff-management";
 import { CalendarPanel } from "@/components/club/coach-tools";
 import { BeltAwardPanel } from "@/components/club/staff-tools";
 import { CoursesManager } from "@/components/club/jav-courses";
@@ -61,7 +68,7 @@ import {
 export type ClubSection =
   | "overview" | "people" | "athletes" | "plans" | "accounting" | "fees" | "proofs" | "absence" | "certificates"
   | "competitions" | "courses" | "calendar" | "attendance" | "daylog" | "belts" | "ranking" | "workhours"
-  | "shop-orders" | "site" | "messages" | "javbot" | "documents" | "settings";
+  | "shop-orders" | "site" | "messages" | "news" | "javbot" | "documents" | "settings";
 type Section = ClubSection;
 
 /** Le sezioni del club, nell'ordine e con i gruppi del menu laterale: la
@@ -84,10 +91,12 @@ export const CLUB_SECTIONS: { key: ClubSection; icon: string; group: "people" | 
   { key: "competitions", icon: "🏆", group: "activity" },
   { key: "belts", icon: "🎖️", group: "activity" },
   { key: "ranking", icon: "📊", group: "activity" },
-  { key: "workhours", icon: "⏱️", group: "club" },
+  { key: "workhours", icon: "👥", group: "club" },
   { key: "site", icon: "🌐", group: "club" },
   // I messaggi scritti al club dalla sua pagina pubblica (contact-inbox.tsx).
   { key: "messages", icon: "✉️", group: "club" },
+  // La bacheca di atleti e famiglie: le notizie del club, come un post.
+  { key: "news", icon: "📰", group: "club" },
   // Che cosa sa JAVBOT dell'area riservata: i PDF e le istruzioni del club.
   { key: "javbot", icon: "🤖", group: "club" },
   // Certidões, atas, rivalidazione FPJ, assicurazioni, statuto del club.
@@ -164,11 +173,12 @@ export function ClubAdminPanel({ section: controlled, onGo, canInvest = false }:
         {section === "daylog" && <DayLogPanel />}
         {section === "belts" && features.belts && <BeltAwardPanel />}
         {section === "ranking" && features.ranking && <RankingPanel admin />}
-        {section === "workhours" && <WorkHoursPanel />}
-        {section === "shop-orders" && <ShopOrders />}
+        {section === "workhours" && <StaffManagementPanel />}
+        {section === "shop-orders" && <ClubShopPanel familyOrders={<ShopOrders />} />}
         {section === "site" && <ClubSiteEditor />}
         {section === "messages" && <ContactInbox mode="club" />}
         {section === "javbot" && <KnowledgePanel mode="club" />}
+        {section === "news" && <NewsAdminPanel />}
         {section === "documents" && <ClubDocumentsPanel />}
         {section === "settings" && <ClubSettingsSection />}
       </motion.div>
@@ -185,8 +195,9 @@ function Overview({ onGo }: { onGo: (s: Section) => void }) {
   const [period, setPeriod] = useState(() => new Date().toISOString().slice(0, 7));
   return (
     <div className="space-y-6">
-      {/* I soldi del club prima di tutto: incassi, costi, risultato, debiti
-          (club-accounting.tsx); sotto, i lavori automatici. */}
+      {/* Prima di tutto il mese corrente: chi ha pagato la mensilità e chi
+          manca (month-board.tsx). Poi i soldi del club e i lavori automatici. */}
+      <MonthBoardPanel compact onOpen={() => onGo("fees")} />
       <ClubMoneyHome onGo={onGo} athletesActive={data?.athletes_active} />
       <div className="glass-card rounded-3xl p-5 space-y-3">
         <h3 className="text-base text-ink-900">Lavori automatici</h3>
@@ -238,7 +249,7 @@ function Athletes() {
               const cert = CERTIFICATE_LABELS[a.certificate.status] ?? CERTIFICATE_LABELS.MISSING!;
               return (
                 <TR key={a.id} onClick={() => setEditing(a)} className="cursor-pointer">
-                  <TD><p className="font-semibold text-ink-900">{fullName(a)}</p><p className="text-xs text-ink-500"><span title="Età federale: gli anni compiuti entro il 31 dicembre">{a.federal_age ?? a.season_age} anni fed.</span> · {a.sex === "F" ? "F" : "M"}</p></TD>
+                  <TD><p className="font-semibold text-ink-900">{fullName(a)} <AthleteMarks id={a.id} /></p><p className="text-xs text-ink-500"><span title="Età federale: gli anni compiuti entro il 31 dicembre">{a.federal_age ?? a.season_age} anni fed.</span> · {a.sex === "F" ? "F" : "M"}</p></TD>
                   <TD><BeltBadge belt={a.belt} size="sm" /></TD>
                   <TD>{a.plan?.name ?? <Badge tone="warning">Da assegnare</Badge>}{a.plan_locked && <span title="Piano bloccato" className="ml-1">🔒</span>}</TD>
                   <TD className="text-xs">{a.guardian_email ?? "—"}</TD>
@@ -404,7 +415,20 @@ function PlanModal({ plan, onClose }: { plan: Plan | null; onClose: () => void }
 
 // --- Quote ------------------------------------------------------------------------------------
 
+/** Le quote: prima il quadro del mese (chi manca questo mese), poi l'elenco
+ *  completo con i filtri per chi cerca una quota precisa. */
 function Fees() {
+  const [view, setView] = useState<"month" | "list">("month");
+  return (
+    <div className="space-y-5">
+      <Tabs value={view} onChange={(k) => setView(k as "month" | "list")}
+        items={[{ key: "month", label: "📅 Il mese" }, { key: "list", label: "📋 Tutte le quote" }]} />
+      {view === "month" ? <MonthBoardPanel /> : <FeesList />}
+    </div>
+  );
+}
+
+function FeesList() {
   const { t } = useI18n();
   const [status, setStatus] = useState("DUE");
   const [kind, setKind] = useState("");
@@ -433,7 +457,7 @@ function Fees() {
           <TBody>
             {(data ?? []).map((f) => (
               <TR key={f.id}>
-                <TD className="font-semibold text-ink-900">{f.athlete_name ?? t("clubAdmin.parentMember")}</TD>
+                <TD className="font-semibold text-ink-900">{f.athlete_name ?? t("clubAdmin.parentMember")} <AthleteMarks id={f.athlete_id} /></TD>
                 <TD>
                   {f.description}<p className="text-xs text-ink-500">{FEE_KIND_LABELS[f.kind] ?? f.kind}</p>
                   {f.discount_note && <p className="text-[11px] text-emerald-700">{f.discount_note}</p>}
@@ -597,7 +621,7 @@ function Certificates() {
               const s = CERTIFICATE_LABELS[c.certificate.status] ?? CERTIFICATE_LABELS.MISSING!;
               return (
                 <TR key={c.athlete_id}>
-                  <TD className="font-semibold text-ink-900">{c.athlete_name}</TD>
+                  <TD className="font-semibold text-ink-900">{c.athlete_name} <AthleteMarks id={c.athlete_id} /></TD>
                   <TD className="text-xs">{c.guardian_email ?? "—"}</TD>
                   <TD><Badge tone={s.tone} dot>{s.label}</Badge></TD>
                   <TD>{shortDate(c.certificate.expires_on)}</TD>
@@ -627,9 +651,10 @@ function Competitions() {
         <div className="space-y-3">
           {(data ?? []).map((c) => (
             <div key={c.id} className="glass-card rounded-3xl p-5 flex flex-col lg:flex-row lg:items-center gap-4">
+              <EventIcon kind={c.kind} imageUrl={c.image_url} />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap gap-1.5 mb-1">
-                  {c.kind === "STAGE" ? <Badge tone="brand">{t("event.stage")}</Badge> : <Badge tone="neutral">{LEVEL_LABELS[c.level] ?? c.level}</Badge>}
+                  {c.kind === "COMPETITION" ? <Badge tone="neutral">{LEVEL_LABELS[c.level] ?? c.level}</Badge> : <Badge tone="brand">{EVENT_KIND_STYLE[c.kind]?.icon} {t.dyn(`event.${({ STAGE: "stage", REFEREEING: "referee", EDUCATION: "education", MEETING: "meeting" } as Record<string, string>)[c.kind] ?? "other"}`, c.kind)}</Badge>}
                   {c.transport_needed && <Badge tone="info">🚌 {t("event.transport")}</Badge>}
                   <Badge tone={c.status === "OPEN" ? "success" : c.status === "DONE" ? "info" : "warning"}>{c.status === "OPEN" ? "Iscrizioni aperte" : c.status === "DONE" ? "Conclusa" : "Iscrizioni chiuse"}</Badge>
                 </div>
@@ -655,6 +680,47 @@ function Competitions() {
       {editing && <CompetitionModal competition={editing === "new" ? null : editing} onClose={() => setEditing(null)} />}
       {results && <ResultsModal competition={results} onClose={() => setResults(null)} />}
       {transportFor && <TransportModal competition={transportFor} onClose={() => setTransportFor(null)} />}
+    </div>
+  );
+}
+
+/** La foto o la locandina della gara: si carica e si toglie subito, senza
+ *  aspettare «Salva». Senza, negli elenchi c'è l'icona del tipo. */
+function EventImageEditor({ competition: c, kind }: { competition: Competition; kind: string }) {
+  const [image, setImage] = useState(c.image_url ?? null);
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  async function upload(file: File | null) {
+    setBusy(true);
+    try {
+      let updated: Competition;
+      if (file) {
+        const form = new FormData();
+        form.append("file", file);
+        updated = await clubSend<Competition>(A(`/competitions/${c.id}/image`), "POST", form);
+      } else {
+        updated = await clubSend<Competition>(A(`/competitions/${c.id}/image`), "DELETE");
+      }
+      setImage(updated.image_url ?? null);
+      await queryClient.invalidateQueries({ queryKey: ["club"] });
+    } catch (e) {
+      toast({ tone: "error", title: "Immagine non caricata", text: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="flex items-center gap-4 rounded-2xl bg-ink-50 p-3 ring-1 ring-ink-100">
+      <EventIcon kind={kind} imageUrl={image} />
+      <div className="min-w-0 flex-1 space-y-2">
+        <p className="text-sm font-semibold text-ink-900">Foto o locandina</p>
+        <p className="text-xs text-ink-500">Compare accanto al nome negli elenchi delle prove. Senza, l&apos;icona del tipo. JPG, PNG o WebP fino a 5 MB.</p>
+        <div className="flex flex-wrap gap-2">
+          <Input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={(e) => { const file = e.target.files?.[0]; if (file) void upload(file); }} className="max-w-xs" />
+          {image && <Button size="sm" variant="ghost" loading={busy} onClick={() => upload(null)}>Togli</Button>}
+        </div>
+      </div>
     </div>
   );
 }
@@ -700,6 +766,7 @@ function CompetitionModal({ competition: c, onClose }: { competition: Competitio
   return (
     <Modal open onClose={onClose} size="lg" title={c ? "Modifica gara" : "Nuova gara"} footer={<><Button variant="ghost" onClick={onClose}>Annulla</Button><Button loading={busy} onClick={save} disabled={!f.name || !f.starts_on || !f.registration_deadline}>Salva</Button></>}>
       <div className="grid sm:grid-cols-2 gap-4">
+        {c && <div className="sm:col-span-2"><EventImageEditor competition={c} kind={f.kind} /></div>}
         <div className="sm:col-span-2"><Field label="Nome" htmlFor="cp-name"><Input id="cp-name" value={f.name} onChange={(e) => set({ name: e.target.value })} /></Field></div>
         <Field label={t("event.kind")} hint={t("event.kindHint")} htmlFor="cp-kind">
           <Select id="cp-kind" value={f.kind} onChange={(e) => set({ kind: e.target.value })}>
@@ -858,7 +925,7 @@ function ResultsModal({ competition: c, onClose }: { competition: Competition; o
           {(data ?? []).map((e) => (
             <div key={e.id} className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-2xl bg-white ring-1 ring-ink-100 px-4 py-3">
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-ink-900">{e.athlete_name}</p>
+                <p className="text-sm font-semibold text-ink-900">{e.athlete_name} <AthleteMarks id={e.athlete_id} /></p>
                 <p className="text-xs text-ink-500">{e.category ?? "Categoria da definire"}{e.weight_kg ? ` · ${e.weight_kg} kg` : ""}{e.fee_status ? ` · quota ${e.fee_status === "PAID" ? "pagata" : e.fee_status === "DUE" ? "da pagare" : e.fee_status.toLowerCase()}` : ""}{e.status === "WITHDRAWN" ? " · ritirato" : ""}</p>
               </div>
               {e.status === "REGISTERED" && (
@@ -966,6 +1033,7 @@ function Courses() {
   const [editing, setEditing] = useState<Course | "new" | null>(null);
   const run = useRun();
   const [slot, setSlot] = useState<Record<string, { weekday: string; from: string; to: string; room: string }>>({});
+  const [editingSlot, setEditingSlot] = useState<{ slot: Course["slots"][number]; course: string } | null>(null);
   const days = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"];
   return (
     <div className="space-y-4">
@@ -986,7 +1054,9 @@ function Courses() {
                 <div className="flex flex-wrap gap-1.5">
                   {c.slots.map((sl) => (
                     <span key={sl.id} className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 ring-1 ring-brand-200 px-2.5 py-1 text-xs font-semibold text-brand-800">
-                      {days[sl.weekday]?.slice(0, 3)} {sl.starts_at.slice(0, 5)}–{sl.ends_at.slice(0, 5)}{sl.room ? ` · ${sl.room}` : ""}
+                      <button type="button" title="Modifica orario" className="cursor-pointer hover:underline" onClick={() => setEditingSlot({ slot: sl, course: c.name })}>
+                        ✎ {days[sl.weekday]?.slice(0, 3)} {sl.starts_at.slice(0, 5)}–{sl.ends_at.slice(0, 5)}{sl.room ? ` · ${sl.room}` : ""}
+                      </button>
                       <button aria-label="Togli orario" className="text-brand-500 hover:text-brand-800 cursor-pointer" onClick={() => run(() => clubSend(A(`/slots/${sl.id}`), "DELETE"), "Orario tolto")}>✕</button>
                     </span>
                   ))}
@@ -1006,6 +1076,7 @@ function Courses() {
         </div>
       )}
       {editing && <CourseModal course={editing === "new" ? null : editing} onClose={() => setEditing(null)} />}
+      {editingSlot && <SlotEditModal slot={editingSlot.slot} courseName={editingSlot.course} onClose={() => setEditingSlot(null)} />}
     </div>
   );
 }
@@ -1175,6 +1246,8 @@ function BankForm({ initial }: { initial: ClubSettings }) {
   const [entityName, setEntityName] = useState(initial.transport_entity_name ?? "");
   const [entityEmail, setEntityEmail] = useState(initial.transport_entity_email ?? "");
   const [language, setLanguage] = useState(initial.letters_language ?? "pt");
+  const [lateOn, setLateOn] = useState(Boolean(initial.late_fee_enabled));
+  const [lateFee, setLateFee] = useState(toEuro(initial.late_fee_cents ?? 1500));
   const [busy, setBusy] = useState(false);
   async function save() {
     setBusy(true);
@@ -1182,6 +1255,7 @@ function BankForm({ initial }: { initial: ClubSettings }) {
       () => clubSend(A("/settings"), "PATCH", {
         bank_iban: iban, bank_account_holder: holder, bank_transfer_instructions: instructions, contact_email: contact,
         transport_entity_name: entityName, transport_entity_email: entityEmail, letters_language: language,
+        late_fee_enabled: lateOn, late_fee_cents: toCents(lateFee) || 1500,
       }),
       t("clubAdmin.bankSaved"),
     );
@@ -1211,6 +1285,21 @@ function BankForm({ initial }: { initial: ClubSettings }) {
             <option value="en">English</option>
           </Select>
         </Field>
+      </div>
+      <div className="border-t border-ink-100 pt-4 space-y-3">
+        <div>
+          <h3 className="text-base text-ink-900">⏰ {t("lateFee.title")}</h3>
+          <p className="text-sm text-ink-500">{t("lateFee.text")}</p>
+        </div>
+        <label className="flex cursor-pointer items-center gap-3 text-sm font-semibold text-ink-800">
+          <input type="checkbox" className="h-5 w-5 accent-brand-600" checked={lateOn} onChange={(e) => setLateOn(e.target.checked)} />
+          {t("lateFee.enable")}
+        </label>
+        {lateOn && (
+          <Field label={t("lateFee.amount")} htmlFor="club-late-fee">
+            <Input id="club-late-fee" inputMode="decimal" value={lateFee} onChange={(e) => setLateFee(e.target.value)} />
+          </Field>
+        )}
       </div>
       <Button onClick={save} loading={busy}>{t("common.save")}</Button>
     </div>

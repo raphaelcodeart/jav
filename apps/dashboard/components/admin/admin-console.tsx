@@ -9,8 +9,12 @@ import { AdminOrganizationSettingsPanel } from "@/components/admin-organization-
 import { AdminTicketsPanel } from "@/components/admin-tickets-panel";
 import { AdminWalletsPanel } from "@/components/admin-wallets-panel";
 import { PlatformMoney } from "@/components/admin/platform-accounting";
+import { SponsorsPanel } from "@/components/admin/sponsors-panel";
+import { EmailTextsPanel } from "@/components/admin/email-texts-panel";
+import { NewsAdminPanel } from "@/components/club/club-board";
 import { ClubAdminPanel, sectionsFor, type ClubSection } from "@/components/club/club-admin-panel";
 import { ContactInbox } from "@/components/club/contact-inbox";
+import { StaffInbox } from "@/components/club/staff-management";
 import { KnowledgePanel } from "@/components/javbot/knowledge-panel";
 import { CoursesUnitPanel } from "@/components/club/courses-unit-panel";
 import { ClubList } from "@/components/club/clubs-panel";
@@ -24,7 +28,7 @@ import type { PlatformOverview } from "@/lib/club";
 import { enterClub, leaveClub } from "@/lib/club-cookie";
 import { useI18n } from "@/lib/i18n/provider";
 
-type PlatformKey = "hq" | "clubs" | "jav-courses" | "messages" | "javbot" | "shop" | "wallets" | "support" | "settings";
+type PlatformKey = "hq" | "clubs" | "jav-courses" | "messages" | "staff-messages" | "sponsors" | "emails" | "jav-news" | "javbot" | "shop" | "wallets" | "support" | "settings";
 type Key = PlatformKey | `club:${ClubSection}`;
 
 const emoji = (e: string) => <span className="text-base leading-none" aria-hidden="true">{e}</span>;
@@ -55,7 +59,14 @@ export function AdminConsole({ email, isSuperAdmin }: { email?: string; isSuperA
     { key: "jav-courses", label: t("javCourses.navEntry"), icon: emoji("🏫"), group: "JudoArteVida" },
     // I messaggi scritti a JudoArteVida da /contactos.
     { key: "messages", label: t("console.messages"), icon: emoji("✉️"), group: "JudoArteVida", notificationTypes: ["CONTACT_MESSAGE"] },
+    { key: "staff-messages", label: t("staffMsg.consoleNav"), icon: emoji("💬"), group: "JudoArteVida", notificationTypes: ["CLUB_STAFF_MESSAGE"] },
     // La base di conoscenza comune di JAVBOT: la gestisce chi gestisce i club (clubs.manage).
+    // Gli sponsor della home e delle loro pagine: chi gestisce i club (clubs.manage).
+    ...(isSuperAdmin ? [{ key: "sponsors", label: t("console.sponsors"), icon: emoji("🤝"), group: "JudoArteVida" }] : []),
+    // I post di JudoArteVida nella bacheca di tutti i club.
+    ...(isSuperAdmin ? [{ key: "jav-news", label: "Bacheca", icon: emoji("📰"), group: "JudoArteVida" }] : []),
+    // I testi delle email che partono dalla piattaforma e dai club.
+    ...(isSuperAdmin ? [{ key: "emails", label: "Email", icon: emoji("📧"), group: "JudoArteVida" }] : []),
     ...(isSuperAdmin ? [{ key: "javbot", label: t("console.javbot"), icon: emoji("🤖"), group: "JudoArteVida" }] : []),
     ...sectionsFor(current?.kind).map((s) => ({
       key: `club:${s.key}`, label: t.dyn(`clubNav.${s.key}`, s.key), icon: emoji(s.icon), group: clubGroup,
@@ -83,6 +94,30 @@ export function AdminConsole({ email, isSuperAdmin }: { email?: string; isSuperA
         <>
           <PageHeader eyebrow="JudoArteVida" title={t("console.messages")} subtitle={isSuperAdmin ? t("console.messagesSubtitleSuper") : t("console.messagesSubtitle")} />
           <ContactInbox mode="platform" canFilterClubs={isSuperAdmin} />
+        </>
+      )}
+      {active === "staff-messages" && (
+        <>
+          <PageHeader eyebrow="JudoArteVida" title={t("staffMsg.consoleNav")} subtitle={t("staffMsg.consoleSubtitle")} />
+          <StaffInbox mode="platform" />
+        </>
+      )}
+      {active === "sponsors" && (
+        <>
+          <PageHeader eyebrow="JudoArteVida" title={t("console.sponsors")} subtitle={t("console.sponsorsSubtitle")} />
+          <SponsorsPanel />
+        </>
+      )}
+      {active === "jav-news" && (
+        <>
+          <PageHeader eyebrow="JudoArteVida" title="Bacheca del circuito" subtitle="I post di JudoArteVida compaiono nella bacheca di atleti e famiglie di tutti i club, insieme ai post dei club e alle prove in arrivo." />
+          <NewsAdminPanel mode="platform" />
+        </>
+      )}
+      {active === "emails" && (
+        <>
+          <PageHeader eyebrow="JudoArteVida" title="Email" subtitle="I testi delle email automatiche: con il logo di JudoArteVida o del club che scrive. Modificali, guarda l'anteprima e mandati una prova." />
+          <EmailTextsPanel />
         </>
       )}
       {active === "javbot" && (

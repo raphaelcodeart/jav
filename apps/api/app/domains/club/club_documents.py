@@ -8,6 +8,11 @@ nel club). Il file va nel bucket privato (CLAUDE.md §5) e si apre con un
 URL presigned di pochi minuti. Una certidão scade: con una data di
 scadenza, la segreteria riceve un avviso 30 giorni prima e il giorno in cui
 scade (una volta sola per documento e momento: `club_reminders_sent`).
+
+Un documento può essere condiviso con i soci (`shared_with_members`): il
+regolamento interno, il calendario della stagione. Allora compare nella
+bacheca di atleti e famiglie del club (news.py), che lo aprono con lo
+stesso link di pochi minuti. Gli altri restano dello staff.
 """
 
 import uuid
@@ -45,6 +50,7 @@ def document_dict(doc: ClubDocument, *, today: date) -> dict:
         "id": doc.id, "category": doc.category, "title": doc.title, "issued_on": doc.issued_on,
         "expires_on": doc.expires_on, "notes": doc.notes, "original_filename": doc.original_filename,
         "size_bytes": doc.size_bytes, "status": status_of(doc, today=today), "created_at": doc.created_at,
+        "shared_with_members": doc.shared_with_members,
     }
 
 
@@ -64,6 +70,8 @@ def _clean(data: dict) -> dict:
             out[key] = data[key]
     if "notes" in data:
         out["notes"] = (data["notes"] or "").strip()[:MAX_NOTES] or None
+    if data.get("shared_with_members") is not None:
+        out["shared_with_members"] = bool(data["shared_with_members"])
     return out
 
 
@@ -84,12 +92,25 @@ async def get_document(db: AsyncSession, *, scope: ClubScope, document_id: uuid.
     return doc
 
 
+async def list_member_documents(db: AsyncSession, *, scope: ClubScope) -> list[ClubDocument]:
+    """I documenti che il club ha condiviso con atleti e famiglie."""
+    stmt = select(ClubDocument).where(ClubDocument.club_id == scope.club_id, ClubDocument.shared_with_members.is_(True))
+    return list((await db.execute(stmt.order_by(ClubDocument.created_at.desc()))).scalars())
+
+
+async def get_member_document(db: AsyncSession, *, scope: ClubScope, document_id: uuid.UUID) -> ClubDocument:
+    doc = await get_document(db, scope=scope, document_id=document_id)
+    if not doc.shared_with_members:
+        raise ClubNotFoundError("Documento non trovato.")
+    return doc
+
+
 async def add_document(
     db: AsyncSession, *, scope: ClubScope, actor_user_id: uuid.UUID, data: dict, file_bytes: bytes,
     content_type: str, filename: str,
 ) -> ClubDocument:
     values = _clean({"category": data.get("category"), "title": data.get("title"), **{
-        k: data.get(k) for k in ("issued_on", "expires_on", "notes")
+        k: data.get(k) for k in ("issued_on", "expires_on", "notes", "shared_with_members")
     }})
     doc = ClubDocument(**scope.columns(), **values, storage_key="", original_filename=(filename or "documento")[:255],
                        content_type=content_type, size_bytes=len(file_bytes), uploaded_by_user_id=actor_user_id)

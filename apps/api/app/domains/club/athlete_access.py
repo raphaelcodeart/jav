@@ -32,6 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.email import PLACEHOLDER_EMAIL_DOMAIN, is_placeholder_address
 from app.core.security import hash_password
 from app.domains.audit import service as audit_service
+from app.domains.club import seasons
 from app.domains.club.models import (
     ClubAthlete,
     ClubAthleteLoginCode,
@@ -350,6 +351,10 @@ async def area(db: AsyncSession, *, athlete: ClubAthlete, viewer_user_id: uuid.U
         "is_minor": age < ADULT_AGE,
         "viewer_is_athlete": own,
         "can_manage": athlete.guardian_user_id == viewer_user_id,
+        # Pagare (caricare la prova delle sue quote): il titolare, o l'atleta
+        # stesso con il suo accesso dai 18 anni di età federale.
+        "can_pay": athlete.guardian_user_id == viewer_user_id
+        or (own and seasons.federal_age(athlete.birth_date, today.year) >= ADULT_AGE),
         # Diventare titolare: solo l'atleta stesso, maggiorenne, con un suo
         # accesso, che ancora non lo è.
         "can_become_holder": own and age >= ADULT_AGE and not athlete.is_self

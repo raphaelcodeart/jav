@@ -7,6 +7,7 @@ import { siteI18n } from "@/components/site/i18n";
 import { Reveal } from "@/components/site/reveal";
 import { SiteShell } from "@/components/site/site-shell";
 import { JAV_CONTACTS } from "@/lib/jav-contacts";
+import { publicSite } from "@/lib/public-site";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await siteI18n();
@@ -18,12 +19,12 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-/** I contatti di JudoArteVida e il modulo per scriverci: il messaggio arriva
- *  a info@judoartevida.com e nella casella "Messaggi" della console. Chi
- *  vuole scrivere a un club lo fa dalla pagina di quel club: qui lo diciamo,
- *  perché un genitore di Lagos non aspetti una risposta da noi. */
+/** I contatti di JudoArteVida e il modulo per scriverci: chi scrive sceglie
+ *  a chi (JudoArteVida o un club) e di che cosa. Il messaggio si salva nella
+ *  casella "Messaggi" di chi lo riceve (la console, o la segreteria del club,
+ *  e lo staff della piattaforma vede anche quelli dei club) e parte l'email. */
 export default async function ContactsPage() {
-  const { t } = await siteI18n();
+  const [{ t }, clubs] = await Promise.all([siteI18n(), publicSite.clubs().catch(() => null)]);
   return (
     <SiteShell>
       <PageIntro eyebrow={t("site.contacts.eyebrow")} title={t("site.contacts.title")} text={t("site.contacts.text")} />
@@ -48,7 +49,7 @@ export default async function ContactsPage() {
         </Reveal>
         <Reveal delay={0.1}>
           <h2 className="mb-4 text-2xl text-ink-900">{t("site.contacts.formTitle")}</h2>
-          <ContactForm target={{ kind: "jav" }} />
+          <ContactForm target={{ kind: "jav" }} chooseTopic recipients={(clubs ?? []).map((c) => ({ slug: c.slug, name: c.name }))} />
         </Reveal>
       </Container>
     </SiteShell>

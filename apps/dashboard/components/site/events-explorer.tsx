@@ -117,7 +117,7 @@ export function EventsExplorer({ initial, initialEvents, clubs, todayIso }: {
     <MotionConfig reducedMotion="user">
       <div className="space-y-6">
         {/* --- La barra degli strumenti --- */}
-        <div className="sticky top-16 z-20 space-y-3">
+        <div className="sticky top-20 z-20 space-y-3 sm:top-24">
           <div className="flex flex-wrap items-center gap-3 rounded-3xl bg-gradient-to-r from-brand-600 via-brand-500 to-accent-500 p-2.5 text-white shadow-lift">
             <div className="flex rounded-2xl bg-white/15 p-1 ring-1 ring-white/25" role="tablist" aria-label={t("site.ev.views")}>
               {([["list", "☰", "site.ev.viewList"], ["calendar", "▦", "site.ev.viewCalendar"], ["year", "◫", "site.ev.viewYear"]] as const).map(([v, icon, key]) => (

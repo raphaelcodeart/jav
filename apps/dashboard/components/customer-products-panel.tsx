@@ -77,14 +77,15 @@ function useShopPages<T>(
   baseKey: readonly string[],
   url: string,
   enabled: boolean,
-  filters: { q: string; category: string | null },
+  filters: { q: string; category: string | null; seller?: string | null },
 ) {
   const query = useInfiniteQuery({
-    queryKey: [...baseKey, filters.q, filters.category],
+    queryKey: [...baseKey, filters.q, filters.category, filters.seller ?? ""],
     queryFn: async ({ pageParam }): Promise<ShopProductPage<T>> => {
       const params = new URLSearchParams({ offset: String(pageParam), limit: String(PAGE_SIZE) });
       if (filters.q) params.set("q", filters.q);
       if (filters.category) params.set("category_id", filters.category);
+      if (filters.seller) params.set("seller", filters.seller);
       const res = await fetch(`${url}?${params}`);
       if (!res.ok) {
         return { items: [], total: 0, shop_total: 0, offset: pageParam, limit: PAGE_SIZE, next_offset: null, category_ids: [] };
@@ -188,6 +189,8 @@ export function CustomerProductsPanel({
   // checkout, mai una scheda prodotto.
   const [search, setSearch] = useState("");
   const [chosenCategoryId, setChosenCategoryId] = useState<string | null>(null);
+  // Lo shop del club o quello di JudoArteVida (null = tutti e due).
+  const [seller, setSeller] = useState<"CLUB" | "JAV" | null>(null);
 
   // Session 89: lo Shop arriva a pagine (useShopPages). La ricerca e la
   // categoria valgono solo per il negozio aperto e partono quando il
@@ -198,7 +201,7 @@ export function CustomerProductsPanel({
     return () => clearTimeout(timer);
   }, [search]);
   const pagedFilters = (tab: ShopTab) =>
-    activeCategory === tab ? { q: pagedSearch, category: chosenCategoryId } : { q: "", category: null };
+    activeCategory === tab ? { q: pagedSearch, category: chosenCategoryId, seller } : { q: "", category: null, seller: null };
   // Session 79: «Fai la Spesa con Jav». Un negozio spento risponde vuoto e
   // la sua scheda sparisce da sola.
   const javMarketShop = useShopPages<JavMarketProductRead>(
@@ -422,6 +425,17 @@ export function CustomerProductsPanel({
               </button>
             )}
           </div>
+
+          {showShopTab && activeTab === "JAV_MARKET" && (
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Venditore">
+              {([[null, "Tutti gli shop"], ["CLUB", "🏯 Shop del mio club"], ["JAV", "🌍 Shop JudoArteVida"]] as const).map(([key, label]) => (
+                <button key={key ?? "all"} type="button" aria-pressed={seller === key} onClick={() => setSeller(key)}
+                  className={`px-4 py-2 rounded-full text-sm font-bold border transition cursor-pointer ${seller === key ? "bg-ink-900 border-ink-900 text-white" : "bg-white border-slate-300 text-slate-700 hover:bg-slate-100"}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
 
           {categoryChips.length > 0 && (
             <div className="flex flex-wrap gap-2">
@@ -657,6 +671,11 @@ export function CustomerProductsPanel({
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-transparent" />
                   <div className="absolute top-3 left-3 flex flex-wrap gap-1.5">
+                    {p.seller && (
+                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold shadow-lg ${p.seller.club_id ? "bg-brand-600 text-white" : "bg-accent-400 text-ink-900"}`}>
+                        {p.seller.club_id ? `🏯 ${p.seller.name}` : "🌍 JudoArteVida"}
+                      </span>
+                    )}
                     <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-950/70 backdrop-blur-sm text-slate-900 border border-slate-200 shadow-lg">
                       {p.shipping_days ? `Consegna ${p.shipping_days} gg` : "Spedito a casa"}
                     </span>

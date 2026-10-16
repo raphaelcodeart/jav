@@ -177,3 +177,32 @@ class ClubAthleteMedia(UUIDPKMixin, TimestampMixin, Base):
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
+
+
+class Sponsor(UUIDPKMixin, TimestampMixin, Base):
+    """Uno sponsor della rete JudoArteVida: compare nella barra dei loghi
+    della home e ha una sua pagina semplice (/patrocinadores/<slug>) con il
+    bottone verso il suo sito. Lo gestisce lo staff della piattaforma dalla
+    console; tutto ciò che sta qui è pubblico per costruzione."""
+
+    __tablename__ = "sponsors"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "slug", name="uq_sponsors_org_slug"),
+        CheckConstraint("website_url IS NULL OR website_url ~* '^https?://'", name="website_url"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(120))
+    slug: Mapped[str] = mapped_column(String(80))
+    #: Una riga sotto il nome ("Município de Lagos").
+    tagline: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Senza logo la barra mostra il nome scritto, con le iniziali.
+    logo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    website_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    #: Il colore della sua pagina e della sua tessera nella barra (#RRGGBB).
+    color: Mapped[str | None] = mapped_column(String(7), nullable=True)
+    sort_order: Mapped[int] = mapped_column(SmallInteger, default=0, server_default=text("0"))
+    active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))

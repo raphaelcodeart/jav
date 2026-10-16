@@ -240,7 +240,9 @@ async def list_my_jav_market_products(
     sparisce da sola dallo Shop, senza che nessuno la nasconda a mano.
     Solo la prima pagina -- la vetrina usa /products/mine/page;
     questa resta per una pagina del browser ancora alla versione di prima."""
-    page = await service.customer_products_page(db, organization_id=current_user.organization_id)
+    page = await service.customer_products_page(
+        db, organization_id=current_user.organization_id, viewer_club_id=await _viewer_club(db, current_user.user_id),
+    )
     return page["items"]
 
 
@@ -250,15 +252,24 @@ async def page_my_jav_market_products(
     limit: int = Query(paging.PAGE_SIZE, ge=1, le=paging.MAX_PAGE_SIZE),
     q: str | None = Query(None, max_length=100),
     category_id: uuid.UUID | None = None,
+    seller: str | None = Query(None, pattern="^(CLUB|JAV)$"),
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """La vetrina a pagine («Mostra altri prodotti»), con ricerca e
-    categoria filtrate sul server: vedi marketplaces/paging.py."""
+    categoria filtrate sul server: vedi marketplaces/paging.py. Lo shop di
+    JudoArteVida e quello del club di chi compra (`seller` per uno solo)."""
     return await service.customer_products_page(
         db, organization_id=current_user.organization_id, offset=offset, limit=limit,
-        search=q, category_id=category_id,
+        search=q, category_id=category_id, viewer_club_id=await _viewer_club(db, current_user.user_id), seller=seller,
     )
+
+
+async def _viewer_club(db: AsyncSession, user_id: uuid.UUID) -> uuid.UUID | None:
+    from app.domains.users.models import User
+
+    user = await db.get(User, user_id)
+    return user.club_id if user else None
 
 
 # --- Cliente: checkout ----------------------------------------------------------------------------

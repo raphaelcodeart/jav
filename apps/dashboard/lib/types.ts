@@ -1126,6 +1126,8 @@ export type JavMarketProducerRead = JavMarketProducerPublic & {
 
 /** La card nella griglia del cliente: MarketProductRead più il produttore. */
 export type JavMarketProductRead = MarketProductRead & {
+  /** Chi vende: lo shop del club (club_id) o quello di JudoArteVida (null). */
+  seller?: { club_id: string | null; name: string } | null;
   producer: JavMarketProducerPublic | null;
   /** Solo «Fai la Spesa»: le regole dell'ordine, per dirle prima del checkout. */
   shipping_flat_cents?: number;

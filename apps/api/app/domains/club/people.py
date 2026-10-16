@@ -31,6 +31,7 @@ from app.domains.club.models import (
     ClubFee,
     ClubFunction,
     ClubPaymentProof,
+    ClubReferee,
 )
 from app.domains.club.scope import ClubScope
 from app.domains.club.service import ClubNotFoundError, ClubValidationError, current_belts
@@ -63,7 +64,9 @@ async def _names(db: AsyncSession, user_ids: set[uuid.UUID]) -> dict[uuid.UUID, 
 
 async def list_people(db: AsyncSession, *, scope: ClubScope) -> list[dict]:
     """Tutti, una riga a testa, con i tipi: ATHLETE, PARENT, SECRETARY,
-    COACH, ASSISTANT_COACH, MONITOR, ASSISTANT_MONITOR."""
+    COACH, ASSISTANT_COACH, MONITOR, ASSISTANT_MONITOR, REFEREE. Un adulto
+    che si allena (`is_self`) è una riga sola: atleta, e anche genitore se
+    il conto ha altri atleti, istruttore se ha l'account da istruttore."""
     athletes = list(
         (await db.execute(select(ClubAthlete).where(ClubAthlete.club_id == scope.club_id))).scalars()
     )
@@ -81,6 +84,9 @@ async def list_people(db: AsyncSession, *, scope: ClubScope) -> list[dict]:
     functions = list((await db.execute(select(ClubFunction).where(ClubFunction.club_id == scope.club_id))).scalars())
     fn_by_user = {f.user_id: f.function for f in functions if f.user_id}
     fn_by_athlete = {f.athlete_id: f.function for f in functions if f.athlete_id}
+    referees = list((await db.execute(select(ClubReferee).where(ClubReferee.club_id == scope.club_id))).scalars())
+    referee_users = {r.user_id for r in referees if r.user_id}
+    referee_athletes = {r.athlete_id for r in referees if r.athlete_id}
     due = dict(
         (
             await db.execute(
@@ -111,9 +117,18 @@ async def list_people(db: AsyncSession, *, scope: ClubScope) -> list[dict]:
         children.setdefault(a.guardian_user_id, []).append(a)
     for a in athletes:
         kinds = ["ATHLETE"]
+        holder_roles = set(roles.get(a.guardian_user_id) or []) if a.is_self else set()
+        if a.is_self and len(children.get(a.guardian_user_id, [])) > 1:
+            kinds.append("PARENT")
+        if "SECRETARY" in holder_roles:
+            kinds.append("SECRETARY")
         function = fn_by_athlete.get(a.id) or (fn_by_user.get(a.guardian_user_id) if a.is_self else None)
         if function:
             kinds.append(function)
+        elif "INSTRUCTOR" in holder_roles:
+            kinds.append("COACH")
+        if a.id in referee_athletes or (a.is_self and a.guardian_user_id in referee_users):
+            kinds.append("REFEREE")
         rows.append({
             "kind": "ATHLETE", "id": a.id, "user_id": a.guardian_user_id if a.is_self else None,
             "name": f"{a.first_name} {a.last_name}", "kinds": kinds, "status": a.status,
@@ -136,6 +151,8 @@ async def list_people(db: AsyncSession, *, scope: ClubScope) -> list[dict]:
             kinds.append(fn_by_user[u.id])
         elif "INSTRUCTOR" in user_roles:
             kinds.append("COACH")
+        if u.id in referee_users:
+            kinds.append("REFEREE")
         if not kinds:
             continue
         family = children.get(u.id, [])
@@ -149,6 +166,39 @@ async def list_people(db: AsyncSession, *, scope: ClubScope) -> list[dict]:
         })
     rows.sort(key=lambda r: r["name"].lower())
     return rows
+
+
+async def set_referee(
+    db: AsyncSession, *, scope: ClubScope, actor_user_id: uuid.UUID, referee: bool,
+    user_id: uuid.UUID | None = None, athlete_id: uuid.UUID | None = None,
+) -> None:
+    """Segna (o toglie) una persona del club come árbitro."""
+    if (user_id is None) == (athlete_id is None):
+        raise ClubValidationError("Indica una persona.")
+    if user_id is not None:
+        user = await db.get(User, user_id)
+        if user is None or user.club_id != scope.club_id:
+            raise ClubNotFoundError("Persona non trovata.")
+        where = ClubReferee.user_id == user_id
+    else:
+        athlete = await db.get(ClubAthlete, athlete_id)
+        if athlete is None or athlete.club_id != scope.club_id:
+            raise ClubNotFoundError("Atleta non trovato.")
+        where = ClubReferee.athlete_id == athlete_id
+    existing = (
+        await db.execute(select(ClubReferee).where(ClubReferee.club_id == scope.club_id, where))
+    ).scalar_one_or_none()
+    if referee and existing is None:
+        db.add(ClubReferee(**scope.columns(), user_id=user_id, athlete_id=athlete_id))
+    elif not referee and existing is not None:
+        await db.delete(existing)
+    await audit_service.record(
+        db, organization_id=scope.organization_id, actor_user_id=actor_user_id,
+        action="club.referee_set", entity_type="club", entity_id=str(scope.club_id),
+        new_value={"user_id": str(user_id) if user_id else None,
+                   "athlete_id": str(athlete_id) if athlete_id else None, "referee": referee},
+    )
+    await db.commit()
 
 
 async def set_function(

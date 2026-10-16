@@ -16,6 +16,7 @@ from app.domains.club import achievements as achievements_catalog
 from app.domains.club import belts as belts_catalog
 from app.domains.club import competitions as competitions_service
 from app.domains.club import courses as courses_service
+from app.domains.club import month_board
 from app.domains.club import months as months_service
 from app.domains.club import seasons
 from app.domains.club import service as club_service
@@ -103,6 +104,11 @@ async def athlete_cards(
         db, athlete_ids=ids, season=competitions_service.ranking_year(today))
     lifetime = await competitions_service.athlete_points(db, athlete_ids=ids)
     attendances = await courses_service.attendance_counts(db, athlete_ids=ids)
+    from app.domains.club import obligations as obligations_service
+    from app.domains.club.models import Club
+
+    duties = await obligations_service.obligations(db, athletes=athletes, today=today)
+    club_names = dict((await db.execute(select(Club.id, Club.name).where(Club.id.in_({a.club_id for a in athletes})))).all()) if athletes else {}
 
     upcoming: dict[uuid.UUID, dict] = {}
     if ids:
@@ -163,6 +169,13 @@ async def athlete_cards(
                 attendances=attendances[athlete.id], belts_earned=belts_earned,
                 ranking_points=lifetime[athlete.id]["points"],
             ),
+            "competitions_count": lifetime[athlete.id]["competitions"],
+            "weight_category": athlete.weight_category,
+            "age_band": competitions_service.age_band_for(
+                competitions_service.ranking_age(athlete.birth_date, today.year)).code,
+            "club_name": club_names.get(athlete.club_id),
+            "white_judogi": athlete.white_judogi,
+            "obligations": duties.get(athlete.id),
             "achievements_earned": sum(
                 1 for a in achievements_catalog.achievements(
                     attendances=attendances[athlete.id], belts_earned=belts_earned,
@@ -231,6 +244,7 @@ async def family_summary(
         "recent_proofs": [proof_dict(p, fees=proof_fees.get(p.id, []), today=today) for p in proofs],
         "open_competitions": len([c for c in open_competitions if c.registration_deadline >= today]),
         "season_months": list(by_athlete.values()),
+        "this_month": await month_board.family_month(db, scope=scope, athletes=athletes, today=today),
     }
 
 

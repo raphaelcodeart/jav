@@ -118,6 +118,8 @@ class AthleteUpdate(BaseModel):
     sex: str | None = Field(default=None, pattern="^[MF]$")
     fiscal_code: str | None = Field(default=None, max_length=16)
     weight_kg: Decimal | None = Field(default=None, gt=0, le=300)
+    #: Ha il judogi bianco per le gare (lo dichiara la famiglia o la segreteria).
+    white_judogi: bool | None = None
 
 
 class AthleteAdminUpdate(AthleteUpdate):
@@ -226,6 +228,14 @@ class AthleteCardRead(BaseModel):
     #: 0..1, verso il livello successivo.
     progress: float
     achievements_earned: int
+    #: La scheda «salute sportiva»: gare, categoria, gruppo del ranking.
+    competitions_count: int = 0
+    weight_category: str | None = None
+    age_band: str | None = None
+    club_name: str | None = None
+    white_judogi: bool = False
+    #: Gli obblighi (club/obligations.py): judogi, certificato, quota annuale.
+    obligations: dict | None = None
 
 
 class BeltHistoryRead(BeltRead):
@@ -299,6 +309,45 @@ class ProofRead(BaseModel):
     fees: list[FeeRead]
 
 
+class MonthRowRead(BaseModel):
+    """Un atleta nel quadro del mese (month_board.py)."""
+
+    athlete_id: uuid.UUID
+    first_name: str
+    last_name: str
+    photo_url: str | None
+    group: str | None
+    #: PAID, DUE, OVERDUE, WAIVED, EXEMPT, NONE.
+    state: str
+    fee: "FeeRead | None"
+    arrears: list["FeeRead"]
+    other_due: list["FeeRead"]
+    guardian_email: str | None = None
+
+
+class MonthTotalsRead(BaseModel):
+    athletes: int
+    expected_cents: int
+    collected_cents: int
+    missing_cents: int
+    paid: int
+    to_pay: int
+    overdue: int
+    exempt: int
+    none: int
+    arrears_cents: int
+    other_due_cents: int
+
+
+class MonthBoardRead(BaseModel):
+    period: str
+    first_day: date
+    last_day: date
+    is_current: bool
+    rows: list[MonthRowRead]
+    totals: MonthTotalsRead
+
+
 class FamilyRead(BaseModel):
     season: int
     season_label: str
@@ -310,6 +359,8 @@ class FamilyRead(BaseModel):
     recent_proofs: list[ProofRead]
     open_competitions: int
     season_months: list["AthleteSeasonMonthsRead"] = []
+    #: «Questo mese»: la mensilità di ogni figlio e ciò che resta.
+    this_month: MonthBoardRead | None = None
 
 
 class AthleteSeasonMonthsRead(BaseModel):
@@ -479,6 +530,8 @@ class CompetitionRead(BaseModel):
     transport_companions: int
     transport_notes: str | None
     transport_auto_send: bool
+    #: La foto o la locandina; None = l'icona del tipo.
+    image_url: str | None = None
 
 
 class AthleteEligibilityRead(BaseModel):
@@ -701,6 +754,8 @@ class ClubSettingsWrite(BaseModel):
     transport_entity_name: str | None = Field(default=None, max_length=200)
     transport_entity_email: str | None = Field(default=None, max_length=255)
     letters_language: str | None = Field(default=None, pattern="^(pt|it|en)$")
+    late_fee_enabled: bool | None = None
+    late_fee_cents: int | None = Field(default=None, gt=0, le=10_000)
 
 
 class ClubSettingsRead(BaseModel):
@@ -711,6 +766,9 @@ class ClubSettingsRead(BaseModel):
     transport_entity_name: str | None = None
     transport_entity_email: str | None = None
     letters_language: str | None = None
+    #: Avvisi automatici della mensilità e multa del 16 (club/payment_reminders.py).
+    late_fee_enabled: bool = False
+    late_fee_cents: int = 1500
 
 
 class ClubStaffRead(BaseModel):
@@ -891,6 +949,30 @@ class PersonRead(BaseModel):
 
 class FunctionWrite(BaseModel):
     function: str | None = Field(default=None, pattern="^(COACH|ASSISTANT_COACH|MONITOR|ASSISTANT_MONITOR)$")
+    user_id: uuid.UUID | None = None
+    athlete_id: uuid.UUID | None = None
+
+
+class PersonKindsRead(BaseModel):
+    """Solo i simboli di una persona (people.py::list_people), senza soldi né contatti."""
+
+    kind: str
+    id: uuid.UUID
+    user_id: uuid.UUID | None
+    kinds: list[str]
+
+
+class SupportWrite(BaseModel):
+    """Un costo pagato dal club per un atleta (club/support.py)."""
+
+    category: str = Field(pattern="^(TRANSPORT|MATERIAL|COMPETITION|EXAM|TRAINING_CAMP|OTHER)$")
+    amount_cents: int = Field(gt=0, le=1_000_000)
+    note: str | None = Field(default=None, max_length=300)
+    paid_on: date
+
+
+class RefereeWrite(BaseModel):
+    referee: bool
     user_id: uuid.UUID | None = None
     athlete_id: uuid.UUID | None = None
 

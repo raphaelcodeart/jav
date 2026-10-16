@@ -11,6 +11,7 @@ import { Modal } from "@/components/ui/modal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { clubGet, clubSend, type Lesson, type Roster } from "@/lib/club";
+import { AthleteMarks } from "@/components/club/person-marks";
 import { useI18n } from "@/lib/i18n/provider";
 
 const S = (path: string) => `/staff${path}`;
@@ -107,7 +108,7 @@ function LessonRoster({ courseId, date, title }: { courseId: string; date: strin
                 </AnimatePresence>
               </motion.button>
               <button type="button" onClick={() => mark(r.athlete_id, !r.present)} className="min-w-0 flex-1 text-left cursor-pointer">
-                <span className="block text-sm font-semibold text-ink-900 truncate">{r.first_name} {r.last_name}</span>
+                <span className="block text-sm font-semibold text-ink-900 truncate">{r.first_name} {r.last_name} <AthleteMarks id={r.athlete_id} /></span>
                 {r.note && <span className="block text-xs text-amber-700 truncate">📝 {r.note}</span>}
               </button>
               <BeltBadge belt={r.belt} size="sm" showLabel={false} />

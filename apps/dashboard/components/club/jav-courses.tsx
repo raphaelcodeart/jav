@@ -13,6 +13,7 @@ import { StatTile } from "@/components/ui/stat-tile";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
 import { useCurrentClub } from "@/components/club/current-club";
+import { SlotEditModal, type EditableSlot } from "@/components/club/slot-edit-modal";
 import { useI18n } from "@/lib/i18n/provider";
 import {
   clubGet,
@@ -226,6 +227,7 @@ function CourseEditor({ course: c, onClose }: { course: Course | null; onClose: 
     active: c?.active ?? true,
   });
   const [slot, setSlot] = useState({ weekday: "0", from: "17:30", to: "18:30" });
+  const [editingSlot, setEditingSlot] = useState<EditableSlot | null>(null);
   const [busy, setBusy] = useState(false);
   const set = (key: keyof typeof form) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [key]: e.target.value }));
   const pct = Number(form.coach_share_pct.replace(",", "."));
@@ -307,7 +309,9 @@ function CourseEditor({ course: c, onClose }: { course: Course | null; onClose: 
               {c.slots.length === 0 && <p className="text-sm text-ink-500">{t("javCourses.noSlots")}</p>}
               {c.slots.map((s) => (
                 <span key={s.id} className="inline-flex items-center gap-1.5 rounded-full bg-white ring-1 ring-brand-200 px-2.5 py-1 text-xs font-semibold text-brand-800">
-                  {weekday(s.weekday, "long")} {s.starts_at.slice(0, 5)}–{s.ends_at.slice(0, 5)}
+                  <button type="button" title={t("slots.editTitle")} className="cursor-pointer hover:underline" onClick={() => setEditingSlot(s)}>
+                    ✎ {weekday(s.weekday, "long")} {s.starts_at.slice(0, 5)}–{s.ends_at.slice(0, 5)}
+                  </button>
                   <button type="button" aria-label={t("javCourses.removeSlot")} className="text-brand-500 hover:text-brand-800 cursor-pointer"
                     onClick={() => run(() => clubSend(A(`/slots/${s.id}`), "DELETE"), t("javCourses.slotRemoved"))}>✕</button>
                 </span>
@@ -329,6 +333,7 @@ function CourseEditor({ course: c, onClose }: { course: Course | null; onClose: 
           <p className="text-xs text-ink-500">{t("javCourses.slotsAfterCreate")}</p>
         )}
       </div>
+      {c && editingSlot && <SlotEditModal slot={editingSlot} courseName={c.name} onClose={() => setEditingSlot(null)} />}
     </Modal>
   );
 }

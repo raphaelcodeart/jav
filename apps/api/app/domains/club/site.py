@@ -224,10 +224,11 @@ async def _ranking_athletes(
 async def _judoka_list(
     db: AsyncSession, pairs: list[tuple[ClubAthlete, ClubAthletePublicProfile | None]],
     clubs: dict[uuid.UUID, tuple[Club, ClubSite]], *, season: int, points_season: int | None,
+    between: tuple[date, date] | None = None,
 ) -> list[dict]:
     ids = [a.id for a, _ in pairs]
     belts = await current_belts(db, athlete_ids=ids)
-    points = await competitions_service.athlete_points(db, athlete_ids=ids, season=points_season)
+    points = await competitions_service.athlete_points(db, athlete_ids=ids, season=points_season, between=between)
     return [
         _judoka_dict(a, p, club=clubs[a.club_id][0], site=clubs[a.club_id][1], belt=belts.get(a.id),
                      totals=points.get(a.id, {}), season=season)
@@ -256,6 +257,7 @@ def _event_dict(comp: ClubCompetition, club: Club | None, site: ClubSite | None)
         "registration_deadline_time": comp.registration_deadline_time,
         "places": comp.places,
         "circular_url": comp.circular_url,
+        "image_url": comp.image_url,
     }
 
 
@@ -812,23 +814,170 @@ async def event_detail(db: AsyncSession, *, event_id: uuid.UUID, today: date | N
 
 async def public_ranking(
     db: AsyncSession, *, season: int | None = None, age_band: str | None = None, club_slug: str | None = None,
-    today: date | None = None,
+    today: date | None = None, period: str = "year", month: int | None = None,
 ) -> dict:
-    season = season if season is not None else competitions_service.ranking_year(today or _today())
+    """La classifica dei judoca: dell'anno solare (`period="year"`, il
+    ranking che conta), di un mese, o di sempre. La fascia d'età è quella
+    dell'anno `season` (per "sempre", quella di quest'anno)."""
+    current = competitions_service.ranking_year(today or _today())
+    season = season if season is not None else current
     if age_band is not None and age_band not in {b.code for b in competitions_service.AGE_BANDS}:
         raise ClubValidationError("Fascia d'età non valida.")
+    between = competitions_service.period_range(period=period, year=season, month=month)
     clubs = {club.id: (club, site) for club, site in await _public_clubs(db)}
     if club_slug:
         clubs = {k: v for k, v in clubs.items() if v[0].slug == club_slug.strip().lower()}
-    rows = await _judoka_list(db, await _ranking_athletes(db, club_ids=list(clubs)), clubs, season=season,
-                              points_season=season)
+    rows = await _judoka_list(db, await _ranking_athletes(db, club_ids=list(clubs)), clubs,
+                              season=season if period != "all" else current, points_season=None, between=between)
     if age_band:
         rows = [r for r in rows if r["age_band"] == age_band]
     return {
         "season": season,
         "season_label": competitions_service.ranking_label(season),
+        "period": period,
+        "month": month if period == "month" else None,
         "clubs": [_club_ref(c, s) for c, s in clubs.values()],
         "rows": _ranked(rows),
+    }
+
+
+async def _club_totals(
+    db: AsyncSession, clubs: dict[uuid.UUID, tuple[Club, ClubSite]], *, between: tuple[date, date] | None,
+) -> dict[uuid.UUID, dict]:
+    """I punti di ogni club: la somma dei punti dei risultati dei suoi
+    atleti, per il club con cui hanno gareggiato (l'iscrizione), come per il
+    ranking dei judoca (stessa tabella, solo le gare)."""
+    stmt = (
+        select(ClubCompetitionEntry, ClubCompetition)
+        .join(ClubCompetition, ClubCompetition.id == ClubCompetitionEntry.competition_id)
+        .where(
+            ClubCompetitionEntry.club_id.in_(list(clubs)),
+            ClubCompetitionEntry.status == "REGISTERED",
+            ClubCompetitionEntry.placement.is_not(None),
+            ClubCompetition.kind == "COMPETITION",
+        )
+    )
+    if between is not None:
+        stmt = stmt.where(ClubCompetition.starts_on >= between[0], ClubCompetition.starts_on <= between[1])
+    out: dict[uuid.UUID, dict] = {}
+    for entry, comp in (await db.execute(stmt)).all():
+        row = out.setdefault(entry.club_id, {"points": 0, "results": 0, "gold": 0, "silver": 0, "bronze": 0,
+                                              "athletes": set(), "events": set()})
+        row["points"] += competitions_service.points_for(placement=entry.placement, level=comp.level)
+        row["results"] += 1
+        row["athletes"].add(entry.athlete_id)
+        row["events"].add(comp.id)
+        if entry.placement in (1, 2, 3):
+            row[("gold", "silver", "bronze")[entry.placement - 1]] += 1
+    return out
+
+
+def _club_rows(clubs: dict[uuid.UUID, tuple[Club, ClubSite]], totals: dict[uuid.UUID, dict]) -> list[dict]:
+    rows = [
+        {
+            "club": _club_ref(*clubs[club_id]), "city": clubs[club_id][1].city if clubs[club_id][1] else None,
+            "points": t["points"], "results": t["results"], "gold": t["gold"], "silver": t["silver"],
+            "bronze": t["bronze"], "athletes": len(t["athletes"]), "events": len(t["events"]),
+        }
+        for club_id, t in totals.items() if t["results"] > 0
+    ]
+    rows.sort(key=lambda r: (-r["points"], -r["gold"], -r["silver"], r["club"]["name"]))
+    position, previous = 0, None
+    for index, row in enumerate(rows, start=1):
+        if row["points"] != previous:
+            position, previous = index, row["points"]
+        row["position"] = position
+    return rows
+
+
+async def public_club_ranking(
+    db: AsyncSession, *, season: int | None = None, period: str = "year", month: int | None = None,
+    today: date | None = None,
+) -> dict:
+    """La Taça dos Clubes: i club per punti dei loro atleti, nel mese,
+    nell'anno (quella che conta: a fine anno il primo vince la coppa) o da
+    sempre. Con l'albo d'oro: il vincitore di ogni anno già chiuso."""
+    today = today or _today()
+    current = competitions_service.ranking_year(today)
+    season = season if season is not None else current
+    between = competitions_service.period_range(period=period, year=season, month=month)
+    clubs = {club.id: (club, site) for club, site in await _public_clubs(db)}
+    rows = _club_rows(clubs, await _club_totals(db, clubs, between=between)) if clubs else []
+
+    # L'albo d'oro: gli anni con almeno un risultato, fino all'anno scorso.
+    first = (await db.execute(
+        select(func.min(ClubCompetition.starts_on))
+        .join(ClubCompetitionEntry, ClubCompetitionEntry.competition_id == ClubCompetition.id)
+        .where(ClubCompetitionEntry.club_id.in_(list(clubs) or [uuid.uuid4()]),
+               ClubCompetitionEntry.placement.is_not(None), ClubCompetition.kind == "COMPETITION")
+    )).scalar_one_or_none()
+    winners = []
+    if first is not None:
+        for year in range(current - 1, first.year - 1, -1):
+            year_rows = _club_rows(clubs, await _club_totals(
+                db, clubs, between=competitions_service.period_range(period="year", year=year)))
+            if year_rows:
+                top = year_rows[0]
+                winners.append({"year": year, "club": top["club"], "points": top["points"]})
+    return {
+        "season": season,
+        "season_label": competitions_service.ranking_label(season),
+        "period": period,
+        "month": month if period == "month" else None,
+        # L'anno in corso è ancora aperto: la coppa si assegna a fine anno.
+        "is_final": period == "year" and season < current,
+        "rows": rows,
+        "winners": winners,
+    }
+
+
+async def ranking_card(db: AsyncSession, *, athlete_id: uuid.UUID, today: date | None = None) -> dict:
+    """La scheda di un judoca della classifica pubblica, per il popup. Con il
+    consenso e la pubblicazione è la scheda completa (judoka_profile: foto,
+    categoria, media...). Senza, solo ciò che una classifica sportiva dice di
+    chiunque: «Nome I.», club, cintura, fascia, punti, posizione e i
+    risultati delle gare (evento, data, piazzamento). Mai foto, età, peso o
+    categoria, e mai le prove in programma: dicono dove sarà un minorenne."""
+    today = today or _today()
+    season = competitions_service.ranking_year(today)
+    clubs = {club.id: (club, site) for club, site in await _public_clubs(db)}
+    pairs = [p for p in await _ranking_athletes(db, club_ids=list(clubs)) if p[0].id == athlete_id]
+    if not pairs:
+        raise ClubNotFoundError("Judoca non trovato.")
+    athlete, profile = pairs[0]
+    if profile is not None:
+        return {"has_page": True, "profile": await judoka_profile(db, athlete_id=athlete_id, today=today), "card": None}
+    [card] = await _judoka_list(db, pairs, clubs, season=season, points_season=None)
+    season_points = await competitions_service.athlete_points(db, athlete_ids=[athlete.id], season=season)
+    entries = (await db.execute(
+        select(ClubCompetitionEntry, ClubCompetition)
+        .join(ClubCompetition, ClubCompetition.id == ClubCompetitionEntry.competition_id)
+        .where(
+            ClubCompetitionEntry.athlete_id == athlete.id, ClubCompetitionEntry.status == "REGISTERED",
+            ClubCompetitionEntry.placement.is_not(None), ClubCompetition.kind == "COMPETITION",
+            ClubCompetitionEntry.club_id.in_(list(clubs)),
+            or_(ClubCompetition.club_id.is_(None), ClubCompetition.club_id.in_(list(clubs))),
+            ClubCompetition.starts_on <= today,
+        )
+        .order_by(ClubCompetition.starts_on.desc())
+        .limit(MAX_RESULTS)
+    )).all()
+    return {
+        "has_page": False,
+        "profile": None,
+        "card": {
+            **card,
+            "season_label": competitions_service.ranking_label(season),
+            "season_points": season_points[athlete.id]["points"],
+            "ranking": await _ranking_position(db, athlete_id=athlete.id, age_band=card["age_band"], season=season,
+                                               today=today),
+            "results": [
+                {"event_id": comp.id, "event_name": comp.name, "level": comp.level, "date": comp.starts_on,
+                 "location": comp.location, "placement": entry.placement,
+                 "points": competitions_service.points_for(placement=entry.placement, level=comp.level)}
+                for entry, comp in entries
+            ],
+        },
     }
 
 

@@ -33,6 +33,8 @@ class ClubDocumentRead(BaseModel):
     #: NONE (senza scadenza), VALID, EXPIRING (entro 30 giorni), EXPIRED.
     status: str
     created_at: datetime
+    #: Visibile nella bacheca di atleti e famiglie.
+    shared_with_members: bool
 
 
 class ClubDocumentUpdate(BaseModel):
@@ -41,6 +43,7 @@ class ClubDocumentUpdate(BaseModel):
     issued_on: date | None = None
     expires_on: date | None = None
     notes: str | None = Field(default=None, max_length=2000)
+    shared_with_members: bool | None = None
 
 
 class DocumentUrlRead(BaseModel):
@@ -74,13 +77,15 @@ async def upload_club_document(
     issued_on: date | None = Form(default=None),
     expires_on: date | None = Form(default=None),
     notes: str | None = Form(default=None, max_length=2000),
+    shared_with_members: bool = Form(default=False),
     current_user: ClubUser = Depends(require_club_permission(MANAGE)),
     db: AsyncSession = Depends(get_db),
 ) -> ClubDocumentRead:
     try:
         doc = await club_documents.add_document(
             db, scope=current_user.scope, actor_user_id=current_user.user_id,
-            data={"category": category, "title": title, "issued_on": issued_on, "expires_on": expires_on, "notes": notes},
+            data={"category": category, "title": title, "issued_on": issued_on, "expires_on": expires_on, "notes": notes,
+                  "shared_with_members": shared_with_members},
             file_bytes=await file.read(), content_type=file.content_type or "", filename=file.filename or "",
         )
     except club_service.ClubError as exc:

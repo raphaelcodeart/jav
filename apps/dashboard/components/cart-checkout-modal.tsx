@@ -80,11 +80,14 @@ export function CartCheckoutModal({
     retry: false,
   });
   const { data: me } = useQuery({ queryKey: ["customer", "me", "record"], queryFn: fetchMyCustomer });
-  const { data: paymentInfo } = useQuery({
+  const { data: orgPaymentInfo } = useQuery({
     queryKey: ["customer", "payment-info"],
     queryFn: fetchPaymentInfo,
     enabled: step === "bank_instructions",
   });
+  // Un ordine dello shop di un club si paga al club (quote.payee), non a JudoArteVida.
+  const payee = (quote as { payee?: { iban: string | null; holder: string; instructions: string | null } | null } | undefined)?.payee;
+  const paymentInfo = payee ?? orgPaymentInfo;
 
   // Precompilato dalla scheda cliente; quello che il cliente scrive vince.
   const [addressEdits, setAddressEdits] = useState<Partial<DeliveryAddress>>({});

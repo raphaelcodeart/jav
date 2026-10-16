@@ -144,6 +144,11 @@ class JavMarketProduct(UUIDPKMixin, TimestampMixin, Base):
     organization_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("organizations.id"), index=True
     )
+    #: Chi vende: un club (lo shop del club, lo gestisce la sua segreteria)
+    #: o, NULL, JudoArteVida (lo shop unico di tutti i club, del superadmin).
+    club_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("clubs.id"), nullable=True, index=True
+    )
     producer_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("jav_market_producers.id"), nullable=True, index=True
     )
@@ -206,6 +211,10 @@ class JavMarketOrder(UUIDPKMixin, TimestampMixin, Base):
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("organizations.id"), index=True
+    )
+    #: Chi vende (come per i prodotti): un ordine è di un venditore solo.
+    club_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("clubs.id"), nullable=True, index=True
     )
     customer_user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), index=True)
     #: Per quale atleta della famiglia è il materiale (il judogi di chi?).

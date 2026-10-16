@@ -167,6 +167,33 @@ async def add_slot(
     return slot
 
 
+async def update_slot(
+    db: AsyncSession, *, scope: ClubScope, slot_id: uuid.UUID, actor_user_id: uuid.UUID,
+    weekday: int, starts_at: time, ends_at: time, room: str | None,
+) -> ClubCourseSlot:
+    """Corregge un orario (giorno, ore, sala) senza toglierlo e rifarlo: le
+    presenze già segnate restano sul corso, non sull'orario."""
+    slot = await db.get(ClubCourseSlot, slot_id)
+    if slot is None:
+        raise ClubNotFoundError("Orario non trovato.")
+    await get_course(db, scope=scope, course_id=slot.course_id)
+    if not 0 <= weekday <= 6:
+        raise ClubValidationError("Giorno della settimana non valido.")
+    if ends_at <= starts_at:
+        raise ClubValidationError("L'orario di fine deve essere dopo quello di inizio.")
+    previous = {"weekday": slot.weekday, "starts_at": slot.starts_at.isoformat(), "ends_at": slot.ends_at.isoformat()}
+    slot.weekday, slot.starts_at, slot.ends_at, slot.room = weekday, starts_at, ends_at, room
+    await audit_service.record(
+        db, organization_id=scope.organization_id, actor_user_id=actor_user_id,
+        action="club.course_slot_updated", entity_type="club_course", entity_id=str(slot.course_id),
+        previous_value=previous,
+        new_value={"weekday": weekday, "starts_at": starts_at.isoformat(), "ends_at": ends_at.isoformat()},
+    )
+    await db.commit()
+    await db.refresh(slot)
+    return slot
+
+
 async def delete_slot(db: AsyncSession, *, scope: ClubScope, slot_id: uuid.UUID, actor_user_id: uuid.UUID) -> None:
     slot = await db.get(ClubCourseSlot, slot_id)
     if slot is None:

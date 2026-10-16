@@ -56,6 +56,14 @@ from app.domains.jav_market import models as _jav_market_models  # noqa: F401
 from app.domains.jav_market.router import router as jav_market_router
 from app.domains.javbot import models as _javbot_models  # noqa: F401
 from app.domains.club.club_documents_router import router as club_documents_router
+from app.domains.club.news_router import admin_news_router, board_router, platform_news_router
+from app.domains.club.sponsors_router import admin_sponsors_router, public_sponsors_router
+from app.domains.jav_market.public_router import public_shop_router
+from app.domains.club.staff_work_router import admin_staff_work_router, platform_staff_router, staff_work_router
+from app.domains.club.calendar_router import member_calendar_router, staff_calendar_router
+from app.domains.club.shop_router import router as club_shop_router
+from app.game.router import router as game_router
+from app.domains.email_texts.router import router as email_texts_router
 from app.domains.javbot.knowledge_router import club_knowledge_router as javbot_club_knowledge_router
 from app.domains.javbot.knowledge_router import platform_knowledge_router as javbot_platform_knowledge_router
 from app.domains.javbot.router import public_router as javbot_public_router
@@ -150,6 +158,20 @@ app.include_router(javbot_router, prefix="/api")
 app.include_router(javbot_public_router, prefix="/api")
 app.include_router(javbot_club_knowledge_router, prefix="/api")
 app.include_router(club_documents_router, prefix="/api")
+app.include_router(admin_news_router, prefix="/api")
+app.include_router(board_router, prefix="/api")
+app.include_router(platform_news_router, prefix="/api")
+app.include_router(public_sponsors_router, prefix="/api")
+app.include_router(public_shop_router, prefix="/api")
+app.include_router(staff_work_router, prefix="/api")
+app.include_router(admin_staff_work_router, prefix="/api")
+app.include_router(platform_staff_router, prefix="/api")
+app.include_router(admin_sponsors_router, prefix="/api")
+app.include_router(staff_calendar_router, prefix="/api")
+app.include_router(member_calendar_router, prefix="/api")
+app.include_router(club_shop_router, prefix="/api")
+app.include_router(game_router, prefix="/api")
+app.include_router(email_texts_router, prefix="/api")
 app.include_router(javbot_platform_knowledge_router, prefix="/api")
 
 

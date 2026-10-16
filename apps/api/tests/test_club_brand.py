@@ -117,8 +117,12 @@ async def test_the_fan_page_carries_brand_groups_and_ranking_but_nothing_persona
     kids = next(g for g in page["groups"] if g["name"] == "Bambini 4-7")
     assert kids["slots"] == [{"weekday": 1, "starts_at": "18:00", "ends_at": "19:00", "course": "Infantis"}]
     assert all(g["monthly_price_cents"] is None and g["description"] is None for g in page["groups"])
-    # Il ranking del club: solo chi è pubblico, con il link alla sua scheda (l'id).
-    assert [(r["id"], r["position"]) for r in page["ranking"]] == [(shown.id, 1)]
+    # Il ranking del club: tutti, come «Nome I.» (decisione del titolare: una
+    # classifica sportiva è pubblica); la scheda solo per chi ha il consenso.
+    ranking = {r["id"]: r for r in page["ranking"]}
+    assert [(r["id"], r["position"]) for r in page["ranking"]] == [(shown.id, 1), (hidden.id, 2)]
+    assert (ranking[shown.id]["has_page"], ranking[hidden.id]["has_page"]) == (True, False)
+    assert ranking[hidden.id]["display_name"] == "Rita S." and ranking[hidden.id]["photo_url"] is None
 
     site.show_prices = True
     await db.commit()
@@ -142,7 +146,8 @@ async def test_the_fan_page_carries_brand_groups_and_ranking_but_nothing_persona
     body = res.json()
     assert body["theme"]["on_primary"] in ("#FFFFFF", "#0A0A0A") and body["groups"] and body["ranking"]
     everything = json.dumps(body)
-    for secret in ("Matias", "Segreta", "Rita", "2015-03-03", "MTSTGO15C03Z128X", "birth", "fiscal", "weight",
+    # I cognomi mai (in classifica tutti sono «Nome I.»).
+    for secret in ("Matias", "Segreta", "2015-03-03", "MTSTGO15C03Z128X", "birth", "fiscal", "weight",
                    "guardian", "fee", str(parent.id), parent.email, "ip_hash"):
         assert secret not in everything, secret
 

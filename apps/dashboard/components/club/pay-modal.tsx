@@ -6,13 +6,13 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge, FeeStatusPill } from "@/components/ui/badge";
 import { CountUp } from "@/components/ui/count-up";
-import { CameraUploadButton } from "@/components/ui/gamification";
 import { Modal } from "@/components/ui/modal";
 import { Input, Select, Textarea } from "@/components/ui/field";
 import { useToast } from "@/components/ui/toast";
 import { friendlyApiError } from "@/lib/api-error";
 import { celebrate } from "@/lib/motion";
 import { clubGet, clubSend, FEE_KIND_LABELS, type CashReceiver, type Fee } from "@/lib/club";
+import { ProofPicker } from "@/components/ui/proof-picker";
 import { useI18n } from "@/lib/i18n/provider";
 import { useClubPaymentInfo, usePaymentInfo, type PaymentInfo } from "@/components/club/payment-info";
 import { JavCashConfirmCode } from "@/components/javcash-confirm-code";
@@ -111,20 +111,9 @@ function BankBox({ bank, label }: { bank: PaymentInfo | undefined; label: string
   );
 }
 
+/** La prova: «Scatta una foto» o «Allega un file», con l'anteprima (ui/proof-picker.tsx). */
 function ReceiptPicker({ file, onFile }: { file: File | null; onFile: (f: File | null) => void }) {
-  const { t } = useI18n();
-  return file ? (
-    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex items-center gap-3 rounded-2xl bg-emerald-50 ring-1 ring-emerald-200 p-4">
-      <span className="h-11 w-11 rounded-xl bg-emerald-500 text-white flex items-center justify-center text-xl">✓</span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold text-ink-900 truncate">{file.name}</span>
-        <span className="block text-xs text-ink-500">{t("pay.ready")}</span>
-      </span>
-      <Button variant="ghost" size="sm" onClick={() => onFile(null)}>{t("common.change")}</Button>
-    </motion.div>
-  ) : (
-    <CameraUploadButton onFile={onFile} />
-  );
+  return <ProofPicker file={file} onFile={onFile} />;
 }
 
 function HowTile({ icon, title, text, on, disabled = false, onClick }: { icon: string; title: string; text: string; on: boolean; disabled?: boolean; onClick: () => void }) {

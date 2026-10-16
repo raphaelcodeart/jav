@@ -41,6 +41,8 @@ from app.domains.club.site_schemas import (
     PublicJudokaProfile,
     PublicProfileConsentRead,
     PublicProfileConsentWrite,
+    PublicClubRankingRead,
+    PublicRankingCardRead,
     PublicRankingRead,
     PublishWrite,
     SiteAdminRead,
@@ -156,10 +158,35 @@ async def ranking(
     season: int | None = Query(default=None, ge=2000, le=2100),
     age_band: str | None = Query(default=None),
     club: str | None = Query(default=None, max_length=80),
+    period: str = Query(default="year", pattern="^(year|month|all)$"),
+    month: int | None = Query(default=None, ge=1, le=12),
     db: AsyncSession = Depends(get_db),
 ) -> PublicRankingRead:
     try:
-        return PublicRankingRead(**await site_service.public_ranking(db, season=season, age_band=age_band, club_slug=club))
+        return PublicRankingRead(**await site_service.public_ranking(
+            db, season=season, age_band=age_band, club_slug=club, period=period, month=month,
+        ))
+    except club_service.ClubError as exc:
+        _raise(exc)
+
+
+@public_site_router.get("/ranking/clubs", response_model=PublicClubRankingRead)
+async def club_ranking(
+    season: int | None = Query(default=None, ge=2000, le=2100),
+    period: str = Query(default="year", pattern="^(year|month|all)$"),
+    month: int | None = Query(default=None, ge=1, le=12),
+    db: AsyncSession = Depends(get_db),
+) -> PublicClubRankingRead:
+    try:
+        return PublicClubRankingRead(**await site_service.public_club_ranking(db, season=season, period=period, month=month))
+    except club_service.ClubError as exc:
+        _raise(exc)
+
+
+@public_site_router.get("/ranking/judoka/{athlete_id}", response_model=PublicRankingCardRead)
+async def ranking_card(athlete_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> PublicRankingCardRead:
+    try:
+        return PublicRankingCardRead(**await site_service.ranking_card(db, athlete_id=athlete_id))
     except club_service.ClubError as exc:
         _raise(exc)
 

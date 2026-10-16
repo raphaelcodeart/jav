@@ -24,6 +24,7 @@ from app.domains.contracts import models as _contracts_models  # noqa: F401
 from app.domains.customers import models as _customers_models  # noqa: F401
 from app.domains.documentation import models as _documentation_models  # noqa: F401
 from app.domains.documents import models as _documents_models  # noqa: F401
+from app.domains.email_texts import models as _email_texts_models  # noqa: F401
 from app.domains.friend_referrals import models as _friend_referrals_models  # noqa: F401
 from app.domains.jav_market import models as _jav_market_models  # noqa: F401
 from app.domains.javbot import models as _javbot_models  # noqa: F401
@@ -60,9 +61,17 @@ def event_loop():
 @pytest_asyncio.fixture(scope="session", autouse=True)
 async def _create_schema():
     engine = create_async_engine(TEST_DATABASE_URL)
+    from sqlalchemy import text
+
+    from app.game.models import GameBase
+
     async with engine.begin() as conn:
+        # Il gioco ha il suo schema e la sua MetaData (app/game): si rifà a parte.
+        await conn.execute(text("DROP SCHEMA IF EXISTS game CASCADE"))
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
+        await conn.execute(text("CREATE SCHEMA game"))
+        await conn.run_sync(GameBase.metadata.create_all)
     await engine.dispose()
 
 

@@ -8,6 +8,7 @@ import { siteI18n } from "@/components/site/i18n";
 import { linkButton } from "@/components/site/link-button";
 import { Reveal } from "@/components/site/reveal";
 import { SiteShell } from "@/components/site/site-shell";
+import { SponsorMarquee } from "@/components/site/sponsor-marquee";
 import { ImageBand, WaveDivider, WordMarquee } from "@/components/site/decor";
 import { VideoCarousel3D } from "@/components/site/video-carousel-3d";
 import { VideoHero } from "@/components/site/video-hero";
@@ -52,10 +53,11 @@ export default async function PortalHomePage() {
   const { t, fmt, locale } = i18n;
   // Se l'API non risponde la home si apre lo stesso, con la parte che non
   // dipende dai dati: chi cerca il login lo deve trovare comunque.
-  const [homeData, videoData, coursesData] = await Promise.all([
+  const [homeData, videoData, coursesData, sponsorsData] = await Promise.all([
     publicSite.home().catch(() => null),
     publicSite.videos().catch(() => null),
     publicSite.courses().catch(() => null),
+    publicSite.sponsors().catch(() => null),
   ]);
   const courses = coursesData?.courses ?? [];
   const home = homeData ?? EMPTY;
@@ -81,6 +83,10 @@ export default async function PortalHomePage() {
         ].filter((s) => s.value > 0)}
         scrollLabel={t("site.tv.scroll")}
       />
+
+      {/* --- Gli sponsor: i loghi che scorrono, ognuno con la sua pagina --- */}
+      <SponsorMarquee sponsors={sponsorsData ?? []} eyebrow={t("site.sponsors.eyebrow")} title={t("site.sponsors.title")}
+        cta={{ href: "/patrocinadores", label: t("site.sponsors.become") }} />
 
       {/* --- JudoArteVida TV: i video del canale YouTube in un anello 3D --- */}
       {videos.length > 0 && (

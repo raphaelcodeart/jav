@@ -651,3 +651,100 @@ Poi, su richiesta del titolare:
   consenso; il calendario degli eventi rifatto (lista, calendario, anno,
   ricerca e filtri); testate con le foto dei club su eventi, ranking e club.
 
+## Sessione 16 — 2026-10-16 — Bacheca del club, orari che si correggono, simboli accanto ai nomi
+
+Su richiesta del titolare (migrazione 0018):
+- **Bacheca** per atleti e famiglie (`club/news.py`, `news_router.py`): le
+  notizie del club come un post (titolo, testo, foto, video YouTube/Vimeo
+  incorporato o link) scritte dalla segreteria in **📰 Notizie**, con
+  anteprima, evidenza e bozze; e i **documenti del club condivisi**
+  (`club_documents.shared_with_members`). Voce «Bacheca» nell'area famiglia,
+  sezione nell'area dell'atleta. Solo area riservata, non sito pubblico.
+- **Orari dei corsi** che si correggono (`PATCH /club/admin/slots/{id}`):
+  prima si potevano solo togliere e rifare.
+- **Simboli accanto ai nomi** (`components/club/person-marks.tsx`) negli
+  elenchi di segreteria e istruttori, da `/club/staff/people-kinds` (solo i
+  tipi, senza soldi né contatti). Nuovo tipo **árbitro** (`club_referees`);
+  un adulto che si allena porta anche 👪 se ha altri atleti sul conto e 🧑‍🏫
+  se ha l'account da istruttore.
+
+Test: `tests/test_club_board.py` (3).
+
+Poi, sempre il 2026-10-16 (migrazione 0019):
+- **Pagina del club**: sotto la copertina una barra nel colore del club con
+  logo, nome, numeri e azioni (strisce, riflesso animato, filo nel colore
+  d'accento); classifica del club cliccabile con la scheda in popup.
+- **Ranking pubblico**: periodi (anno, mese, sempre), ricerca istantanea,
+  righe grandi con foto e logo del club, scheda del judoca in popup stile
+  IJF (`/public-site/ranking/judoka/{id}`, ridotta senza consenso) e la
+  **Taça dos Clubes** con albo d'oro (`/public-site/ranking/clubs`).
+- **Messaggi**: argomento (`contact_messages.topic`), destinatario
+  sceglibile su `/contactos`, modulo sponsor su `/patrocinadores`, filtro e
+  badge in casella; il superadmin parte da «Tutti».
+- **Sponsor** (`sponsors`): console → 🤝 Sponsor, barra di loghi animata in
+  home, pagina `/patrocinadores/<slug>`. Caricati: Câmara Municipal de
+  Lagos, de Albufeira, de Portimão, Estamparia Cordavida (senza sito: non
+  trovato, da completare in console). Loghi da caricare in console.
+
+Test: `tests/test_public_portal_extras.py` (3); `test_club_brand.py`
+aggiornato alla regola «tutti in classifica come Nome I.».
+
+Poi (migrazione 0020): **il quadro del mese** (`club/month_board.py`,
+`GET /club/admin/month`, `this_month` nella pagina della famiglia), in cima
+alla Panoramica, prima scheda di Quote e card «Questo mese» della famiglia;
+«Segna pagato» di più quote insieme (anche MB Way). **Immagine delle
+prove** (`club_competitions.image_url`) e icona grande per tipo negli
+elenchi della segreteria e delle famiglie. Test:
+`tests/test_club_month_board.py`.
+
+Poi (migrazione 0021):
+- Sito: l'header resta bianco pieno anche scorrendo.
+- **Calendário JudoArteVida** (`club/calendar.py`): periodo da/a, viste
+  schede/lista/tabella e PDF diviso per mesi, per staff e famiglie.
+- **JAV Games** (`app/game`, schema `game`, docs/games.md): Dojo Academy
+  (quiz a tempo corretti dal server, percorsi ed esami di cintura del
+  gioco), Judo Career (simulazione della carriera e del club, salvata come
+  JSON) e classifica di tutti i club. Voce «Giochi» per le famiglie,
+  `/giochi` per gli atleti. Test: `tests/test_game.py`.
+
+
+Poi (migrazioni 0022–0025):
+- **Email** con la veste di JudoArteVida o del club (`core/email_templates.py`,
+  `domains/club/email_brand.py`) e **testi personalizzabili**
+  (`domains/email_texts`, console → 📧 Email, con anteprima e invio di prova):
+  docs/emails.md.
+- **Scheda «salute sportiva»** dell'atleta (`club/obligations.py`,
+  `club_athletes.white_judogi`): judogi del club, judogi bianco, certificato,
+  quota annuale, pronto per le gare; foto caricabile.
+- **Bacheca del circuito** (pubblico CLUB o NETWORK, post di JudoArteVida,
+  «mi piace» `club_news_likes`, prove dei prossimi 90 giorni come post).
+- **Shop dei club** (`jav_market_products/orders.club_id`,
+  `club/shop_router.py`): vetrina con venditore e filtro, carrello di un
+  venditore solo, bonifico all'IBAN del club, niente IVA sui prodotti del club.
+
+Poi (migrazioni 0026–0028):
+- **Aiuto del club** (`club_athlete_supports`, `club/support.py`): i costi
+  pagati dal club per un atleta, nel wallet della famiglia come ricarica più
+  addebito; riquadro dei soldi nella scheda dell'atleta.
+- **Area dell'atleta** con il menu a sinistra; «Gare e stage» con «Voglio
+  partecipare» (email e notifica al titolare); il minorenne non carica il
+  certificato; «Convide um amigo» con i bottoni dei social.
+- **Avvisi della mensilità** (1, 10, 15 alle 9:00) e **multa del 16**
+  (`club/payment_reminders.py`, impostazione del club, job ogni ora).
+- **Flyer del mese** del Calendário (`calendar.render_flyer`).
+- **Shop della rete sul sito** (`/loja`, `/public-site/shop`, prezzi IVA
+  compresa) con «per acquistare devi essere socio di un club»; importatore
+  del catalogo suplementos24.com (`scripts/import_suplementos24.py`).
+- **Crea il tuo club** (`/criar-clube`, messaggio con argomento `NEW_CLUB`,
+  migrazione 0027).
+- **Personale del club** (`club_staff_tasks`, `club_staff_messages`,
+  `club/staff_work.py`, migrazione 0028): il mese del personale, compiti
+  svolti, lavoretti occasionali pagati come spesa COLLABORATORS, messaggi
+  dello staff con la segreteria o con JudoArteVida.
+- Pagina di accesso a tutto schermo con la scheda al centro; Dojo Academy
+  con 10 secondi in più per domanda.
+- Corretto: la prova di pagamento dall'area dell'atleta usava una funzione
+  inesistente (`athlete_access.scope_of`) e sarebbe finita in errore 500.
+
+Test: `tests/test_club_payment_reminders.py`, `tests/test_club_area_extras.py`,
+`tests/test_club_staff_work.py`, `tests/test_public_shop.py`.

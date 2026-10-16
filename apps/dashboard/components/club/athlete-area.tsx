@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
@@ -13,9 +12,17 @@ import { ProgressBar } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { CertificatesTab } from "@/components/club/athlete-detail-modal";
+import { ClubBoard } from "@/components/club/club-board";
+import { InviteCard } from "@/components/club/invite-card";
+import { GamesHub } from "@/components/game/games-hub";
+import { AppShell, type NavItem } from "@/components/app-shell";
+import { AreaCompetitions, AthleteMoneyCard } from "@/components/club/athlete-area-extras";
+import { AthleteHealthCard } from "@/components/club/athlete-health-card";
+import { AthletePayModal } from "@/components/club/athlete-pay-modal";
 import { SeasonMonthsPanel } from "@/components/club/season-months";
 import { ACHIEVEMENT_ICONS, clubGet, clubSend, type AthleteDetail } from "@/lib/club";
 import { cn } from "@/lib/cn";
+import type { MessageKey } from "@/lib/i18n/messages/it";
 import { useI18n } from "@/lib/i18n/provider";
 
 interface AreaRef { id: string; name: string; photo_url: string | null; is_own: boolean }
@@ -24,6 +31,8 @@ interface AthleteArea extends AthleteDetail {
   is_minor: boolean;
   viewer_is_athlete: boolean;
   can_manage: boolean;
+  /** Il titolare, o l'atleta stesso dai 18 anni federali: può caricare la prova. */
+  can_pay?: boolean;
   can_become_holder: boolean;
   today: string;
   lessons: AreaLesson[];
@@ -43,51 +52,65 @@ const STATUS_STYLE: Record<AreaLesson["status"], string> = {
  *  l'atleta con il suo accesso (nome utente, email o QR) e il titolare del
  *  conto per ognuno dei suoi atleti. Lezioni del mese, presenza di oggi,
  *  cintura e traguardi, quote in lettura; la formazione arriverà qui. */
+type AreaSection = "home" | "lessons" | "fees" | "certificate" | "competitions" | "board" | "games" | "achievements" | "invite";
+
+const AREA_NAV: { key: AreaSection; icon: string; label: MessageKey }[] = [
+  { key: "home", icon: "🏠", label: "area.nav.home" },
+  { key: "lessons", icon: "🗓️", label: "area.nav.lessons" },
+  { key: "competitions", icon: "🏆", label: "area.nav.competitions" },
+  { key: "board", icon: "📰", label: "area.nav.board" },
+  { key: "fees", icon: "💶", label: "area.nav.fees" },
+  { key: "certificate", icon: "🩺", label: "area.nav.certificate" },
+  { key: "achievements", icon: "🏅", label: "area.nav.achievements" },
+  { key: "games", icon: "🎮", label: "area.nav.games" },
+  { key: "invite", icon: "🤝", label: "area.nav.invite" },
+];
+
+/** L'area dell'atleta (docs/club-portal.md, "Il conto dell'atleta"): la vede
+ *  l'atleta con il suo accesso (nome utente, email o QR) e il titolare del
+ *  conto per ognuno dei suoi atleti. Con il menu a sinistra, come le altre
+ *  aree: in home la scheda, oggi e le scorciatoie; lezioni, gare, bacheca,
+ *  quote, certificato, traguardi, giochi e inviti nelle loro sezioni. */
 export function AthleteAreaPage({ initialId }: { initialId: string | null }) {
   const { t } = useI18n();
   const { data: list, isLoading } = useQuery({ queryKey: ["club", "athlete-area"], queryFn: () => clubGet<AreaRef[]>("/athlete-area") });
   const [picked, setPicked] = useState<string | null>(initialId);
+  const [section, setSection] = useState<AreaSection>("home");
   const current = list?.find((a) => a.id === picked) ?? list?.[0];
+  const navItems: NavItem[] = AREA_NAV.map((n) => ({ key: n.key, label: t(n.label), icon: <span className="text-base leading-none" aria-hidden="true">{n.icon}</span> }));
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-brand-50/60 via-white to-white">
-      <header className="sticky top-0 z-30 border-b border-ink-900/5 bg-white/90 backdrop-blur-md">
-        <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-3">
-          <a href="/area" className="shrink-0"><Image src="/judoartevida-logo.jpg" alt="Judo Arte e Vida" width={110} height={48} className="h-9 w-auto" /></a>
-          <div className="ml-auto flex items-center gap-2">
-            {list && list.length > 1 && (
-              <div className="flex gap-1 overflow-x-auto rounded-2xl bg-ink-50 p-1">
-                {list.map((a) => (
-                  <button key={a.id} type="button" onClick={() => setPicked(a.id)}
-                    className={cn("shrink-0 rounded-xl px-3 py-1.5 text-sm font-semibold transition", current?.id === a.id ? "bg-white text-brand-700 shadow-soft" : "text-ink-600 hover:text-ink-900")}>
-                    {a.is_own ? t("athleteArea.me") : a.name.split(" ")[0]}
-                  </button>
-                ))}
-              </div>
-            )}
-            <button type="button" className="rounded-xl px-3 py-2 text-sm font-semibold text-ink-600 hover:bg-ink-50"
-              onClick={async () => { await fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined); window.location.assign("/login"); }}>
-              {t("athleteArea.logout")}
+    <AppShell
+      roleLabel={t("area.roleLabel")}
+      navItems={navItems}
+      activeKey={section}
+      onNavigate={(k) => setSection(k as AreaSection)}
+      headerActions={list && list.length > 1 ? (
+        <div className="flex gap-1 overflow-x-auto rounded-2xl bg-ink-50 p-1">
+          {list.map((a) => (
+            <button key={a.id} type="button" onClick={() => setPicked(a.id)}
+              className={cn("shrink-0 rounded-xl px-3 py-1.5 text-sm font-semibold transition", current?.id === a.id ? "bg-white text-brand-700 shadow-soft" : "text-ink-600 hover:text-ink-900")}>
+              {a.is_own ? t("athleteArea.me") : a.name.split(" ")[0]}
             </button>
-          </div>
+          ))}
         </div>
-      </header>
-      <main className="mx-auto max-w-5xl px-4 py-6 sm:py-10">
-        {isLoading ? <Skeleton className="h-96" /> : current ? <Area key={current.id} id={current.id} /> : (
-          <div className="rounded-3xl bg-white p-8 text-center shadow-soft">{t("athleteArea.none")}</div>
-        )}
-      </main>
-    </div>
+      ) : undefined}
+    >
+      {isLoading ? <Skeleton className="h-96" /> : current ? <Area key={current.id} id={current.id} section={section} onGo={setSection} /> : (
+        <div className="rounded-3xl bg-white p-8 text-center shadow-soft">{t("athleteArea.none")}</div>
+      )}
+    </AppShell>
   );
 }
 
-function Area({ id }: { id: string }) {
+function Area({ id, section, onGo }: { id: string; section: AreaSection; onGo: (s: AreaSection) => void }) {
   const { t, fmt } = useI18n();
   const toast = useToast();
   const queryClient = useQueryClient();
   const key = ["club", "athlete-area", id];
   const { data: a, isLoading } = useQuery({ queryKey: key, queryFn: () => clubGet<AthleteArea>(`/athlete-area/${id}`) });
   const [busy, setBusy] = useState<string | null>(null);
+  const [paying, setPaying] = useState(false);
 
   if (isLoading || !a) return <Skeleton className="h-96" />;
   const today = a.lessons.filter((l) => l.date === a.today);
@@ -107,40 +130,70 @@ function Area({ id }: { id: string }) {
     }
   }
 
+  const minorSelf = a.viewer_is_athlete && a.is_minor;
+  const goCert = () => onGo("certificate");
+  const goFees = () => onGo("fees");
+
   return (
     <div className="space-y-6">
-      {/* --- Il judoca --- */}
-      <section className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-brand-500 via-brand-600 to-ink-900 p-6 text-white shadow-lift sm:p-8">
-        <div className="absolute -bottom-12 -right-4 select-none font-display text-[11rem] leading-none text-white/10" aria-hidden="true">柔</div>
-        <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center">
-          <span className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/20 ring-4 ring-white/80">
-            {a.photo_url
-              // eslint-disable-next-line @next/next/no-img-element -- foto caricata dalla famiglia
-              ? <img src={a.photo_url} alt="" className="h-full w-full object-cover" />
-              : <span className="font-display text-4xl">{a.first_name.slice(0, 1)}</span>}
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm text-white/80">{a.viewer_is_athlete ? t("athleteArea.hello") : t("athleteArea.areaOf")}</p>
-            <h1 className="text-3xl">{a.first_name} {a.last_name}</h1>
-            <p className="mt-1 text-sm text-white/80">{a.plan?.name ?? ""}</p>
-            {a.belt && <div className="mt-3 inline-flex rounded-full bg-white/95 px-3 py-1.5"><BeltBadge belt={a.belt} /></div>}
+      {section === "home" && (
+        <>
+          {/* --- Il judoca: la scheda «salute sportiva» con gli obblighi --- */}
+          <AthleteHealthCard athlete={a} mode="area" onAction={(code) => {
+            if (code === "CERTIFICATE") goCert();
+            if (code === "ANNUAL_FEE") goFees();
+          }} />
+          <AthleteMoneyCard athleteId={a.id} />
+          <div className="rounded-2xl bg-white px-4 py-3 shadow-soft ring-1 ring-ink-900/5">
+            <div className="mb-1.5 flex justify-between text-[11px] font-semibold text-ink-500">
+              <span>{a.xp} XP</span><span>{t("athlete.nextLevelAt", { n: a.level + 1, xp: a.next_level_xp })}</span>
+            </div>
+            <ProgressBar value={a.xp - a.level_xp_floor} max={Math.max(1, a.next_level_xp - a.level_xp_floor)} tone="accent" />
           </div>
-          <div className="grid grid-cols-3 gap-2 sm:w-72">
-            <Stat value={`${a.month_present}/${a.month_total}`} label={t("athleteArea.monthStat")} />
-            <Stat value={String(a.medals.gold + a.medals.silver + a.medals.bronze)} label={t("athleteArea.medals")} />
-            <Stat value={String(a.level)} label={t("athlete.levelLabel")} />
-          </div>
-        </div>
-        <div className="relative mt-5">
-          <div className="mb-1.5 flex justify-between text-[11px] font-semibold text-white/80">
-            <span>{a.xp} XP</span><span>{t("athlete.nextLevelAt", { n: a.level + 1, xp: a.next_level_xp })}</span>
-          </div>
-          <ProgressBar value={a.xp - a.level_xp_floor} max={Math.max(1, a.next_level_xp - a.level_xp_floor)} tone="accent" />
-        </div>
-      </section>
+          {a.can_become_holder && <BecomeHolder id={id} />}
+          {/* --- Oggi --- */}
+          <section className="rounded-3xl bg-white p-5 shadow-soft ring-1 ring-ink-900/5 sm:p-6">
+            <h2 className="text-xl text-ink-900">{t("athleteArea.todayTitle")}</h2>
+            {today.length === 0 ? (
+              <p className="mt-2 text-sm text-ink-500">{t("athleteArea.noToday")}</p>
+            ) : (
+              <ul className="mt-4 space-y-3">
+                {today.map((l) => (
+                  <li key={l.course_id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-ink-50 p-4">
+                    <div>
+                      <p className="font-display text-2xl text-ink-900">{l.starts_at.slice(0, 5)}<span className="text-base text-ink-500">–{l.ends_at.slice(0, 5)}</span></p>
+                      <p className="text-sm text-ink-600">{l.course_name}</p>
+                    </div>
+                    {l.status === "PRESENT" ? (
+                      <div className="flex items-center gap-2">
+                        <motion.span initial={{ scale: 0.6 }} animate={{ scale: 1 }} className="rounded-2xl bg-emerald-500 px-4 py-3 font-semibold text-white">✓ {t("athleteArea.present")}</motion.span>
+                        <Button variant="ghost" size="sm" disabled={busy !== null} onClick={() => mark(l, false)}>{t("athleteArea.undo")}</Button>
+                      </div>
+                    ) : (
+                      <Button size="lg" loading={busy === l.course_id} onClick={() => mark(l, true)} className="animate-pulse-ring">
+                        🥋 {t("athleteArea.imHere")}
+                      </Button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
 
-      {a.can_become_holder && <BecomeHolder id={id} />}
+          <ul className="grid gap-3 sm:grid-cols-3">
+            {([["competitions", "🏆", t("area.nav.competitions")], ["board", "📰", t("area.nav.board")], ["games", "🎮", t("area.nav.games")]] as const).map(([key, icon, label]) => (
+              <li key={key}>
+                <button type="button" onClick={() => onGo(key)} className="flex w-full cursor-pointer items-center gap-3 rounded-2xl bg-white p-4 text-left shadow-soft ring-1 ring-ink-900/5 transition hover:-translate-y-0.5">
+                  <span className="text-2xl" aria-hidden="true">{icon}</span><span className="font-semibold text-ink-900">{label}</span><span className="ml-auto text-ink-400">→</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
 
+      {section === "lessons" && (
+        <>
       {/* --- Oggi --- */}
       <section className="rounded-3xl bg-white p-5 shadow-soft ring-1 ring-ink-900/5 sm:p-6">
         <h2 className="text-xl text-ink-900">{t("athleteArea.todayTitle")}</h2>
@@ -198,22 +251,46 @@ function Area({ id }: { id: string }) {
         )}
       </section>
 
-      {/* --- Il certificato medico: lo carica anche l'atleta, che va dal medico --- */}
-      <section className="rounded-3xl bg-white p-5 shadow-soft ring-1 ring-ink-900/5 sm:p-6">
-        <h2 className="mb-4 text-xl text-ink-900">🩺 {t("athleteArea.certificateTitle")}</h2>
-        <CertificatesTab
-          athlete={a}
-          uploadPath={`/athlete-area/${id}/certificates`}
-          urlPath={(certificateId) => `/athlete-area/${id}/certificates/${certificateId}/url`}
-        />
-      </section>
+        </>
+      )}
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* --- Le quote, in lettura --- */}
+      {section === "competitions" && <AreaCompetitions athlete={a} />}
+
+      {section === "board" && (
+        <section className="rounded-3xl bg-ink-50/60 p-5 ring-1 ring-ink-900/5 sm:p-6">
+          <h2 className="mb-4 text-xl text-ink-900">📰 {t("board.title")}</h2>
+          <ClubBoard compact />
+        </section>
+      )}
+
+      {section === "certificate" && (
         <section className="rounded-3xl bg-white p-5 shadow-soft ring-1 ring-ink-900/5 sm:p-6">
+          <h2 className="mb-4 text-xl text-ink-900">🩺 {t("athleteArea.certificateTitle")}</h2>
+          {minorSelf ? (
+            <div className="space-y-3">
+              <div className={cn("rounded-2xl p-4 text-sm font-semibold ring-1", a.certificate.status === "VALID" ? "bg-emerald-50 text-emerald-800 ring-emerald-200" : "bg-amber-50 text-amber-900 ring-amber-200")}>
+                {t.dyn(`health.cert.${a.certificate.status}`, a.certificate.status)}
+                {a.certificate.expires_on ? ` · ${t("club.dueOnCap", { date: fmt.shortDate(a.certificate.expires_on) })}` : ""}
+              </div>
+              <p className="rounded-2xl bg-sky-50 p-4 text-sm text-sky-900 ring-1 ring-sky-200">👨‍👩‍👧 {t("area.certMinor")}</p>
+            </div>
+          ) : (
+            <CertificatesTab
+              athlete={a}
+              uploadPath={`/athlete-area/${id}/certificates`}
+              urlPath={(certificateId) => `/athlete-area/${id}/certificates/${certificateId}/url`}
+            />
+          )}
+        </section>
+      )}
+
+      {section === "fees" && (
+        <>
+        {/* --- Le quote, in lettura --- */}
+        <section id="area-fees" className="rounded-3xl bg-white p-5 shadow-soft ring-1 ring-ink-900/5 sm:p-6">
           <h2 className="text-xl text-ink-900">{t("athleteArea.feesTitle")}</h2>
           <p className="mt-1 text-sm text-ink-500">
-            {a.can_manage ? t("athleteArea.feesManage") : t("athleteArea.feesReadOnly")}
+            {a.can_manage ? t("athleteArea.feesManage") : a.can_pay ? t("proof.adultText") : t("athleteArea.feesReadOnly")}
           </p>
           {dueFees.length === 0 ? (
             <p className="mt-4 rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">✓ {t("athleteArea.allPaid")}</p>
@@ -233,9 +310,24 @@ function Area({ id }: { id: string }) {
               ))}
             </ul>
           )}
-          {a.can_manage && <a href="/customer" className="mt-4 inline-flex text-sm font-semibold text-brand-700 hover:underline">{t("athleteArea.goPay")} →</a>}
+          {a.can_pay && dueFees.length > 0 && (
+            <button type="button" onClick={() => setPaying(true)}
+              className="mt-4 flex w-full cursor-pointer items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-brand-500 to-brand-700 px-5 py-4 text-base font-bold text-white shadow-brand transition hover:brightness-110">
+              📸 {t("proof.payButton")}
+            </button>
+          )}
+          {a.can_manage && <a href="/customer" className="mt-3 inline-flex text-sm font-semibold text-brand-700 hover:underline">{t("athleteArea.goPay")} →</a>}
+          {paying && <AthletePayModal athleteId={a.id} fees={dueFees} onClose={() => setPaying(false)} />}
         </section>
 
+          <section className="rounded-3xl bg-white p-5 shadow-soft ring-1 ring-ink-900/5 sm:p-6">
+            <SeasonMonthsPanel athleteId={a.id} mode="area" />
+          </section>
+        </>
+      )}
+
+      {section === "achievements" && (
+        <>
         {/* --- Traguardi --- */}
         <section className="rounded-3xl bg-white p-5 shadow-soft ring-1 ring-ink-900/5 sm:p-6">
           <h2 className="text-xl text-ink-900">{t("athlete.achievements")}</h2>
@@ -246,13 +338,6 @@ function Area({ id }: { id: string }) {
             ))}
           </div>
         </section>
-      </div>
-
-      {/* --- Le mensilità mese per mese, in lettura (paga il titolare) --- */}
-      <section className="rounded-3xl bg-white p-5 shadow-soft ring-1 ring-ink-900/5 sm:p-6">
-        <SeasonMonthsPanel athleteId={a.id} mode="area" />
-      </section>
-
       {/* --- La formazione: il posto è pronto --- */}
       <section className="overflow-hidden rounded-3xl bg-ink-950 p-6 text-white shadow-lift sm:p-8">
         <p className="text-xs font-bold uppercase tracking-[0.22em] text-accent-300">{t("athleteArea.learnEyebrow")}</p>
@@ -267,6 +352,12 @@ function Area({ id }: { id: string }) {
           ))}
         </ul>
       </section>
+        </>
+      )}
+
+      {section === "games" && <GamesHub />}
+
+      {section === "invite" && <InviteCard />}
     </div>
   );
 }

@@ -14,7 +14,7 @@ risultati dei suoi atleti.
 
 import uuid
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -213,6 +213,34 @@ async def update_competition(
         db, organization_id=scope.organization_id, actor_user_id=actor_user_id,
         action="club.competition_updated", entity_type="club_competition", entity_id=str(comp.id),
         new_value={k: str(v) for k, v in changes.items()},
+    )
+    await db.commit()
+    await db.refresh(comp)
+    return comp
+
+
+async def set_competition_image(
+    db: AsyncSession, *, scope: ClubScope, competition_id: uuid.UUID, actor_user_id: uuid.UUID,
+    file_bytes: bytes | None, content_type: str = "",
+) -> ClubCompetition:
+    """La foto o la locandina della gara, nel bucket media (è pubblica come
+    la circolare); `file_bytes` None la toglie. Solo le gare del club: un
+    evento della rete lo cura la piattaforma."""
+    from app.core.storage import UploadValidationError, upload_media
+
+    comp = await get_competition(db, scope=scope, competition_id=competition_id, editing=True)
+    if file_bytes is None:
+        comp.image_url = None
+    else:
+        try:
+            comp.image_url = upload_media(file_bytes=file_bytes, content_type=content_type,
+                                          key_prefix=f"club-events/{scope.club_id}")
+        except UploadValidationError as exc:
+            raise ClubValidationError("L'immagine deve essere un JPG, PNG o WebP di massimo 5 MB.") from exc
+    await audit_service.record(
+        db, organization_id=scope.organization_id, actor_user_id=actor_user_id,
+        action="club.competition_image", entity_type="club_competition", entity_id=str(comp.id),
+        new_value={"image": comp.image_url is not None},
     )
     await db.commit()
     await db.refresh(comp)
@@ -431,11 +459,28 @@ async def withdraw_entry(
 # --- Jav Ranking ----------------------------------------------------------------------------------
 
 
+def period_range(*, period: str, year: int, month: int | None = None) -> tuple[date, date] | None:
+    """Le date di un periodo del ranking: un mese, un anno solare, o (None)
+    da sempre."""
+    if period == "all":
+        return None
+    if period == "month":
+        if month is None or not 1 <= month <= 12:
+            raise ClubValidationError("Mese non valido.")
+        last = (date(year + (month == 12), month % 12 + 1, 1) - timedelta(days=1))
+        return date(year, month, 1), last
+    if period == "year":
+        return date(year, 1, 1), date(year, 12, 31)
+    raise ClubValidationError("Periodo non valido: mese, anno o da sempre.")
+
+
 async def athlete_points(
     db: AsyncSession, *, athlete_ids: list[uuid.UUID], season: int | None = None,
+    between: tuple[date, date] | None = None,
 ) -> dict[uuid.UUID, dict]:
     """Punti, gare e medaglie per atleta, nell'anno solare `season` (il nome
-    è rimasto: il ranking era per stagione), o da sempre."""
+    è rimasto: il ranking era per stagione), tra le date `between`, o da
+    sempre."""
     if not athlete_ids:
         return {}
     stmt = (
@@ -450,10 +495,9 @@ async def athlete_points(
         )
     )
     if season is not None:
-        stmt = stmt.where(
-            ClubCompetition.starts_on >= date(season, 1, 1),
-            ClubCompetition.starts_on <= date(season, 12, 31),
-        )
+        between = (date(season, 1, 1), date(season, 12, 31))
+    if between is not None:
+        stmt = stmt.where(ClubCompetition.starts_on >= between[0], ClubCompetition.starts_on <= between[1])
     out = {
         a: {"points": 0, "competitions": 0, "gold": 0, "silver": 0, "bronze": 0}
         for a in athlete_ids

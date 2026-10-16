@@ -160,6 +160,14 @@ gradi e piano provvigioni sono **dati**, non struttura, e li crea
 `python -m app.seed.bootstrap` (idempotente: rilanciarlo riallinea permessi e
 ruoli al codice). Vedi `docs/server-migration-guide.md` §6.1.
 
+**I giochi (JAV Games) sono un mondo a parte**: schema Postgres `game`, una
+`MetaData` sua (`app/game/models.py::GameBase`), nessuna FK verso il
+gestionale (`players.user_id` senza FK). L'autogenerate non vede quelle
+tabelle: una loro modifica si scrive a mano in una migrazione nuova con
+`schema="game"`. I test creano lo schema a parte in `tests/conftest.py`. Mai
+far leggere al gestionale i dati del gioco, né scrivere dal gioco nel
+gestionale: i dati del gioco sono finti. Vedi `docs/games.md`.
+
 ---
 
 ## 5. Regole di dominio che non si negoziano

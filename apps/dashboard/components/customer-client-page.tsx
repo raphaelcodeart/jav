@@ -19,6 +19,8 @@ import { SupportTicketsPanel } from "@/components/support-tickets-panel";
 import { CustomerProductRequestsPanel } from "@/components/product-requests";
 import { WalletPanel } from "@/components/wallet-panel";
 import { CustomerSettingsPanel } from "@/components/customer-settings-panel";
+import { ClubBoard } from "@/components/club/club-board";
+import { GamesHub } from "@/components/game/games-hub";
 import { CompetitionsPanel } from "@/components/club/competitions-panel";
 import { CoursesPanel } from "@/components/club/courses-panel";
 import { FamilyAccounting } from "@/components/club/family-accounting";
@@ -101,7 +103,29 @@ const CLUB_ACCOUNTING_ITEM: NavItem = {
   ),
 };
 
-const CLUB_TABS = ["club", "club-competitions", "club-ranking", "club-courses", "club-accounting"] as const;
+// La bacheca del club: le notizie della segreteria e i documenti condivisi (club-board.tsx).
+const CLUB_BOARD_ITEM: NavItem = {
+  key: "club-board",
+  label: "Bacheca",
+  icon: (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
+    </svg>
+  ),
+};
+
+// JAV Games: un mondo a parte (components/game, docs/games.md).
+const GAMES_ITEM: NavItem = {
+  key: "games",
+  label: "Giochi",
+  icon: (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 11h4M8 9v4m7-1h.01M18 10h.01M7 6h10a4 4 0 014 4v4a4 4 0 01-4 4c-1.5 0-2.3-1-3-2h-4c-.7 1-1.5 2-3 2a4 4 0 01-4-4v-4a4 4 0 014-4z" />
+    </svg>
+  ),
+};
+
+const CLUB_TABS = ["club", "club-board", "games", "club-competitions", "club-ranking", "club-courses", "club-accounting"] as const;
 
 const NAV_ITEMS: NavItem[] = [
   {
@@ -239,7 +263,10 @@ const NAV_ITEMS: NavItem[] = [
 const FAMILY_KEYS = new Set(["orders", "wallet", "support", "settings"]);
 const [, SHOP_ITEM, ...OTHER_ITEMS] = NAV_ITEMS;
 const FAMILY_NAV_ITEMS: NavItem[] = [
-  ...CLUB_NAV_ITEMS,
+  CLUB_NAV_ITEMS[0]!,
+  CLUB_BOARD_ITEM,
+  ...CLUB_NAV_ITEMS.slice(1),
+  GAMES_ITEM,
   ...(SHOP_ITEM ? [SHOP_ITEM] : []),
   CLUB_COURSES_ITEM,
   CLUB_ACCOUNTING_ITEM,
@@ -413,6 +440,8 @@ export function CustomerClientPage({ email, organizationId }: CustomerClientPage
       )}
 
       {activeTab === "club" && <FamilyHome onNavigate={(key) => setActiveTab(key as typeof activeTab)} />}
+      {activeTab === "club-board" && <ClubBoard />}
+      {activeTab === "games" && <GamesHub />}
       {activeTab === "club-competitions" && features.competitions && <CompetitionsPanel />}
       {activeTab === "club-ranking" && features.ranking && <RankingPanel />}
       {activeTab === "club-courses" && <CoursesPanel />}

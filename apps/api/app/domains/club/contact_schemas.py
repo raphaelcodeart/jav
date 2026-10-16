@@ -18,6 +18,8 @@ class ContactMessageWrite(BaseModel):
     #: "Accetto di essere ricontattato": senza, il messaggio non si accetta.
     consent: bool = False
     locale: str | None = Field(default=None, max_length=5)
+    #: GENERAL, SPONSOR, ENROLMENT, EVENTS, NEW_CLUB, OTHER (contact_models.CONTACT_TOPICS).
+    topic: str | None = Field(default=None, max_length=16)
     #: Il campo trappola: nascosto alle persone, i robot lo riempiono.
     website: str | None = Field(default=None, max_length=300)
 
@@ -40,6 +42,7 @@ class ContactMessageRead(BaseModel):
     email: str
     phone: str | None
     message: str
+    topic: str
     locale: str
     status: str
     created_at: datetime

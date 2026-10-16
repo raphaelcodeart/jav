@@ -11,7 +11,6 @@ sì (stesso principio di core/deps.py::require_permission).
 import logging
 import uuid
 from datetime import date, timedelta
-from html import escape
 
 from sqlalchemy import func, or_, select, text
 from sqlalchemy.dialects.postgresql import insert
@@ -320,7 +319,7 @@ def give_starting_belt(db: AsyncSession, *, athlete: ClubAthlete, on: date, belt
 
 #: Cosa il genitore può correggere da solo. Piano, stato e tesseramento li
 #: decide la segreteria.
-GUARDIAN_EDITABLE = {"first_name", "last_name", "birth_date", "sex", "fiscal_code", "weight_kg"}
+GUARDIAN_EDITABLE = {"first_name", "last_name", "birth_date", "sex", "fiscal_code", "weight_kg", "white_judogi"}
 ADMIN_EDITABLE = GUARDIAN_EDITABLE | {
     "plan_id", "plan_locked", "status", "federation_number", "federation_expires_on",
     # Gli sconti: li decide la segreteria dopo aver visto il documento.
@@ -900,8 +899,11 @@ async def upload_payment_proof(
     method: str = "BANK_TRANSFER",
     cash_received_by_user_id: uuid.UUID | None = None,
     cash_received_by_name: str | None = None,
+    uploaded_by_user_id: uuid.UUID | None = None,
 ) -> ClubPaymentProof:
-    """Il genitore carica la foto del pagamento e indica cosa copre. Le
+    """Il genitore carica la foto del pagamento e indica cosa copre.
+    `uploaded_by_user_id`: chi la carica davvero, se non è il titolare
+    (l'atleta maggiorenne con il suo accesso, per le sue quote). Le
     quote risultano pagate subito: è la regola di autogestione
     (docs/club-portal.md). La segreteria può rifiutarla dopo.
 
@@ -976,9 +978,10 @@ async def upload_payment_proof(
             else "Carica la foto o il PDF della ricevuta del bonifico."
         )
 
+    uploader = uploaded_by_user_id or guardian_user_id
     proof = ClubPaymentProof(
         **scope.columns(),
-        uploaded_by_user_id=guardian_user_id,
+        uploaded_by_user_id=uploader,
         storage_key=storage_key,
         original_filename=(original_filename or "pagamento")[:255] if storage_key else None,
         content_type=content_type if storage_key else None,
@@ -1002,12 +1005,12 @@ async def upload_payment_proof(
         fee.status = "PAID"
         fee.paid_at = now
         fee.paid_via_proof_id = proof.id
-        fee.paid_by_user_id = guardian_user_id
+        fee.paid_by_user_id = uploader
         fee.payment_method = "WALLET" if credit_cents == total and total > 0 else method
         fee.cash_received_by_user_id = receiver_id
         fee.cash_received_by_name = receiver_name
     await audit_service.record(
-        db, organization_id=scope.organization_id, actor_user_id=guardian_user_id,
+        db, organization_id=scope.organization_id, actor_user_id=uploader,
         action="club.payment_proof_uploaded", entity_type="club_payment_proof", entity_id=str(proof.id),
         new_value={
             "fee_ids": [str(f) for f in fee_ids], "amount_cents": total, "credit_cents": credit_cents,
@@ -1039,6 +1042,86 @@ async def upload_payment_proof(
             raise ClubValidationError("Nel tuo wallet non c'è abbastanza credito: aggiorna la pagina.") from exc
     else:
         await db.commit()
+    await db.refresh(proof)
+    for fee, _athlete in rows:
+        await referrals.on_fee_paid(db, fee=fee)
+    return proof
+
+
+async def staff_record_payment(
+    db: AsyncSession, *, scope: ClubScope, actor_user_id: uuid.UUID, fee_ids: list[uuid.UUID], method: str,
+    file_bytes: bytes | None = None, content_type: str | None = None, original_filename: str | None = None,
+    note: str | None = None, cash_received_by_user_id: uuid.UUID | None = None, cash_received_by_name: str | None = None,
+) -> ClubPaymentProof:
+    """La segreteria registra un pagamento ricevuto (contanti in palestra,
+    MB Way, bonifico, carta al POS) per una o più quote della stessa
+    famiglia, con una ricevuta sola e, se c'è, la foto o il PDF della prova
+    (sempre facoltativa: per i contanti può essere la ricevuta firmata).
+    Come una prova caricata dalla famiglia, ma caricata dallo staff."""
+    from app.core.storage import UploadValidationError
+    from app.core.storage import upload_document as storage_upload_document
+
+    fee_ids = list(dict.fromkeys(fee_ids))
+    if not fee_ids:
+        raise ClubValidationError("Scegli almeno una quota.")
+    if method not in ("BANK_TRANSFER", "MBWAY", "CASH", "CARD"):
+        raise ClubValidationError("Scegli come è stata pagata: bonifico, MB Way, contanti o carta.")
+    receiver_id, receiver_name = (None, None)
+    if method == "CASH":
+        receiver_id, receiver_name = await _cash_receiver(
+            db, scope=scope, user_id=cash_received_by_user_id, name=cash_received_by_name
+        )
+    rows = (
+        await db.execute(
+            select(ClubFee, ClubAthlete)
+            .outerjoin(ClubAthlete, ClubAthlete.id == ClubFee.athlete_id)
+            .where(ClubFee.id.in_(fee_ids), ClubFee.club_id == scope.club_id)
+            .with_for_update(of=ClubFee)
+        )
+    ).all()
+    if len(rows) != len(fee_ids):
+        raise ClubNotFoundError("Quota non trovata.")
+    families = {a.guardian_user_id if a is not None else f.guardian_user_id for f, a in rows}
+    if len(families) != 1:
+        raise ClubValidationError("Una ricevuta è di una famiglia sola: registra le quote famiglia per famiglia.")
+    not_due = [f for f, _a in rows if f.status != "DUE"]
+    if not_due:
+        raise ClubValidationError(f"«{not_due[0].description}» non è più da pagare: aggiorna la pagina.")
+    storage_key = None
+    if file_bytes:
+        try:
+            storage_key = storage_upload_document(
+                file_bytes=file_bytes, content_type=content_type or "",
+                key_prefix=f"club-payment-proofs/{next(iter(families))}",
+            )
+        except UploadValidationError as exc:
+            raise ClubValidationError("Allega una foto (JPG o PNG) o un PDF, di massimo 15 MB.") from exc
+    total = sum(f.amount_cents for f, _a in rows)
+    proof = ClubPaymentProof(
+        **scope.columns(), uploaded_by_user_id=actor_user_id, storage_key=storage_key,
+        original_filename=(original_filename or "pagamento")[:255] if storage_key else None,
+        content_type=content_type if storage_key else None, amount_cents=total, credit_cents=0,
+        note=(note or "").strip()[:500] or None, status="ACCEPTED", method=method,
+        cash_received_by_user_id=receiver_id, cash_received_by_name=receiver_name,
+        receipt_number=await receipts.next_number(
+            db, club_id=scope.club_id, prefix=receipts.prefix_for([f.kind for f, _a in rows]), year=utcnow().year,
+        ),
+    )
+    db.add(proof)
+    await db.flush()
+    now = utcnow()
+    for fee, _athlete in rows:
+        db.add(ClubPaymentProofFee(proof_id=proof.id, fee_id=fee.id))
+        fee.status, fee.paid_at, fee.paid_via_proof_id, fee.paid_by_user_id = "PAID", now, proof.id, actor_user_id
+        fee.payment_method, fee.payment_note = method, proof.note
+        fee.cash_received_by_user_id, fee.cash_received_by_name = receiver_id, receiver_name
+    await audit_service.record(
+        db, organization_id=scope.organization_id, actor_user_id=actor_user_id, action="club.payment_recorded_by_staff",
+        entity_type="club_payment_proof", entity_id=str(proof.id),
+        new_value={"fee_ids": [str(f) for f in fee_ids], "amount_cents": total, "method": method,
+                   "file": storage_key is not None, "cash_received_by": receiver_name},
+    )
+    await db.commit()
     await db.refresh(proof)
     for fee, _athlete in rows:
         await referrals.on_fee_paid(db, fee=fee)
@@ -1117,16 +1200,17 @@ async def reject_proof(
     )
     await db.commit()
     await db.refresh(proof)
-    await email_guardian(
-        db, user_id=proof.uploaded_by_user_id, context="club proof rejected",
-        subject="Prova di pagamento non accettata",
-        heading="Prova di pagamento non accettata",
-        lines=[
-            f"La segreteria non ha potuto accettare la prova di pagamento per: <strong>{escape(descriptions)}</strong>.",
-            f"Motivo: {escape(reason)}",
-            "Le quote risultano di nuovo da pagare: puoi caricare una nuova prova dal portale.",
-        ],
-    )
+    from app.core.email import send_html_email_best_effort
+    from app.domains.club.email_brand import club_brand
+    from app.domains.email_texts.service import compose
+
+    uploader = await db.get(User, proof.uploaded_by_user_id)
+    if uploader is not None:
+        mail = await compose(db, "proof_rejected", values={"quotas": descriptions, "motivo": reason},
+                             brand=await club_brand(db, scope.club_id),
+                             cta_url=f"{get_settings().public_app_base_url}/area")
+        send_html_email_best_effort(context="club proof rejected", to=uploader.email, subject=mail.subject,
+                                    html_body=mail.html, text_body=mail.text)
     return proof
 
 
@@ -1364,11 +1448,13 @@ async def email_guardian(
     user = await db.get(User, user_id)
     if user is None:
         return
+    from app.domains.club.email_brand import brand_for_user
+
     base = get_settings().public_app_base_url
     html = render_email(
         preheader=subject, heading=heading,
-        body_html="".join(f"<p>{line}</p>" for line in lines),
-        cta_label=cta_label, cta_url=f"{base}/customer",
+        body_html="".join(f"<p style=\"margin:0 0 16px 0;\">{line}</p>" for line in lines),
+        cta_label=cta_label, cta_url=f"{base}/customer", brand=await brand_for_user(db, user_id),
     )
     text = "\n\n".join(_strip_tags(line) for line in lines) + f"\n\n{base}/customer"
     send_html_email_best_effort(context=context, to=user.email, subject=subject, html_body=html, text_body=text)

@@ -133,6 +133,20 @@ export interface AthleteCard {
   next_level_xp: number;
   progress: number;
   achievements_earned: number;
+  competitions_count?: number;
+  weight_category?: string | null;
+  age_band?: string | null;
+  club_name?: string | null;
+  white_judogi?: boolean;
+  obligations?: Obligations | null;
+}
+
+/** Gli obblighi dell'atleta (apps/api/app/domains/club/obligations.py). */
+export interface Obligations {
+  items: { code: "JUDOGI_COLOUR" | "WHITE_JUDOGI" | "CERTIFICATE" | "ANNUAL_FEE"; ok: boolean; rule?: string; state?: string; status?: string | null; declared?: boolean; due_cents?: number }[];
+  missing: number;
+  can_compete: boolean;
+  compete_missing: string[];
 }
 
 export interface BeltHistory extends ClubBelt {
@@ -213,6 +227,39 @@ export interface Family {
   recent_proofs: Proof[];
   open_competitions: number;
   season_months?: AthleteSeasonMonths[];
+  /** «Questo mese»: la mensilità di ogni figlio e ciò che resta. */
+  this_month?: MonthBoard | null;
+}
+
+/** Lo stato della mensilità di un atleta nel mese (club/month_board.py). */
+export type MonthBoardState = "PAID" | "DUE" | "OVERDUE" | "WAIVED" | "EXEMPT" | "NONE";
+
+export interface MonthRow {
+  athlete_id: string;
+  first_name: string;
+  last_name: string;
+  photo_url: string | null;
+  group: string | null;
+  state: MonthBoardState;
+  fee: Fee | null;
+  /** I mesi passati ancora da pagare. */
+  arrears: Fee[];
+  /** Le altre quote scadute entro la fine del mese (gare, judogi, iscrizione...). */
+  other_due: Fee[];
+  guardian_email?: string | null;
+}
+
+export interface MonthBoard {
+  period: string;
+  first_day: string;
+  last_day: string;
+  is_current: boolean;
+  rows: MonthRow[];
+  totals: {
+    athletes: number; expected_cents: number; collected_cents: number; missing_cents: number;
+    paid: number; to_pay: number; overdue: number; exempt: number; none: number;
+    arrears_cents: number; other_due_cents: number;
+  };
 }
 
 /** Le mensilità della stagione di un atleta, in numeri (grafico famiglia). */
@@ -306,6 +353,8 @@ export interface Competition {
   transport_companions: number;
   transport_notes: string | null;
   transport_auto_send: boolean;
+  /** La foto o la locandina; null = l'icona del tipo (EventIcon). */
+  image_url?: string | null;
 }
 
 /** La lettera al comune (o all'ente) per il trasporto di un evento. */
@@ -615,7 +664,7 @@ export function fullName(a: { first_name: string; last_name: string }): string {
 // --- Persone, lezioni, cartellino, taxa de falta -----------------------------------------------
 
 /** I tipi di una persona nel club, ognuno con il suo simbolo. */
-export type PersonKind = "ATHLETE" | "PARENT" | "SECRETARY" | "COACH" | "ASSISTANT_COACH" | "MONITOR" | "ASSISTANT_MONITOR";
+export type PersonKind = "ATHLETE" | "PARENT" | "SECRETARY" | "COACH" | "ASSISTANT_COACH" | "MONITOR" | "ASSISTANT_MONITOR" | "REFEREE";
 
 export const PERSON_KIND_ICONS: Record<PersonKind, string> = {
   ATHLETE: "🥋",
@@ -625,6 +674,7 @@ export const PERSON_KIND_ICONS: Record<PersonKind, string> = {
   ASSISTANT_COACH: "🤝",
   MONITOR: "🎽",
   ASSISTANT_MONITOR: "🎗️",
+  REFEREE: "🧑‍⚖️",
 };
 
 export interface Person {

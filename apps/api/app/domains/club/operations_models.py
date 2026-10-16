@@ -13,7 +13,9 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import BigInteger, CheckConstraint, Date, ForeignKey, Integer, Numeric, SmallInteger, String, Text
+from sqlalchemy import (
+    BigInteger, Boolean, CheckConstraint, Date, DateTime, ForeignKey, Integer, Numeric, SmallInteger, String, Text,
+)
 from sqlalchemy import text as sql_text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -198,4 +200,139 @@ class ClubDocument(UUIDPKMixin, TimestampMixin, Base):
     uploaded_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
+    #: Visibile nella bacheca di atleti e famiglie del club (un regolamento,
+    #: il calendario della stagione): lo decide la segreteria, documento per
+    #: documento. Spento, lo vede solo lo staff.
+    shared_with_members: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=sql_text("false")
+    )
 
+
+class ClubNewsPost(UUIDPKMixin, TimestampMixin, Base):
+    """Una notizia del club nella bacheca di atleti e famiglie, come un post:
+    titolo, testo, una foto, un video (YouTube, Vimeo) o un link. La scrive la
+    segreteria; si vede solo nell'area riservata, non sul sito pubblico. La
+    foto sta nel bucket dei media come quelle della pagina del club."""
+
+    __tablename__ = "club_news_posts"
+    __table_args__ = (
+        CheckConstraint("audience IN ('CLUB', 'NETWORK')", name="audience"),
+        # Un post della piattaforma (club_id NULL) è sempre per tutto il circuito.
+        CheckConstraint("club_id IS NOT NULL OR audience = 'NETWORK'", name="platform_is_network"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id"))
+    #: NULL = un post di JudoArteVida (l'amministratore), per tutto il circuito.
+    club_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("clubs.id"), index=True, nullable=True)
+    #: CLUB: solo per i soci del club; NETWORK: per tutti i club del circuito.
+    audience: Mapped[str] = mapped_column(String(8), default="CLUB", server_default="CLUB")
+    title: Mapped[str] = mapped_column(String(200))
+    body: Mapped[str | None] = mapped_column(Text, nullable=True)
+    image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    video_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    link_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    #: In cima alla bacheca, prima delle altre.
+    pinned: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sql_text("false"))
+    #: Spento è una bozza: la vede solo la segreteria.
+    published: Mapped[bool] = mapped_column(Boolean, default=True, server_default=sql_text("true"))
+    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    author_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+
+
+class ClubNewsLike(Base):
+    """Un «mi piace» a un post della bacheca: uno per persona."""
+
+    __tablename__ = "club_news_likes"
+
+    post_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("club_news_posts.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+
+#: Che cosa il club ha pagato per un atleta.
+SUPPORT_CATEGORIES = ("TRANSPORT", "MATERIAL", "COMPETITION", "EXAM", "TRAINING_CAMP", "OTHER")
+
+
+class ClubAthleteSupport(UUIDPKMixin, TimestampMixin, Base):
+    """Un costo che il club ha pagato per un atleta (trasporto, materiale,
+    iscrizione a una gara, esame, stage...): l'aiuto del club, visibile
+    alla famiglia. Nel wallet della famiglia diventa una ricarica seguita
+    subito dall'addebito del costo (club/support.py): il saldo non cambia,
+    ma lo storico dice quando e quanto il club l'ha aiutata."""
+
+    __tablename__ = "club_athlete_supports"
+    __table_args__ = (
+        CheckConstraint(f"category IN ({_in(SUPPORT_CATEGORIES)})", name="category"),
+        CheckConstraint("amount_cents > 0", name="amount_positive"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id"))
+    club_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("clubs.id"), index=True)
+    athlete_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("club_athletes.id"), index=True)
+    category: Mapped[str] = mapped_column(String(16))
+    amount_cents: Mapped[int] = mapped_column(BigInteger)
+    note: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    paid_on: Mapped[date] = mapped_column(Date)
+    recorded_by_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+
+
+#: Il lavoro dello staff oltre alle ore del cartellino: un compito svolto
+#: (lo scrive chi l'ha fatto) o un lavoretto occasionale (lo scrive la
+#: segreteria, anche per chi non ha un account).
+STAFF_TASK_KINDS = ("TASK", "ODD_JOB")
+STAFF_MESSAGE_CHANNELS = ("CLUB", "JAV")
+
+
+class ClubStaffTask(UUIDPKMixin, TimestampMixin, Base):
+    """Un compito svolto o un lavoretto occasionale (club/staff_work.py).
+    Il costo, se c'è, quando si paga diventa una spesa COLLABORATORS
+    (`club_expenses`, `expense_id`): la contabilità lo vede come tutto il resto."""
+
+    __tablename__ = "club_staff_tasks"
+    __table_args__ = (
+        CheckConstraint(f"kind IN ({_in(STAFF_TASK_KINDS)})", name="kind"),
+        CheckConstraint("cost_cents >= 0", name="cost_not_negative"),
+        CheckConstraint("minutes IS NULL OR minutes > 0", name="minutes_positive"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id"))
+    club_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("clubs.id"), index=True)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
+    person_name: Mapped[str] = mapped_column(String(150))
+    kind: Mapped[str] = mapped_column(String(10))
+    title: Mapped[str] = mapped_column(String(200))
+    done_on: Mapped[date] = mapped_column(Date, index=True)
+    minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cost_cents: Mapped[int] = mapped_column(BigInteger, default=0, server_default=sql_text("0"))
+    note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    paid_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    expense_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("club_expenses.id", ondelete="SET NULL"), nullable=True,
+    )
+    recorded_by_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+
+
+class ClubStaffMessage(UUIDPKMixin, TimestampMixin, Base):
+    """Le comunicazioni tra una persona dello staff e il suo club (canale
+    CLUB, la segreteria) o JudoArteVida (canale JAV, lo staff della
+    piattaforma). Una conversazione per persona e canale; `from_staff` dice
+    da che parte viene il messaggio, `read_at` se l'altra parte l'ha letto."""
+
+    __tablename__ = "club_staff_messages"
+    __table_args__ = (
+        CheckConstraint(f"channel IN ({_in(STAFF_MESSAGE_CHANNELS)})", name="channel"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id"))
+    club_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("clubs.id"), index=True)
+    staff_user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), index=True)
+    channel: Mapped[str] = mapped_column(String(8))
+    from_staff: Mapped[bool] = mapped_column(Boolean)
+    author_user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+    body: Mapped[str] = mapped_column(Text)
+    read_at: Mapped[datetime | None] = mapped_column(nullable=True)

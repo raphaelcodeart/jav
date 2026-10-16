@@ -33,6 +33,9 @@ CLUB_SETTINGS_KEYS = (
     # La lingua delle lettere che il club manda a terzi (trasporto): "pt",
     # "it" o "en".
     "letters_language",
+    # Gli avvisi automatici della mensilità (1, 10, 15) e la multa del 16
+    # (club/payment_reminders.py): acceso/spento e importo in centesimi.
+    "late_fee_enabled", "late_fee_cents",
 )
 LETTER_LANGUAGES = ("pt", "it", "en")
 #: I ruoli che un club può dare ai suoi account di staff.
@@ -46,7 +49,10 @@ def slugify(name: str) -> str:
 
 
 def club_settings(club: Club) -> dict:
-    return {key: (club.settings or {}).get(key) or None for key in CLUB_SETTINGS_KEYS}
+    out = {key: (club.settings or {}).get(key) or None for key in CLUB_SETTINGS_KEYS}
+    out["late_fee_enabled"] = bool((club.settings or {}).get("late_fee_enabled"))
+    out["late_fee_cents"] = int((club.settings or {}).get("late_fee_cents") or 1500)
+    return out
 
 
 async def list_clubs(db: AsyncSession, *, organization_id: uuid.UUID) -> list[dict]:
@@ -235,6 +241,11 @@ async def update_club_settings(
         raise ClubValidationError("Lingua delle lettere non valida.")
     if updates.get("bank_iban"):
         updates["bank_iban"] = re.sub(r"\s+", "", updates["bank_iban"]).upper()
+    if "late_fee_cents" in updates and updates["late_fee_cents"] is not None:
+        cents = int(updates["late_fee_cents"])
+        if not 0 < cents <= 10_000:
+            raise ClubValidationError("La multa va da 0,01 € a 100 €.")
+        updates["late_fee_cents"] = cents
     # Una colonna JSONB modificata sul posto non risulta cambiata a
     # SQLAlchemy: va assegnato un dizionario nuovo.
     club.settings = {**(club.settings or {}), **updates}

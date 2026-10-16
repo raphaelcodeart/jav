@@ -1,7 +1,8 @@
 "use client";
 
+import { motion } from "motion/react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { clubGet, type Invite, type Pricing } from "@/lib/club";
 import { useI18n } from "@/lib/i18n/provider";
@@ -9,40 +10,95 @@ import { shareOrCopyLink } from "@/lib/share-link";
 
 /** Il link personale per invitare un amico nel club, e quanto ha reso: ogni
  *  mensilità pagata da una famiglia invitata dà credito nel wallet, da usare
- *  quando si pagano le quote (apps/api/app/domains/club/referrals.py). Sotto,
- *  che cosa comprende l'iscrizione annuale: le famiglie lo chiedono. */
+ *  quando si pagano le quote (apps/api/app/domains/club/referrals.py). Si
+ *  condivide con un tocco su WhatsApp, Facebook, Telegram, X o per email, o si
+ *  copia. Sotto, che cosa comprende l'iscrizione annuale: le famiglie lo chiedono. */
 export function InviteCard() {
   const { t, fmt } = useI18n();
   const toast = useToast();
-  const { data: invite } = useQuery({ queryKey: ["club", "invite"], queryFn: () => clubGet<Invite>("/invite") });
-  const { data: pricing } = useQuery({ queryKey: ["club", "pricing"], queryFn: () => clubGet<Pricing>("/pricing") });
+  const [copied, setCopied] = useState(false);
+  const { data: invite } = useQuery({ queryKey: ["club", "invite"], queryFn: () => clubGet<Invite>("/invite"), retry: false });
+  const { data: pricing } = useQuery({ queryKey: ["club", "pricing"], queryFn: () => clubGet<Pricing>("/pricing"), retry: false });
   if (!invite) return null;
   const url = `${typeof window === "undefined" ? "" : window.location.origin}${invite.path}`;
+  const text = t("invite.shareText");
+  const enc = encodeURIComponent;
 
-  async function share() {
-    const result = await shareOrCopyLink({ url, title: t("invite.shareTitle"), text: t("invite.shareText") });
+  const socials = [
+    { name: "WhatsApp", bg: "bg-[#25D366]", href: `https://wa.me/?text=${enc(`${text} ${url}`)}`, icon: <path d="M17.5 14.4c-.3-.1-1.7-.8-2-.9-.3-.1-.5-.1-.7.1-.2.3-.8.9-.9 1.1-.2.2-.3.2-.6.1-.3-.1-1.2-.5-2.3-1.4-.9-.8-1.4-1.7-1.6-2-.2-.3 0-.5.1-.6l.4-.5c.1-.2.2-.3.3-.5.1-.2 0-.4 0-.5l-.9-2.2c-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.4s1 2.8 1.2 3c.1.2 2 3.1 4.9 4.3.7.3 1.2.5 1.6.6.7.2 1.3.2 1.8.1.6-.1 1.7-.7 1.9-1.4.2-.7.2-1.2.2-1.4-.1-.1-.3-.2-.6-.3zM12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2c-1.5 0-3-.4-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2z" /> },
+    { name: "Facebook", bg: "bg-[#1877F2]", href: `https://www.facebook.com/sharer/sharer.php?u=${enc(url)}`, icon: <path d="M14 8.5V6.8c0-.8.2-1.3 1.4-1.3H17V2.6c-.3 0-1.3-.1-2.5-.1-2.5 0-4.2 1.5-4.2 4.3v1.7H7.5v3.2h2.8V21H14v-9.3h2.8l.4-3.2H14z" /> },
+    { name: "Telegram", bg: "bg-[#229ED9]", href: `https://t.me/share/url?url=${enc(url)}&text=${enc(text)}`, icon: <path d="M21.9 4.6 18.7 19.7c-.2 1-.9 1.3-1.7.8l-4.7-3.5-2.3 2.2c-.3.3-.5.5-1 .5l.3-4.8 8.8-7.9c.4-.3-.1-.5-.6-.2L6.6 13.6 2 12.2c-1-.3-1-1 .2-1.5l18.1-7c.9-.3 1.6.2 1.3 1.6z" /> },
+    { name: "X", bg: "bg-ink-950", href: `https://twitter.com/intent/tweet?text=${enc(text)}&url=${enc(url)}`, icon: <path d="M17.8 3h3.1l-6.8 7.8L22 21h-6.2l-4.9-6.4L5.3 21H2.2l7.3-8.3L2 3h6.4l4.4 5.8L17.8 3zm-1.1 16.2h1.7L7.4 4.7H5.6l11.1 14.5z" /> },
+    { name: "Email", bg: "bg-brand-600", href: `mailto:?subject=${enc(t("invite.shareTitle"))}&body=${enc(`${text}\n\n${url}`)}`, icon: <path d="M3 5h18v14H3V5zm2 2v.5l7 4.5 7-4.5V7H5zm14 2.8-7 4.5-7-4.5V17h14V9.8z" /> },
+  ];
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      toast({ tone: "success", title: t("invite.copied") });
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast({ tone: "error", title: t("invite.copyFailed") });
+    }
+  }
+
+  async function nativeShare() {
+    const result = await shareOrCopyLink({ url, title: t("invite.shareTitle"), text });
     if (result === "copied") toast({ tone: "success", title: t("invite.copied") });
     if (result === "failed") toast({ tone: "error", title: t("invite.copyFailed") });
   }
 
   return (
-    <section className="glass-card rounded-3xl p-5 space-y-3">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <section className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-emerald-500 via-teal-600 to-ink-900 p-6 text-white shadow-lift sm:p-7">
+      <motion.span aria-hidden="true" className="pointer-events-none absolute -right-6 -top-8 select-none text-[8rem] leading-none opacity-20"
+        animate={{ rotate: [-6, 6, -6] }} transition={{ duration: 6, repeat: Infinity }}>🤝</motion.span>
+      <div className="relative grid gap-5 lg:grid-cols-[1fr_auto] lg:items-center">
         <div>
-          <h3 className="text-base text-ink-900">🤝 {t("invite.title")}</h3>
-          <p className="text-sm text-ink-500 mt-1">
-            {t("invite.text", { amount: fmt.euro(invite.credit_per_month_cents) })}
-          </p>
+          <p className="text-xs font-bold uppercase tracking-[0.22em] text-emerald-100">🎁 {t("invite.title")}</p>
+          <h3 className="mt-1 font-display text-2xl leading-tight sm:text-3xl">
+            +{fmt.euro(invite.credit_per_month_cents)} <span className="font-sans text-base font-semibold text-white/85">{t("invite.perMonth")}</span>
+          </h3>
+          <p className="mt-2 max-w-xl text-sm text-white/85">{t("invite.text", { amount: fmt.euro(invite.credit_per_month_cents) })}</p>
         </div>
-        <Button size="sm" onClick={share}>{t("invite.share")}</Button>
+        <div className="grid grid-cols-2 gap-2 text-center">
+          <div className="rounded-2xl bg-white/15 px-4 py-3 ring-1 ring-white/20">
+            <p className="font-display text-3xl leading-none">{invite.invited_count}</p>
+            <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-white/75">{t("invite.invitedLabel")}</p>
+          </div>
+          <div className="rounded-2xl bg-white/15 px-4 py-3 ring-1 ring-white/20">
+            <p className="font-display text-3xl leading-none">{fmt.euro(invite.earned_cents)}</p>
+            <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-white/75">{t("invite.earnedLabel")}</p>
+          </div>
+        </div>
       </div>
-      <code className="block rounded-xl bg-ink-50 px-3 py-2 text-xs text-ink-700 break-all">{url}</code>
-      <p className="text-xs text-ink-500">
-        {t("invite.stats", { n: invite.invited_count, amount: fmt.euro(invite.earned_cents) })}
-      </p>
+
+      <div className="relative mt-5 flex flex-col gap-2 sm:flex-row">
+        <code className="flex-1 truncate rounded-2xl bg-white/95 px-4 py-3 text-sm text-ink-800">{url}</code>
+        <button type="button" onClick={copy}
+          className="inline-flex h-12 cursor-pointer items-center justify-center gap-2 rounded-2xl bg-accent-400 px-5 font-bold text-ink-900 shadow transition hover:bg-accent-300">
+          {copied ? "✓" : "📋"} {copied ? t("invite.copiedShort") : t("invite.copy")}
+        </button>
+      </div>
+
+      <div className="relative mt-4 flex flex-wrap items-center gap-2">
+        <span className="mr-1 text-xs font-semibold text-white/80">{t("invite.shareOn")}</span>
+        {socials.map((s) => (
+          <motion.a key={s.name} href={s.href} target="_blank" rel="noopener noreferrer" whileHover={{ y: -3, scale: 1.08 }} whileTap={{ scale: 0.95 }}
+            title={s.name} aria-label={s.name}
+            className={`flex h-11 w-11 items-center justify-center rounded-full text-white shadow-lg ring-2 ring-white/30 ${s.bg}`}>
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden="true">{s.icon}</svg>
+          </motion.a>
+        ))}
+        <button type="button" onClick={nativeShare} title={t("invite.share")}
+          className="flex h-11 cursor-pointer items-center gap-2 rounded-full bg-white/15 px-4 text-sm font-semibold ring-1 ring-white/30 hover:bg-white/25">
+          ↗ {t("invite.more")}
+        </button>
+      </div>
+
       {pricing?.enrollment_includes && (
-        <p className="text-xs text-ink-500 border-t border-ink-100 pt-3">
-          <span className="font-semibold text-ink-700">{t("invite.enrollmentIncludes")}</span> {pricing.enrollment_includes}
+        <p className="relative mt-4 border-t border-white/20 pt-3 text-xs text-white/80">
+          <span className="font-semibold text-white">{t("invite.enrollmentIncludes")}</span> {pricing.enrollment_includes}
         </p>
       )}
     </section>

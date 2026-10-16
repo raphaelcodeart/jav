@@ -277,6 +277,9 @@ class ClubAthlete(UUIDPKMixin, TimestampMixin, Base):
     custom_discount_value: Mapped[int | None] = mapped_column(Integer, nullable=True)
     custom_discount_scope: Mapped[str] = mapped_column(String(8), default="MONTHLY", server_default="MONTHLY")
     custom_discount_note: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    #: Ha il judogi bianco per le gare (club/obligations.py): lo dichiara la
+    #: famiglia o la segreteria.
+    white_judogi: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
 
 
 class ClubPaymentProof(UUIDPKMixin, TimestampMixin, Base):
@@ -443,6 +446,9 @@ class ClubCompetition(UUIDPKMixin, TimestampMixin, Base):
     #: bucket media: è pensata per essere letta da tutti.
     circular_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     circular_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    #: La foto o la locandina dell'evento (bucket media), accanto al nome
+    #: negli elenchi; senza, l'icona del tipo (gara, stage, arbitragem...).
+    image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
 
 class ClubTransportRequest(UUIDPKMixin, TimestampMixin, Base):
@@ -770,6 +776,28 @@ class ClubFunction(UUIDPKMixin, TimestampMixin, Base):
     user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     athlete_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("club_athletes.id"), nullable=True
+    )
+
+
+class ClubReferee(UUIDPKMixin, TimestampMixin, Base):
+    """Chi nel club è anche árbitro: un segno accanto al nome, indipendente
+    dalla funzione (un treinador o un genitore può arbitrare). Come
+    ClubFunction, su un account o su un atleta."""
+
+    __tablename__ = "club_referees"
+    __table_args__ = (
+        CheckConstraint("(user_id IS NULL) <> (athlete_id IS NULL)", name="one_person"),
+        UniqueConstraint("club_id", "user_id", name="uq_club_referees_club_user"),
+        UniqueConstraint("club_id", "athlete_id", name="uq_club_referees_club_athlete"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id"), index=True
+    )
+    club_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("clubs.id"), index=True)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    athlete_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("club_athletes.id", ondelete="CASCADE"), nullable=True
     )
 
 

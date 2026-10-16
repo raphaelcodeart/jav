@@ -25,10 +25,12 @@ import {
   type StaffHours,
 } from "@/lib/club";
 import { MoveToClubModal, useClubFeatures } from "@/components/club/jav-courses";
+import { AthleteMoneyCard, SUPPORT_CATEGORIES, SUPPORT_ICONS } from "@/components/club/athlete-area-extras";
+import type { MessageKey } from "@/lib/i18n/messages/it";
 import { useI18n } from "@/lib/i18n/provider";
 
 const A = (path: string) => `/admin${path}`;
-const KIND_ORDER: PersonKind[] = ["ATHLETE", "PARENT", "COACH", "ASSISTANT_COACH", "MONITOR", "ASSISTANT_MONITOR", "SECRETARY"];
+const KIND_ORDER: PersonKind[] = ["ATHLETE", "PARENT", "COACH", "ASSISTANT_COACH", "MONITOR", "ASSISTANT_MONITOR", "REFEREE", "SECRETARY"];
 
 /** I simboli di una persona, con il nome del tipo al passaggio del mouse. */
 export function KindIcons({ kinds }: { kinds: PersonKind[] }) {
@@ -125,7 +127,7 @@ export function PeoplePanel({ canInvest = false }: { canInvest?: boolean }) {
   );
 }
 
-type CardTab = "debts" | "payments" | "results" | "investments" | "function";
+type CardTab = "debts" | "payments" | "results" | "investments" | "support" | "function";
 
 function PersonDrawer({ person, canInvest, onClose }: { person: Person; canInvest: boolean; onClose: () => void }) {
   const { t, fmt } = useI18n();
@@ -137,6 +139,7 @@ function PersonDrawer({ person, canInvest, onClose }: { person: Person; canInves
     { key: "payments", label: `✅ ${t("people.payments")}` },
     { key: "results", label: `🏆 ${t("people.results")}` },
     { key: "investments", label: `💎 ${t("people.investments")}` },
+    ...(person.kind === "ATHLETE" ? [{ key: "support", label: `💚 ${t("support.tab")}` }] : []),
     { key: "function", label: `🏷️ ${t("people.function")}` },
   ];
   // Nei corsi JAV una famiglia può passare a un club ufficiale: si sposta
@@ -186,11 +189,68 @@ function PersonDrawer({ person, canInvest, onClose }: { person: Person; canInves
               )
             )}
             {tab === "investments" && <Investments person={person} card={data} canInvest={canInvest} />}
+            {tab === "support" && <SupportTab athleteId={person.id} />}
             {tab === "function" && <FunctionEditor person={person} />}
           </>
         )}
       </div>
     </Modal>
+  );
+}
+
+/** L'aiuto del club (club/support.py): un costo pagato dal club per l'atleta
+ *  (trasporto, materiale, gara, esame, stage). Nel wallet della famiglia
+ *  diventa una ricarica del club e subito l'addebito: il saldo resta, lo
+ *  storico racconta l'aiuto, e la scheda dell'atleta mostra il totale. */
+function SupportTab({ athleteId }: { athleteId: string }) {
+  const { t } = useI18n();
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [category, setCategory] = useState<string>("TRANSPORT");
+  const [amount, setAmount] = useState("");
+  const [note, setNote] = useState("");
+  const [paidOn, setPaidOn] = useState(() => new Date().toISOString().slice(0, 10));
+  const [busy, setBusy] = useState(false);
+  async function save() {
+    setBusy(true);
+    try {
+      await clubSend(A(`/athletes/${athleteId}/supports`), "POST", {
+        category, amount_cents: Math.round(Number(amount.replace(",", ".")) * 100), note: note || null, paid_on: paidOn,
+      });
+      toast({ tone: "success", title: t("support.saved") });
+      setAmount("");
+      setNote("");
+      await queryClient.invalidateQueries({ queryKey: ["club", "athlete-money", athleteId] });
+    } catch (e) {
+      toast({ tone: "error", title: t("support.failed"), text: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-ink-500">{t("support.text")}</p>
+      <AthleteMoneyCard athleteId={athleteId} path={A(`/athletes/${athleteId}/supports`)} />
+      <div className="grid gap-3 rounded-2xl bg-ink-50 p-4 sm:grid-cols-2">
+        <Field label={t("support.category")}>
+          <Select value={category} onChange={(e) => setCategory(e.target.value)}>
+            {SUPPORT_CATEGORIES.map((c) => <option key={c} value={c}>{SUPPORT_ICONS[c]} {t(`support.cat.${c}` as MessageKey)}</option>)}
+          </Select>
+        </Field>
+        <Field label={t("support.amount")}>
+          <Input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="25,00" />
+        </Field>
+        <Field label={t("support.note")}>
+          <Input value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} placeholder={t("support.notePlaceholder")} />
+        </Field>
+        <Field label={t("support.paidOn")}>
+          <Input type="date" value={paidOn} onChange={(e) => setPaidOn(e.target.value)} />
+        </Field>
+        <div className="sm:col-span-2">
+          <Button loading={busy} disabled={!(Number(amount.replace(",", ".")) > 0)} onClick={save}>💚 {t("support.save")}</Button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -279,13 +339,15 @@ function FunctionEditor({ person }: { person: Person }) {
   const queryClient = useQueryClient();
   const current = person.kinds.find((k) => ["COACH", "ASSISTANT_COACH", "MONITOR", "ASSISTANT_MONITOR"].includes(k)) ?? "";
   const [fn, setFn] = useState<string>(current);
+  const [referee, setReferee] = useState(person.kinds.includes("REFEREE"));
   const options = person.kind === "ATHLETE" ? ["MONITOR", "ASSISTANT_MONITOR"] : ["COACH", "ASSISTANT_COACH", "MONITOR", "ASSISTANT_MONITOR"];
   async function save() {
+    const who = person.kind === "ATHLETE" ? { athlete_id: person.id } : { user_id: person.id };
     try {
-      await clubSend(A("/functions"), "PUT", {
-        function: fn || null, ...(person.kind === "ATHLETE" ? { athlete_id: person.id } : { user_id: person.id }),
-      });
+      if (fn !== current) await clubSend(A("/functions"), "PUT", { function: fn || null, ...who });
+      if (referee !== person.kinds.includes("REFEREE")) await clubSend(A("/referees"), "PUT", { referee, ...who });
       await queryClient.invalidateQueries({ queryKey: ["club", "admin", "people"] });
+      await queryClient.invalidateQueries({ queryKey: ["club", "staff", "people-kinds"] });
       toast({ tone: "success", title: t("people.functionSaved") });
     } catch (e) {
       toast({ tone: "error", title: t("people.functionFailed"), text: (e as Error).message });
@@ -298,6 +360,10 @@ function FunctionEditor({ person }: { person: Person }) {
         <option value="">{t("people.noFunction")}</option>
         {options.map((o) => <option key={o} value={o}>{PERSON_KIND_ICONS[o as PersonKind]} {t.dyn(`people.kind.${o}`, o)}</option>)}
       </Select>
+      <label className="flex items-center gap-2 text-sm text-ink-700 cursor-pointer">
+        <input type="checkbox" className="h-4 w-4 accent-brand-600" checked={referee} onChange={(e) => setReferee(e.target.checked)} />
+        {PERSON_KIND_ICONS.REFEREE} {t("people.isReferee")}
+      </label>
       <Button onClick={save}>{t("common.save")}</Button>
     </div>
   );

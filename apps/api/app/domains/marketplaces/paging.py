@@ -57,8 +57,11 @@ async def customer_page(
     limit: int = PAGE_SIZE,
     search: str | None = None,
     category_id: uuid.UUID | None = None,
+    scope_filters: list | None = None,
 ) -> dict:
-    """Una pagina della vetrina di un negozio.
+    """Una pagina della vetrina di un negozio. `scope_filters`: condizioni in
+    più su che cosa fa parte della vetrina di chi guarda (lo shop del suo club
+    e quello di JudoArteVida).
 
     `total` sono i prodotti accesi che rispondono a ricerca e categoria,
     `shop_total` quelli accesi senza filtri (la scheda dello Shop e il suo
@@ -67,7 +70,7 @@ async def customer_page(
     (esaurito, non spedibile) li supera di poco, mai il contrario."""
     offset = max(offset, 0)
     limit = max(1, min(limit, MAX_PAGE_SIZE))
-    in_shop = [model.organization_id == organization_id, model.status == "ACTIVE"]
+    in_shop = [model.organization_id == organization_id, model.status == "ACTIVE", *(scope_filters or [])]
     filters = list(in_shop)
     needle = (search or "").strip()
     if needle:

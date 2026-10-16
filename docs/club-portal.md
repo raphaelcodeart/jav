@@ -249,6 +249,28 @@ La segreteria segna pagata una quota a mano (`POST /club/admin/fees/{id}/
 mark-paid`) dicendo sempre il metodo (`CASH`, `CARD`, `BANK_TRANSFER`) e,
 per i contanti, a chi.
 
+### Il quadro del mese (`club/month_board.py`)
+- La prima cosa della segreteria (in cima alla Panoramica e prima scheda di
+  **Quote**, `GET /club/admin/month?period=YYYY-MM`): il mese corrente in
+  grande, con le frecce per i mesi prima e dopo, quanto si doveva incassare
+  di mensilità e quanto manca, e **un riquadro per atleta attivo** con il
+  gruppo (il piano), l'importo e lo stato: pagata, da pagare, in ritardo,
+  condonata, esente (`exempt_monthly`), nessuna quota.
+- Nel riquadro anche ciò che la persona deve ancora: i **mesi arretrati** e
+  le **altre quote scadute entro fine mese** (gare, judogi, iscrizione,
+  multe). «Segna pagato» le chiude insieme, con il modo (contanti e a chi,
+  MB Way, bonifico, carta), quota per quota come `/fees/{id}/mark-paid`.
+- «Segna pagato» registra le quote scelte con **una ricevuta sola**
+  (`POST /club/admin/fees/pay`, `club_service.staff_record_payment`) e, sotto
+  il modo di pagamento, la **prova facoltativa**: «Scatta una foto» (apre la
+  fotocamera) o «Allega un file» (JPG, PNG, PDF), nel bucket privato come le
+  prove delle famiglie. Mai quote di due famiglie nella stessa ricevuta.
+- Gli ordini dello Shop in attesa di pagamento si contano a parte: li
+  conferma la piattaforma.
+- La famiglia vede lo stesso calcolo per i suoi figli (`this_month` di
+  `GET /club/family`): la card «Questo mese» in cima alla sua pagina, con
+  il totale e il bottone che apre il pagamento con quelle quote già scelte.
+
 ### Il calendario delle mensilità (`club/months.py`)
 
 Le dodici mensilità della stagione di un atleta, da settembre ad agosto
@@ -308,6 +330,25 @@ cosa* si è pagato, perché le due cose vanno in posti diversi:
   La segreteria riceve una notifica 30 giorni prima e il giorno in cui
   scade (`CLUB_DOCUMENT_EXPIRING`), una volta sola per documento e momento
   (`club_reminders_sent`), con i promemoria del mattino.
+- **Condiviso con i soci** (`shared_with_members`, spento di default): il
+  documento compare anche nella bacheca di atleti e famiglie del club
+  (regolamento, calendario della stagione), che lo aprono con lo stesso URL
+  presigned (`/club/board/documents/{id}/url`). Gli altri restano dello staff.
+
+### La bacheca — `club_news_posts` (`club/news.py`)
+- Nell'area riservata, voce **Bacheca** per la famiglia e sezione nell'area
+  dell'atleta: le notizie del club e i documenti condivisi (`GET /club/board`,
+  permesso `club.athlete`, che hanno sia `CUSTOMER` sia `ATHLETE`).
+- Una notizia è come un post: titolo, testo, una foto, un video (YouTube e
+  Vimeo si vedono dentro la notizia, ogni altro link resta un link), un link.
+  La scrive la segreteria da **📰 Notizie** (`/club/admin/news`), con
+  l'anteprima; si può fissare in cima, nascondere (bozza) e togliere. Una
+  bozza pubblicata dopo prende la data del giorno in cui esce.
+- Solo nell'area riservata, **mai sul sito pubblico**. La foto va nel bucket
+  dei media (`club-news/<club>/…`), e l'indirizzo della foto deve essere uno
+  dei nostri: un'immagine esterna è rifiutata. Video e link solo `http(s)://`.
+- "Nuovo" sulle notizie uscite dopo l'ultima visita: lo ricorda il browser
+  (localStorage), non il server.
 
 ### Il certificato medico lo carica anche l'atleta
 Oltre al titolare e alla segreteria, l'atleta con il suo accesso lo carica
@@ -327,7 +368,8 @@ stesse regole (tipo, date, massimo due anni), stesso bucket privato.
 
 ### Corsi e presenze — `club_courses`, `club_course_slots`, `club_course_athletes`, `club_attendances`
 - Corso: nome, descrizione, fascia d'età/livello, istruttore (`users.id`).
-- Slot settimanali: giorno della settimana, ora inizio/fine, sala.
+- Slot settimanali: giorno della settimana, ora inizio/fine, sala. Si
+  correggono senza toglierli (clic sull'orario → `PATCH /club/admin/slots/{id}`).
 - Presenza: (`athlete_id`, `course_id`, `date`) UNIQUE, segnata dall'istruttore
   da tablet o telefono con un tocco per atleta.
 
@@ -340,6 +382,10 @@ stesse regole (tipo, date, massimo due anni), stesso bucket privato.
   (`age_groups`), posti, orari, trasporto (`transport_mode`: del club, per
   conto proprio, da confermare), la circolare dell'organizzatore, stato
   `OPEN` / `CLOSED` / `DONE`.
+- Una **foto o locandina** facoltativa (`image_url`, bucket media,
+  `POST/DELETE /club/admin/competitions/{id}/image`) accanto al nome negli
+  elenchi; senza, l'icona grande del tipo (🏆 gara, 🥋 stage, 🧑‍⚖️ arbitragem,
+  🎓 formação, 🤝 reunião, 📌 altro).
 - Tipo (`kind`): gara (`COMPETITION`, l'unica che dà punti e medaglie),
   `STAGE`, `REFEREEING` (arbitragem), `EDUCATION` (formação), `MEETING`,
   `OTHER`.
@@ -434,6 +480,27 @@ stesse regole (tipo, date, massimo due anni), stesso bucket privato.
   atleti attivi dei club pubblicati, come "Nome I." con club, cintura e
   punti (decisione del titolare, ottobre 2026). Foto e pagina del judoca
   (`has_page`) solo per chi ha il consenso della famiglia ed è pubblicato.
+- **Periodi** (`period`): `year` (l'anno solare, il ranking che conta e il
+  predefinito), `month` (un mese di un anno) e `all` (da sempre). Per
+  "sempre" la fascia d'età è quella di quest'anno. Su `/ranking` si
+  sceglie periodo, anno e mese; l'indirizzo si condivide.
+- **Ricerca e scheda in popup**: la classifica si filtra mentre si scrive
+  (nome o club) e un clic apre la scheda (`GET
+  /public-site/ranking/judoka/{id}`, `site.ranking_card`). Con il consenso è
+  la scheda completa in stile IJF (foto, categoria, cinture, risultati,
+  prove in programma, media); senza, solo ciò che dice una classifica:
+  «Nome I.», club, fascia, cintura, posizione, punti e i risultati passati
+  (evento, data, piazzamento). **Mai** foto, età, categoria, media o prove
+  future: dicono dove sarà un minorenne.
+
+### Taça dos Clubes
+- `GET /public-site/ranking/clubs` (`site.public_club_ranking`): i club per
+  punti, somma dei punti dei risultati dei loro atleti **per il club con cui
+  hanno gareggiato** (l'iscrizione), stessa tabella e stessi periodi del
+  ranking dei judoca. Con atleti, gare, risultati e medaglie.
+- **La coppa** si assegna a fine anno: per l'anno in corso il primo è "in
+  testa" (`is_final` falso), per un anno chiuso è il vincitore. L'albo d'oro
+  (`winners`) è il vincitore di ogni anno chiuso con almeno un risultato.
 
 ### Livelli e medaglie
 - Calcolati, mai salvati (`club/achievements.py`): XP = 10 per presenza +
@@ -475,6 +542,7 @@ Nessun termine tecnico, nessun passaggio che si possa evitare.
 | Ogni giorno, 08:00 | Avvisi: quote scadute, certificati in scadenza/scaduti, tesseramenti in scadenza, scadenze iscrizioni gare |
 | Ogni giorno, 01:00 | Chiude le iscrizioni alle gare con scadenza passata e prepara (o manda) la richiesta di trasporto |
 | Ogni giorno, 03:10 | I costi fissi del club diventano le spese del mese in corso (vedi "Contabilità") |
+| Ogni ora, al minuto 5 | Avvisi della mensilità (1, 10, 15 alle 9:00 ora del club) e multa del 16 per i club che li hanno accesi (vedi "Avvisi della mensilità e multa") |
 
 Ogni job gira club per club, solo sui club attivi, ed è idempotente
 (vincoli UNIQUE, non flag applicativi). I promemoria
@@ -653,7 +721,13 @@ altrove sarebbe un inganno.
 ### Messaggi dal sito
 
 Chiunque può scrivere a un club dalla sua pagina, o a JudoArteVida da
-`/contactos` (`club/contact.py`, tabella `contact_messages`):
+`/contactos` (`club/contact.py`, tabella `contact_messages`). Su
+`/contactos` sceglie **a chi** (JudoArteVida o un club: allora il messaggio
+è di quel club) e **di che cosa** (`topic`: GENERAL, SPONSOR, ENROLMENT,
+EVENTS, OTHER); su `/patrocinadores` il modulo manda sempre `SPONSOR`. La
+casella mostra l'argomento e filtra per argomento; lo staff della
+piattaforma parte da «Tutti» (i messaggi a JAV e quelli dei club, con il
+nome del club):
 
 - `POST /public-site/clubs/{slug}/message` (solo un club che il sito mostra:
   a una pagina in bozza, sospesa o all'unità dei corsi JAV non si scrive,
@@ -1177,3 +1251,196 @@ API: `/club/admin/accounting/{summary,ledger,debts,expenses,recurring,staff-cost
 (il periodo è `?period=AAAA-MM` o `AAAA`), `/clubs/accounting?year=`,
 `/clubs/{id}/platform-fee`, `/club/accounting/mine?year=`. Il browser sceglie
 solo il periodo: ogni importo nasce sul server.
+
+## Sponsor
+
+- Tabella `sponsors` (`club/sponsors.py`, `sponsors_router.py`): nome, slug,
+  riga sotto il nome, descrizione, logo (bucket dei media, solo caricato da
+  qui), sito (`http(s)://`), colore, ordine, attivo. Li gestisce lo staff
+  della piattaforma (console → 🤝 Sponsor, `clubs.manage` e account senza
+  club).
+- La **home** li mostra in una barra di loghi che scorre (solo CSS, si ferma
+  sotto il mouse e con «riduci movimento»); senza logo, il nome con le
+  iniziali nel colore dello sponsor. Ogni logo porta a
+  `/patrocinadores/<slug>`: chi è, la descrizione e un bottone grande verso
+  il suo sito. `/patrocinadores` elenca gli sponsor e ha il modulo per
+  diventarlo (messaggio con argomento SPONSOR).
+- Uno sponsor spento sparisce dal sito (anche la sua pagina: 404), resta in
+  console.
+
+## Il Calendário JudoArteVida
+
+- `club/calendar.py`: le prove del club e della rete tra due date (al
+  massimo due anni). Per lo staff (`GET /club/staff/calendar[/pdf]`,
+  `club.instruct`) e per atleti e famiglie (`GET /club/calendar[/pdf]`,
+  `club.athlete`). Nel «Calendario» della segreteria e degli istruttori
+  (prima scheda) e nella pagina «Gare» delle famiglie (scheda 📅).
+- Tre viste: **schede** (con la locandina o l'icona del tipo), **lista**
+  dettagliata e **tabella**, sempre divise per mese con la riga del mese.
+- Il **PDF** (A4 orizzontale, in portoghese): una tabella per mese con data,
+  prova (tipo, livello, chi la organizza nella rete), local, estado,
+  escalões e notas (organizzatore, scadenza iscrizioni, costo, descrizione);
+  intestazioni e riga del mese si ripetono in cima a ogni pagina, così il
+  calendario continua senza interruzioni.
+- Il **flyer del mese** (`render_flyer`, `GET /club/[staff/]calendar/flyer?year&month`,
+  bottone «🎨 Scarica flyer del mese» con il mese da scegliere): una pagina A4
+  verticale da appendere o mandare su WhatsApp, con il logo JAV
+  (`app/assets/jav-logo.png`), il mese in grande, la cintura gialla e una
+  scheda per prova (giorno, tipo e livello, nome, luogo, escalões, scadenza
+  delle iscrizioni). Due colonne fino a 10 prove, poi tre; oltre una pagina
+  continua nella seguente con la testata ridotta. Senza prove, «Sem eventos
+  neste mês».
+
+### La prova di pagamento dall'area dell'atleta
+- Il titolare, o **l'atleta stesso con il suo accesso dai 18 anni di età
+  federale** (`can_pay`), paga le quote di quell'atleta dalla sua area
+  (`POST /club/athlete-area/{id}/payment-proofs`): stesse regole del
+  genitore (bonifico o MB Way con la prova, contanti con chi li ha presi),
+  senza il credito del wallet, che è del titolare. La prova risulta caricata
+  da chi l'ha caricata (`uploaded_by_user_id`, `paid_by_user_id`).
+- In ogni pagamento la prova si sceglie con due bottoni sempre visibili,
+  «📷 Scatta una foto» e «📎 Allega un file», con l'anteprima
+  (`components/ui/proof-picker.tsx`): due input separati perché con
+  `capture` alcuni telefoni aprono solo la fotocamera.
+
+## Gli obblighi dell'atleta (la scheda «salute sportiva»)
+
+- `club/obligations.py`, nella scheda dell'atleta (`obligations` di
+  `athlete_cards`): in cima all'area dell'atleta e, per ogni figlio, nella
+  pagina della famiglia (`components/club/athlete-health-card.tsx`), con
+  foto (si carica toccando il cerchio), età, gruppo, categoria, peso, lezioni,
+  gare, medaglie e punti.
+- **Judogi del club** (ordine non annullato in `club_equipment_orders`):
+  azul per i maschi, rosa per le femmine; dal Grupo 3 (13 anni federali) una
+  femmina sceglie rosa o azul.
+- **Judogi bianco** (`club_athletes.white_judogi`, lo dichiarano famiglia,
+  atleta o segreteria; o un ordine bianco).
+- **Certificato medico** valido; **quota annuale** dell'anno pagata
+  (l'iscrizione `ENROLLMENT`: socio, taxa de falta, seguro, FPJ e
+  associazione distrettuale in un'unica quota, anche a rate).
+- **Pronto per le gare**: quota annuale pagata e judogi bianco (un maschio
+  anche con l'azul). Per ora è un avviso: non blocca l'iscrizione.
+
+## La bacheca del circuito
+
+- Un post di un club è **per i soci** (`audience = CLUB`) o **per tutto il
+  circuito** (`NETWORK`); JudoArteVida scrive dalla console (📰 Bacheca,
+  `/platform-news`, `club_id` NULL, sempre per tutti).
+- La bacheca di atleti e famiglie (`feed` di `GET /club/board`) mette insieme
+  i post del club, del circuito e di JudoArteVida, e le **prove dei prossimi
+  90 giorni come post** (alla data in cui sono state annunciate). Ogni post
+  porta nome e logo di chi lo firma e i «mi piace» (`club_news_likes`, uno
+  per persona).
+
+## Lo shop del club
+
+- Ogni prodotto e ogni ordine dello Shop hanno un venditore
+  (`jav_market_products.club_id`, `jav_market_orders.club_id`): un club, o
+  NULL = lo **shop unico di JudoArteVida** del superadmin.
+- La segreteria gestisce i prodotti e gli ordini del suo club da «Ordini
+  Shop del club» (`/club/admin/shop/...`): prodotti con foto e varianti,
+  conferma del pagamento, spedito, consegnato, annulla. JavCash e fornitori
+  restano dello shop di JudoArteVida.
+- Una famiglia vede nella vetrina lo shop del suo club e quello di
+  JudoArteVida, con l'etichetta del venditore e il filtro; mai lo shop di un
+  altro club. Un ordine è di un venditore solo (un carrello misto si rifiuta
+  con la spiegazione) e il bonifico di un ordine del club va all'IBAN del
+  club (`payee`).
+
+
+## L'area dell'atleta
+
+- L'area (`components/club/athlete-area.tsx`) ha il menu a sinistra come le
+  altre aree (AppShell): Home, Lezioni, Gare e stage, Bacheca, Quote,
+  Certificato medico, Traguardi, Giochi, Invita un amico.
+- **Gare e stage** (`GET /club/athlete-area/{id}/competitions`): le prove in
+  arrivo con l'iscrizione dell'atleta, se c'è. L'atleta non si iscrive da solo:
+  «🙋 Voglio partecipare» (`POST …/competitions/{cid}/wish`) avvisa il titolare
+  del conto con email e notifica, una volta sola per prova; il titolare invece
+  vede «Iscrivi», che porta alla pagina delle gare.
+- Il **certificato medico** di un minorenne lo carica il titolare (anche il
+  server rifiuta con 403 l'upload dall'area di un minorenne).
+- **Invita un amico**: il link personale con i bottoni WhatsApp, Facebook,
+  Telegram, X, email, «Copia» e la condivisione del telefono
+  (`components/club/invite-card.tsx`).
+
+## L'aiuto del club
+
+- `club/support.py`, `club_athlete_supports`: un costo che il club paga per
+  un atleta (trasporto, materiale, iscrizione a una prova, esame, stage, altro),
+  con importo, data e nota. Lo registra la segreteria dalla scheda persona
+  (Persone → atleta → 💚 Aiuto del club, `POST /club/admin/athletes/{id}/supports`).
+- Nel **wallet della famiglia** diventa una ricarica del club e subito
+  l'addebito del costo (`source = CLUB_SUPPORT`, legati all'atleta): il saldo
+  non cambia, ma lo storico dice quando e quanto il club l'ha aiutata.
+- La **scheda dell'atleta** (area e scheda della segreteria,
+  `GET /club/athlete-area/{id}/money`) mostra il saldo del wallet, il totale
+  dell'aiuto per voce, gli investimenti del club e gli ultimi costi
+  (`AthleteMoneyCard`). Senza saldo, aiuti né investimenti il riquadro non c'è.
+
+## Avvisi della mensilità e multa
+
+- Si accendono nelle Impostazioni del club (⏰ «Avvisi della mensilità e
+  multa», `late_fee_enabled`, `late_fee_cents`, 15 € se non indicato).
+- Il **1°, il 10 e il 15** del mese, dalle 9:00 ora del club: un'email e una
+  notifica a ogni famiglia con la **mensilità del mese corrente** ancora da
+  pagare, che avvisa della multa. Con la prova caricata la quota è già pagata e
+  l'avviso non parte.
+- Il **16 dalle 9:00**: per ogni mensilità del mese ancora da pagare nasce una
+  quota `FINE` (`period = atraso-AAAA-MM`, scadenza a 7 giorni), una sola per
+  atleta e mese, con email e notifica.
+- Conta solo la mensilità del mese corrente. Il job gira ogni ora
+  (`club_payment_reminders_task`, `club/payment_reminders.py`); ogni avviso
+  parte una volta sola (`club_reminders_sent`).
+
+## Il personale del club
+
+`club/staff_work.py`, `club_staff_tasks`, `club_staff_messages`; nella
+segreteria la sezione **👥 Personale** (che comprende il cartellino).
+
+- **Il mese** (`GET /club/admin/staff-work?month`): persona per persona ore
+  del cartellino, tariffa e costo delle ore (`accounting.staff_costs`),
+  compiti e lavoretti con il loro costo, il totale e quanto resta da pagare.
+- **Compiti svolti** (`TASK`): li scrive chi lavora nel club dalla sua area
+  («Il mio lavoro», `POST /club/staff/work/tasks`): che cosa, quando, quanto
+  tempo. Può toglierli finché non sono pagati.
+- **Lavoretti occasionali** (`ODD_JOB`): li scrive la segreteria, anche per
+  chi non ha un account (basta il nome), con il costo.
+- **Pagare** un compito o un lavoretto (con il suo costo, o indicandolo)
+  crea la spesa `COLLABORATORS` nella contabilità (`expense_id`), una volta
+  sola; una riga pagata non si cancella più da qui. Chi ha un account riceve
+  la notifica.
+- **Comunicazioni**: ogni persona dello staff ha due conversazioni, con la
+  segreteria del suo club (canale `CLUB`, Personale → Messaggi) e con
+  JudoArteVida (canale `JAV`, console → 💬 Messaggi dello staff,
+  `/club-platform/staff-messages`). Chi scrive avvisa l'altra parte con una
+  notifica; la risposta avvisa la persona. Le conversazioni mostrano i non
+  letti e il «letto» (✓✓).
+
+## Lo shop della rete sul sito
+
+- `/loja` (`jav_market/public_router.py`, `GET /public-site/shop`): lo
+  **shop unico di JudoArteVida** si guarda senza account (mai i prodotti dei
+  club), con ricerca, categorie e «Mostra altri prodotti»; i prezzi sono
+  **IVA compresa**. A negozio spento la pagina dice che apre presto.
+- «Acquista» porta a `/loja/comprar`: per comprare bisogna essere soci di un
+  club della rete. Chi è socio entra (e trova lo Shop nella sua area); gli
+  altri scelgono un club (`/c/<slug>`) o vanno a «Crea il tuo club».
+- Il catalogo di suplementos24.com si carica con
+  `scripts/import_suplementos24.py` (dati in `scripts/shop_import/`): le
+  cinque grandi categorie e le sottocategorie «Grande › Sotto», il prezzo
+  netto `prezzo × 100 / (100 + IVA)` così al cliente arriva il prezzo del sito,
+  le foto copiate nel bucket dei media. Di default prova soltanto; `--apply`
+  scrive; idempotente.
+
+## Crea il tuo club
+
+- `/criar-clube` (nel menu «Chi siamo»): due strade.
+  **Ho già un club** e voglio il supporto gestionale della rete (portale,
+  quote, gare, ranking, pagina pubblica e shop), oppure **parto da zero con il
+  Judo Team Matias Luwawa** (corso per istruttore, aiuto a trovare lo spazio,
+  formazione amministrativa e tecnica; solo in Portogallo).
+- La richiesta (nome, email, telefono, città, nome del club e atleti, oppure
+  esperienza e spazio, e un messaggio) arriva a JudoArteVida come messaggio di
+  contatto con argomento `NEW_CLUB` (`contact_messages.topic`): console →
+  Messaggi, con il filtro «Creare un club». Lo staff la valuta e risponde.

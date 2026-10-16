@@ -69,6 +69,8 @@ class PublicEvent(BaseModel):
     registration_deadline_time: time | None = None
     places: int | None = None
     circular_url: str | None = None
+    #: La foto o la locandina dell'evento (bucket media); None = l'icona del tipo.
+    image_url: str | None = None
     #: Quanti atleti iscritti (solo il numero).
     entries_count: int = 0
 
@@ -355,8 +357,70 @@ class PublicEventDetail(PublicEvent):
 class PublicRankingRead(BaseModel):
     season: int
     season_label: str
+    #: "year" (l'anno solare, il ranking che conta), "month" o "all".
+    period: str = "year"
+    month: int | None = None
     clubs: list[PublicClubRef]
     rows: list[PublicRankingRow]
+
+
+class PublicClubRankingRow(BaseModel):
+    position: int
+    club: PublicClubRef
+    city: str | None
+    points: int
+    results: int
+    gold: int
+    silver: int
+    bronze: int
+    athletes: int
+    events: int
+
+
+class PublicCupWinner(BaseModel):
+    year: int
+    club: PublicClubRef
+    points: int
+
+
+class PublicClubRankingRead(BaseModel):
+    """La Taça dos Clubes."""
+
+    season: int
+    season_label: str
+    period: str
+    month: int | None
+    #: L'anno è chiuso: il primo ha vinto la coppa.
+    is_final: bool
+    rows: list[PublicClubRankingRow]
+    #: L'albo d'oro: il vincitore di ogni anno chiuso, dal più recente.
+    winners: list[PublicCupWinner]
+
+
+class PublicRankingCardResult(BaseModel):
+    event_id: uuid.UUID
+    event_name: str
+    level: str
+    date: date
+    location: str | None
+    placement: int
+    points: int
+
+
+class PublicRankingCard(PublicJudoka):
+    """Il judoca in classifica senza pagina pubblica: niente foto, età,
+    categoria, media o prove in programma."""
+
+    season_label: str
+    season_points: int
+    ranking: PublicRankingPosition | None
+    results: list[PublicRankingCardResult]
+
+
+class PublicRankingCardRead(BaseModel):
+    has_page: bool
+    profile: PublicJudokaProfile | None
+    card: PublicRankingCard | None
 
 
 # --- Segreteria -----------------------------------------------------------------------------------

@@ -13,6 +13,9 @@ export interface ClubSettings {
   transport_entity_email: string | null;
   /** La lingua delle lettere a terzi: "pt", "it", "en". */
   letters_language: string | null;
+  /** Gli avvisi della mensilità (1, 10, 15) e la multa del 16 (club/payment_reminders.py). */
+  late_fee_enabled?: boolean;
+  late_fee_cents?: number;
 }
 
 export interface CurrentClub {

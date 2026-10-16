@@ -27,6 +27,8 @@ interface ContactMessage {
   email: string;
   phone: string | null;
   message: string;
+  /** GENERAL, SPONSOR, ENROLMENT, EVENTS, OTHER: lo sceglie chi scrive. */
+  topic: string;
   locale: string;
   status: "NEW" | "READ" | "ARCHIVED";
   created_at: string;
@@ -40,6 +42,9 @@ interface Inbox {
 
 type View = "inbox" | "archived";
 
+const TOPICS = ["GENERAL", "SPONSOR", "ENROLMENT", "EVENTS", "NEW_CLUB", "OTHER"] as const;
+const TOPIC_ICONS: Record<string, string> = { GENERAL: "💬", SPONSOR: "🤝", ENROLMENT: "🥋", EVENTS: "🏆", NEW_CLUB: "🏯", OTHER: "📎" };
+
 async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(await friendlyApiError(res));
@@ -51,7 +56,9 @@ export function ContactInbox({ mode, canFilterClubs = false }: { mode: "club" | 
   const toast = useToast();
   const queryClient = useQueryClient();
   const [view, setView] = useState<View>("inbox");
-  const [club, setClub] = useState("jav");
+  // Il superadmin parte da «Tutti»: i messaggi a JudoArteVida e quelli dei club.
+  const [club, setClub] = useState(canFilterClubs ? "all" : "jav");
+  const [topic, setTopic] = useState<string>("");
   const [pending, setPending] = useState<string | null>(null);
 
   const base = mode === "club" ? "/api/proxy/club/admin/messages" : "/api/proxy/contact-messages";
@@ -94,6 +101,11 @@ export function ContactInbox({ mode, canFilterClubs = false }: { mode: "club" | 
             { key: "archived", label: t("inbox.tabArchived"), count: counts.ARCHIVED },
           ]}
         />
+        <div className="flex flex-col gap-2 sm:flex-row">
+        <Select value={topic} onChange={(e) => setTopic(e.target.value)} className="sm:w-56" aria-label={t("inbox.topicFilter")}>
+          <option value="">{t("inbox.topicAll")}</option>
+          {TOPICS.map((k) => <option key={k} value={k}>{TOPIC_ICONS[k]} {t(`site.contactForm.topic.${k}`)}</option>)}
+        </Select>
         {mode === "platform" && canFilterClubs && (
           <Select value={club} onChange={(e) => setClub(e.target.value)} className="sm:w-72" aria-label={t("inbox.filterLabel")}>
             <option value="jav">{t("inbox.filterJav")}</option>
@@ -101,6 +113,7 @@ export function ContactInbox({ mode, canFilterClubs = false }: { mode: "club" | 
             {(clubs.data ?? []).filter((c) => c.kind !== "JAV_COURSES").map((c) => <option key={c.id} value={c.id}>🏯 {c.name}</option>)}
           </Select>
         )}
+        </div>
       </div>
       {counts.NEW > 0 && view === "inbox" && (
         <p className="text-sm font-semibold text-brand-700">{t("inbox.newCount", { n: counts.NEW })}</p>
@@ -110,7 +123,7 @@ export function ContactInbox({ mode, canFilterClubs = false }: { mode: "club" | 
         <Skeleton className="h-48" />
       ) : error ? (
         <EmptyState title={t("inbox.loadFailed")} text={(error as Error).message} />
-      ) : !data || data.items.length === 0 ? (
+      ) : !data || data.items.filter((m) => !topic || m.topic === topic).length === 0 ? (
         <EmptyState
           icon={<span className="text-3xl" aria-hidden="true">✉️</span>}
           title={view === "archived" ? t("inbox.emptyArchived") : t("inbox.empty")}
@@ -118,7 +131,7 @@ export function ContactInbox({ mode, canFilterClubs = false }: { mode: "club" | 
         />
       ) : (
         <ul className="space-y-3">
-          {data.items.map((m) => {
+          {data.items.filter((m) => !topic || m.topic === topic).map((m) => {
             const subject = encodeURIComponent(t("inbox.replySubject", { club: m.club?.name ?? "JudoArteVida" }));
             const quoted = encodeURIComponent(`\n\n---\n${m.message}`);
             return (
@@ -128,6 +141,9 @@ export function ContactInbox({ mode, canFilterClubs = false }: { mode: "club" | 
                     <p className="flex flex-wrap items-center gap-2 font-semibold text-ink-900">
                       {m.name}
                       {m.status === "NEW" && <Badge tone="brand" dot>{t("inbox.new")}</Badge>}
+                      {m.topic && m.topic !== "GENERAL" && (
+                        <Badge tone={m.topic === "SPONSOR" || m.topic === "NEW_CLUB" ? "warning" : "neutral"}>{TOPIC_ICONS[m.topic]} {t.dyn(`site.contactForm.topic.${m.topic}`, m.topic)}</Badge>
+                      )}
                       {showClub && <Badge tone="neutral">{m.club ? m.club.name : "JudoArteVida"}</Badge>}
                     </p>
                     <p className="mt-0.5 text-sm text-ink-500">
