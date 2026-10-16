@@ -1,5 +1,6 @@
 "use client";
 
+import { VOICE_INPUT_ENABLED } from "@/components/javbot/use-voice-input";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { JavbotChat } from "@/components/javbot/javbot-chat";
@@ -89,7 +90,7 @@ export function PublicJavbot() {
 
   return (
     <JavbotChat
-      transcribeUrl={"/api/public/bot/transcribe"}
+      transcribeUrl={VOICE_INPUT_ENABLED ? "/api/public/bot/transcribe" : undefined}
       open={open}
       setOpen={setOpen}
       // Il messaggio vuoto è il saluto: solo la prima volta che si apre.

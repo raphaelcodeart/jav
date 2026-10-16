@@ -187,9 +187,6 @@ Lo stato dell'ordine lo vedi in "I miei Ordini".
   orari speciali, regole degli esami): chiedigli «cosa serve per l'esame di
   cintura?» o «il dojo è aperto ad agosto?»: ti mostra il passaggio del
   documento che risponde, con il titolo e la pagina.
-  Non hai voglia di scrivere? Tocca il 🎤, parla e tocca ■ quando hai
-  finito: il testo compare nel campo, lo controlli e lo invii. La voce si
-  trascrive sul nostro server e non si salva.
 - **Invita un amico**: il tuo link personale e chi si è iscritto con quello;
   ogni 5 amici con un contratto attivo puoi richiedere un omaggio, che
   consegna la segreteria.

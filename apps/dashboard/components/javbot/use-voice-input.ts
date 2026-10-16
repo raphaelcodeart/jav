@@ -9,6 +9,11 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
  *
  *  Senza MediaRecorder o senza microfono `supported` è falso e il bottone
  *  non compare. Dopo `MAX_SECONDS` la registrazione si ferma da sola. */
+/** Il microfono è nascosto finché la trascrizione non è abbastanza veloce e
+ *  precisa (Whisper `small` su 2 CPU: ~10 secondi e parole sbagliate). Il
+ *  codice resta pronto: rimettere `true` (e avviare il servizio `stt`). */
+export const VOICE_INPUT_ENABLED = false;
+
 export type VoiceState = "idle" | "recording" | "transcribing";
 export type VoiceError = "denied" | "tooLong" | "busy" | "empty" | "error";
 

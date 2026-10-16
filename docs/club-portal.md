@@ -836,6 +836,12 @@ apposta:
 
 ### Il microfono
 
+> **Oggi è nascosto** (`VOICE_INPUT_ENABLED = false` in
+> `components/javbot/use-voice-input.ts`): con 2 CPU la trascrizione
+> impiegava circa 10 secondi e sbagliava parole. Il servizio `stt` è fermo
+> (`docker compose stop stt`) per liberare memoria. Per riaccenderlo: `true`
+> lì, `up -d stt`, e un server più potente o un modello migliore.
+
 Nei due JAVBOT, accanto al campo di testo, c'è il bottone 🎤: si parla
 invece di scrivere. Il browser registra (al massimo un minuto, `MediaRecorder`:
 opus su Chrome/Firefox/Android, mp4 su Safari/iPhone), l'audio va a

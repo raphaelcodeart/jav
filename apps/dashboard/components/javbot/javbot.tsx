@@ -1,5 +1,6 @@
 "use client";
 
+import { VOICE_INPUT_ENABLED } from "@/components/javbot/use-voice-input";
 import { useState } from "react";
 import { JavbotChat } from "@/components/javbot/javbot-chat";
 import { friendlyApiError } from "@/lib/api-error";
@@ -122,7 +123,7 @@ export function Javbot({ navKeys, onNavigate }: { navKeys: string[]; onNavigate:
 
   return (
     <JavbotChat
-      transcribeUrl={"/api/proxy/javbot/transcribe"}
+      transcribeUrl={VOICE_INPUT_ENABLED ? "/api/proxy/javbot/transcribe" : undefined}
       open={open}
       setOpen={setOpen}
       onOpen={() => void load()}

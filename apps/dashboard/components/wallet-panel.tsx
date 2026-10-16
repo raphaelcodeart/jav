@@ -159,14 +159,14 @@ export function WalletPanel() {
               <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Saldo disponibile</p>
               <p className="text-3xl font-bold text-slate-900">{javCash(wallet.balance_cents)}</p>
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Il tuo indirizzo wallet</p>
               <button
                 onClick={handleCopyAddress}
                 title="Copia indirizzo"
-                className="flex items-center gap-2 font-mono text-xs text-slate-600 bg-slate-900/5 border border-slate-200 rounded-lg px-3 py-2 hover:bg-slate-100 transition cursor-pointer"
+                className="flex max-w-full items-center gap-2 font-mono text-xs text-slate-600 bg-slate-900/5 border border-slate-200 rounded-lg px-3 py-2 hover:bg-slate-100 transition cursor-pointer"
               >
-                {wallet.address}
+                <span className="min-w-0 truncate">{wallet.address}</span>
                 <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   {copied ? (
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />

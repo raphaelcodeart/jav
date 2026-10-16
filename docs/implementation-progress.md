@@ -762,3 +762,11 @@ Poi: lo Shop JudoArteVida in vetrina anche nell'area a shop spento
 nelle due chat, la voce trascritta dal nuovo servizio `stt` (Whisper `small`
 sul nostro server, l'audio non si salva), il testo nel campo da rileggere.
 Vedi club-portal.md, «Il microfono». Test: `tests/test_javbot_voice.py`.
+Poi il microfono è stato **nascosto** (lento e impreciso su 2 CPU) e `stt`
+fermato. Telefono: niente più pagine più larghe dello schermo nella
+dashboard. La causa comune erano le griglie a una colonna, che si allargavano
+al testo troncato o alle tabelle: in `globals.css` `.grid > * { min-width: 0 }`
+e `overflow-x: clip` su html e body. Misurato con un browser headless a 390 e
+360 px su una copia del backup (admin con Lagos, una famiglia): tutte le
+sezioni stanno nello schermo. Sistemati anche le caselle dei totali della
+console, l'indirizzo del wallet e le cinture del login.

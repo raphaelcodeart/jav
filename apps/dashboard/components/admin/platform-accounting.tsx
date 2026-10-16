@@ -58,7 +58,7 @@ export function PlatformMoney({ canEdit, onEnter }: { canEdit: boolean; onEnter:
             </p>
             <p className="text-white/70 text-sm mt-2 max-w-xl">{t("hq.counterExplain")}</p>
           </div>
-          <dl className="grid grid-cols-3 gap-3">
+          <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             {([
               [t("hq.counterMonth"), e.month_cents, t("hq.counterMonthHint", { amount: fmt.euro(e.month_forecast_cents) })],
               [t("hq.counterYear", { year: data.year }), e.year_cents, t("hq.counterYearHint")],

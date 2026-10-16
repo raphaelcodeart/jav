@@ -106,11 +106,28 @@
   --foreground: #161515;
 }
 
+/* Sul telefono niente scorre di lato: Safari su iPhone ignora
+   `overflow-x: hidden` sul solo body e allargava la pagina. `clip` e non
+   `hidden`: non fa del body un contenitore che scorre, così le testate
+   sticky restano sticky. `hidden` resta per i browser senza `clip`. */
+html {
+  overflow-x: clip;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
   overflow-x: hidden;
+  overflow-x: clip;
+}
+
+/* Un elemento di una griglia può restringersi sotto la larghezza del suo
+   contenuto. Senza, sul telefono (una colonna sola) un nome troncato con
+   «…» o una tabella allargavano la colonna, e con lei tutta la pagina:
+   la striscia bianca a destra. */
+.grid > * {
+  min-width: 0;
 }
 
 /* The "dojo" backdrop: two soft brand blobs and a faint tatami grid, fixed

@@ -75,7 +75,7 @@ export function AuthLayout({ children, title, subtitle }: { children: ReactNode;
             </motion.p>
           ))}
         </div>
-        <div className="mt-4 flex gap-2">
+        <div className="mt-4 flex flex-wrap justify-center gap-2">
           {["WHITE", "YELLOW", "ORANGE", "GREEN", "BLUE", "BROWN", "BLACK_1"].map((b, i) => (
             <motion.span key={b} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 + i * 0.06 }}>
               <BeltBadge code={b} size="sm" showLabel={false} />
