@@ -16,7 +16,11 @@ export async function SiteShell({ children }: { children: ReactNode }) {
   const [session, { t }] = await Promise.all([getSession(), siteI18n()]);
   const year = new Date().getFullYear();
   return (
-    <div className="flex min-h-screen flex-col">
+    // overflow-x-clip: niente (aloni, caroselli, nastri) allarga la pagina oltre
+    // lo schermo del telefono, dove spingerebbe fuori JAVBOT e lascerebbe una
+    // striscia bianca a destra. `clip` e non `hidden`: l'intestazione sticky
+    // resta sticky.
+    <div className="flex min-h-screen flex-col overflow-x-clip">
       <SiteHeader loggedIn={session !== null} />
       <main id="conteudo" className="flex-1">{children}</main>
       <footer className="mt-24 bg-ink-950 text-ink-300">
