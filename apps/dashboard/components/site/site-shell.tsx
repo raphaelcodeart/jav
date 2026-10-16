@@ -6,6 +6,8 @@ import { SiteHeader } from "@/components/site/site-header";
 import { PublicJavbot } from "@/components/javbot/public-bot";
 import { JAV_CONTACTS } from "@/lib/jav-contacts";
 import { getSession } from "@/lib/session";
+import { CookieSettingsButton } from "@/components/legal/cookie-settings-button";
+import { LEGAL } from "@/lib/legal";
 
 /** La cornice di ogni pagina del sito pubblico: barra, contenuto, piè di
  *  pagina. La sessione si legge solo per decidere tra "Entrar" e "A minha
@@ -52,8 +54,14 @@ export async function SiteShell({ children }: { children: ReactNode }) {
         </div>
         <div className="border-t border-white/10">
           <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-6 text-xs text-ink-400 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-            <p>© {year} Judo Arte e Vida</p>
-            <p>{t("site.footer.privacy")}</p>
+            <p>© {year} Judo Arte e Vida · {LEGAL.controller.name}</p>
+            <nav aria-label={t("legal.nav")} className="flex flex-wrap gap-x-4 gap-y-1">
+              <Link className="hover:text-white" href="/privacidade">{t("legal.privacy")}</Link>
+              <Link className="hover:text-white" href="/cookies">{t("legal.cookies")}</Link>
+              <Link className="hover:text-white" href="/termos">{t("legal.terms")}</Link>
+              <a className="hover:text-white" href={LEGAL.disputes.url} target="_blank" rel="noopener noreferrer">{t("legal.complaints")}</a>
+              <CookieSettingsButton variant="link" />
+            </nav>
           </div>
         </div>
       </footer>

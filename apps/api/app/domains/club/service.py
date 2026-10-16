@@ -279,6 +279,10 @@ async def create_athlete(
         give_starting_belt(db, athlete=athlete, on=today, belt=belt)
     if course is not None:
         db.add(ClubCourseAthlete(course_id=course.id, athlete_id=athlete.id))
+    # La scheda pubblica d'ufficio (senza foto): la famiglia può opporsi.
+    from app.domains.club.site import ensure_default_profile
+
+    await ensure_default_profile(db, athlete=athlete)
     await db.flush()
     if plan is not None:
         pricing = await club_pricing(db, club_id=scope.club_id)

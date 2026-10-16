@@ -1446,3 +1446,46 @@ segreteria la sezione **👥 Personale** (che comprende il cartellino).
   esperienza e spazio, e un messaggio) arriva a JudoArteVida come messaggio di
   contatto con argomento `NEW_CLUB` (`contact_messages.topic`): console →
   Messaggi, con il filtro «Creare un club». Lo staff la valuta e risponde.
+
+## Chi compare sul sito (dalla migrazione 0029)
+
+- Ogni atleta dei club pubblici **parte con la scheda sportiva pubblica**,
+  senza foto (`club_athlete_public_profiles.basis = LEGITIMATE_INTEREST`,
+  creata con l'atleta da `site.ensure_default_profile`): «Nome I.», club,
+  cintura, fascia, medaglie, risultati, punti. Il club può comunque metterla
+  in pausa (`published = false`: resta in classifica come «Nome I.», senza
+  pagina).
+- La famiglia può **opporsi** dalla scheda dell'atleta («Mi oppongo»,
+  `opted_out_at`): la scheda sparisce dal sito e l'atleta anche da
+  classifiche, eventi e medaglie; il club non la può ripubblicare. Con «Rendi
+  di nuovo pubblica» torna (`basis = CONSENT`).
+- La **foto** e i video restano un consenso esplicito (`show_photo`).
+- Base giuridica e analisi: docs/legal.md.
+
+## Privacy, cookie e termini
+
+`/privacidade`, `/cookies`, `/termos`, link nel footer, banner dei cookie al
+primo accesso e contenuti di terzi (YouTube, Vimeo) solo dopo il consenso:
+tutto in docs/legal.md. Job notturno di conservazione
+(`domains/legal/retention.py`, 04:20): messaggi dal sito oltre 24 mesi,
+sessioni scadute.
+
+## Eventi nell'area riservata e ordine
+
+- Il calendario degli eventi del sito (`components/site/events-explorer.tsx`)
+  c'è anche nell'area: per le famiglie è la prima scheda di «Gare»
+  (🗓️ Eventi), per gli atleti la prima di «Gare e stage» (accanto a
+  «Voglio partecipare»). Stessa grafica, dati pubblici
+  (`components/club/area-events.tsx`).
+- La lista mette **in cima i prossimi eventi** (dal più vicino), poi quelli
+  già fatti (dal più recente); nell'anno in corso arriva fino a dicembre
+  dell'anno dopo. A pagine da 12.
+- Gli elenchi lunghi sono **a pagine numerate** (`components/ui/pagination.tsx`,
+  `usePaged`); lo Shop (area e `/loja`) chiede al server una pagina alla volta.
+
+## I prodotti dei partner
+
+Lo Shop di JudoArteVida si presenta come **«I prodotti dei nostri partner e
+amici»**, sul sito (`/loja`) e nell'area (riquadro sopra la vetrina). La
+vetrina pubblica si vede anche a negozio spento; l'interruttore chiude solo lo
+shop dell'area.

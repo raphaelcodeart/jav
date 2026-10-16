@@ -2,6 +2,8 @@
 
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
+import { useThirdPartyAllowed } from "@/lib/cookie-consent";
+import { ThirdPartyGate } from "@/components/legal/cookie-banner";
 
 export interface ChannelVideo {
   id: string;
@@ -26,6 +28,7 @@ export function VideoCarousel3D({ videos, labels, locale }: {
   labels: { play: string; prev: string; next: string; close: string; watchOnYoutube: string; region: string };
   locale: string;
 }) {
+  const thirdParty = useThirdPartyAllowed();
   const reduce = useReducedMotion();
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -116,7 +119,7 @@ export function VideoCarousel3D({ videos, labels, locale }: {
                   }}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={v.thumbnail} alt="" loading="lazy" className="aspect-video w-full object-cover" draggable={false} />
+                  {thirdParty ? <img src={v.thumbnail} alt="" loading="lazy" className="aspect-video w-full object-cover" draggable={false} /> : <span className="block aspect-video w-full bg-gradient-to-br from-ink-700 to-ink-950" />}
                   <span className={`absolute left-1/2 top-[38%] flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-brand-500 text-2xl text-white shadow-brand transition ${isFront ? "scale-100 opacity-100" : "scale-75 opacity-0"} group-hover:scale-110`}>
                     ▶
                   </span>
@@ -172,13 +175,13 @@ export function VideoCarousel3D({ videos, labels, locale }: {
             <motion.div initial={{ scale: 0.92, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95 }}
               className="w-full max-w-5xl" onClick={(e) => e.stopPropagation()}>
               <div className="relative aspect-video overflow-hidden rounded-3xl bg-black shadow-2xl ring-1 ring-white/10">
-                <iframe
+                {!thirdParty ? <ThirdPartyGate provider="YouTube" className="absolute inset-0" /> : <iframe
                   src={`https://www.youtube-nocookie.com/embed/${playing.id}?autoplay=1&rel=0&modestbranding=1`}
                   title={playing.title}
                   allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
                   allowFullScreen
                   className="absolute inset-0 h-full w-full"
-                />
+                />}
               </div>
               <div className="mt-4 flex items-center justify-between gap-4 text-white">
                 <p className="font-semibold">{playing.title}</p>

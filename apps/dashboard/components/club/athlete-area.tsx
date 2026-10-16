@@ -17,6 +17,8 @@ import { InviteCard } from "@/components/club/invite-card";
 import { GamesHub } from "@/components/game/games-hub";
 import { AppShell, type NavItem } from "@/components/app-shell";
 import { AreaCompetitions, AthleteMoneyCard } from "@/components/club/athlete-area-extras";
+import { AreaEvents } from "@/components/club/area-events";
+import { Tabs } from "@/components/ui/tabs";
 import { AthleteHealthCard } from "@/components/club/athlete-health-card";
 import { AthletePayModal } from "@/components/club/athlete-pay-modal";
 import { SeasonMonthsPanel } from "@/components/club/season-months";
@@ -254,7 +256,7 @@ function Area({ id, section, onGo }: { id: string; section: AreaSection; onGo: (
         </>
       )}
 
-      {section === "competitions" && <AreaCompetitions athlete={a} />}
+      {section === "competitions" && <AreaCompetitionsSection athlete={a} />}
 
       {section === "board" && (
         <section className="rounded-3xl bg-ink-50/60 p-5 ring-1 ring-ink-900/5 sm:p-6">
@@ -403,5 +405,21 @@ function BecomeHolder({ id }: { id: string }) {
         }}>{t("athleteArea.holderButton")}</Button>
       </div>
     </section>
+  );
+}
+
+/** Gare e stage: il calendario degli eventi (come sul sito) e le prove a cui
+ *  dire «Voglio partecipare». */
+function AreaCompetitionsSection({ athlete }: { athlete: AthleteDetail }) {
+  const { t } = useI18n();
+  const [tab, setTab] = useState("events");
+  return (
+    <div className="space-y-5">
+      <Tabs value={tab} onChange={setTab} items={[
+        { key: "events", label: `🗓️ ${t("comp.eventsTab")}` },
+        { key: "wish", label: `🙋 ${t("area.wishTab")}` },
+      ]} />
+      {tab === "events" ? <AreaEvents /> : <AreaCompetitions athlete={athlete} />}
+    </div>
   );
 }

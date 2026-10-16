@@ -4,6 +4,8 @@ import { useState, useSyncExternalStore } from "react";
 import { Modal } from "@/components/ui/modal";
 import { useI18n } from "@/lib/i18n/provider";
 import type { NewsPost } from "@/lib/public-site";
+import { useThirdPartyAllowed } from "@/lib/cookie-consent";
+import { ThirdPartyGate } from "@/components/legal/cookie-banner";
 
 export interface PlayableVideo {
   youtube_id: string;
@@ -18,6 +20,7 @@ export interface PlayableVideo {
  *  un indirizzo da mettere in un iframe. */
 export function ClubVideos({ videos }: { videos: PlayableVideo[] }) {
   const { t, fmt } = useI18n();
+  const thirdParty = useThirdPartyAllowed();
   const [open, setOpen] = useState<PlayableVideo | null>(null);
   if (videos.length === 0) return null;
   return (
@@ -31,10 +34,12 @@ export function ClubVideos({ videos }: { videos: PlayableVideo[] }) {
               className="group relative block h-full w-full overflow-hidden rounded-3xl bg-ink-950 text-left shadow-soft ring-1 ring-ink-900/10 transition-transform hover:-translate-y-1 motion-reduce:transition-none motion-reduce:hover:translate-y-0 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-club/40 cursor-pointer"
               aria-label={`${t("site.judoka.playVideo")}: ${v.title}`}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element -- copertina servita da YouTube */}
-              <img src={`https://i.ytimg.com/vi/${v.youtube_id}/${i === 0 ? "maxresdefault" : "hqdefault"}.jpg`} alt="" loading="lazy"
-                onError={(e) => { const img = e.currentTarget; if (!img.src.endsWith("/hqdefault.jpg")) img.src = `https://i.ytimg.com/vi/${v.youtube_id}/hqdefault.jpg`; }}
-                className="aspect-video h-full w-full object-cover opacity-85 transition duration-500 group-hover:scale-[1.03] group-hover:opacity-100 motion-reduce:transition-none" />
+              {thirdParty ? (
+                // eslint-disable-next-line @next/next/no-img-element -- copertina servita da YouTube
+                <img src={`https://i.ytimg.com/vi/${v.youtube_id}/${i === 0 ? "maxresdefault" : "hqdefault"}.jpg`} alt="" loading="lazy"
+                  onError={(e) => { const img = e.currentTarget; if (!img.src.endsWith("/hqdefault.jpg")) img.src = `https://i.ytimg.com/vi/${v.youtube_id}/hqdefault.jpg`; }}
+                  className="aspect-video h-full w-full object-cover opacity-85 transition duration-500 group-hover:scale-[1.03] group-hover:opacity-100 motion-reduce:transition-none" />
+              ) : <span className="block aspect-video h-full w-full bg-gradient-to-br from-ink-700 to-ink-950" />}
               <span className="absolute inset-0 bg-gradient-to-t from-ink-950/90 via-ink-950/10 to-transparent" aria-hidden="true" />
               <span className={`absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-club text-club-on shadow-lift transition-transform group-hover:scale-110 motion-reduce:transition-none ${i === 0 ? "h-20 w-20 text-3xl" : "h-14 w-14 text-xl"}`} aria-hidden="true">
                 ▶
@@ -48,7 +53,8 @@ export function ClubVideos({ videos }: { videos: PlayableVideo[] }) {
         ))}
       </ul>
       <Modal open={open !== null} onClose={() => setOpen(null)} title={open?.title ?? ""} size="xl">
-        {open && (
+        {open && !thirdParty && <ThirdPartyGate provider="YouTube" className="aspect-video rounded-xl" />}
+        {open && thirdParty && (
           <div className="relative aspect-video overflow-hidden rounded-xl bg-black">
             <iframe
               src={`https://www.youtube-nocookie.com/embed/${open.youtube_id}?autoplay=1&rel=0&modestbranding=1`}

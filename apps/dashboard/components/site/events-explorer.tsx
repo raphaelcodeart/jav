@@ -4,6 +4,7 @@ import Link from "next/link";
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Pagination, usePaged } from "@/components/ui/pagination";
 import { cn } from "@/lib/cn";
 import { useI18n } from "@/lib/i18n/provider";
 import type { PublicEvent } from "@/lib/public-site";
@@ -53,16 +54,20 @@ function monthGrid(year: number, month: number): Date[] {
   return Array.from({ length: 42 }, (_, i) => new Date(year, month, 1 - offset + i));
 }
 
-async function fetchYear(year: number, club: string): Promise<PublicEvent[]> {
-  const q = new URLSearchParams({ from: `${year}-01-01`, to: `${year}-12-31`, limit: "500" });
+async function fetchYear(year: number, club: string, toYear = year): Promise<PublicEvent[]> {
+  const q = new URLSearchParams({ from: `${year}-01-01`, to: `${toYear}-12-31`, limit: "500" });
   if (club) q.set("club", club);
   const res = await fetch(`${API}?${q}`);
   if (!res.ok) throw new Error(String(res.status));
   return res.json();
 }
 
-export function EventsExplorer({ initial, initialEvents, clubs, todayIso }: {
-  initial: ExplorerState; initialEvents: PublicEvent[]; clubs: { slug: string; name: string }[]; todayIso: string;
+/** `embedded`: dentro l'area riservata (atleti e famiglie): stesso calendario,
+ *  ma l'URL della pagina non si tocca e la barra non si attacca sotto
+ *  l'header del sito. */
+export function EventsExplorer({ initial, initialEvents, clubs, todayIso, embedded = false }: {
+  initial: ExplorerState; initialEvents?: PublicEvent[]; clubs: { slug: string; name: string }[]; todayIso: string;
+  embedded?: boolean;
 }) {
   const { t, fmt } = useI18n();
   const [s, setS] = useState<ExplorerState>(initial);
@@ -73,12 +78,22 @@ export function EventsExplorer({ initial, initialEvents, clubs, todayIso }: {
   const { data = [], isFetching, isError } = useQuery({
     queryKey: ["site-events", s.year, s.club],
     queryFn: () => fetchYear(s.year, s.club),
-    initialData: s.year === initial.year && s.club === initial.club ? initialEvents : undefined,
+    initialData: initialEvents && s.year === initial.year && s.club === initial.club ? initialEvents : undefined,
+    staleTime: 60_000,
+  });
+  // La lista dell'anno in corso arriva fino a dicembre dell'anno dopo: in
+  // cima ci sono sempre i prossimi eventi, anche a cavallo d'anno.
+  const extended = s.view === "list" && s.year === today.getFullYear();
+  const { data: listData } = useQuery({
+    queryKey: ["site-events-list", s.year, s.club],
+    queryFn: () => fetchYear(s.year, s.club, s.year + 1),
+    enabled: extended,
     staleTime: 60_000,
   });
 
   // La ricerca nell'URL: si condivide e sopravvive a un "indietro".
   useEffect(() => {
+    if (embedded) return;
     const q = new URLSearchParams();
     if (s.view !== "list") q.set("view", s.view);
     if (s.year !== today.getFullYear()) q.set("year", String(s.year));
@@ -87,18 +102,19 @@ export function EventsExplorer({ initial, initialEvents, clubs, todayIso }: {
     if (s.open) q.set("open", "1");
     const qs = q.toString();
     window.history.replaceState(null, "", qs ? `/eventos?${qs}` : "/eventos");
-  }, [s, today]);
+  }, [s, today, embedded]);
 
+  const source = extended && listData ? listData : data;
   const events = useMemo(() => {
     const needle = norm(s.q.trim());
-    return data.filter((e) =>
+    return source.filter((e) =>
       (!needle || norm(`${e.name} ${e.location ?? ""} ${e.organizer ?? ""}`).includes(needle))
       && (!s.kind || e.kind === s.kind)
       && (!s.level || (e.kind === "COMPETITION" && e.level === s.level))
       && (!s.age || (e.age_groups ?? []).length === 0 || (e.age_groups ?? []).includes(s.age))
       && (!s.open || (e.status === "OPEN" && e.registration_deadline >= todayIso)),
     );
-  }, [data, s.q, s.kind, s.level, s.age, s.open, todayIso]);
+  }, [source, s.q, s.kind, s.level, s.age, s.open, todayIso]);
 
   const filtersOn = Boolean(s.q || s.kind || s.level || s.club || s.age || s.open);
   const monthLabel = (y: number, m: number) => fmt.date(new Date(y, m, 1), { month: "long", year: "numeric" });
@@ -117,7 +133,7 @@ export function EventsExplorer({ initial, initialEvents, clubs, todayIso }: {
     <MotionConfig reducedMotion="user">
       <div className="space-y-6">
         {/* --- La barra degli strumenti --- */}
-        <div className="sticky top-20 z-20 space-y-3 sm:top-24">
+        <div className={cn("z-20 space-y-3", embedded ? "relative" : "sticky top-20 sm:top-24")}>
           <div className="flex flex-wrap items-center gap-3 rounded-3xl bg-gradient-to-r from-brand-600 via-brand-500 to-accent-500 p-2.5 text-white shadow-lift">
             <div className="flex rounded-2xl bg-white/15 p-1 ring-1 ring-white/25" role="tablist" aria-label={t("site.ev.views")}>
               {([["list", "☰", "site.ev.viewList"], ["calendar", "▦", "site.ev.viewCalendar"], ["year", "◫", "site.ev.viewYear"]] as const).map(([v, icon, key]) => (
@@ -194,7 +210,7 @@ export function EventsExplorer({ initial, initialEvents, clubs, todayIso }: {
 
         <AnimatePresence mode="wait">
           <motion.div key={`${s.view}-${s.year}-${s.view === "calendar" ? s.month : ""}`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.25 }}>
-            {s.view === "list" && <ListView events={events} year={s.year} today={today} todayIso={todayIso} />}
+            {s.view === "list" && <ListView events={events} todayIso={todayIso} />}
             {s.view === "calendar" && (
               <CalendarView events={events} year={s.year} month={s.month} todayIso={todayIso}
                 selected={selectedDay} onSelect={setSelectedDay} />
@@ -289,46 +305,55 @@ function EventRow({ e, todayIso, index }: { e: PublicEvent; todayIso: string; in
   );
 }
 
-function ListView({ events, year, today, todayIso }: { events: PublicEvent[]; year: number; today: Date; todayIso: string }) {
+/** La lista: in cima i **prossimi eventi** (dal più vicino), poi quelli già
+ *  fatti (dal più recente), a pagine da 12, con il mese come titolo. */
+function ListView({ events, todayIso }: { events: PublicEvent[]; todayIso: string }) {
   const { t, fmt } = useI18n();
-  const byMonth = useMemo(() => {
-    const out = new Map<number, PublicEvent[]>();
-    for (const e of [...events].sort((a, b) => a.starts_on.localeCompare(b.starts_on))) {
-      const d = day(e.starts_on);
-      const m = d.getFullYear() < year ? 0 : d.getMonth();
-      out.set(m, [...(out.get(m) ?? []), e]);
-    }
-    return [...out.entries()];
-  }, [events, year]);
-  const current = useRef<HTMLDivElement>(null);
-  const thisYear = today.getFullYear();
-  // Nell'anno in corso la lista parte dal mese di oggi (i mesi prima restano sopra).
-  useEffect(() => {
-    if (year === thisYear) current.current?.scrollIntoView({ block: "start", behavior: "smooth" });
-  }, [year, thisYear]);
-
+  const ordered = useMemo(() => {
+    const next = events.filter((e) => e.ends_on >= todayIso).sort((a, b) => a.starts_on.localeCompare(b.starts_on));
+    const past = events.filter((e) => e.ends_on < todayIso).sort((a, b) => b.starts_on.localeCompare(a.starts_on));
+    return [...next.map((e) => ({ e, past: false })), ...past.map((e) => ({ e, past: true }))];
+  }, [events, todayIso]);
+  const paged = usePaged(ordered, 12);
+  const top = useRef<HTMLDivElement>(null);
   if (events.length === 0) return <Empty text={t("site.ev.none")} />;
-  const target = byMonth.find(([m]) => m >= today.getMonth())?.[0];
+  const upcoming = ordered.filter((x) => !x.past).length;
+
+  // Dentro la pagina: un blocco per sezione (prossimi / già fatti) e mese.
+  const groups: { key: string; past: boolean; label: string; items: PublicEvent[] }[] = [];
+  for (const { e, past } of paged.items) {
+    const d = day(e.starts_on);
+    const key = `${past ? "p" : "n"}-${d.getFullYear()}-${d.getMonth()}`;
+    let g = groups[groups.length - 1];
+    if (!g || g.key !== key) {
+      g = { key, past, label: fmt.date(new Date(d.getFullYear(), d.getMonth(), 1), { month: "long", year: "numeric" }), items: [] };
+      groups.push(g);
+    }
+    g.items.push(e);
+  }
   return (
-    <div className="space-y-8">
-      <nav className="flex flex-wrap gap-1.5" aria-label={t("site.ev.months")}>
-        {byMonth.map(([m, list]) => (
-          <a key={m} href={`#mes-${m}`} className="rounded-full bg-white px-3 py-1 text-xs font-semibold capitalize text-ink-700 ring-1 ring-ink-200 hover:ring-brand-300">
-            {fmt.date(new Date(year, m, 1), { month: "short" })} <span className="text-ink-400">{list.length}</span>
-          </a>
-        ))}
-      </nav>
-      {byMonth.map(([m, list]) => (
-        <section key={m} id={`mes-${m}`} className="scroll-mt-48" ref={year === today.getFullYear() && m === target ? current : undefined}>
+    <div ref={top} className="scroll-mt-48 space-y-8">
+      <p className="flex flex-wrap gap-2 text-sm">
+        <span className="rounded-full bg-emerald-50 px-3 py-1 font-semibold text-emerald-800 ring-1 ring-emerald-200">⏭ {t("site.ev.upcomingCount", { n: upcoming })}</span>
+        <span className="rounded-full bg-ink-50 px-3 py-1 font-semibold text-ink-600 ring-1 ring-ink-200">✓ {t("site.ev.pastCount", { n: ordered.length - upcoming })}</span>
+      </p>
+      {groups.map((g, i) => (
+        <section key={g.key}>
+          {(i === 0 || groups[i - 1]!.past !== g.past) && (
+            <p className={cn("mb-3 text-xs font-bold uppercase tracking-[0.2em]", g.past ? "text-ink-400" : "text-emerald-700")}>
+              {g.past ? t("site.ev.pastTitle") : t("site.ev.upcomingTitle")}
+            </p>
+          )}
           <h2 className="mb-3 flex items-baseline gap-3 font-display text-2xl capitalize text-ink-900">
-            {fmt.date(new Date(year, m, 1), { month: "long" })}
-            <span className="text-sm font-semibold normal-case text-ink-400">{t("site.ev.count", { n: list.length })}</span>
+            {g.label}
+            <span className="text-sm font-semibold normal-case text-ink-400">{t("site.ev.count", { n: g.items.length })}</span>
           </h2>
           <div className="grid gap-3 lg:grid-cols-2">
-            {list.map((e, i) => <EventRow key={e.id} e={e} todayIso={todayIso} index={i} />)}
+            {g.items.map((e, j) => <EventRow key={e.id} e={e} todayIso={todayIso} index={j} />)}
           </div>
         </section>
       ))}
+      <Pagination page={paged.page} pages={paged.pages} onChange={(p) => { paged.setPage(p); top.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }} />
     </div>
   );
 }

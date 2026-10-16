@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
+import { Pagination, usePaged } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toast";
@@ -53,6 +54,7 @@ function Products() {
   const { fmt } = useI18n();
   const { data, isLoading } = useQuery({ queryKey: ["club", "admin", "shop", "products"], queryFn: () => clubGet<Product[]>(`${A}/products`) });
   const [editing, setEditing] = useState<Product | "new" | null>(null);
+  const paged = usePaged(data ?? [], 12);
   if (isLoading) return <Skeleton className="h-64" />;
   return (
     <div className="space-y-4">
@@ -66,7 +68,7 @@ function Products() {
         <EmptyState icon={<span className="text-3xl">🛍️</span>} title="Lo shop del club è vuoto" text="Aggiungi la t-shirt del club, il judogi con il logo, il materiale." action={<Button onClick={() => setEditing("new")}>Aggiungi il primo prodotto</Button>} />
       ) : (
         <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {(data ?? []).map((p) => (
+          {paged.items.map((p) => (
             <li key={p.id} className="glass-card overflow-hidden rounded-3xl">
               <div className="h-40 bg-ink-50">
                 {p.image_url
@@ -86,6 +88,7 @@ function Products() {
           ))}
         </ul>
       )}
+      <Pagination page={paged.page} pages={paged.pages} onChange={(p) => { paged.setPage(p); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
       {editing && <ProductModal product={editing === "new" ? null : editing} onClose={() => setEditing(null)} />}
     </div>
   );
@@ -194,6 +197,7 @@ function Orders() {
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: ["club", "admin", "shop", "orders"], queryFn: () => clubGet<Order[]>(`${A}/orders`) });
   const [busy, setBusy] = useState<string | null>(null);
+  const paged = usePaged(data ?? [], 20);
 
   async function act(o: Order, action: "confirm-payment" | "ship" | "delivered" | "cancel") {
     let body: unknown;
@@ -230,27 +234,30 @@ function Orders() {
   if (isLoading) return <Skeleton className="h-64" />;
   if ((data ?? []).length === 0) return <EmptyState icon={<span className="text-3xl">📦</span>} title="Ancora nessun ordine nello shop del club" />;
   return (
-    <ul className="space-y-3">
-      {(data ?? []).map((o) => (
-        <li key={o.id} className="glass-card flex flex-wrap items-center gap-4 rounded-2xl p-4">
-          <div className="min-w-0 flex-1">
-            <p className="font-semibold text-ink-900">{o.product_name}</p>
-            <p className="text-xs text-ink-500">
-              {o.order_code} · {fmt.shortDate(o.created_at)} · {o.customer_display_name}{o.athlete_name ? ` · per ${o.athlete_name}` : ""}
-            </p>
-          </div>
-          <span className="font-display text-lg text-ink-900">{fmt.euro(o.amount_due_cents ?? o.amount_cents)}</span>
-          <Badge tone={ORDER_TONE[o.status] ?? "neutral"} dot>{o.status === "AWAITING_PAYMENT" ? "Da pagare" : o.status === "PAID" ? "Pagato" : o.status === "CANCELLED" ? "Annullato" : o.status}</Badge>
-          {o.status === "PAID" && <Badge tone="neutral">{o.fulfillment_status === "DELIVERED" ? "Consegnato" : o.fulfillment_status === "SHIPPED" ? "Spedito" : "Da preparare"}</Badge>}
-          <div className="flex flex-wrap gap-2">
-            {o.payment_proof_uploaded_at && <Button size="sm" variant="ghost" onClick={() => proof(o)}>🧾 Prova</Button>}
-            {o.status === "AWAITING_PAYMENT" && <Button size="sm" loading={busy === o.id} onClick={() => act(o, "confirm-payment")}>✓ Pagamento ricevuto</Button>}
-            {o.status === "PAID" && o.fulfillment_status !== "SHIPPED" && o.fulfillment_status !== "DELIVERED" && <Button size="sm" variant="secondary" loading={busy === o.id} onClick={() => act(o, "ship")}>🚚 Spedito</Button>}
-            {o.status === "PAID" && o.fulfillment_status !== "DELIVERED" && <Button size="sm" variant="secondary" loading={busy === o.id} onClick={() => act(o, "delivered")}>📦 Consegnato</Button>}
-            {o.status === "AWAITING_PAYMENT" && <Button size="sm" variant="ghost" className="text-rose-600" loading={busy === o.id} onClick={() => act(o, "cancel")}>Annulla</Button>}
-          </div>
-        </li>
-      ))}
-    </ul>
+    <div className="space-y-4">
+      <ul className="space-y-3">
+        {paged.items.map((o) => (
+          <li key={o.id} className="glass-card flex flex-wrap items-center gap-4 rounded-2xl p-4">
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-ink-900">{o.product_name}</p>
+              <p className="text-xs text-ink-500">
+                {o.order_code} · {fmt.shortDate(o.created_at)} · {o.customer_display_name}{o.athlete_name ? ` · per ${o.athlete_name}` : ""}
+              </p>
+            </div>
+            <span className="font-display text-lg text-ink-900">{fmt.euro(o.amount_due_cents ?? o.amount_cents)}</span>
+            <Badge tone={ORDER_TONE[o.status] ?? "neutral"} dot>{o.status === "AWAITING_PAYMENT" ? "Da pagare" : o.status === "PAID" ? "Pagato" : o.status === "CANCELLED" ? "Annullato" : o.status}</Badge>
+            {o.status === "PAID" && <Badge tone="neutral">{o.fulfillment_status === "DELIVERED" ? "Consegnato" : o.fulfillment_status === "SHIPPED" ? "Spedito" : "Da preparare"}</Badge>}
+            <div className="flex flex-wrap gap-2">
+              {o.payment_proof_uploaded_at && <Button size="sm" variant="ghost" onClick={() => proof(o)}>🧾 Prova</Button>}
+              {o.status === "AWAITING_PAYMENT" && <Button size="sm" loading={busy === o.id} onClick={() => act(o, "confirm-payment")}>✓ Pagamento ricevuto</Button>}
+              {o.status === "PAID" && o.fulfillment_status !== "SHIPPED" && o.fulfillment_status !== "DELIVERED" && <Button size="sm" variant="secondary" loading={busy === o.id} onClick={() => act(o, "ship")}>🚚 Spedito</Button>}
+              {o.status === "PAID" && o.fulfillment_status !== "DELIVERED" && <Button size="sm" variant="secondary" loading={busy === o.id} onClick={() => act(o, "delivered")}>📦 Consegnato</Button>}
+              {o.status === "AWAITING_PAYMENT" && <Button size="sm" variant="ghost" className="text-rose-600" loading={busy === o.id} onClick={() => act(o, "cancel")}>Annulla</Button>}
+            </div>
+          </li>
+        ))}
+      </ul>
+      <Pagination page={paged.page} pages={paged.pages} onChange={(p) => { paged.setPage(p); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
+    </div>
   );
 }

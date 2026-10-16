@@ -106,6 +106,11 @@ celery_app.conf.update(
             "task": "app.celery_app.club_recurring_expenses_task",
             "schedule": crontab(hour=3, minute=10),
         },
+        # La conservazione promessa dalla privacy (domains/legal/retention.py).
+        "data-retention": {
+            "task": "app.celery_app.data_retention_task",
+            "schedule": crontab(hour=4, minute=20),
+        },
     },
 )
 
@@ -228,3 +233,17 @@ def club_close_competitions_task() -> int:
 @celery_app.task(name="app.celery_app.club_recurring_expenses_task")
 def club_recurring_expenses_task() -> int:
     return _club_run("run_recurring_expenses")
+
+
+@celery_app.task(name="app.celery_app.data_retention_task")
+def data_retention_task() -> dict:
+    import asyncio
+
+    from app.core.db import AsyncSessionLocal
+    from app.domains.legal import retention
+
+    async def _run() -> dict:
+        async with AsyncSessionLocal() as db:
+            return await retention.run(db)
+
+    return asyncio.run(_run())

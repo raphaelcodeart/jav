@@ -58,6 +58,15 @@ def test_colours_are_normalised_and_text_is_always_readable():
     assert "ACCENT_LIKE_PRIMARY" in brand.theme("#C92429", None, "#C92429")["warnings"]
 
 
+
+async def _unpublish(db, athlete) -> None:
+    from sqlalchemy import select as _select
+
+    from app.domains.club.site_models import ClubAthletePublicProfile
+    profile = (await db.execute(_select(ClubAthletePublicProfile).where(ClubAthletePublicProfile.athlete_id == athlete.id))).scalar_one()
+    profile.published = False
+    await db.commit()
+
 async def test_the_editor_accepts_only_colours_and_real_social_links(db, scope):
     admin = await _user(db, scope, "admin")
     site = await site_service.update_site(db, scope=scope, actor_user_id=admin.id, changes={
@@ -105,6 +114,9 @@ async def test_the_fan_page_carries_brand_groups_and_ranking_but_nothing_persona
     shown = await _athlete(db, scope, parent, birth_date=date(2015, 3, 3), first_name="Tiago", last_name="Matias",
                            fiscal_code="MTSTGO15C03Z128X")
     hidden = await _athlete(db, scope, parent, birth_date=date(2016, 6, 6), first_name="Rita", last_name="Segreta")
+    # Rita parte pubblica come tutti; il club non pubblica la sua scheda: resta
+    # in classifica e tra gli iscritti come «Nome I.», senza pagina.
+    await _unpublish(db, hidden)
     await _consent_and_publish(db, scope, shown, parent, admin)
     comp = await _competition(db, scope, admin, starts_on=date(2026, 10, 4))
     await _result(db, comp, shown, admin, 1)

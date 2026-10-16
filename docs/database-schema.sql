@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict 0a0qXTYucsXCmZ9Yn5socFFxbrTK6v6hdcvq5ttcWofznu52iivvrfMqPhlHjp6
+\restrict nkLjJIBhOIv8esJZBOLvL6HqFO3tEP1WbtV3UkWwyMbCgF4bxaRxDkMDejIbTGL
 
 -- Dumped from database version 16.15
 -- Dumped by pg_dump version 16.15
@@ -338,6 +338,8 @@ CREATE TABLE public.club_athlete_public_profiles (
     ijf_profile_url character varying(300),
     favorite_technique character varying(80),
     dominant_side character varying(5),
+    basis character varying(20) DEFAULT 'CONSENT'::character varying NOT NULL,
+    opted_out_at timestamp with time zone,
     CONSTRAINT ck_club_athlete_public_profiles_dominant_side CHECK (((dominant_side IS NULL) OR ((dominant_side)::text = ANY ((ARRAY['LEFT'::character varying, 'RIGHT'::character varying])::text[]))))
 );
 
@@ -9431,5 +9433,5 @@ ALTER TABLE ONLY public.wallets
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 0a0qXTYucsXCmZ9Yn5socFFxbrTK6v6hdcvq5ttcWofznu52iivvrfMqPhlHjp6
+\unrestrict nkLjJIBhOIv8esJZBOLvL6HqFO3tEP1WbtV3UkWwyMbCgF4bxaRxDkMDejIbTGL
 

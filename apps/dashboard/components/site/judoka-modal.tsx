@@ -7,6 +7,8 @@ import { BeltBadge } from "@/components/ui/belt";
 import { cn } from "@/lib/cn";
 import { useI18n } from "@/lib/i18n/provider";
 import type { JudokaProfile, RankingCard } from "@/lib/public-site";
+import { useThirdPartyAllowed } from "@/lib/cookie-consent";
+import { ThirdPartyGate } from "@/components/legal/cookie-banner";
 
 // La scheda di un judoca in popup, dalla classifica pubblica, in stile IJF:
 // foto grande, a destra i dati sportivi (club, fascia, categoria, cintura,
@@ -98,6 +100,7 @@ function Loading() {
 
 function CardBody({ data }: { data: Data }) {
   const { t, fmt } = useI18n();
+  const thirdParty = useThirdPartyAllowed();
   const p = data.profile;
   const full = data.reduced ? null : data.profile;
   const band = t.dyn(`club.ageBand.${p.age_band}`, p.age_band);
@@ -240,8 +243,8 @@ function CardBody({ data }: { data: Data }) {
             <div className="grid gap-3 sm:grid-cols-2">
               {full.videos.map((v, i) => (
                 <div key={v.id} className="aspect-video overflow-hidden rounded-2xl bg-ink-950">
-                  <iframe src={`https://www.youtube-nocookie.com/embed/${v.youtube_id}`} title={t("site.judoka.videoOf", { n: i + 1, name: p.display_name })}
-                    className="h-full w-full" loading="lazy" allow="encrypted-media; picture-in-picture; fullscreen" allowFullScreen />
+                  {!thirdParty ? <ThirdPartyGate provider="YouTube" className="h-full w-full" /> : <iframe src={`https://www.youtube-nocookie.com/embed/${v.youtube_id}`} title={t("site.judoka.videoOf", { n: i + 1, name: p.display_name })}
+                    className="h-full w-full" loading="lazy" allow="encrypted-media; picture-in-picture; fullscreen" allowFullScreen />}
                 </div>
               ))}
             </div>

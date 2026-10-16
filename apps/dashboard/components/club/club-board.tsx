@@ -8,11 +8,14 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Field, Input, Textarea } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
+import { Pagination, usePaged } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { friendlyApiError } from "@/lib/api-error";
 import { clubGet, clubSend } from "@/lib/club";
 import { useI18n } from "@/lib/i18n/provider";
+import { useThirdPartyAllowed } from "@/lib/cookie-consent";
+import { ThirdPartyGate } from "@/components/legal/cookie-banner";
 
 // La bacheca del club (apps/api/app/domains/club/news.py): le notizie che la
 // segreteria pubblica, come un post (titolo, testo, foto, video o link), e i
@@ -95,6 +98,7 @@ function hostOf(url: string): string {
 
 export function NewsCard({ post, fresh = false, actions, likeable = false }: { post: NewsPost; fresh?: boolean; actions?: React.ReactNode; likeable?: boolean }) {
   const { t, fmt } = useI18n();
+  const thirdParty = useThirdPartyAllowed();
   const embed = videoEmbedUrl(post.video_url);
   const queryClient = useQueryClient();
   const [like, setLike] = useState({ n: post.likes ?? 0, on: !!post.liked });
@@ -142,9 +146,11 @@ export function NewsCard({ post, fresh = false, actions, likeable = false }: { p
       )}
       {embed ? (
         <div className="mt-4 aspect-video w-full bg-ink-950">
-          <iframe src={embed} title={post.title} className="h-full w-full" loading="lazy"
-            allow="accelerometer; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowFullScreen
-            referrerPolicy="strict-origin-when-cross-origin" />
+          {!thirdParty ? <ThirdPartyGate provider={embed.includes("vimeo") ? "Vimeo" : "YouTube"} className="h-full w-full" /> : (
+            <iframe src={embed} title={post.title} className="h-full w-full" loading="lazy"
+              allow="accelerometer; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowFullScreen
+              referrerPolicy="strict-origin-when-cross-origin" />
+          )}
         </div>
       ) : post.video_url && (
         <a href={post.video_url} target="_blank" rel="noopener noreferrer" className="mx-5 mt-4 flex items-center gap-3 rounded-2xl bg-ink-950 px-4 py-3 text-sm font-semibold text-white hover:bg-ink-800">
@@ -195,13 +201,15 @@ export function ClubBoard({ compact = false }: { compact?: boolean }) {
       try { window.localStorage.setItem(SEEN_KEY, newest); } catch { /* il browser non salva: niente «Nuovo» */ }
     }
   }, [data]);
+  // Il flusso: i post del club, del circuito e di JudoArteVida, e le prove in arrivo come post.
+  const items: FeedItem[] = data?.feed ?? (data?.news ?? []).map((p) => ({ type: "POST", date: p.published_at, post: p, event: null }));
+  // La bacheca intera va a pagine; la versione compatta resta con «Mostra tutte».
+  const paged = usePaged(items, 12);
 
   if (isLoading) return <Skeleton className="h-64" />;
   if (error || !data) return <EmptyState icon={<span className="text-3xl">📰</span>} title={t("board.loadError")} text={(error as Error)?.message} />;
 
-  // Il flusso: i post del club, del circuito e di JudoArteVida, e le prove in arrivo come post.
-  const items: FeedItem[] = data.feed ?? data.news.map((p) => ({ type: "POST", date: p.published_at, post: p, event: null }));
-  const shown = compact && !all ? items.slice(0, 4) : items;
+  const shown = compact ? (all ? items : items.slice(0, 4)) : paged.items;
 
   const news = (
     <div className="space-y-4">
@@ -213,6 +221,7 @@ export function ClubBoard({ compact = false }: { compact?: boolean }) {
       {compact && items.length > shown.length && (
         <Button variant="secondary" onClick={() => setAll(true)}>{t("board.showAll", { n: items.length })}</Button>
       )}
+      {!compact && <Pagination page={paged.page} pages={paged.pages} onChange={(p) => { paged.setPage(p); window.scrollTo({ top: 0, behavior: "smooth" }); }} />}
     </div>
   );
   const docs = <BoardDocuments docs={data.documents} />;
@@ -340,6 +349,7 @@ export function NewsAdminPanel({ mode = "club" }: { mode?: "club" | "platform" }
   const api = newsApi(mode);
   const { data, isLoading } = useQuery({ queryKey: ["club", "admin", "news", mode], queryFn: () => api<NewsPost[]>("") });
   const [editing, setEditing] = useState<NewsPost | "new" | null>(null);
+  const paged = usePaged(data ?? [], 12);
 
   async function patch(post: NewsPost, changes: Partial<NewsPost>, ok: string) {
     try {
@@ -372,7 +382,7 @@ export function NewsAdminPanel({ mode = "club" }: { mode?: "club" | "platform" }
           action={<Button onClick={() => setEditing("new")}>{t("board.firstPost")}</Button>} />
       ) : (
         <div className="mx-auto max-w-2xl space-y-4">
-          {(data ?? []).map((p) => (
+          {paged.items.map((p) => (
             <NewsCard key={p.id} post={p} actions={<>
               <Button size="sm" variant="secondary" onClick={() => setEditing(p)}>✎ {t("board.edit")}</Button>
               <Button size="sm" variant="ghost" onClick={() => patch(p, { pinned: !p.pinned }, p.pinned ? t("board.unpinned") : t("board.pinnedDone"))}>
@@ -384,6 +394,7 @@ export function NewsAdminPanel({ mode = "club" }: { mode?: "club" | "platform" }
               <Button size="sm" variant="ghost" className="ml-auto text-rose-600" onClick={() => remove(p)}>{t("board.delete")}</Button>
             </>} />
           ))}
+          <Pagination page={paged.page} pages={paged.pages} onChange={(p) => { paged.setPage(p); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
         </div>
       )}
       {editing && <NewsModal mode={mode} post={editing === "new" ? null : editing} onClose={() => setEditing(null)} />}

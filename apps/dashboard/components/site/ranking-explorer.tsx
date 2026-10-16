@@ -2,8 +2,9 @@
 
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { BeltBadge } from "@/components/ui/belt";
+import { Pagination, usePaged } from "@/components/ui/pagination";
 import { JudokaModal } from "@/components/site/judoka-modal";
 import { cn } from "@/lib/cn";
 import { useI18n } from "@/lib/i18n/provider";
@@ -78,6 +79,9 @@ export function AthleteRanking({ rows, showClub = true }: { rows: RankingRow[]; 
     const needle = fold(q.trim());
     return needle ? rows.filter((r) => fold(`${r.display_name} ${r.club.name}`).includes(needle)) : rows;
   }, [rows, q]);
+  // A pagine da 25: si torna in cima all'elenco cambiando pagina.
+  const paged = usePaged(shown, 25);
+  const list = useRef<HTMLOListElement>(null);
 
   return (
     <MotionConfig reducedMotion="user">
@@ -85,9 +89,9 @@ export function AthleteRanking({ rows, showClub = true }: { rows: RankingRow[]; 
       {shown.length === 0 ? (
         <p className="rounded-2xl bg-ink-50 p-8 text-center text-ink-500">{t("site.rankx.noMatch", { q })}</p>
       ) : (
-        <ol className="space-y-2">
+        <ol ref={list} className="scroll-mt-28 space-y-2">
           <AnimatePresence initial={false}>
-            {shown.map((r, i) => (
+            {paged.items.map((r, i) => (
               <motion.li key={r.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
                 transition={{ delay: q ? 0 : Math.min(i, 12) * 0.025 }}>
                 <button type="button" onClick={() => setOpen(r.id)}
@@ -127,6 +131,7 @@ export function AthleteRanking({ rows, showClub = true }: { rows: RankingRow[]; 
           </AnimatePresence>
         </ol>
       )}
+      <Pagination className="mt-6" page={paged.page} pages={paged.pages} onChange={(p) => { paged.setPage(p); list.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }} />
       <JudokaModal id={open} onClose={() => setOpen(null)} />
     </MotionConfig>
   );
@@ -142,6 +147,8 @@ export function ClubCup({ data }: { data: ClubRanking }) {
     const needle = fold(q.trim());
     return needle ? data.rows.filter((r) => fold(`${r.club.name} ${r.city ?? ""}`).includes(needle)) : data.rows;
   }, [data.rows, q]);
+  const paged = usePaged(shown, 25);
+  const list = useRef<HTMLOListElement>(null);
   const leader = data.rows[0];
   const yearOpen = data.period === "year" && !data.is_final;
 
@@ -171,8 +178,8 @@ export function ClubCup({ data }: { data: ClubRanking }) {
       {data.rows.length === 0 ? (
         <p className="rounded-2xl bg-ink-50 p-8 text-center text-ink-500">{t("site.rankx.cupEmpty")}</p>
       ) : (
-        <ol className="space-y-3">
-          {shown.map((r, i) => (
+        <ol ref={list} className="scroll-mt-28 space-y-3">
+          {paged.items.map((r, i) => (
             <motion.li key={r.club.slug} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: Math.min(i, 10) * 0.04 }}>
               <Link href={`/clubes/${r.club.slug}`}
                 className="group relative flex items-center gap-4 overflow-hidden rounded-2xl bg-white p-4 shadow-soft ring-1 ring-ink-900/5 transition hover:-translate-y-0.5 hover:shadow-lift hover:ring-accent-300">
@@ -202,6 +209,7 @@ export function ClubCup({ data }: { data: ClubRanking }) {
           ))}
         </ol>
       )}
+      <Pagination className="mt-6" page={paged.page} pages={paged.pages} onChange={(p) => { paged.setPage(p); list.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }} />
 
       {data.winners.length > 0 && (
         <section className="mt-12">

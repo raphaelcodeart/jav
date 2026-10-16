@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
+import { Pagination, usePaged } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { Tabs } from "@/components/ui/tabs";
@@ -86,6 +87,7 @@ function StaffMonthPanel() {
   const [adding, setAdding] = useState(false);
   const key = ["club", "admin", "staff-work", month];
   const { data, isLoading } = useQuery({ queryKey: key, queryFn: () => clubGet<StaffMonth>(A(`/staff-work?month=${month}`)) });
+  const paged = usePaged(data?.tasks ?? [], 20);
   const refresh = () => qc.invalidateQueries({ queryKey: ["club", "admin", "staff-work"] });
 
   async function pay(task: StaffTask) {
@@ -159,7 +161,7 @@ function StaffMonthPanel() {
             <h3 className="mb-2 text-sm text-ink-900">{t("staffMgmt.tasksTitle")}</h3>
             {data.tasks.length === 0 ? <p className="text-sm text-ink-500">{t("staffMgmt.noTasks")}</p> : (
               <ul className="divide-y divide-ink-100 rounded-2xl bg-white shadow-soft ring-1 ring-ink-900/5">
-                {data.tasks.map((task) => (
+                {paged.items.map((task) => (
                   <li key={task.id} className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm">
                     <span aria-hidden="true">{task.kind === "TASK" ? "✅" : "🛠️"}</span>
                     <span className="min-w-0 flex-1">
@@ -179,6 +181,7 @@ function StaffMonthPanel() {
                 ))}
               </ul>
             )}
+            <Pagination className="mt-3" page={paged.page} pages={paged.pages} onChange={paged.setPage} />
           </section>
         </>
       )}
@@ -365,6 +368,7 @@ export function StaffWorkPanel() {
   const qc = useQueryClient();
   const [month, setMonth] = useState(thisMonth);
   const { data, isLoading } = useQuery({ queryKey: ["club", "staff-work", month], queryFn: () => clubGet<MyMonth>(`/staff/work?month=${month}`) });
+  const paged = usePaged(data?.tasks ?? [], 20);
   const [title, setTitle] = useState("");
   const [doneOn, setDoneOn] = useState(today);
   const [minutes, setMinutes] = useState("");
@@ -415,7 +419,7 @@ export function StaffWorkPanel() {
       </div>
       {data && (data.tasks.length === 0 ? <p className="text-sm text-ink-500">{t("staffMgmt.noTasks")}</p> : (
         <ul className="divide-y divide-ink-100 rounded-2xl bg-white shadow-soft ring-1 ring-ink-900/5">
-          {data.tasks.map((task) => (
+          {paged.items.map((task) => (
             <li key={task.id} className="flex items-center gap-3 px-4 py-3 text-sm">
               <span aria-hidden="true">{task.kind === "TASK" ? "✅" : "🛠️"}</span>
               <span className="min-w-0 flex-1">
@@ -430,6 +434,7 @@ export function StaffWorkPanel() {
           ))}
         </ul>
       ))}
+      <Pagination className="mt-3" page={paged.page} pages={paged.pages} onChange={paged.setPage} />
     </div>
   );
 }

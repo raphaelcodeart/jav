@@ -98,10 +98,11 @@ class ClubSite(UUIDPKMixin, TimestampMixin, Base):
 
 
 class ClubAthletePublicProfile(UUIDPKMixin, TimestampMixin, Base):
-    """Il consenso della famiglia e la scelta del club per un atleta. La
-    riga nasce quando il genitore dà il consenso; ritirarlo azzera
-    `consent_given_at` e toglie la pubblicazione, e la riga resta come
-    traccia di chi ha deciso cosa."""
+    """La scheda pubblica di un atleta. Nasce con l'atleta, pubblicata e senza
+    foto (`basis = LEGITIMATE_INTEREST`: i dati sportivi, come in una
+    classifica); la famiglia può opporsi (`opted_out_at`, che toglie scheda e
+    classifiche) o dare il consenso alla foto. La riga resta come traccia di
+    chi ha deciso cosa."""
 
     __tablename__ = "club_athlete_public_profiles"
 
@@ -117,6 +118,12 @@ class ClubAthletePublicProfile(UUIDPKMixin, TimestampMixin, Base):
     consent_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
+    #: Su che cosa si basa la scheda pubblica: CONSENT (l'ha chiesto la
+    #: famiglia) o LEGITIMATE_INTEREST (d'ufficio: ogni atleta parte con la
+    #: scheda sportiva pubblica, senza foto, e la famiglia si può opporre).
+    basis: Mapped[str] = mapped_column(String(20), default="CONSENT", server_default=text("'CONSENT'"))
+    #: La famiglia si è opposta: niente scheda e niente classifiche pubbliche.
+    opted_out_at: Mapped[datetime | None] = mapped_column(nullable=True)
     #: La foto è un consenso a parte: si può voler comparire senza il volto.
     show_photo: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     #: Due righe scritte dalla famiglia ("Judo da quando avevo 5 anni").

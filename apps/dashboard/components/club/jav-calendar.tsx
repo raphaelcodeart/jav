@@ -1,11 +1,12 @@
 "use client";
 
 import { MotionConfig, motion } from "motion/react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Field, Input } from "@/components/ui/field";
+import { Pagination, usePaged } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { EVENT_KIND_STYLE, EventIcon } from "@/components/club/event-icon";
@@ -65,9 +66,18 @@ export function JavCalendar({ mode }: { mode: "staff" | "member" }) {
     queryFn: () => clubGet<CalEvent[]>(`${base}?from=${from}&to=${to}`),
     enabled: !!valid,
   });
+  // Le prove a pagine (12 schede, 25 righe), poi divise per mese: le righe
+  // dei mesi restano dentro la pagina, con il totale del mese intero.
+  const paged = usePaged(data ?? [], view === "cards" ? 12 : 25);
+  const top = useRef<HTMLDivElement>(null);
+  const monthTotals = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const e of data ?? []) out[e.starts_on.slice(0, 7)] = (out[e.starts_on.slice(0, 7)] ?? 0) + 1;
+    return out;
+  }, [data]);
   const months = useMemo(() => {
     const out: { key: string; label: string; events: CalEvent[] }[] = [];
-    for (const e of data ?? []) {
+    for (const e of paged.items) {
       const key = e.starts_on.slice(0, 7);
       let m = out.find((x) => x.key === key);
       if (!m) {
@@ -77,7 +87,7 @@ export function JavCalendar({ mode }: { mode: "staff" | "member" }) {
       m.events.push(e);
     }
     return out;
-  }, [data, fmt]);
+  }, [paged.items, fmt]);
 
   async function downloadPdf() {
     setDownloading(true);
@@ -169,13 +179,13 @@ export function JavCalendar({ mode }: { mode: "staff" | "member" }) {
         {!valid ? <EmptyState title={t("jcal.badRange")} /> : isLoading ? <Skeleton className="h-64" /> : error ? (
           <EmptyState title={t("jcal.loadError")} text={(error as Error).message} />
         ) : months.length === 0 ? <EmptyState icon={<span className="text-3xl">📅</span>} title={t("jcal.empty")} /> : (
-          <div className="space-y-6">
+          <div ref={top} className="scroll-mt-24 space-y-6">
             {months.map((m) => (
               <section key={m.key}>
                 {/* La riga del mese: il calendario continua, mese dopo mese. */}
                 <div className="sticky top-0 z-10 mb-3 flex items-center justify-between rounded-2xl bg-gradient-to-r from-brand-600 to-brand-700 px-5 py-2.5 text-white shadow-soft">
                   <h3 className="font-display text-lg uppercase tracking-wide">{m.label}</h3>
-                  <span className="rounded-full bg-white/20 px-3 py-0.5 text-xs font-semibold">{t("jcal.count", { n: m.events.length })}</span>
+                  <span className="rounded-full bg-white/20 px-3 py-0.5 text-xs font-semibold">{t("jcal.count", { n: monthTotals[m.key] ?? m.events.length })}</span>
                 </div>
                 {view === "cards" && (
                   <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -247,6 +257,7 @@ export function JavCalendar({ mode }: { mode: "staff" | "member" }) {
                 )}
               </section>
             ))}
+            <Pagination page={paged.page} pages={paged.pages} onChange={(p) => { paged.setPage(p); top.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }} />
           </div>
         )}
       </div>

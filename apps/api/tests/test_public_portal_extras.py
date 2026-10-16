@@ -26,6 +26,15 @@ from tests.test_contact_messages import _published
 TODAY = date(2026, 10, 14)
 
 
+
+async def _unpublish(db, athlete) -> None:
+    from sqlalchemy import select as _select
+
+    from app.domains.club.site_models import ClubAthletePublicProfile
+    profile = (await db.execute(_select(ClubAthletePublicProfile).where(ClubAthletePublicProfile.athlete_id == athlete.id))).scalar_one()
+    profile.published = False
+    await db.commit()
+
 async def test_sponsors_public_only_when_active(db, scope):
     admin = await _user(db, scope, "admin")
     org = scope.organization_id
@@ -76,6 +85,9 @@ async def test_rankings_by_period_the_club_cup_and_the_card(db, scope):
     parent = await _user(db, scope)
     shown = await _athlete(db, scope, parent, birth_date=date(2015, 3, 3), first_name="Tiago", last_name="Matias")
     hidden = await _athlete(db, scope, parent, birth_date=date(2016, 6, 6), first_name="Rita", last_name="Segreta")
+    # Rita parte pubblica come tutti; il club non pubblica la sua scheda: resta
+    # in classifica e tra gli iscritti come «Nome I.», senza pagina.
+    await _unpublish(db, hidden)
     await _consent_and_publish(db, scope, shown, parent, admin)
 
     other = await _other_club(db, scope.organization_id, name="Judo Clube de Albufeira")

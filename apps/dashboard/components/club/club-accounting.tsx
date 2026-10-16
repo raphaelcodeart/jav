@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Field, Input, Select } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
+import { Pagination, usePaged } from "@/components/ui/pagination";
 import { ProgressBar } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
@@ -165,26 +166,31 @@ export function ClubMoneyHome({ onGo, athletesActive }: { onGo: (section: "accou
 
 function DebtorList({ debts, limit }: { debts: Debts; limit?: number }) {
   const { t, fmt } = useI18n();
-  const rows = limit ? debts.top.slice(0, limit) : debts.top;
+  // L'elenco intero va a pagine; con `limit` (la home) restano i primi.
+  const paged = usePaged(debts.top, 20);
+  const rows = limit ? debts.top.slice(0, limit) : paged.items;
   if (!rows.length) return <p className="text-sm text-ink-500 py-6 text-center">{t("acc.noDebts")}</p>;
   return (
-    <ul className="divide-y divide-ink-100">
-      {rows.map((d) => (
-        <li key={d.user_id} className="flex items-center justify-between gap-3 py-2.5">
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-ink-900 truncate">{d.name || "—"}</p>
-            <p className="text-xs text-ink-500">
-              {t("acc.debtorLine", { n: d.fees, date: fmt.shortDate(d.oldest_due_date) })}
-              {d.days_overdue > 0 && <> · <span className="text-rose-700">{t("acc.daysLate", { n: d.days_overdue })}</span></>}
-            </p>
-          </div>
-          <div className="text-right shrink-0">
-            <p className="font-semibold text-ink-900 tabular-nums">{fmt.euro(d.due_cents)}</p>
-            {d.overdue_cents > 0 && <p className="text-xs text-rose-700 tabular-nums">{t("acc.ofWhichOverdue", { amount: fmt.euro(d.overdue_cents) })}</p>}
-          </div>
-        </li>
-      ))}
-    </ul>
+    <>
+      <ul className="divide-y divide-ink-100">
+        {rows.map((d) => (
+          <li key={d.user_id} className="flex items-center justify-between gap-3 py-2.5">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-ink-900 truncate">{d.name || "—"}</p>
+              <p className="text-xs text-ink-500">
+                {t("acc.debtorLine", { n: d.fees, date: fmt.shortDate(d.oldest_due_date) })}
+                {d.days_overdue > 0 && <> · <span className="text-rose-700">{t("acc.daysLate", { n: d.days_overdue })}</span></>}
+              </p>
+            </div>
+            <div className="text-right shrink-0">
+              <p className="font-semibold text-ink-900 tabular-nums">{fmt.euro(d.due_cents)}</p>
+              {d.overdue_cents > 0 && <p className="text-xs text-rose-700 tabular-nums">{t("acc.ofWhichOverdue", { amount: fmt.euro(d.overdue_cents) })}</p>}
+            </div>
+          </li>
+        ))}
+      </ul>
+      {!limit && <Pagination className="mt-4" page={paged.page} pages={paged.pages} onChange={paged.setPage} />}
+    </>
   );
 }
 
@@ -363,6 +369,7 @@ function LedgerPanel({ period }: { period: string }) {
     placeholderData: (prev) => prev,
   });
   const openReceipt = useOpenReceipt();
+  const paged = usePaged(data?.rows ?? [], 25);
   const typeLabel = (r: Ledger["rows"][number]) =>
     r.type === "INCOME" ? t.dyn(`acc.kind.${r.category}`, r.category)
       : r.type === "EXPENSE" ? t.dyn(`acc.cat.${r.category}`, r.category)
@@ -403,7 +410,7 @@ function LedgerPanel({ period }: { period: string }) {
           <Table>
             <THead><tr><TH>{t("acc.col.date")}</TH><TH>{t("acc.col.description")}</TH><TH>{t("acc.col.category")}</TH><TH>{t("acc.col.method")}</TH><TH className="text-right">{t("acc.col.amount")}</TH></tr></THead>
             <TBody>
-              {data.rows.map((r) => (
+              {paged.items.map((r) => (
                 <TR key={`${r.type}-${r.id}`}>
                   <TD className="whitespace-nowrap">{fmt.shortDate(r.date)}</TD>
                   <TD>
@@ -425,6 +432,7 @@ function LedgerPanel({ period }: { period: string }) {
           </Table>
         </div>
       )}
+      <Pagination page={paged.page} pages={paged.pages} onChange={(p) => { paged.setPage(p); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
     </div>
   );
 }
@@ -453,6 +461,7 @@ function ExpensesPanel({ period }: { period: string }) {
   const act = useAct();
   const openReceipt = useOpenReceipt();
   const total = (data ?? []).reduce((s, e) => s + e.amount_cents, 0);
+  const paged = usePaged(data ?? [], 25);
   return (
     <div className="space-y-4">
       <div className="rounded-2xl bg-sky-50 ring-1 ring-sky-200 p-4 text-sm text-sky-900">{t("acc.expensesIntro")}</div>
@@ -470,7 +479,7 @@ function ExpensesPanel({ period }: { period: string }) {
         <Table>
           <THead><tr><TH>{t("acc.col.date")}</TH><TH>{t("acc.col.description")}</TH><TH>{t("acc.col.category")}</TH><TH>{t("acc.col.method")}</TH><TH className="text-right">{t("acc.col.amount")}</TH><TH /></tr></THead>
           <TBody>
-            {(data ?? []).map((e) => (
+            {paged.items.map((e) => (
               <TR key={e.id}>
                 <TD className="whitespace-nowrap">{fmt.shortDate(e.spent_on)}</TD>
                 <TD><p className="font-semibold text-ink-900">{e.description}</p>{e.supplier && <p className="text-xs text-ink-500">{e.supplier}</p>}</TD>
@@ -490,6 +499,7 @@ function ExpensesPanel({ period }: { period: string }) {
           </TBody>
         </Table>
       )}
+      <Pagination page={paged.page} pages={paged.pages} onChange={(p) => { paged.setPage(p); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
       {editing && <ExpenseModal expense={editing === "new" ? null : editing} onClose={() => setEditing(null)} />}
     </div>
   );

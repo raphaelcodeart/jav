@@ -206,8 +206,8 @@ export default function ReferralLandingPage({ params }: { params: Promise<{ code
                   className="mt-0.5 w-4 h-4 rounded border-slate-200 accent-brand-500 shrink-0"
                 />
                 <span>
-                  Ho letto e accetto l&apos;informativa sulla privacy e il trattamento dei miei dati
-                  personali da parte di Jav, in conformità al Regolamento (UE) 2016/679 (GDPR).
+                  Ho letto l&apos;<a href="/privacidade" target="_blank" className="font-semibold text-brand-700 underline">informativa sulla privacy</a> e
+                  accetto i <a href="/termos" target="_blank" className="font-semibold text-brand-700 underline">termini e condizioni</a> (Regolamento (UE) 2016/679, GDPR).
                 </span>
               </label>
 

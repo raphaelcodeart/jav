@@ -213,9 +213,13 @@ async def _ranking_athletes(
     if not club_ids:
         return []
     with_page = {a.id: (a, p) for a, p in await _public_athletes(db, club_ids=club_ids)}
+    # Chi si è opposto (la famiglia ha tolto la scheda) non compare nemmeno
+    # nelle classifiche.
+    opted_out = select(ClubAthletePublicProfile.athlete_id).where(ClubAthletePublicProfile.opted_out_at.is_not(None))
     rows = (await db.execute(
         select(ClubAthlete).join(Club, Club.id == ClubAthlete.club_id).where(
             _publishable_club(), ClubAthlete.club_id.in_(club_ids), ClubAthlete.status == "ACTIVE",
+            ClubAthlete.id.not_in(opted_out),
         )
     )).scalars().all()
     return [with_page.get(a.id, (a, None)) for a in rows]
@@ -1662,10 +1666,22 @@ def consent_dict(athlete: ClubAthlete, profile: ClubAthletePublicProfile | None)
         "consent": consent,
         "consent_given_at": profile.consent_given_at if consent else None,
         "show_photo": bool(profile and profile.show_photo),
+        "opted_out": bool(profile and profile.opted_out_at),
+        "basis": profile.basis if consent else None,
         "bio": profile.bio if profile else None,
         # La famiglia vede se il club l'ha messo davvero sul sito.
         "published": bool(consent and profile.published),
     }
+
+
+async def ensure_default_profile(db: AsyncSession, *, athlete: ClubAthlete) -> None:
+    """La scheda pubblica d'ufficio di un atleta nuovo: pubblicata, senza foto
+    (`LEGITIMATE_INTEREST`), finché la famiglia non si oppone. Non committa."""
+    if (await _profiles(db, athlete_ids=[athlete.id])).get(athlete.id) is None:
+        db.add(ClubAthletePublicProfile(
+            organization_id=athlete.organization_id, club_id=athlete.club_id, athlete_id=athlete.id,
+            consent_given_at=utcnow(), basis="LEGITIMATE_INTEREST", show_photo=False, published=True,
+        ))
 
 
 async def get_consent(db: AsyncSession, *, athlete: ClubAthlete) -> dict:
@@ -1688,11 +1704,17 @@ async def update_consent(
         db.add(profile)
     consent = changes.get("consent")
     if consent is True and profile.consent_given_at is None:
+        # Tornare pubblici dopo un'opposizione: la scheda torna sul sito.
         profile.consent_given_at = utcnow()
         profile.consent_by_user_id = actor_user_id
+        profile.basis = "CONSENT"
+        profile.opted_out_at = None
+        profile.published = True
     elif consent is False:
+        # L'opposizione: via la scheda, la foto e anche le classifiche.
         profile.consent_given_at = None
         profile.consent_by_user_id = actor_user_id
+        profile.opted_out_at = utcnow()
         profile.published = False
         profile.show_photo = False
         # Come la pubblicazione: anche foto e video tornano privati, e un

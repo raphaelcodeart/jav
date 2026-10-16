@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Select } from "@/components/ui/field";
+import { Pagination, usePaged } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toast";
@@ -90,6 +91,9 @@ export function ContactInbox({ mode, canFilterClubs = false }: { mode: "club" | 
   }
 
   const counts = data?.counts ?? { NEW: 0, READ: 0, ARCHIVED: 0 };
+  // I messaggi del filtro scelto, a pagine.
+  const shown = (data?.items ?? []).filter((m) => !topic || m.topic === topic);
+  const paged = usePaged(shown, 20);
   const showClub = mode === "platform" && club !== "jav";
   return (
     <div className="space-y-5">
@@ -123,7 +127,7 @@ export function ContactInbox({ mode, canFilterClubs = false }: { mode: "club" | 
         <Skeleton className="h-48" />
       ) : error ? (
         <EmptyState title={t("inbox.loadFailed")} text={(error as Error).message} />
-      ) : !data || data.items.filter((m) => !topic || m.topic === topic).length === 0 ? (
+      ) : shown.length === 0 ? (
         <EmptyState
           icon={<span className="text-3xl" aria-hidden="true">✉️</span>}
           title={view === "archived" ? t("inbox.emptyArchived") : t("inbox.empty")}
@@ -131,7 +135,7 @@ export function ContactInbox({ mode, canFilterClubs = false }: { mode: "club" | 
         />
       ) : (
         <ul className="space-y-3">
-          {data.items.filter((m) => !topic || m.topic === topic).map((m) => {
+          {paged.items.map((m) => {
             const subject = encodeURIComponent(t("inbox.replySubject", { club: m.club?.name ?? "JudoArteVida" }));
             const quoted = encodeURIComponent(`\n\n---\n${m.message}`);
             return (
@@ -183,6 +187,7 @@ export function ContactInbox({ mode, canFilterClubs = false }: { mode: "club" | 
           })}
         </ul>
       )}
+      <Pagination page={paged.page} pages={paged.pages} onChange={(p) => { paged.setPage(p); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
     </div>
   );
 }

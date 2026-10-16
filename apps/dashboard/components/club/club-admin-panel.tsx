@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
+import { Pagination, usePaged } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { Tabs } from "@/components/ui/tabs";
@@ -230,6 +231,7 @@ function Athletes() {
   const { data, isLoading } = useQuery({ queryKey: ["club", "admin", "athletes", qs], queryFn: () => clubGet<AdminAthlete[]>(A(`/athletes?${qs}`)) });
   const { data: plans } = useQuery({ queryKey: ["club", "admin", "plans"], queryFn: () => clubGet<Plan[]>(A("/plans")) });
   const [editing, setEditing] = useState<AdminAthlete | null>(null);
+  const paged = usePaged(data ?? [], 25);
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row gap-3">
@@ -245,7 +247,7 @@ function Athletes() {
         <Table>
           <THead><tr><TH>Atleta</TH><TH>Cintura</TH><TH>Piano</TH><TH>Genitore</TH><TH>Certificato</TH><TH className="text-right">Da pagare</TH></tr></THead>
           <TBody>
-            {(data ?? []).map((a) => {
+            {paged.items.map((a) => {
               const cert = CERTIFICATE_LABELS[a.certificate.status] ?? CERTIFICATE_LABELS.MISSING!;
               return (
                 <TR key={a.id} onClick={() => setEditing(a)} className="cursor-pointer">
@@ -261,6 +263,7 @@ function Athletes() {
           </TBody>
         </Table>
       )}
+      <Pagination page={paged.page} pages={paged.pages} onChange={(p) => { paged.setPage(p); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
       {editing && <AthleteAdminModal athlete={editing} plans={plans ?? []} onClose={() => setEditing(null)} />}
     </div>
   );
@@ -438,6 +441,7 @@ function FeesList() {
   const run = useRun();
   const [paying, setPaying] = useState<Fee | null>(null);
   const total = (data ?? []).reduce((s, f) => s + f.amount_cents, 0);
+  const paged = usePaged(data ?? [], 25);
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row gap-3">
@@ -455,7 +459,7 @@ function FeesList() {
         <Table>
           <THead><tr><TH>Atleta</TH><TH>Quota</TH><TH>Scadenza</TH><TH>Stato</TH><TH className="text-right">Importo</TH><TH className="text-right">Azioni</TH></tr></THead>
           <TBody>
-            {(data ?? []).map((f) => (
+            {paged.items.map((f) => (
               <TR key={f.id}>
                 <TD className="font-semibold text-ink-900">{f.athlete_name ?? t("clubAdmin.parentMember")} <AthleteMarks id={f.athlete_id} /></TD>
                 <TD>
@@ -484,6 +488,7 @@ function FeesList() {
           </TBody>
         </Table>
       )}
+      <Pagination page={paged.page} pages={paged.pages} onChange={(p) => { paged.setPage(p); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
       {paying && <MarkPaidModal fee={paying} onClose={() => setPaying(null)} />}
     </div>
   );
@@ -564,6 +569,7 @@ function Proofs() {
   const { data, isLoading } = useQuery({ queryKey: ["club", "admin", "proofs", status], queryFn: () => clubGet<AdminProof[]>(A(`/payment-proofs${status ? `?status=${status}` : ""}`)) });
   const run = useRun();
   const toast = useToast();
+  const paged = usePaged(data ?? [], 12);
   async function open(id: string) {
     try {
       const { url } = await clubGet<{ url: string }>(A(`/payment-proofs/${id}/url`));
@@ -578,7 +584,7 @@ function Proofs() {
       <Tabs value={status || "ALL"} onChange={(k) => setStatus(k === "ALL" ? "" : k)} items={[{ key: "ACCEPTED", label: "Registrate" }, { key: "REJECTED", label: "Rifiutate" }, { key: "ALL", label: "Tutte" }]} />
       {isLoading ? <Skeleton className="h-64" /> : (data ?? []).length === 0 ? <EmptyState title="Nessuna prova" /> : (
         <div className="grid md:grid-cols-2 gap-4">
-          {(data ?? []).map((p) => (
+          {paged.items.map((p) => (
             <div key={p.id} className="glass-card rounded-3xl p-5 space-y-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -601,6 +607,7 @@ function Proofs() {
           ))}
         </div>
       )}
+      <Pagination page={paged.page} pages={paged.pages} onChange={(p) => { paged.setPage(p); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
     </div>
   );
 }
@@ -610,6 +617,7 @@ function Proofs() {
 function Certificates() {
   const [status, setStatus] = useState("EXPIRING");
   const { data, isLoading } = useQuery({ queryKey: ["club", "admin", "certificates", status], queryFn: () => clubGet<AdminCertificate[]>(A(`/certificates${status ? `?status=${status}` : ""}`)) });
+  const paged = usePaged(data ?? [], 25);
   return (
     <div className="space-y-4">
       <Tabs value={status || "ALL"} onChange={(k) => setStatus(k === "ALL" ? "" : k)} items={[{ key: "EXPIRING", label: "In scadenza" }, { key: "EXPIRED", label: "Scaduti" }, { key: "MISSING", label: "Mancanti" }, { key: "VALID", label: "Validi" }, { key: "ALL", label: "Tutti" }]} />
@@ -617,7 +625,7 @@ function Certificates() {
         <Table>
           <THead><tr><TH>Atleta</TH><TH>Genitore</TH><TH>Stato</TH><TH>Scadenza</TH></tr></THead>
           <TBody>
-            {(data ?? []).map((c) => {
+            {paged.items.map((c) => {
               const s = CERTIFICATE_LABELS[c.certificate.status] ?? CERTIFICATE_LABELS.MISSING!;
               return (
                 <TR key={c.athlete_id}>
@@ -631,6 +639,7 @@ function Certificates() {
           </TBody>
         </Table>
       )}
+      <Pagination page={paged.page} pages={paged.pages} onChange={(p) => { paged.setPage(p); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
     </div>
   );
 }
@@ -644,12 +653,13 @@ function Competitions() {
   const [editing, setEditing] = useState<Competition | "new" | null>(null);
   const [results, setResults] = useState<Competition | null>(null);
   const run = useRun();
+  const paged = usePaged(data ?? [], 12);
   return (
     <div className="space-y-4">
       <div className="flex justify-end"><Button onClick={() => setEditing("new")} icon={<span>＋</span>}>Nuova gara</Button></div>
       {isLoading ? <Skeleton className="h-48" /> : (data ?? []).length === 0 ? <EmptyState icon={<span className="text-3xl">🏟️</span>} title="Nessuna gara" action={<Button onClick={() => setEditing("new")}>Pubblica la prima gara</Button>} /> : (
         <div className="space-y-3">
-          {(data ?? []).map((c) => (
+          {paged.items.map((c) => (
             <div key={c.id} className="glass-card rounded-3xl p-5 flex flex-col lg:flex-row lg:items-center gap-4">
               <EventIcon kind={c.kind} imageUrl={c.image_url} />
               <div className="min-w-0 flex-1">
@@ -677,6 +687,7 @@ function Competitions() {
           ))}
         </div>
       )}
+      <Pagination page={paged.page} pages={paged.pages} onChange={(p) => { paged.setPage(p); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
       {editing && <CompetitionModal competition={editing === "new" ? null : editing} onClose={() => setEditing(null)} />}
       {results && <ResultsModal competition={results} onClose={() => setResults(null)} />}
       {transportFor && <TransportModal competition={transportFor} onClose={() => setTransportFor(null)} />}
@@ -1136,6 +1147,7 @@ function ShopOrders() {
   const { t, fmt } = useI18n();
   const { data, isLoading } = useQuery({ queryKey: ["club", "admin", "shop-orders"], queryFn: () => clubGet<ClubShopOrder[]>(A("/shop-orders")) });
   const statusTone = (s: string) => (s === "PAID" ? "success" : s === "CANCELLED" ? "danger" : "warning");
+  const paged = usePaged(data ?? [], 25);
   return (
     <div className="space-y-4">
       <p className="text-sm text-ink-500">{t("clubAdmin.shopOrdersIntro")}</p>
@@ -1143,7 +1155,7 @@ function ShopOrders() {
         <Table>
           <THead><tr><TH>{t("clubAdmin.colOrder")}</TH><TH>{t("clubAdmin.colFamily")}</TH><TH>{t("clubAdmin.colItems")}</TH><TH>{t("clubAdmin.colStatus")}</TH><TH className="text-right">{t("clubAdmin.colAmount")}</TH></tr></THead>
           <TBody>
-            {(data ?? []).map((o) => (
+            {paged.items.map((o) => (
               <TR key={o.id}>
                 <TD><p className="font-semibold text-ink-900">{o.number}</p><p className="text-xs text-ink-500">{fmt.shortDate(o.created_at)}</p></TD>
                 <TD className="text-xs">{o.customer_email ?? "—"}{o.athlete_name && <p className="text-ink-500">{t("pay.orderFor", { name: o.athlete_name })}</p>}</TD>
@@ -1159,6 +1171,7 @@ function ShopOrders() {
           </TBody>
         </Table>
       )}
+      <Pagination page={paged.page} pages={paged.pages} onChange={(p) => { paged.setPage(p); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
     </div>
   );
 }

@@ -595,3 +595,17 @@ il telefono, compresa la foto della ricevuta e del certificato.
   l'argomento «Creare un club».
 - **Console → 💬 Messaggi dello staff**: i messaggi che treinadores, monitor
   e segreterie dei club scrivono a JudoArteVida, con la risposta.
+
+## Eventi, pagine, privacy
+
+- **Eventi nell'area**: famiglie in «Gare» → 🗓️ Eventi, atleti in «Gare e
+  stage» → 🗓️ Eventi. È lo stesso calendario del sito: lista (in alto i
+  prossimi), mese e anno, con ricerca e filtri.
+- Gli elenchi lunghi hanno le **pagine 1 2 3** in fondo.
+- **Il sito pubblico**: ogni atleta compare con nome e iniziale, club,
+  cintura, medaglie e risultati, senza foto. Il genitore, dalla scheda del
+  figlio → «Sito pubblico JudoArteVida», può premere **Mi oppongo**: sparisce
+  dal sito e dalle classifiche. La foto si mostra solo spuntandola.
+- **Cookie**: la prima volta il sito chiede se caricare anche i video di
+  YouTube e Vimeo; «Gerir cookies» in fondo alla pagina cambia la scelta.
+  Privacy, cookie e termini sono linkati in fondo a ogni pagina.

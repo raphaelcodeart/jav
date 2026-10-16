@@ -748,3 +748,11 @@ Poi (migrazioni 0026–0028):
 
 Test: `tests/test_club_payment_reminders.py`, `tests/test_club_area_extras.py`,
 `tests/test_club_staff_work.py`, `tests/test_public_shop.py`.
+
+Poi (migrazione 0029): eventi del sito nell'area di famiglie e atleti; lista
+eventi con i prossimi in cima; pagine numerate; «prodotti dei nostri partner e
+amici»; ogni atleta parte con la scheda pubblica senza foto, con
+l'opposizione della famiglia (`basis`, `opted_out_at`); pagine
+`/privacidade`, `/cookies`, `/termos`, banner dei cookie e contenuti di terzi
+solo con consenso; job di conservazione. Analisi: docs/legal.md. Test:
+`tests/test_data_retention.py`, test del sito aggiornati alla nuova regola.

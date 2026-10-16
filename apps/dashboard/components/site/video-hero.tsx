@@ -5,6 +5,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { linkButton } from "@/components/site/link-button";
+import { useThirdPartyAllowed } from "@/lib/cookie-consent";
+import { ThirdPartyGate } from "@/components/legal/cookie-banner";
 
 const WIDE = "(min-width: 768px)";
 
@@ -41,6 +43,7 @@ export function VideoHero({
   stats: HeroStat[];
   scrollLabel: string;
 }) {
+  const thirdParty = useThirdPartyAllowed();
   const reduce = useReducedMotion();
   // Il video di sfondo solo da tablet in su: sul telefono costa dati e
   // batteria, e la foto basta.
@@ -69,7 +72,7 @@ export function VideoHero({
     >
       {/* Sfondo: la foto sempre, il video sopra quando c'è. */}
       <Image src="/site/judo-hero.jpg" alt="" fill priority sizes="100vw" className="-z-30 object-cover opacity-60" />
-      {showVideo && <BackgroundVideo videoId={videoId} />}
+      {showVideo && thirdParty && <BackgroundVideo videoId={videoId} />}
 
       {/* Luce e colore. */}
       <div className="absolute inset-0 -z-10 bg-gradient-to-b from-ink-950/70 via-ink-950/40 to-ink-950" aria-hidden="true" />

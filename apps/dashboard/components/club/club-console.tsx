@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Field, Input, Select } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
+import { Pagination, usePaged } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { Tabs } from "@/components/ui/tabs";
@@ -67,6 +68,7 @@ export function PeoplePanel({ canInvest = false }: { canInvest?: boolean }) {
     (kind === "ALL" || p.kinds.includes(kind)) &&
     (!q || `${p.name} ${p.email ?? ""} ${p.guardian_name ?? ""}`.toLowerCase().includes(q.toLowerCase())),
   );
+  const paged = usePaged(rows, 25);
 
   return (
     <div className="space-y-4">
@@ -87,7 +89,7 @@ export function PeoplePanel({ canInvest = false }: { canInvest?: boolean }) {
         <Table>
           <THead><tr><TH>{t("people.colName")}</TH><TH>{t("people.colKinds")}</TH><TH>{t("people.colDetail")}</TH><TH className="text-right">{t("people.colDue")}</TH><TH /></tr></THead>
           <TBody>
-            {rows.map((p) => (
+            {paged.items.map((p) => (
               <TR key={`${p.kind}-${p.id}`} onClick={() => setOpen(p)} className="cursor-pointer">
                 <TD>
                   <div className="flex items-center gap-3">
@@ -122,6 +124,7 @@ export function PeoplePanel({ canInvest = false }: { canInvest?: boolean }) {
           </TBody>
         </Table>
       )}
+      <Pagination page={paged.page} pages={paged.pages} onChange={(p) => { paged.setPage(p); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
       {open && <PersonDrawer person={open} canInvest={canInvest} onClose={() => setOpen(null)} />}
     </div>
   );
@@ -385,6 +388,7 @@ export function AbsencePanel() {
   const [onlySuggested, setOnlySuggested] = useState(true);
   const { data, isLoading } = useQuery({ queryKey: ["club", "admin", "absence", period], queryFn: () => clubGet<AbsenceRow[]>(A(`/absence?period=${period}`)) });
   const rows = (data ?? []).filter((r) => !onlySuggested || r.suggestion || r.applied);
+  const paged = usePaged(rows, 25);
   async function apply(feeId: string, adjustment: "HALF" | "FULL" | null) {
     try {
       await clubSend(A(`/fees/${feeId}/absence`), "PUT", { adjustment });
@@ -408,7 +412,7 @@ export function AbsencePanel() {
         <Table>
           <THead><tr><TH>{t("people.colName")}</TH><TH>{t("absence.lessons")}</TH><TH>{t("absence.suggestion")}</TH><TH className="text-right">{t("clubAdmin.colAmount")}</TH><TH className="text-right" /></tr></THead>
           <TBody>
-            {rows.map((r) => (
+            {paged.items.map((r) => (
               <TR key={r.fee.id}>
                 <TD className="font-semibold text-ink-900">{r.athlete_name}</TD>
                 <TD>{r.lessons_held ? t("absence.presences", { p: r.presences, n: r.lessons_held }) : <span className="text-ink-400">{t("absence.noMarks")}</span>}</TD>
@@ -424,6 +428,7 @@ export function AbsencePanel() {
           </TBody>
         </Table>
       )}
+      <Pagination page={paged.page} pages={paged.pages} onChange={(p) => { paged.setPage(p); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
     </div>
   );
 }
@@ -435,13 +440,14 @@ export function WorkHoursPanel() {
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [open, setOpen] = useState<string | null>(null);
   const { data, isLoading } = useQuery({ queryKey: ["club", "admin", "work-hours", month], queryFn: () => clubGet<StaffHours[]>(A(`/work-hours?month=${month}`)) });
+  const paged = usePaged(data ?? [], 12);
   return (
     <div className="space-y-4">
       <p className="text-sm text-ink-500">{t("workHours.intro")}</p>
       <Input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="w-48" aria-label={t("absence.month")} />
       {isLoading ? <Skeleton className="h-48" /> : !data?.length ? <EmptyState title={t("workHours.empty")} /> : (
         <div className="space-y-3">
-          {data.map((s) => (
+          {paged.items.map((s) => (
             <div key={s.user_id} className="glass-card rounded-3xl p-4">
               <button type="button" onClick={() => setOpen(open === s.user_id ? null : s.user_id)} className="w-full flex items-center justify-between cursor-pointer">
                 <span className="font-semibold text-ink-900">🧑‍🏫 {s.name}</span>
@@ -461,6 +467,7 @@ export function WorkHoursPanel() {
           ))}
         </div>
       )}
+      <Pagination page={paged.page} pages={paged.pages} onChange={(p) => { paged.setPage(p); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
     </div>
   );
 }
@@ -472,6 +479,7 @@ export function DayLogPanel() {
   const [day, setDay] = useState(() => new Date().toISOString().slice(0, 10));
   const { data, isLoading } = useQuery({ queryKey: ["club", "admin", "attendance", day], queryFn: () => clubGet<DayAttendance[]>(A(`/attendance?date=${day}`)) });
   const present = (data ?? []).filter((r) => r.present);
+  const paged = usePaged(data ?? [], 25);
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
@@ -483,7 +491,7 @@ export function DayLogPanel() {
         <Table>
           <THead><tr><TH>{t("people.colName")}</TH><TH>{t("dayLog.course")}</TH><TH>{t("dayLog.state")}</TH><TH>{t("dayLog.note")}</TH><TH>{t("dayLog.by")}</TH></tr></THead>
           <TBody>
-            {data.map((r) => (
+            {paged.items.map((r) => (
               <TR key={`${r.athlete_id}-${r.course_id}`}>
                 <TD className="font-semibold text-ink-900">{r.athlete_name}</TD>
                 <TD>{r.course_name}</TD>
@@ -495,6 +503,7 @@ export function DayLogPanel() {
           </TBody>
         </Table>
       )}
+      <Pagination page={paged.page} pages={paged.pages} onChange={(p) => { paged.setPage(p); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
     </div>
   );
 }

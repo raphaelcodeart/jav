@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { keepPreviousData, useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Pagination } from "@/components/ui/pagination";
 import { ProductRequestBanner } from "@/components/product-requests";
 import type {
   CustomerRead,
@@ -71,7 +72,7 @@ async function fetchMyCustomerRecord(): Promise<CustomerRead | null> {
  *  arriva `PAGE_SIZE` schede per volta e ricerca e categoria le filtra il
  *  server. `baseKey` è la chiave di sempre, così chi la invalida continua a
  *  funzionare. */
-const PAGE_SIZE = 48;
+const PAGE_SIZE = 24;
 
 function useShopPages<T>(
   baseKey: readonly string[],
@@ -79,34 +80,41 @@ function useShopPages<T>(
   enabled: boolean,
   filters: { q: string; category: string | null; seller?: string | null },
 ) {
-  const query = useInfiniteQuery({
-    queryKey: [...baseKey, filters.q, filters.category, filters.seller ?? ""],
-    queryFn: async ({ pageParam }): Promise<ShopProductPage<T>> => {
-      const params = new URLSearchParams({ offset: String(pageParam), limit: String(PAGE_SIZE) });
+  // Le pagine 1 2 3: si torna alla prima quando cambiano ricerca, categoria o venditore.
+  const filterKey = `${filters.q}|${filters.category ?? ""}|${filters.seller ?? ""}`;
+  const [page, setPage] = useState(1);
+  const [seenKey, setSeenKey] = useState(filterKey);
+  if (seenKey !== filterKey) {
+    setSeenKey(filterKey);
+    setPage(1);
+  }
+  const query = useQuery({
+    queryKey: [...baseKey, filters.q, filters.category, filters.seller ?? "", page],
+    queryFn: async (): Promise<ShopProductPage<T>> => {
+      const params = new URLSearchParams({ offset: String((page - 1) * PAGE_SIZE), limit: String(PAGE_SIZE) });
       if (filters.q) params.set("q", filters.q);
       if (filters.category) params.set("category_id", filters.category);
       if (filters.seller) params.set("seller", filters.seller);
       const res = await fetch(`${url}?${params}`);
       if (!res.ok) {
-        return { items: [], total: 0, shop_total: 0, offset: pageParam, limit: PAGE_SIZE, next_offset: null, category_ids: [] };
+        return { items: [], total: 0, shop_total: 0, offset: 0, limit: PAGE_SIZE, next_offset: null, category_ids: [] };
       }
       return res.json();
     },
-    initialPageParam: 0,
-    getNextPageParam: (last) => last.next_offset ?? undefined,
     enabled,
-    // Cambiando ricerca resta la griglia di prima finché arriva la nuova.
+    // Cambiando pagina o ricerca resta la griglia di prima finché arriva la nuova.
     placeholderData: keepPreviousData,
   });
-  const pages = query.data?.pages ?? [];
+  const data = query.data;
+  const total = data?.total ?? 0;
   return {
-    items: pages.flatMap((page) => page.items),
-    shopTotal: pages[0]?.shop_total ?? 0,
-    total: pages.at(-1)?.total ?? 0,
-    categoryIds: pages[0]?.category_ids ?? [],
-    hasMore: query.hasNextPage,
-    loadingMore: query.isFetchingNextPage,
-    loadMore: () => query.fetchNextPage(),
+    items: data?.items ?? [],
+    shopTotal: data?.shop_total ?? 0,
+    total,
+    categoryIds: data?.category_ids ?? [],
+    page,
+    pages: Math.max(1, Math.ceil(total / PAGE_SIZE)),
+    setPage,
   };
 }
 
@@ -390,6 +398,16 @@ export function CustomerProductsPanel({
           );
         })}
       </div>
+      )}
+
+      {showShopTab && activeTab === "JAV_MARKET" && (
+        <div className="flex items-start gap-3 rounded-2xl bg-gradient-to-r from-emerald-50 to-accent-50 p-4 ring-1 ring-emerald-200">
+          <span className="text-2xl" aria-hidden="true">🤝</span>
+          <p className="text-sm text-slate-700">
+            <span className="block font-bold text-slate-900">I prodotti dei nostri partner e amici</span>
+            Integratori, abbigliamento e attrezzatura scelti dai partner e dagli amici della rete JudoArteVida, insieme ai prodotti del tuo club.
+          </p>
+        </div>
       )}
 
       {onOpenProductRequests && (
@@ -762,26 +780,15 @@ export function CustomerProductsPanel({
       )}
 
       {(() => {
-        // «Mostra altri prodotti» per lo Shop, che arriva a pagine.
+        // Lo Shop arriva a pagine: 1 2 3…
         const paged = pagedShops[activeTab];
         if (!paged || paged.items.length === 0) return null;
         return (
           <div className="flex flex-col items-center gap-2 pt-2">
-            {paged.hasMore && (
-              <p className=" text-slate-500 tabular-nums">
-                {paged.items.length.toLocaleString("it-IT")} di {paged.total.toLocaleString("it-IT")} prodotti
-              </p>
-            )}
-            {paged.hasMore && (
-              <button
-                type="button"
-                onClick={() => paged.loadMore()}
-                disabled={paged.loadingMore}
-                className="px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-bold text-white shadow-lg shadow-brand-500/20 transition cursor-pointer disabled:opacity-60"
-              >
-                {paged.loadingMore ? "Caricamento…" : "Mostra altri prodotti"}
-              </button>
-            )}
+            <p className="text-xs text-slate-500 tabular-nums">
+              {paged.total.toLocaleString("it-IT")} prodotti · pagina {paged.page} di {paged.pages}
+            </p>
+            <Pagination page={paged.page} pages={paged.pages} onChange={(p) => { paged.setPage(p); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
           </div>
         );
       })()}

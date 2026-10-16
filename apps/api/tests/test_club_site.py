@@ -29,6 +29,15 @@ from tests.test_club_multi import _other_club
 TODAY = date(2026, 10, 14)
 
 
+
+async def _unpublish(db, athlete) -> None:
+    from sqlalchemy import select as _select
+
+    from app.domains.club.site_models import ClubAthletePublicProfile
+    profile = (await db.execute(_select(ClubAthletePublicProfile).where(ClubAthletePublicProfile.athlete_id == athlete.id))).scalar_one()
+    profile.published = False
+    await db.commit()
+
 async def _published_site(db, scope, **content) -> ClubSite:
     site = ClubSite(**scope.columns(), published=True, gallery=[], coaches=[], **content)
     db.add(site)
@@ -100,7 +109,7 @@ async def test_an_unpublished_or_suspended_club_does_not_exist(db, scope):
     assert await site_service.list_events(db, today=TODAY) == []
 
 
-async def test_without_the_family_consent_an_athlete_is_never_public(db, scope):
+async def test_every_athlete_starts_public_and_the_family_can_oppose(db, scope):
     admin = await _user(db, scope, "admin")
     await _plans(db, scope, admin)
     await _published_site(db, scope)
@@ -108,35 +117,34 @@ async def test_without_the_family_consent_an_athlete_is_never_public(db, scope):
     parent = await _user(db, scope)
     kid = await _athlete(db, scope, parent, birth_date=date(2015, 3, 3), first_name="Tiago", last_name="Matias")
 
-    # Il club non può pubblicare chi non ha il consenso.
-    with pytest.raises(club_service.ClubValidationError):
-        await site_service.set_athlete_published(
-            db, scope=scope, athlete_id=kid.id, published=True, actor_user_id=admin.id,
-        )
+    # D'ufficio: la scheda sportiva è pubblica, senza foto (legittimo interesse).
+    page = await site_service.club_page(db, slug=slug, today=TODAY)
+    assert [j["display_name"] for j in page["judoka"]] == ["Tiago M."]
+    consent = await site_service.get_consent(db, athlete=kid)
+    assert consent["consent"] and consent["basis"] == "LEGITIMATE_INTEREST" and not consent["show_photo"]
+
+    # Il club può comunque toglierla dal sito.
+    await site_service.set_athlete_published(db, scope=scope, athlete_id=kid.id, published=False, actor_user_id=admin.id)
+    assert (await site_service.club_page(db, slug=slug, today=TODAY))["judoka"] == []
+    await site_service.set_athlete_published(db, scope=scope, athlete_id=kid.id, published=True, actor_user_id=admin.id)
+
+    # L'opposizione della famiglia: via la scheda e via dalle classifiche;
+    # il club non può ripubblicarla.
+    withdrawn = await site_service.update_consent(db, athlete=kid, actor_user_id=parent.id, changes={"consent": False})
+    assert withdrawn["consent"] is False and withdrawn["published"] is False and withdrawn["opted_out"] is True
     assert (await site_service.club_page(db, slug=slug, today=TODAY))["judoka"] == []
     with pytest.raises(club_service.ClubNotFoundError):
         await site_service.judoka_profile(db, athlete_id=kid.id, today=TODAY)
+    assert kid.id not in {a.id for a, _ in await site_service._ranking_athletes(db, club_ids=[scope.club_id])}
+    with pytest.raises(club_service.ClubValidationError):
+        await site_service.set_athlete_published(db, scope=scope, athlete_id=kid.id, published=True, actor_user_id=admin.id)
 
-    # Il consenso da solo non basta: decide anche il club.
-    await site_service.update_consent(db, athlete=kid, actor_user_id=parent.id, changes={"consent": True})
-    assert (await site_service.club_page(db, slug=slug, today=TODAY))["judoka"] == []
-
-    await site_service.set_athlete_published(
-        db, scope=scope, athlete_id=kid.id, published=True, actor_user_id=admin.id,
-    )
-    page = await site_service.club_page(db, slug=slug, today=TODAY)
-    assert [j["display_name"] for j in page["judoka"]] == ["Tiago M."]
+    # Ci ripensa: torna pubblica.
+    back = await site_service.update_consent(db, athlete=kid, actor_user_id=parent.id, changes={"consent": True})
+    assert back["published"] and not back["opted_out"] and back["basis"] == "CONSENT"
     assert (await site_service.judoka_profile(db, athlete_id=kid.id, today=TODAY))["display_name"] == "Tiago M."
 
-    # Ritirato il consenso, sparisce subito, e la pubblicazione non torna da sola.
-    withdrawn = await site_service.update_consent(db, athlete=kid, actor_user_id=parent.id, changes={"consent": False})
-    assert withdrawn["consent"] is False and withdrawn["published"] is False
-    assert (await site_service.club_page(db, slug=slug, today=TODAY))["judoka"] == []
-    await site_service.update_consent(db, athlete=kid, actor_user_id=parent.id, changes={"consent": True})
-    assert (await site_service.club_page(db, slug=slug, today=TODAY))["judoka"] == []
-
     # Un atleta che lascia il club esce dal sito.
-    await site_service.set_athlete_published(db, scope=scope, athlete_id=kid.id, published=True, actor_user_id=admin.id)
     kid.status = "LEFT"
     await db.commit()
     with pytest.raises(club_service.ClubNotFoundError):
@@ -157,6 +165,9 @@ async def test_public_payloads_carry_only_what_may_be_public(db, scope, monkeypa
     shown.weight_kg = 37
     hidden = await _athlete(db, scope, parent, birth_date=date(2016, 6, 6), first_name="Rita", last_name="Segreta")
     await _consent_and_publish(db, scope, shown, parent, admin, show_photo=False)
+    # Rita parte pubblica come tutti; il club non pubblica la sua scheda: resta
+    # in classifica e tra gli iscritti come «Nome I.», senza pagina.
+    await _unpublish(db, hidden)
 
     past = await _competition(db, scope, admin, starts_on=date(2026, 10, 4))
     await _result(db, past, shown, admin, 1)
@@ -253,7 +264,7 @@ async def test_a_club_admin_edits_only_the_own_site(db, scope):
         )
     assert await site_service.list_athletes_public_status(db, scope=scope) == []
     [row] = await site_service.list_athletes_public_status(db, scope=lagos)
-    assert row["consent"] is True and row["published"] is False
+    assert row["consent"] is True and row["published"] is True  # pubblico d'ufficio
 
     # Un indirizzo che non è un indirizzo web si rifiuta con una frase chiara.
     with pytest.raises(club_service.ClubValidationError):
@@ -277,7 +288,7 @@ async def test_family_consent_routes_are_family_only(db, scope, monkeypatch):
         async with client:
             res = await client.put(f"/club/athletes/{mine.id}/public-profile", json={"consent": True, "bio": "Ippon!"})
             assert res.status_code == 200, res.text
-            assert res.json()["consent"] is True and res.json()["published"] is False
+            assert res.json()["consent"] is True and res.json()["published"] is True
             assert (await client.get(f"/club/athletes/{theirs.id}/public-profile")).status_code == 404
             assert (await client.put(f"/club/athletes/{theirs.id}/public-profile", json={"consent": True})).status_code == 404
             # Il genitore non entra nell'editor della pagina del club.

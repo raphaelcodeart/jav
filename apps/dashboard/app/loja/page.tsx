@@ -28,7 +28,7 @@ export default async function ShopPage({ searchParams }: Search) {
   const page = Math.max(1, Math.min(200, Number(params.page) || 1));
   const [{ t, fmt }, shop, photos] = await Promise.all([
     siteI18n(),
-    publicSite.shop({ q: q || undefined, category_id: category, offset: "0", limit: String(PAGE * page) }),
+    publicSite.shop({ q: q || undefined, category_id: category, offset: String((page - 1) * PAGE), limit: String(PAGE) }),
     publicSite.photos(),
   ]);
   const items = shop?.items ?? [];
@@ -46,6 +46,13 @@ export default async function ShopPage({ searchParams }: Search) {
         {shop && shop.shop_total > 0 && <HeroStat value={shop.shop_total} label={t("site.shop.heroProducts")} />}
       </PageHero>
       <Container className="py-8">
+        <div className="mb-6 flex items-start gap-3 rounded-3xl bg-gradient-to-r from-emerald-50 to-accent-50 p-5 ring-1 ring-emerald-200">
+          <span className="text-3xl" aria-hidden="true">🤝</span>
+          <div>
+            <p className="font-display text-lg text-ink-900">{t("site.shop.partnersTitle")}</p>
+            <p className="text-sm text-ink-700">{t("site.shop.partnersText")}</p>
+          </div>
+        </div>
         {!shop || shop.shop_total === 0 ? (
           <EmptyNote>{t("site.shop.closed")}</EmptyNote>
         ) : (
@@ -72,7 +79,7 @@ export default async function ShopPage({ searchParams }: Search) {
               <ul className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
                 {items.map((p, i) => (
                   <li key={p.id}>
-                    <Reveal delay={(i % PAGE) * 0.02} className="h-full">
+                    <Reveal delay={i * 0.02} className="h-full">
                       <article className="glass-card group flex h-full flex-col overflow-hidden rounded-3xl">
                         <div className="relative aspect-square overflow-hidden bg-white">
                           {p.image_url ? (
@@ -95,16 +102,33 @@ export default async function ShopPage({ searchParams }: Search) {
                 ))}
               </ul>
             )}
-            {shop.next_offset != null && (
-              <div className="mt-8 text-center">
-                <Link href={href({ page: String(page + 1) })} scroll={false} className={linkButton({ variant: "secondary" })}>{t("site.shop.more")}</Link>
-              </div>
-            )}
+            <PageLinks page={page} pages={Math.max(1, Math.ceil(shop.total / PAGE))} href={(n) => href({ page: n > 1 ? String(n) : undefined })} />
             <p className="mt-6 text-center text-xs text-ink-500">{t("site.shop.vatNote")}</p>
           </>
         )}
       </Container>
     </SiteShell>
+  );
+}
+
+/** Le pagine 1 2 3 come link (la pagina si prepara sul server). */
+function PageLinks({ page, pages, href }: { page: number; pages: number; href: (n: number) => string }) {
+  if (pages <= 1) return null;
+  const list: (number | "…")[] = [];
+  for (let p = 1; p <= pages; p++) {
+    if (p === 1 || p === pages || Math.abs(p - page) <= 1) list.push(p);
+    else if (list[list.length - 1] !== "…") list.push("…");
+  }
+  const cls = (active: boolean) => cn("inline-flex h-10 min-w-10 items-center justify-center rounded-xl px-3 text-sm font-semibold",
+    active ? "bg-brand-600 text-white shadow-soft" : "bg-white text-ink-700 ring-1 ring-ink-200 hover:bg-ink-50");
+  return (
+    <nav aria-label="Páginas" className="mt-8 flex flex-wrap items-center justify-center gap-1.5">
+      {page > 1 && <Link href={href(page - 1)} className={cls(false)} aria-label="‹">‹</Link>}
+      {list.map((p, i) => p === "…" ? <span key={`g${i}`} className="px-1 text-ink-400">…</span> : (
+        <Link key={p} href={href(p)} aria-current={p === page ? "page" : undefined} className={cls(p === page)}>{p}</Link>
+      ))}
+      {page < pages && <Link href={href(page + 1)} className={cls(false)} aria-label="›">›</Link>}
+    </nav>
   );
 }
 

@@ -11,6 +11,8 @@ import { useClubFeatures } from "@/components/club/jav-courses";
 import { clubGet, clubSend } from "@/lib/club";
 import { cn } from "@/lib/cn";
 import { useI18n } from "@/lib/i18n/provider";
+import { useThirdPartyAllowed } from "@/lib/cookie-consent";
+import { ThirdPartyGate } from "@/components/legal/cookie-banner";
 
 // La scheda pubblica di un atleta, per la segreteria (docs/club-portal.md,
 // "Sito pubblico" → "La scheda del judoca"): profilo IJF, due righe,
@@ -259,6 +261,7 @@ function PhotosBlock({ page, photos, onChange }: { page: AthletePage; photos: Me
 
 function VideosBlock({ page, videos, onChange }: { page: AthletePage; videos: Media[]; onChange: (page: AthletePage) => void }) {
   const { t } = useI18n();
+  const thirdParty = useThirdPartyAllowed();
   const [url, setUrl] = useState("");
   const [caption, setCaption] = useState("");
   const { busy, run } = useSaver(onChange);
@@ -288,8 +291,10 @@ function VideosBlock({ page, videos, onChange }: { page: AthletePage; videos: Me
         <ul className="mt-3 grid gap-3 sm:grid-cols-2">
           {videos.map((m) => (
             <li key={m.id} className="rounded-2xl border border-ink-900/10 bg-white p-2">
-              {/* eslint-disable-next-line @next/next/no-img-element -- copertina servita da YouTube */}
-              <img src={`https://i.ytimg.com/vi/${m.youtube_id}/hqdefault.jpg`} alt="" className="aspect-video w-full rounded-xl object-cover" />
+              {thirdParty ? (
+                // eslint-disable-next-line @next/next/no-img-element -- copertina servita da YouTube
+                <img src={`https://i.ytimg.com/vi/${m.youtube_id}/hqdefault.jpg`} alt="" className="aspect-video w-full rounded-xl object-cover" />
+              ) : <ThirdPartyGate provider="YouTube" className="aspect-video w-full rounded-xl" />}
               {m.caption && <p className="mt-1 truncate text-xs font-semibold text-ink-700">{m.caption}</p>}
               <div className="mt-2"><PublishToggle media={m} athleteId={page.athlete_id} onChange={onChange} /></div>
             </li>

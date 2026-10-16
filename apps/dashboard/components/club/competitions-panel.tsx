@@ -16,6 +16,8 @@ import { LEVEL_LABELS, PLACEMENT_LABELS, clubGet, clubSend, daysUntil, type Fami
 import type { MessageKey } from "@/lib/i18n/messages/it";
 import { EventIcon } from "@/components/club/event-icon";
 import { JavCalendar } from "@/components/club/jav-calendar";
+import { AreaEvents } from "@/components/club/area-events";
+import { Pagination, usePaged } from "@/components/ui/pagination";
 import { useI18n } from "@/lib/i18n/provider";
 
 const LEVEL_TONES: Record<string, string> = {
@@ -34,18 +36,20 @@ const LEVEL_TONES: Record<string, string> = {
 /** The competition calendar, per family: for every competition, each child
  *  with a one-tap "Iscrivi" -- or the reason they can't (age, certificate). */
 export function CompetitionsPanel() {
-  const [when, setWhen] = useState<"next" | "past" | "calendar">("next");
+  const [when, setWhen] = useState<"events" | "next" | "past" | "calendar">("events");
   const { t } = useI18n();
   const { data, isLoading, error } = useQuery({
     queryKey: ["club", "competitions", when === "past" ? "past" : "next"],
     queryFn: () => clubGet<FamilyCompetition[]>(`/competitions${when === "past" ? "?include_past=true" : ""}`),
   });
-  const list = (data ?? []).filter((c) => (when === "past" ? c.status === "DONE" || daysUntil(c.ends_on) < 0 : c.status !== "DONE" && daysUntil(c.ends_on) >= 0));
+  const list = (data ?? []).filter((c) => (when === "past" ? c.status === "DONE" || daysUntil(c.ends_on) < 0 : c.status !== "DONE" && daysUntil(c.ends_on) >= 0))
+    .sort((a, b) => when === "past" ? b.starts_on.localeCompare(a.starts_on) : a.starts_on.localeCompare(b.starts_on));
+  const paged = usePaged(list, 8);
 
   return (
     <div>
-      <PageHeader eyebrow={t("comp.eyebrow")} title={t("nav.club-competitions")} subtitle={t("comp.subtitle")} actions={<Tabs value={when} onChange={(k) => setWhen(k as "next" | "past" | "calendar")} items={[{ key: "next", label: t("comp.upcoming") }, { key: "past", label: t("comp.past") }, { key: "calendar", label: `📅 ${t("jcal.tabEvents")}` }]} />} />
-      {when === "calendar" ? <JavCalendar mode="member" /> : (
+      <PageHeader eyebrow={t("comp.eyebrow")} title={t("nav.club-competitions")} subtitle={t("comp.subtitle")} actions={<Tabs value={when} onChange={(k) => setWhen(k as "events" | "next" | "past" | "calendar")} items={[{ key: "events", label: `🗓️ ${t("comp.eventsTab")}` }, { key: "next", label: t("comp.upcoming") }, { key: "past", label: t("comp.past") }, { key: "calendar", label: `📅 ${t("jcal.tabEvents")}` }]} />} />
+      {when === "events" ? <AreaEvents /> : when === "calendar" ? <JavCalendar mode="member" /> : (
         <>
           {isLoading && <div className="space-y-4"><Skeleton className="h-40" /><Skeleton className="h-40" /></div>}
           {error && <EmptyState title={t("comp.unavailable")} text={(error as Error).message} />}
@@ -53,10 +57,11 @@ export function CompetitionsPanel() {
             <EmptyState icon={<span className="text-3xl">🏟️</span>} title={when === "next" ? t("comp.noneUpcoming") : t("comp.nonePast")} text={t("comp.emptyText")} />
           )}
           <div className="space-y-5">
-            {list.map((c, i) => (
+            {paged.items.map((c, i) => (
               <CompetitionCard key={c.id} competition={c} delay={i * 0.05} />
             ))}
           </div>
+          <Pagination className="mt-6" page={paged.page} pages={paged.pages} onChange={(p) => { paged.setPage(p); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
         </>
       )}
     </div>

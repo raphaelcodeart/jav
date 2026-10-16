@@ -129,7 +129,12 @@ export default function ClubSignupPage({ params }: { params: Promise<{ slug: str
         <label className="flex items-start gap-2.5 text-xs text-ink-500 cursor-pointer pt-1">
           <input type="checkbox" checked={acceptPrivacy} onChange={(e) => setAcceptPrivacy(e.target.checked)}
             className="mt-0.5 w-4 h-4 rounded border-ink-200 accent-brand-500 shrink-0" />
-          <span>{t("signup.privacy", { club: club.name })}</span>
+          <span>
+            {t("signup.privacy", { club: club.name })}{" "}
+            <a href="/privacidade" target="_blank" className="font-semibold text-brand-700 underline">{t("legal.privacy")}</a>
+            {" · "}
+            <a href="/termos" target="_blank" className="font-semibold text-brand-700 underline">{t("legal.terms")}</a>
+          </span>
         </label>
         <AnimatePresence>
           {error && (

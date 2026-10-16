@@ -283,8 +283,9 @@ async def _public_world(db, organization_id):
     parent = await _user(db, unit)
     kid = await _athlete(db, unit, parent, birth_date=date(2018, 3, 3), first_name="Tiago", last_name="Escolar",
                          course_id=shown.id, today=TODAY)
-    db.add(ClubAthletePublicProfile(**unit.columns(), athlete_id=kid.id, consent_given_at=datetime.now(UTC),
-                                    consent_by_user_id=parent.id, published=True, show_photo=True))
+    # La scheda d'ufficio c'è già: la famiglia aggiunge la foto.
+    profile = (await db.execute(select(ClubAthletePublicProfile).where(ClubAthletePublicProfile.athlete_id == kid.id))).scalar_one()
+    profile.show_photo = True
     comp = ClubCompetition(**unit.columns(), name="Torneio Interno", starts_on=date(2026, 10, 1),
                            ends_on=date(2026, 10, 1), registration_deadline=date(2026, 10, 1), level="CLUB",
                            fee_cents=0, status="DONE", requires_agonistic_certificate=False)
