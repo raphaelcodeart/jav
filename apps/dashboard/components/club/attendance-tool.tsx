@@ -62,7 +62,10 @@ export function AttendanceTool({ initial }: { initial?: { date: string; courseId
               return (
                 <button key={key} type="button" onClick={() => setChosen(key)}
                   className={`shrink-0 rounded-2xl px-4 py-2.5 text-left ring-1 cursor-pointer transition-colors ${on ? "bg-brand-500 text-white ring-brand-500" : "bg-white ring-ink-200 hover:ring-ink-300"}`}>
-                  <span className="block text-sm font-semibold">{l.course_name}</span>
+                  <span className="block text-sm font-semibold">
+                    {l.course_name}
+                    {l.mine && <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase ${on ? "bg-white/25" : "bg-accent-100 text-ink-800"}`}>★ {t("attendance.mine")}</span>}
+                  </span>
                   <span className={`block text-xs ${on ? "text-white/80" : "text-ink-500"}`}>
                     {hhmm(l.starts_at)}–{hhmm(l.ends_at)}{l.current && !date ? ` · ${t("attendance.now")}` : ""} · {l.present}/{l.enrolled}
                   </span>

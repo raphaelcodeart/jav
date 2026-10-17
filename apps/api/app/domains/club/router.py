@@ -87,6 +87,7 @@ from app.domains.club.schemas import (
     CompetitionRead,
     CompetitionUpdate,
     CompetitionWrite,
+    CourseCoachExclusionsWrite,
     CourseRead,
     CourseStaffWrite,
     CourseUpdate,
@@ -708,9 +709,12 @@ def _belts_read(history) -> list[BeltHistoryRead]:
 
 
 async def _courses_read(
-    db: AsyncSession, courses, *, my_athlete_ids: set[uuid.UUID] | None = None
+    db: AsyncSession, courses, *, my_athlete_ids: set[uuid.UUID] | None = None,
+    mine_ids: set[uuid.UUID] | None = None, with_staff: bool = False,
 ) -> list[CourseRead]:
     ids = [c.id for c in courses]
+    staff = await courses_service.staff_ids_by_course(db, course_ids=ids) if with_staff else {}
+    excluded = await courses_service.coach_exclusions_by_course(db, course_ids=ids) if with_staff else {}
     slots = await courses_service.slots_by_course(db, course_ids=ids)
     enrolled = await courses_service.enrolled_athlete_ids(db, course_ids=ids)
     instructor_ids = {c.instructor_user_id for c in courses if c.instructor_user_id}
@@ -725,6 +729,8 @@ async def _courses_read(
             active=c.active, slots=[SlotRead.model_validate(s) for s in slots[c.id]],
             athletes_count=len(enrolled[c.id]),
             my_athlete_ids=sorted(enrolled[c.id] & my_athlete_ids, key=str) if my_athlete_ids is not None else [],
+            mine=c.id in mine_ids if mine_ids is not None else False,
+            staff_user_ids=staff.get(c.id, []), excluded_coach_ids=excluded.get(c.id, []),
             venue_name=c.venue_name, venue_address=c.venue_address, venue_city=c.venue_city,
             public_description=c.public_description, public_coach_name=c.public_coach_name,
             coach_share_pct=c.coach_share_pct, published=c.published,
@@ -1516,7 +1522,7 @@ async def admin_list_courses(
     courses = await courses_service.list_courses(
         db, scope=current_user.scope, only_active=not include_inactive
     )
-    return await _courses_read(db, courses)
+    return await _courses_read(db, courses, with_staff=True)
 
 
 @admin_router.post("/courses", response_model=CourseRead, status_code=status.HTTP_201_CREATED)
@@ -1532,7 +1538,7 @@ async def admin_create_course(
         )
     except club_service.ClubError as exc:
         _raise(exc)
-    return (await _courses_read(db, [course]))[0]
+    return (await _courses_read(db, [course], with_staff=True))[0]
 
 
 @admin_router.patch("/courses/{course_id}", response_model=CourseRead)
@@ -1549,7 +1555,7 @@ async def admin_update_course(
         )
     except club_service.ClubError as exc:
         _raise(exc)
-    return (await _courses_read(db, [course]))[0]
+    return (await _courses_read(db, [course], with_staff=True))[0]
 
 
 @admin_router.post("/courses/{course_id}/slots", response_model=SlotRead, status_code=status.HTTP_201_CREATED)
@@ -1681,12 +1687,12 @@ async def admin_stats(
 
 async def _staff_course(db: AsyncSession, current_user: ClubUser, course_id: uuid.UUID):
     """Il corso, se chi chiede lo può gestire: la segreteria tutti, un
-    istruttore solo i suoi."""
+    istruttore quelli che vede (tutti, tranne quelli da cui è escluso)."""
     try:
         course = await courses_service.get_course(db, scope=current_user.scope, course_id=course_id)
     except club_service.ClubError as exc:
         _raise(exc)
-    if not await courses_service.teaches(db, course=course, user_id=current_user.user_id):
+    if not await courses_service.can_see(db, course=course, user_id=current_user.user_id):
         granted = await get_permission_codes_for_user(
             db, user_id=current_user.user_id, organization_id=current_user.organization_id
         )
@@ -1716,9 +1722,10 @@ async def staff_list_courses(
     )
     courses = await courses_service.list_courses(
         db, scope=current_user.scope,
-        instructor_user_id=None if MANAGE in granted else current_user.user_id,
+        visible_to_user_id=None if MANAGE in granted else current_user.user_id,
     )
-    return await _courses_read(db, courses)
+    mine = await courses_service.taught_course_ids(db, scope=current_user.scope, user_id=current_user.user_id)
+    return await _courses_read(db, courses, mine_ids=mine)
 
 
 @staff_router.get("/courses/{course_id}/roster", response_model=RosterRead)
@@ -2283,6 +2290,37 @@ async def admin_set_course_staff(
         _raise(exc)
 
 
+@admin_router.get("/courses/{course_id}/coach-exclusions", response_model=list[uuid.UUID])
+async def admin_course_coach_exclusions(
+    course_id: uuid.UUID,
+    current_user: ClubUser = Depends(require_club_permission(MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> list[uuid.UUID]:
+    """I treinador che NON vedono il corso: di regola nessuno, ogni
+    treinador vede tutti i corsi (courses.visible_course_filter)."""
+    try:
+        course = await courses_service.get_course(db, scope=current_user.scope, course_id=course_id)
+    except club_service.ClubError as exc:
+        _raise(exc)
+    return (await courses_service.coach_exclusions_by_course(db, course_ids=[course.id]))[course.id]
+
+
+@admin_router.put("/courses/{course_id}/coach-exclusions", response_model=list[uuid.UUID])
+async def admin_set_course_coach_exclusions(
+    course_id: uuid.UUID,
+    payload: CourseCoachExclusionsWrite,
+    current_user: ClubUser = Depends(require_club_permission(MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> list[uuid.UUID]:
+    try:
+        return await courses_service.set_coach_exclusions(
+            db, scope=current_user.scope, course_id=course_id, user_ids=payload.user_ids,
+            actor_user_id=current_user.user_id,
+        )
+    except club_service.ClubError as exc:
+        _raise(exc)
+
+
 # --- Lezioni, presenze, cartellino ---------------------------------------------------------------
 
 
@@ -2300,7 +2338,8 @@ async def staff_lessons(
     current_user: ClubUser = Depends(require_club_permission(INSTRUCT)),
     db: AsyncSession = Depends(get_db),
 ) -> list[LessonRead]:
-    """Il calendario: le lezioni dei miei corsi (titolare o adjunto); la
+    """Il calendario: le lezioni dei corsi che vedo (tutti, tranne quelli da
+    cui la segreteria mi ha escluso; `mine` su quelli che insegno); la
     segreteria vede tutte quelle del club. Senza date: oggi."""
     today = (await lessons_service.club_now(db, club_id=current_user.club_id)).date()
     start = start or today

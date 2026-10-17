@@ -7,6 +7,7 @@ import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { clubGet, clubSend, type Course } from "@/lib/club";
+import { cn } from "@/lib/cn";
 import { useI18n } from "@/lib/i18n/provider";
 
 const A = (path: string) => `/admin${path}`;
@@ -38,6 +39,8 @@ export function CourseModal({ course: c, defaults, onClose }: {
   const [maxAge, setMaxAge] = useState(c?.max_age != null ? String(c.max_age) : defaults?.max_age != null ? String(defaults.max_age) : "");
   const [instructor, setInstructor] = useState(c?.instructor_user_id ?? "");
   const [active, setActive] = useState(c?.active ?? true);
+  const [assistants, setAssistants] = useState<string[]>(c?.staff_user_ids ?? []);
+  const [hiddenFrom, setHiddenFrom] = useState<string[]>(c?.excluded_coach_ids ?? []);
   const [busy, setBusy] = useState(false);
 
   async function save() {
@@ -48,7 +51,15 @@ export function CourseModal({ course: c, defaults, onClose }: {
       instructor_user_id: instructor || null, active,
     };
     try {
-      await (c ? clubSend(A(`/courses/${c.id}`), "PATCH", body) : clubSend(A("/courses"), "POST", body));
+      const saved = await (c ? clubSend<Course>(A(`/courses/${c.id}`), "PATCH", body) : clubSend<Course>(A("/courses"), "POST", body));
+      // Adjunto ed esclusioni hanno rotte loro: si mandano solo se cambiati.
+      const wantedAssistants = assistants.filter((u) => u !== instructor);
+      if (!sameSet(wantedAssistants, c?.staff_user_ids ?? [])) {
+        await clubSend(A(`/courses/${saved.id}/staff`), "PUT", { user_ids: wantedAssistants });
+      }
+      if (!sameSet(hiddenFrom, c?.excluded_coach_ids ?? [])) {
+        await clubSend(A(`/courses/${saved.id}/coach-exclusions`), "PUT", { user_ids: hiddenFrom });
+      }
       await queryClient.invalidateQueries({ queryKey: ["club"] });
       toast({ tone: "success", title: c ? t("ca.course.updated") : t("ca.course.created") });
       onClose();
@@ -80,7 +91,53 @@ export function CourseModal({ course: c, defaults, onClose }: {
         </div>
         <Field label={t("ca.description")} htmlFor="co-desc"><Textarea id="co-desc" value={description} onChange={(e) => setDescription(e.target.value)} /></Field>
         <label className="flex items-center gap-2 text-sm text-ink-700"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="accent-brand-500 h-4 w-4" /> {t("ca.course.active")}</label>
+        <CoachChecklist title={t("ca.course.assistants")} hint={t("ca.course.assistantsHint")}
+          coaches={instructors.filter((s) => s.user_id !== instructor)} value={assistants} onChange={setAssistants} />
+        <CoachChecklist title={t("ca.course.hiddenFrom")} hint={t("ca.course.hiddenFromHint")} tone="danger"
+          summary={hiddenFrom.length ? t("ca.course.hiddenCount", { n: hiddenFrom.length }) : t("ca.course.everyoneSees")}
+          coaches={instructors} value={hiddenFrom} onChange={setHiddenFrom} />
       </div>
     </Modal>
+  );
+}
+
+function sameSet(a: string[], b: string[]) {
+  return a.length === b.length && a.every((x) => b.includes(x));
+}
+
+/** Una lista di treinador da spuntare: gli adjunto della turma, o quelli che
+ *  NON la vedono (`tone="danger"`; di regola ogni treinador vede tutto). */
+function CoachChecklist({ title, hint, summary, coaches, value, onChange, tone = "brand" }: {
+  title: string; hint: string; summary?: string; coaches: StaffOption[]; value: string[];
+  onChange: (v: string[]) => void; tone?: "brand" | "danger";
+}) {
+  const { t } = useI18n();
+  return (
+    <fieldset className="space-y-2 rounded-2xl bg-ink-50/70 p-3 ring-1 ring-ink-100">
+      <legend className="sr-only">{title}</legend>
+      <div>
+        <p className="text-sm font-semibold text-ink-900">{title}</p>
+        <p className="text-xs text-ink-500">{hint}</p>
+      </div>
+      {coaches.length === 0 ? <p className="text-xs text-ink-400">{t("ca.course.noCoaches")}</p> : (
+        <div className="flex flex-wrap gap-1.5">
+          {coaches.map((s) => {
+            const on = value.includes(s.user_id);
+            return (
+              <label key={s.user_id} className={cn(
+                "flex min-h-9 cursor-pointer items-center gap-2 rounded-full px-3 py-1.5 text-sm ring-1 transition-colors",
+                on ? (tone === "danger" ? "bg-rose-50 text-rose-800 ring-rose-300" : "bg-brand-50 text-brand-800 ring-brand-300")
+                  : "bg-white text-ink-700 ring-ink-200 hover:ring-ink-300",
+              )}>
+                <input type="checkbox" checked={on} className={cn("h-4 w-4", tone === "danger" ? "accent-rose-600" : "accent-brand-500")}
+                  onChange={(e) => onChange(e.target.checked ? [...value, s.user_id] : value.filter((u) => u !== s.user_id))} />
+                {s.name || s.email}
+              </label>
+            );
+          })}
+        </div>
+      )}
+      {summary && <p className={cn("text-xs font-semibold", value.length ? "text-rose-700" : "text-emerald-700")}>{summary}</p>}
+    </fieldset>
   );
 }

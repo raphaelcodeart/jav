@@ -52,12 +52,18 @@ async def lessons(
     now: datetime | None = None,
 ) -> list[dict]:
     """Le lezioni tra `start` ed `end` (compresi), ordinate. Con
-    `teacher_user_id` solo i corsi di quella persona."""
+    `teacher_user_id` solo i corsi che quel treinador vede
+    (`courses.visible_course_filter`: tutti, tranne quelli da cui è escluso),
+    con `mine` sulle lezioni dei corsi che insegna."""
     if end < start or (end - start).days > MAX_RANGE_DAYS:
         raise ClubValidationError("Scegli un intervallo di al massimo due mesi.")
-    courses = await courses_service.list_courses(db, scope=scope, instructor_user_id=teacher_user_id)
+    courses = await courses_service.list_courses(db, scope=scope, visible_to_user_id=teacher_user_id)
     if not courses:
         return []
+    taught = (
+        await courses_service.taught_course_ids(db, scope=scope, user_id=teacher_user_id)
+        if teacher_user_id is not None else set()
+    )
     by_id = {c.id: c for c in courses}
     slots = await courses_service.slots_by_course(db, course_ids=list(by_id))
     enrolled = await courses_service.enrolled_athlete_ids(db, course_ids=list(by_id))
@@ -85,7 +91,7 @@ async def lessons(
                     "course_id": course_id, "course_name": by_id[course_id].name, "slot_id": slot.id, "date": day,
                     "starts_at": slot.starts_at, "ends_at": slot.ends_at, "room": slot.room,
                     "enrolled": len(enrolled[course_id]), "present": present.get((course_id, day), 0),
-                    "current": False,
+                    "current": False, "mine": course_id in taught,
                 })
         day += timedelta(days=1)
     out.sort(key=lambda lesson: (lesson["date"], lesson["starts_at"], lesson["course_name"]))

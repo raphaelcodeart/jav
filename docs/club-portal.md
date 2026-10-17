@@ -1747,7 +1747,23 @@ servizio con `manager` (chi ha anche `club.manage`, la segreteria).
   letti, gli atleti **da tenere d'occhio** (nessuna presenza da 21 giorni,
   certificato scaduto, in scadenza o mancante: solo lo stato, il file resta
   della segreteria) e le ultime note del quaderno.
-- **Presenze**: il treinador vede solo i suoi corsi (titolare o adjunto), la
+- **Chi vede che cosa** (migrazione 0038, `courses.visible_course_filter`,
+  unico punto in cui si decide): ogni treinador vede **tutti i corsi del
+  club** e i loro atleti, più gli atleti attivi che non sono in nessun corso:
+  nei club piccoli i treinador insegnano in tutti i gruppi, e un treinador
+  senza corsi assegnati che apriva le presenze e non trovava nessuno era un
+  errore (Lagos, 17/10/2026). La segreteria **toglie** un corso a una
+  persona dalla scheda della turma («Treinadores que NÃO veem esta turma»,
+  `club_course_coach_exclusions`, `GET/PUT
+  /club/admin/courses/{id}/coach-exclusions`, audit
+  `club.course_coach_exclusions_set`): quel corso, le sue lezioni, le sue
+  note e gli atleti che stanno solo lì per lui non esistono (404). Chi
+  insegna il corso (titolare o adjunto) lo vede comunque e lo trova per primo,
+  segnato «minha» (`mine` su lezioni e corsi). Nella stessa scheda si
+  scelgono gli adjunto (`PUT /club/admin/courses/{id}/staff`). Vedere un
+  corso non è insegnarlo: la quota del treinador sui corsi JAV
+  (`coach_earnings`, `coach_share_pct`) resta del titolare.
+- **Presenze**: il treinador vede i corsi che vede (sopra), la
   segreteria tutti; i giorni passati si aprono dalla striscia del mese (che
   segue il mese del giorno scelto) o dal calendario e si correggono. Un
   giorno futuro si guarda ma non si segna. «Todos presentes» segna in un
@@ -1773,19 +1789,19 @@ servizio con `manager` (chi ha anche `club.manage`, la segreteria).
   doppioni, al massimo 30), testo. Più note per la stessa lezione (titolare
   e adjunto). Si sfogliano come linea del tempo per mese, per corso, con la
   ricerca in tema/tecniche/testo e il filtro per tecnica; accanto le
-  tecniche più lavorate del periodo. Le vedono i treinadores del corso e la
-  segreteria; le corregge solo chi le ha scritte, le toglie anche la
+  tecniche più lavorate del periodo. Le vedono i treinadores che vedono il
+  corso e la segreteria; le corregge solo chi le ha scritte, le toglie anche la
   segreteria (audit).
 - **Quaderno: note sugli atleti** (`club_athlete_notes`,
   `/club/staff/coach/athletes/{id}/notes`, `/club/staff/coach/athlete-notes/{id}`):
   una categoria (tecnica, comportamento, salute, obiettivo, gare, altro) e
-  il testo. Le vedono **solo** i treinadores dei corsi a cui l'atleta è
-  iscritto e la segreteria; mai la famiglia né l'atleta, mai un altro club
+  il testo. Le vedono **solo** i treinadores che vedono l'atleta (un corso
+  a cui è iscritto, o nessun corso) e la segreteria; mai la famiglia né l'atleta, mai un altro club
   (404). Correggerle è di chi le ha scritte (il testo di prima resta
   nell'audit), toglierle anche della segreteria.
 - **Os meus atletas** (`GET /club/staff/coach/athletes`, scheda
-  `GET /club/staff/coach/athletes/{id}`): gli iscritti ai propri corsi (la
-  segreteria: tutti gli attivi) con cintura, presenze degli ultimi 30
+  `GET /club/staff/coach/athletes/{id}`): gli iscritti ai corsi che vede e
+  gli attivi senza corso (la segreteria: tutti gli attivi) con cintura, presenze degli ultimi 30
   giorni, ultima presenza, stato del certificato e numero di note; la scheda
   ha le presenze di 90 giorni giorno per giorno e le note.
 - **Mural** (`GET /club/staff/board`, `POST/PATCH/DELETE /club/staff/news`):

@@ -8,7 +8,7 @@ toccare di nuovo lo stesso nome corregge, non duplica.
 import uuid
 from datetime import date, time
 
-from sqlalchemy import func, select, update
+from sqlalchemy import case, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,6 +20,7 @@ from app.domains.club.models import (
     ClubAttendance,
     ClubCourse,
     ClubCourseAthlete,
+    ClubCourseCoachExclusion,
     ClubCourseSlot,
     ClubCourseStaff,
     ClubFee,
@@ -116,17 +117,98 @@ async def update_course(
 
 async def list_courses(
     db: AsyncSession, *, scope: ClubScope, only_active: bool = True, instructor_user_id: uuid.UUID | None = None,
+    visible_to_user_id: uuid.UUID | None = None,
 ) -> list[ClubCourse]:
+    """I corsi del club. Con `instructor_user_id` solo quelli che quella
+    persona insegna (titolare o adjunto); con `visible_to_user_id` quelli che
+    un treinador vede (`visible_course_filter`), i suoi per primi."""
     stmt = select(ClubCourse).where(ClubCourse.club_id == scope.club_id)
     if only_active:
         stmt = stmt.where(ClubCourse.active.is_(True))
     if instructor_user_id is not None:
-        # I suoi corsi: quelli di cui è titolare e quelli in cui è adjunto.
-        stmt = stmt.where(
-            (ClubCourse.instructor_user_id == instructor_user_id)
-            | ClubCourse.id.in_(select(ClubCourseStaff.course_id).where(ClubCourseStaff.user_id == instructor_user_id))
-        )
+        stmt = stmt.where(_taught_by(instructor_user_id))
+    if visible_to_user_id is not None:
+        stmt = stmt.where(visible_course_filter(visible_to_user_id))
+        # CASE e non `mine DESC`: senza titolare il confronto è NULL, e NULL
+        # in un DESC va in testa.
+        mine = case((_taught_by(visible_to_user_id), 0), else_=1)
+        return list((await db.execute(stmt.order_by(mine, ClubCourse.name))).scalars())
     return list((await db.execute(stmt.order_by(ClubCourse.name))).scalars())
+
+
+def _taught_by(user_id: uuid.UUID):
+    # I suoi corsi: quelli di cui è titolare e quelli in cui è adjunto.
+    return (ClubCourse.instructor_user_id == user_id) | ClubCourse.id.in_(
+        select(ClubCourseStaff.course_id).where(ClubCourseStaff.user_id == user_id)
+    )
+
+
+def visible_course_filter(user_id: uuid.UUID):
+    """Che cosa vede un treinador: **tutti** i corsi del club, tranne quelli da
+    cui la segreteria l'ha escluso (`ClubCourseCoachExclusion`). Nei club
+    piccoli i treinador insegnano in tutti i gruppi: un treinador senza corsi
+    assegnati che non vede nessuno è un errore, non una scelta. Chi insegna il
+    corso lo vede comunque, anche se escluso per sbaglio. Unico punto in cui
+    si decide: l'area del treinador (presenze, lezioni, Início, quaderno, i
+    miei atleti) passa tutta di qui. I soldi no: la quota del treinador sui
+    corsi JAV resta del titolare (`instructor_user_id`)."""
+    excluded = select(ClubCourseCoachExclusion.course_id).where(ClubCourseCoachExclusion.user_id == user_id)
+    return _taught_by(user_id) | ClubCourse.id.not_in(excluded)
+
+
+async def taught_course_ids(db: AsyncSession, *, scope: ClubScope, user_id: uuid.UUID) -> set[uuid.UUID]:
+    """I corsi che `user_id` insegna (titolare o adjunto): «i miei»."""
+    return set((await db.execute(
+        select(ClubCourse.id).where(ClubCourse.club_id == scope.club_id, _taught_by(user_id))
+    )).scalars())
+
+
+async def can_see(db: AsyncSession, *, course: ClubCourse, user_id: uuid.UUID) -> bool:
+    """Il controllo di `visible_course_filter` per un corso solo."""
+    return (await db.execute(
+        select(ClubCourse.id).where(ClubCourse.id == course.id, visible_course_filter(user_id))
+    )).first() is not None
+
+
+async def coach_exclusions_by_course(db: AsyncSession, *, course_ids: list[uuid.UUID]) -> dict[uuid.UUID, list[uuid.UUID]]:
+    out: dict[uuid.UUID, list[uuid.UUID]] = {c: [] for c in course_ids}
+    if course_ids:
+        for course_id, user_id in (await db.execute(
+            select(ClubCourseCoachExclusion.course_id, ClubCourseCoachExclusion.user_id)
+            .where(ClubCourseCoachExclusion.course_id.in_(course_ids))
+        )).all():
+            out[course_id].append(user_id)
+    return out
+
+
+async def set_coach_exclusions(
+    db: AsyncSession, *, scope: ClubScope, course_id: uuid.UUID, user_ids: list[uuid.UUID], actor_user_id: uuid.UUID,
+) -> list[uuid.UUID]:
+    """I treinador che NON vedono il corso: l'elenco intero, che sostituisce
+    il precedente (vuoto = lo vedono tutti)."""
+    course = await get_course(db, scope=scope, course_id=course_id)
+    for user_id in user_ids:
+        await _validate_instructor(db, scope=scope, user_id=user_id)
+    rows = {
+        r.user_id: r for r in (await db.execute(
+            select(ClubCourseCoachExclusion).where(ClubCourseCoachExclusion.course_id == course.id)
+        )).scalars()
+    }
+    wanted = set(user_ids)
+    for user_id in set(rows) - wanted:
+        await db.delete(rows[user_id])
+    for user_id in wanted - set(rows):
+        db.add(ClubCourseCoachExclusion(
+            club_id=scope.club_id, course_id=course.id, user_id=user_id, created_by_user_id=actor_user_id,
+        ))
+    await audit_service.record(
+        db, organization_id=scope.organization_id, actor_user_id=actor_user_id,
+        action="club.course_coach_exclusions_set", entity_type="club_course", entity_id=str(course.id),
+        previous_value={"user_ids": sorted(str(u) for u in rows)},
+        new_value={"user_ids": sorted(str(u) for u in wanted)},
+    )
+    await db.commit()
+    return sorted(wanted, key=str)
 
 
 async def slots_by_course(db: AsyncSession, *, course_ids: list[uuid.UUID]) -> dict[uuid.UUID, list[ClubCourseSlot]]:

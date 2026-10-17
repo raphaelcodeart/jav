@@ -1490,3 +1490,16 @@ club_wishlist_items     i desideri dell'atleta minorenne: athlete_id (CASCADE),
 
 Personalizzazione e permuta del club stanno in `clubs.settings["judogi"]`
 (`customization_cents`, default 3500; `trade_in_percent`, default 50).
+
+**Che cosa vede un treinador** (migrazione 0038, `club/courses.py::visible_course_filter`):
+
+```
+club_course_coach_exclusions  club_id, course_id -> club_courses (ON DELETE CASCADE),
+                              user_id -> users, created_by_user_id -> users, created_at;
+                              UNIQUE (course_id, user_id)
+```
+
+Di regola ogni treinador del club vede tutti i corsi e i loro atleti: una riga
+qui toglie un corso a una persona. Chi insegna il corso (`club_courses.instructor_user_id`
+o `club_course_staff`) lo vede comunque. Non tocca i soldi: la quota del
+treinador sui corsi JAV resta del titolare.

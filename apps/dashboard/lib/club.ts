@@ -499,6 +499,11 @@ export interface Course {
   slots: Slot[];
   athletes_count: number;
   my_athlete_ids: string[];
+  /** Per il treinador: la insegna (titolare o adjunto). */
+  mine?: boolean;
+  /** Per la segreteria: adjunto e treinador che NON vedono la turma. */
+  staff_user_ids?: string[];
+  excluded_coach_ids?: string[];
   /** Corsi JAV: la scuola, il testo pubblico, la parte del treinador. */
   venue_name: string | null;
   venue_address: string | null;
@@ -757,6 +762,8 @@ export interface Lesson {
   enrolled: number;
   present: number;
   current: boolean;
+  /** Una lezione di una turma che chi chiede insegna. */
+  mine?: boolean;
 }
 
 export interface WorkSession {
