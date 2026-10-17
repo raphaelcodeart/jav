@@ -803,3 +803,9 @@ Poi: `/customer` aperta da un accesso solo atleta (ariel.83, con l'«indietro»
 del browser dopo il cambio di account) dava «Qualcosa è andato storto»: la
 pagina chiede i contratti, che un atleta non può leggere (403). Ora chi non ha
 il ruolo CUSTOMER viene mandato a `/area`, cioè nella sua area.
+
+Poi: sul telefono il calendario del mese degli eventi sembrava vuoto (solo
+puntini da 6 px, l'elenco del mese fuori schermo). Ora il giorno con eventi
+è un cerchio colorato con puntini più grandi e il numero di eventi; toccarlo
+porta all'elenco di quel giorno; l'intestazione mostra l'iniziale del giorno
+(«SEGUNDATERÇA…» si sovrapponeva). Computer invariato.

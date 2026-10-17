@@ -425,13 +425,29 @@ function CalendarView({ events, year, month, todayIso, selected, onSelect }: {
 }) {
   const { t, fmt } = useI18n();
   const days = monthGrid(year, month);
-  const weekdays = days.slice(0, 7).map((d) => fmt.date(d, { weekday: "short" }));
+  // Sul telefono «segunda, terça…» non ci stanno: l'iniziale.
+  const weekdays = days.slice(0, 7).map((d) => ({ short: fmt.date(d, { weekday: "short" }), narrow: fmt.date(d, { weekday: "narrow" }) }));
   const picked = selected ? covering(events, selected) : null;
+  // Sotto xl l'elenco sta sotto il calendario, fuori schermo sul telefono:
+  // toccando un giorno ci si arriva.
+  const listRef = useRef<HTMLElement>(null);
+  function pick(iso: string) {
+    const next = selected === iso ? null : iso;
+    onSelect(next);
+    if (next && window.matchMedia("(max-width: 1279px)").matches) {
+      requestAnimationFrame(() => listRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    }
+  }
   return (
     <div className="grid gap-6 xl:grid-cols-[1fr_22rem]">
       <div className="glass-card overflow-hidden rounded-3xl">
         <div className="grid grid-cols-7 bg-ink-900 text-center text-[11px] font-bold uppercase tracking-widest text-white/80">
-          {weekdays.map((w) => <div key={w} className="py-2">{w}</div>)}
+          {weekdays.map((w) => (
+            <div key={w.short} className="py-2">
+              <span className="sm:hidden" aria-hidden="true">{w.narrow}</span>
+              <span className="hidden sm:inline">{w.short}</span>
+            </div>
+          ))}
         </div>
         <div className="grid grid-cols-7">
           {days.map((d) => {
@@ -443,7 +459,7 @@ function CalendarView({ events, year, month, todayIso, selected, onSelect }: {
               <button
                 key={iso}
                 type="button"
-                onClick={() => onSelect(selected === iso ? null : iso)}
+                onClick={() => pick(iso)}
                 className={cn(
                   "group relative min-h-[4.5rem] cursor-pointer border-b border-r border-ink-900/5 p-1.5 text-left align-top transition-colors sm:min-h-[6.5rem]",
                   inMonth ? "bg-white hover:bg-brand-50/50" : "bg-ink-50/60 text-ink-400",
@@ -451,7 +467,11 @@ function CalendarView({ events, year, month, todayIso, selected, onSelect }: {
                 )}
                 aria-label={`${fmt.date(d, { day: "numeric", month: "long" })}: ${t("site.ev.count", { n: list.length })}`}
               >
-                <span className={cn("inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold", isToday ? "bg-brand-500 text-white" : inMonth ? "text-ink-700" : "")}>{d.getDate()}</span>
+                {/* Sul telefono non c'è posto per i nomi: il giorno con eventi
+                    si colora (come nella vista anno) e dice quanti sono. */}
+                <span className={cn("inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold",
+                  isToday ? "bg-brand-500 text-white" : inMonth ? "text-ink-700" : "",
+                  !isToday && list.length > 0 && cn("text-white sm:bg-transparent sm:text-ink-700", style(list[0]!.kind).dot))}>{d.getDate()}</span>
                 <div className="mt-1 hidden space-y-0.5 sm:block">
                   {list.slice(0, 3).map((e) => (
                     <span key={e.id} className={cn("block truncate rounded-md px-1.5 py-0.5 text-[10px] font-semibold leading-tight", style(e.kind).chip, e.starts_on !== iso && "opacity-80")} title={e.name}>
@@ -460,15 +480,18 @@ function CalendarView({ events, year, month, todayIso, selected, onSelect }: {
                   ))}
                   {list.length > 3 && <span className="block px-1 text-[10px] font-bold text-ink-500">{t("site.ev.more", { n: list.length - 3 })}</span>}
                 </div>
-                <div className="mt-1 flex flex-wrap gap-0.5 sm:hidden">
-                  {list.slice(0, 4).map((e) => <span key={e.id} className={cn("h-1.5 w-1.5 rounded-full", style(e.kind).dot)} />)}
-                </div>
+                {list.length > 0 && (
+                  <div className="mt-1 flex flex-wrap items-center gap-0.5 sm:hidden">
+                    {list.slice(0, 3).map((e) => <span key={e.id} className={cn("h-2 w-2 rounded-full", style(e.kind).dot)} />)}
+                    {list.length > 1 && <span className="text-[10px] font-bold leading-none text-ink-600">{list.length}</span>}
+                  </div>
+                )}
               </button>
             );
           })}
         </div>
       </div>
-      <aside className="space-y-3">
+      <aside ref={listRef} className="scroll-mt-24 space-y-3">
         <h3 className="font-display text-xl capitalize text-ink-900">
           {selected ? fmt.date(day(selected), { weekday: "long", day: "numeric", month: "long" }) : t("site.ev.monthEvents")}
         </h3>
