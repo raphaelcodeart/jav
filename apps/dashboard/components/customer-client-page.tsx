@@ -29,6 +29,7 @@ import { RankingPanel } from "@/components/club/ranking-panel";
 import { useClubFeatures } from "@/components/club/jav-courses";
 import { useI18n } from "@/lib/i18n/provider";
 import type { ContractRead, CustomerRead } from "@/lib/types";
+import { useEventsReturn } from "@/lib/events-return";
 
 async function fetchMyCustomerRecord(): Promise<CustomerRead | null> {
   const res = await fetch("/api/proxy/customers/me");
@@ -352,6 +353,15 @@ export function CustomerClientPage({ email, organizationId }: CustomerClientPage
   const [wizard, setWizard] = useState<WizardTarget | "new" | null>(
     linkedPratica ? { requestId: linkedPratica, step: "summary" } : null
   );
+
+  // Tornando dalla pagina di un evento aperta dal calendario delle gare: di
+  // nuovo sulle gare (lib/events-return.ts). Durante il render, una volta.
+  const back = useEventsReturn();
+  const [backSeen, setBackSeen] = useState(false);
+  if (!backSeen && back?.url.startsWith("/customer")) {
+    setBackSeen(true);
+    setActiveTab("club-competitions");
+  }
 
   // A deep-link from an email ("Vai al wallet" etc, ?tab=wallet) switches to
   // that tab. The query params are stripped right after reading them so a

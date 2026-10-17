@@ -26,6 +26,7 @@ import { ACHIEVEMENT_ICONS, clubGet, clubSend, type AthleteDetail } from "@/lib/
 import { cn } from "@/lib/cn";
 import type { MessageKey } from "@/lib/i18n/messages/it";
 import { useI18n } from "@/lib/i18n/provider";
+import { useEventsReturn } from "@/lib/events-return";
 
 interface AreaRef { id: string; name: string; photo_url: string | null; is_own: boolean }
 interface AreaLesson { date: string; course_id: string; course_name: string; starts_at: string; ends_at: string; status: "PRESENT" | "ABSENT" | "MISSED" | "TODAY" | "UPCOMING" }
@@ -78,6 +79,14 @@ export function AthleteAreaPage({ initialId }: { initialId: string | null }) {
   const { data: list, isLoading } = useQuery({ queryKey: ["club", "athlete-area"], queryFn: () => clubGet<AreaRef[]>("/athlete-area") });
   const [picked, setPicked] = useState<string | null>(initialId);
   const [section, setSection] = useState<AreaSection>("home");
+  // Tornando dalla pagina di un evento aperta dal calendario: di nuovo su
+  // «Gare e stage» (lib/events-return.ts). Durante il render, una volta.
+  const back = useEventsReturn();
+  const [backSeen, setBackSeen] = useState(false);
+  if (!backSeen && back?.url.startsWith("/atleta")) {
+    setBackSeen(true);
+    setSection("competitions");
+  }
   const current = list?.find((a) => a.id === picked) ?? list?.[0];
   const navItems: NavItem[] = AREA_NAV.map((n) => ({ key: n.key, label: t(n.label), icon: <span className="text-base leading-none" aria-hidden="true">{n.icon}</span> }));
 
@@ -419,7 +428,7 @@ function AreaCompetitionsSection({ athlete }: { athlete: AthleteDetail }) {
         { key: "events", label: `🗓️ ${t("comp.eventsTab")}` },
         { key: "wish", label: `🙋 ${t("area.wishTab")}` },
       ]} />
-      {tab === "events" ? <AreaEvents /> : <AreaCompetitions athlete={athlete} />}
+      {tab === "events" ? <AreaEvents returnHref={`/atleta?a=${athlete.id}`} /> : <AreaCompetitions athlete={athlete} />}
     </div>
   );
 }

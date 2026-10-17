@@ -1003,6 +1003,7 @@ export function AdminPromotersPanel({
             <div className="mb-5 pb-5 border-b border-slate-200">
               <label className="text-xs font-semibold text-slate-600 uppercase block mb-2">Foto profilo</label>
               <PhotoUpload
+                crop
                 currentUrl={editPhotoUrl}
                 uploadPath={`network/agents/${editingAgent.id}/photo`}
                 onUploaded={(url) => {

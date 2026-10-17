@@ -19,6 +19,7 @@
 Backed by the MinIO instance running in this stack (docker-compose.dev.yml).
 """
 
+import io
 import mimetypes
 import uuid
 
@@ -121,18 +122,57 @@ def ensure_media_bucket() -> None:
     client.put_bucket_policy(Bucket=bucket, Policy=policy)
 
 
-def upload_media(*, file_bytes: bytes, content_type: str, key_prefix: str) -> str:
+#: Il lato più lungo di un'immagine salvata: abbastanza per una copertina a
+#: tutto schermo. Le foto profilo (cerchi) ne chiedono meno (AVATAR_MAX_SIDE).
+MEDIA_MAX_SIDE = 1600
+AVATAR_MAX_SIDE = 800
+
+
+def optimize_image(file_bytes: bytes, content_type: str, *, max_side: int = MEDIA_MAX_SIDE) -> tuple[bytes, str]:
+    """Una foto pronta da salvare: girata come la mostra il telefono (EXIF),
+    ridotta a `max_side` px sul lato lungo, senza metadati (il GPS di una foto
+    scattata col telefono non finisce sul sito) e ricompressa: JPEG
+    progressivo se è opaca, PNG se ha trasparenza (un logo). Una GIF resta
+    com'è (può essere animata). Un file che non si apre come immagine è
+    rifiutato: la firma dei primi byte da sola non basta a dirlo."""
+    if content_type == "image/gif":
+        return file_bytes, content_type
+    from PIL import Image, ImageOps, UnidentifiedImageError
+
+    try:
+        with Image.open(io.BytesIO(file_bytes)) as img:
+            img.load()
+            img = ImageOps.exif_transpose(img)
+            img.thumbnail((max_side, max_side), Image.Resampling.LANCZOS)
+            has_alpha = img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info)
+            out = io.BytesIO()
+            if has_alpha:
+                img = img.convert("RGBA")
+                img.save(out, format="PNG", optimize=True)
+                return out.getvalue(), "image/png"
+            img = img.convert("RGB")
+            img.save(out, format="JPEG", quality=85, optimize=True, progressive=True)
+            return out.getvalue(), "image/jpeg"
+    except (UnidentifiedImageError, OSError, ValueError) as exc:
+        raise UploadValidationError("Il file non è un'immagine leggibile.") from exc
+
+
+def upload_media(
+    *, file_bytes: bytes, content_type: str, key_prefix: str, max_side: int = MEDIA_MAX_SIDE,
+) -> str:
     """Uploads to the public bucket under a fresh random key (old uploads for
     the same entity are never overwritten in place -- the caller just points
     its photo_url column at the new key, orphaning the old object; not worth
     a cleanup job for a handful of KB images). Returns the PUBLIC url the
     browser can load directly (through nginx's /media/ proxy, never MinIO's
-    internal docker-network address)."""
+    internal docker-network address). The image is stored optimized
+    (optimize_image): a 5 MB phone photo becomes a few hundred KB."""
     if content_type not in ALLOWED_IMAGE_CONTENT_TYPES:
         raise UploadValidationError(f"Unsupported content type: {content_type}")
     if len(file_bytes) > MAX_UPLOAD_BYTES:
         raise UploadValidationError("File too large (max 5 MB)")
     _verify_magic_bytes(file_bytes=file_bytes, content_type=content_type)
+    file_bytes, content_type = optimize_image(file_bytes, content_type, max_side=max_side)
 
     extension = mimetypes.guess_extension(content_type) or ".bin"
     key = f"{key_prefix}/{uuid.uuid4().hex}{extension}"

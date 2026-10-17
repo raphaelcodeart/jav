@@ -4,6 +4,7 @@ import { MotionConfig, motion } from "motion/react";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { BeltBadge } from "@/components/ui/belt";
+import { ImageCropDialog } from "@/components/ui/image-cropper";
 import { useToast } from "@/components/ui/toast";
 import { clubSend, type AthleteCard, type Obligations } from "@/lib/club";
 import { cn } from "@/lib/cn";
@@ -32,6 +33,8 @@ export function AthleteHealthCard({ athlete: a, mode, onChanged, onAction }: {
   const toast = useToast();
   const queryClient = useQueryClient();
   const [uploading, setUploading] = useState(false);
+  // La foto scelta, da ritagliare prima di caricarla.
+  const [picked, setPicked] = useState<File | null>(null);
   const o = a.obligations;
   const medals = a.medals.gold + a.medals.silver + a.medals.bronze;
 
@@ -96,8 +99,10 @@ export function AthleteHealthCard({ athlete: a, mode, onChanged, onAction }: {
                 {uploading ? "…" : "📷"}
               </span>
               <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadPhoto(f); e.target.value = ""; }} />
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) setPicked(f); e.target.value = ""; }} />
             </label>
+            <ImageCropDialog file={picked} onCancel={() => setPicked(null)}
+              onConfirm={async (f) => { await uploadPhoto(f); setPicked(null); }} />
             <div className="min-w-0 flex-1 text-center sm:text-left">
               <p className="text-xs font-bold uppercase tracking-[0.22em] text-accent-200">{a.club_name ?? ""}</p>
               <h2 className="font-display text-3xl leading-tight sm:text-4xl">{a.first_name} {a.last_name}</h2>

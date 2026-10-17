@@ -1283,7 +1283,7 @@ async def upload_site_image(
     atleti). La copertina e il logo si sostituiscono; una foto della
     galleria si aggiunge in fondo; la foto di un allenatore torna solo come
     indirizzo, da mettere nella scheda dell'allenatore."""
-    from app.core.storage import UploadValidationError, upload_media
+    from app.core.storage import AVATAR_MAX_SIDE, MEDIA_MAX_SIDE, UploadValidationError, upload_media
 
     if slot not in IMAGE_SLOTS:
         raise ClubValidationError("Tipo di foto non valido.")
@@ -1291,7 +1291,8 @@ async def upload_site_image(
     if slot == "gallery" and len(site.gallery or []) >= MAX_GALLERY:
         raise ClubValidationError(f"La galleria ha già {MAX_GALLERY} foto: togline una prima di aggiungerne altre.")
     try:
-        url = upload_media(file_bytes=file_bytes, content_type=content_type, key_prefix=f"club-sites/{scope.club_id}/{slot}")
+        url = upload_media(file_bytes=file_bytes, content_type=content_type, key_prefix=f"club-sites/{scope.club_id}/{slot}",
+                           max_side=AVATAR_MAX_SIDE if slot == "coach" else MEDIA_MAX_SIDE)
     except UploadValidationError as exc:
         raise ClubValidationError("La foto deve essere un'immagine JPG, PNG o WebP di massimo 5 MB.") from exc
     if slot == "hero":

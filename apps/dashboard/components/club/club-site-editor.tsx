@@ -17,6 +17,7 @@ import { friendlyApiError } from "@/lib/api-error";
 import { brandTheme, contrast, normalizeHex, themeStyle } from "@/lib/brand";
 import { cn } from "@/lib/cn";
 import { useI18n } from "@/lib/i18n/provider";
+import { ImageCropDialog } from "@/components/ui/image-cropper";
 
 // L'editor della pagina pubblica del club (docs/club-portal.md, "Sito
 // pubblico"). La segreteria scrive testi, carica foto, mette contatti e
@@ -381,7 +382,7 @@ function SiteForm({ site }: { site: SiteAdmin }) {
               return (
                 <li key={i} className="flex flex-col gap-3 rounded-2xl border border-ink-900/10 bg-white p-3 sm:flex-row sm:items-end">
                   <ImageSlot
-                    label={t("siteEditor.coachPhoto")} url={coach.photo_url} compact
+                    label={t("siteEditor.coachPhoto")} url={coach.photo_url} compact crop
                     onUpload={async (file) => { const r = await uploadImage("coach", file); update({ photo_url: r.url }); }}
                     onRemove={() => update({ photo_url: null })}
                   />
@@ -637,14 +638,17 @@ function BrandCard({ site, hero, logo, colors, onChange, onReset }: {
 
 /** Una foto della pagina: anteprima subito (dal file scelto, prima ancora
  *  che il caricamento finisca), poi quella vera. */
-function ImageSlot({ label, hint, url, wide = false, compact = false, onUpload, onRemove }: {
+function ImageSlot({ label, hint, url, wide = false, compact = false, crop = false, onUpload, onRemove }: {
   label: string; hint?: string; url: string | null; wide?: boolean; compact?: boolean;
+  /** Una foto di persona (un allenatore): prima si ritaglia nel cerchio. */
+  crop?: boolean;
   onUpload: (file: File) => Promise<void>; onRemove: () => void;
 }) {
   const { t } = useI18n();
   const toast = useToast();
   const [preview, setPreview] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [picked, setPicked] = useState<File | null>(null);
   const shown = preview ?? url;
 
   async function handle(file: File) {
@@ -673,10 +677,12 @@ function ImageSlot({ label, hint, url, wide = false, compact = false, onUpload, 
         {busy && <span className="absolute inset-0 flex items-center justify-center bg-white/70 text-xs font-semibold text-ink-700">{t("siteEditor.uploading")}</span>}
       </div>
       <div className="mt-2 flex flex-wrap gap-2">
-        <UploadButton label={shown ? t("siteEditor.change") : t("siteEditor.upload")} ariaLabel={label} onFile={handle} disabled={busy} />
+        <UploadButton label={shown ? t("siteEditor.change") : t("siteEditor.upload")} ariaLabel={label} disabled={busy}
+          onFile={async (file) => { if (crop) setPicked(file); else await handle(file); }} />
         {url && !busy && <Button size="sm" variant="ghost" className="text-rose-600" onClick={onRemove}>{t("siteEditor.remove")}</Button>}
       </div>
       {hint && <p className="mt-1 text-xs text-ink-500">{hint}</p>}
+      {crop && <ImageCropDialog file={picked} onCancel={() => setPicked(null)} onConfirm={async (f) => { setPicked(null); await handle(f); }} />}
     </div>
   );
 }

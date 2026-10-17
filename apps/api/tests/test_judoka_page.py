@@ -9,11 +9,13 @@ pubblicazione, foto e video solo con il permesso della foto, gli atleti dei
 corsi JAV mai, e nessun dato personale arriva al browser.
 """
 
+import io
 import json
 from datetime import date
 
 import httpx
 import pytest
+from PIL import Image
 from sqlalchemy import update
 
 from app.domains.club import service as club_service
@@ -25,11 +27,11 @@ from tests.test_club_multi import _other_club
 from tests.test_club_site import _competition, _consent_and_publish, _published_site, _result
 
 TODAY = date(2026, 10, 14)
-#: Un PNG di 1×1 pixel: abbastanza vero da passare il controllo dei byte magici.
-PNG = (
-    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
-    b"\x00\x00\x00\rIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82"
-)
+#: Un PNG vero di 1×1 pixel: le foto si aprono e si ricomprimono prima di
+#: salvarle (core/storage.py::optimize_image), dei byte finti non basterebbero.
+_png = io.BytesIO()
+Image.new("RGBA", (1, 1), (255, 0, 0, 255)).save(_png, format="PNG")
+PNG = _png.getvalue()
 IJF = "https://www.ijf.org/judoka/12345"
 
 

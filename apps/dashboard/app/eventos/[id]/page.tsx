@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
+import { BackToCalendar } from "@/components/site/back-to-calendar";
 import { Container, EmptyNote, KindBadge } from "@/components/site/blocks";
 import { EventParticipants } from "@/components/site/event-participants";
 import { ageBandLabel, eventDates, levelLabel, siteI18n } from "@/components/site/i18n";
@@ -10,7 +11,7 @@ import { Reveal } from "@/components/site/reveal";
 import { SiteShell } from "@/components/site/site-shell";
 import { isUuid, publicSite } from "@/lib/public-site";
 
-type Params = { params: Promise<{ id: string }> };
+type Params = { params: Promise<{ id: string }>; searchParams?: Promise<{ from?: string }> };
 
 async function load(id: string) {
   return isUuid(id) ? publicSite.event(id) : null;
@@ -29,8 +30,10 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 /** Un evento: la scheda pratica (date, luogo con la mappa, scadenza,
  *  quota, circolare, club) e gli iscritti come nel ranking: «Nome I.», club
  *  e cintura per tutti, il popup della scheda per chi ce l'ha. */
-export default async function EventPage({ params }: Params) {
+export default async function EventPage({ params, searchParams }: Params) {
   const { id } = await params;
+  // Aperta dal calendario dell'area: il bottone per tornarci.
+  const fromArea = (await searchParams)?.from === "area";
   const [{ t, fmt }, event] = await Promise.all([siteI18n(), load(id)]);
   if (!event) notFound();
 
@@ -76,6 +79,7 @@ export default async function EventPage({ params }: Params) {
         <div className="pointer-events-none absolute right-0 -top-20 h-72 w-72 rounded-full bg-accent-400/25 blur-3xl" aria-hidden="true" />
         <Container className="relative py-14 sm:py-20">
           <Reveal>
+            {fromArea && <BackToCalendar />}
             <nav aria-label={t("site.breadcrumb")} className="mb-6 text-sm text-white/70">
               <Link href="/eventos" className="hover:text-white">{t("site.nav.events")}</Link> <span aria-hidden="true">/</span>{" "}
               {event.club

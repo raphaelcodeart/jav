@@ -1113,6 +1113,17 @@ See `database-model.md §7` for the table shape. Behavior:
   previous photo's object in place -- it gets a fresh random key and the
   `photo_url` column is repointed; the old object is simply orphaned (not worth
   a cleanup job for a handful of KB-sized images).
+- Every image is stored **optimized** (`core/storage.py::optimize_image`, Pillow):
+  turned upright from its EXIF orientation, shrunk to 1600 px on the long side
+  (800 for profile photos: athletes, customers, promoters, club coaches --
+  `AVATAR_MAX_SIDE`), all metadata stripped (no GPS from a phone photo),
+  re-encoded as progressive JPEG q85, or PNG when it has transparency (a logo).
+  A GIF is kept as it is. A file that doesn't decode as an image is refused,
+  even with the right magic bytes.
+- Profile photos (the round ones) are **cropped in the browser first**
+  (`components/ui/image-cropper.tsx`): drag, zoom (slider, wheel, two fingers),
+  a live preview in the circle at three sizes; the square crop goes up as a
+  JPEG of at most 800 px, never upscaled.
 - If no photo has been uploaded, `photo_url` is `NULL` and every list/detail view
   shows a generic person icon -- never a broken `<img>` tag.
 

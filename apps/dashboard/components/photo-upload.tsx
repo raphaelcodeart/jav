@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { ImageCropDialog } from "@/components/ui/image-cropper";
 import { friendlyApiError } from "@/lib/api-error";
 
 interface PhotoUploadProps {
@@ -10,6 +11,8 @@ interface PhotoUploadProps {
   onUploaded: (newPhotoUrl: string) => void;
   alt: string;
   size?: number;
+  /** Una foto profilo: prima di caricarla si ritaglia nel cerchio. */
+  crop?: boolean;
 }
 
 /** Shared photo upload widget: shows the current photo (or a generic person
@@ -17,16 +20,25 @@ interface PhotoUploadProps {
     preview of whatever was just picked before upload completes. Reused for
     customer, promoter and product photos -- same upload mechanics, same
     "name prominent, id small below"-style fallback everywhere. */
-export function PhotoUpload({ currentUrl, uploadPath, onUploaded, alt, size = 96 }: PhotoUploadProps) {
+export function PhotoUpload({ currentUrl, uploadPath, onUploaded, alt, size = 96, crop = false }: PhotoUploadProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [picked, setPicked] = useState<File | null>(null);
 
-  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (crop) {
+      setPicked(file);
+      e.target.value = "";
+      return;
+    }
+    void upload(file);
+  }
 
+  async function upload(file: File) {
     setError(null);
     const localPreview = URL.createObjectURL(file);
     setPreviewUrl(localPreview);
@@ -75,6 +87,7 @@ export function PhotoUpload({ currentUrl, uploadPath, onUploaded, alt, size = 96
         </label>
         {error && <p className="text-[11px] text-rose-400">{error}</p>}
       </div>
+      {crop && <ImageCropDialog file={picked} onCancel={() => setPicked(null)} onConfirm={async (f) => { setPicked(null); await upload(f); }} />}
     </div>
   );
 }

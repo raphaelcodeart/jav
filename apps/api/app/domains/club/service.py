@@ -383,11 +383,12 @@ async def update_athlete(
 async def set_athlete_photo(
     db: AsyncSession, *, athlete: ClubAthlete, file_bytes: bytes, content_type: str, actor_user_id: uuid.UUID
 ) -> ClubAthlete:
-    from app.core.storage import UploadValidationError, upload_media
+    from app.core.storage import AVATAR_MAX_SIDE, UploadValidationError, upload_media
 
     try:
         athlete.photo_url = upload_media(
-            file_bytes=file_bytes, content_type=content_type, key_prefix=f"club-athletes/{athlete.id}"
+            file_bytes=file_bytes, content_type=content_type, key_prefix=f"club-athletes/{athlete.id}",
+            max_side=AVATAR_MAX_SIDE,
         )
     except UploadValidationError as exc:
         raise ClubValidationError("La foto deve essere un'immagine JPG, PNG o WebP di massimo 5 MB.") from exc

@@ -788,3 +788,13 @@ os eventos». Il calendario chiama `/backend/api/public-site/events`, e
 `api` con un IP nuovo, rispondeva 502. Ora usa variabile + resolver, con il
 `set` prima del `rewrite` (guida di migrazione, punto 11). Nessuna
 migrazione.
+
+Poi: **ritaglio delle foto profilo** (`components/ui/image-cropper.tsx`) nella
+scheda dell'atleta (famiglia, area e segreteria), per allenatori del sito del
+club, clienti e promoter; il server salva **ogni immagine ottimizzata**
+(`core/storage.py::optimize_image`: EXIF girato, 1600/800 px, niente
+metadati, JPEG q85 o PNG con trasparenza). **«Torna al calendario»** nella
+pagina di un evento aperta dall'area, con lo stato del calendario
+(`lib/events-return.ts`). Il PNG di prova di `test_judoka_page.py` era rotto
+(ora rifiutato): ne genera uno vero. Test: `tests/test_image_optimize.py`.
+Nessuna migrazione.

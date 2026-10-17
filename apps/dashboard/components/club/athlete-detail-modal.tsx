@@ -10,6 +10,7 @@ import { Badge, FeeStatusPill } from "@/components/ui/badge";
 import { BeltBadge } from "@/components/ui/belt";
 import { Field, Input, Select } from "@/components/ui/field";
 import { AchievementBadge } from "@/components/ui/gamification";
+import { ImageCropDialog } from "@/components/ui/image-cropper";
 import { Modal } from "@/components/ui/modal";
 import { ProgressBar } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -42,6 +43,7 @@ export function AthleteDetailModal({ athleteId, onClose, initialTab = "path" }: 
   const features = useClubFeatures();
   const [editing, setEditing] = useState(false);
   const [payFee, setPayFee] = useState<Fee | null>(null);
+  const [pickedPhoto, setPickedPhoto] = useState<File | null>(null);
   const queryClient = useQueryClient();
   const toast = useToast();
   const { t, fmt } = useI18n();
@@ -85,8 +87,10 @@ export function AthleteDetailModal({ athleteId, onClose, initialTab = "path" }: 
                   <span className="h-full w-full flex items-center justify-center font-display text-4xl">{a.first_name.slice(0, 1)}</span>
                 )}
                 <span className="absolute inset-0 bg-ink-900/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-xs font-bold transition">📷 {t("common.change")}</span>
-                <input type="file" accept="image/*" capture="user" className="sr-only" onChange={(e) => e.target.files?.[0] && uploadPhoto(e.target.files[0])} />
+                <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(e) => { const f = e.target.files?.[0]; if (f) setPickedPhoto(f); e.target.value = ""; }} />
               </label>
+              <ImageCropDialog file={pickedPhoto} onCancel={() => setPickedPhoto(null)}
+                onConfirm={async (f) => { await uploadPhoto(f); setPickedPhoto(null); }} />
               <div className="min-w-0 flex-1">
                 <h2 className="text-2xl">{a.first_name} {a.last_name}</h2>
                 <p className="text-sm text-white/80 mt-0.5">

@@ -35,6 +35,9 @@ dependencies = [
     # dei PDF della base di conoscenza (javbot/knowledge.py), puro Python.
     "anthropic>=1.14,<2",
     "pypdf>=5.0",
+    # Le foto caricate si ridimensionano e si ricomprimono prima di salvarle
+    # (core/storage.py::optimize_image). Arrivava già con reportlab.
+    "pillow>=11.0",
 ]
 
 [project.optional-dependencies]

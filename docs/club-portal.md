@@ -1526,6 +1526,13 @@ sessioni scadute.
   (🗓️ Eventi), per gli atleti la prima di «Gare e stage» (accanto a
   «Voglio partecipare»). Stessa grafica, dati pubblici
   (`components/club/area-events.tsx`).
+- **Tornare al calendario**: nell'area il link di un evento è
+  `/eventos/<id>?from=area` e, prima di aprirlo, salva dove si era (sezione
+  dell'area, vista, mese, filtri, pagina della lista, giorno scelto,
+  scorrimento) in sessionStorage (`lib/events-return.ts`, mezz'ora). La pagina
+  dell'evento mostra «← Torna al calendario»; tornando (anche con l'indietro
+  del browser) l'area riapre le gare e il calendario riparte da lì, poi il
+  punto si cancella.
 - La lista mette **in cima i prossimi eventi** (dal più vicino), poi quelli
   già fatti (dal più recente); nell'anno in corso arriva fino a dicembre
   dell'anno dopo. A pagine da 12.

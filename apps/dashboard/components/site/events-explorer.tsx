@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Pagination, usePaged } from "@/components/ui/pagination";
+import { Pagination } from "@/components/ui/pagination";
 import { cn } from "@/lib/cn";
+import { saveEventsReturn, type EventsReturn } from "@/lib/events-return";
 import { useI18n } from "@/lib/i18n/provider";
 import type { PublicEvent } from "@/lib/public-site";
 
@@ -19,7 +20,13 @@ export type View = "list" | "calendar" | "year";
 export interface ExplorerState {
   view: View; year: number; month: number; q: string; kind: string; level: string; club: string; age: string;
   open: boolean;
+  /** La pagina della lista (da 1); solo nell'area, dove si torna dalla pagina di un evento. */
+  page?: number;
 }
+
+/** Il link alla pagina di un evento: nell'area porta con sé il modo di
+ *  tornare (events-return.ts), sul sito è il link semplice. */
+const OpenEvent = createContext<{ query: string; onOpen: () => void } | null>(null);
 
 const API = "/backend/api/public-site/events";
 const KINDS = ["COMPETITION", "STAGE", "REFEREEING", "EDUCATION", "MEETING", "OTHER"] as const;
@@ -65,14 +72,19 @@ async function fetchYear(year: number, club: string, toYear = year): Promise<Pub
 /** `embedded`: dentro l'area riservata (atleti e famiglie): stesso calendario,
  *  ma l'URL della pagina non si tocca e la barra non si attacca sotto
  *  l'header del sito. */
-export function EventsExplorer({ initial, initialEvents, clubs, todayIso, embedded = false }: {
+export function EventsExplorer({ initial, initialEvents, clubs, todayIso, embedded = false, returnHref, restored }: {
   initial: ExplorerState; initialEvents?: PublicEvent[]; clubs: { slug: string; name: string }[]; todayIso: string;
   embedded?: boolean;
+  /** Nell'area: l'indirizzo della sezione a cui torna il bottone della pagina dell'evento. */
+  returnHref?: string;
+  /** Dove si era prima di aprire un evento: si riparte da lì. */
+  restored?: EventsReturn | null;
 }) {
   const { t, fmt } = useI18n();
-  const [s, setS] = useState<ExplorerState>(initial);
-  const [selectedDay, setSelectedDay] = useState<string | null>(null);
-  const set = (change: Partial<ExplorerState>) => setS((prev) => ({ ...prev, ...change }));
+  const [s, setS] = useState<ExplorerState>(restored?.state ?? initial);
+  const [selectedDay, setSelectedDay] = useState<string | null>(restored?.day ?? null);
+  // Cambiare vista, anno o filtri riporta la lista alla prima pagina.
+  const set = (change: Partial<ExplorerState>) => setS((prev) => ({ ...prev, page: 1, ...change }));
   const today = useMemo(() => day(todayIso), [todayIso]);
 
   const { data = [], isFetching, isError } = useQuery({
@@ -129,7 +141,46 @@ export function EventsExplorer({ initial, initialEvents, clubs, todayIso, embedd
     setSelectedDay(null);
   }
 
+  // Tornando da un evento: lo scorrimento di prima, appena gli eventi ci
+  // sono. La pagina intorno (menu, intestazioni) può crescere ancora un
+  // momento: si riprova per un secondo e mezzo, e ci si ferma se chi guarda
+  // scorre da sé.
+  const scrolled = useRef(false);
+  const stopScroll = useRef<(() => void) | null>(null);
+  useEffect(() => () => stopScroll.current?.(), []);
+  useEffect(() => {
+    if (!restored || scrolled.current || events.length === 0) return;
+    scrolled.current = true;
+    const y = restored.scrollY;
+    let tries = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const stop = () => {
+      clearTimeout(timer);
+      for (const ev of ["wheel", "touchstart", "keydown"]) window.removeEventListener(ev, stop);
+    };
+    const go = () => {
+      window.scrollTo({ top: y });
+      if (Math.abs(window.scrollY - y) > 4 && tries++ < 30) timer = setTimeout(go, 50);
+      else stop();
+    };
+    for (const ev of ["wheel", "touchstart", "keydown"]) window.addEventListener(ev, stop, { passive: true });
+    stopScroll.current = stop;
+    go();
+    // Niente pulizia qui: se arrivano altri eventi i tentativi continuano;
+    // si fermano da soli, o smontando il calendario.
+  }, [restored, events.length]);
+
+  const openEvent = useMemo(() => returnHref ? {
+    query: "?from=area",
+    onOpen: () => {
+      saveEventsReturn({ url: returnHref, state: s, day: selectedDay, scrollY: window.scrollY });
+      // Anche il «indietro» del browser torna alla sezione giusta dell'area.
+      window.history.replaceState(window.history.state, "", returnHref);
+    },
+  } : null, [returnHref, s, selectedDay]);
+
   return (
+    <OpenEvent.Provider value={openEvent}>
     <MotionConfig reducedMotion="user">
       <div className="space-y-6">
         {/* --- La barra degli strumenti --- */}
@@ -210,7 +261,7 @@ export function EventsExplorer({ initial, initialEvents, clubs, todayIso, embedd
 
         <AnimatePresence mode="wait">
           <motion.div key={`${s.view}-${s.year}-${s.view === "calendar" ? s.month : ""}`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.25 }}>
-            {s.view === "list" && <ListView events={events} todayIso={todayIso} />}
+            {s.view === "list" && <ListView events={events} todayIso={todayIso} page={s.page ?? 1} onPage={(page) => setS((prev) => ({ ...prev, page }))} />}
             {s.view === "calendar" && (
               <CalendarView events={events} year={s.year} month={s.month} todayIso={todayIso}
                 selected={selectedDay} onSelect={setSelectedDay} />
@@ -223,6 +274,7 @@ export function EventsExplorer({ initial, initialEvents, clubs, todayIso, embedd
         </AnimatePresence>
       </div>
     </MotionConfig>
+    </OpenEvent.Provider>
   );
 }
 
@@ -261,6 +313,7 @@ function Deadline({ e, todayIso }: { e: PublicEvent; todayIso: string }) {
 
 /** Una riga della lista: tutto ciò che serve per decidere, senza aprire. */
 function EventRow({ e, todayIso, index }: { e: PublicEvent; todayIso: string; index: number }) {
+  const open = useContext(OpenEvent);
   const { t, fmt } = useI18n();
   const start = day(e.starts_on);
   const end = day(e.ends_on);
@@ -286,7 +339,7 @@ function EventRow({ e, todayIso, index }: { e: PublicEvent; todayIso: string; in
           <Deadline e={e} todayIso={todayIso} />
         </div>
         <h3 className="text-base leading-snug text-ink-900 sm:text-lg">
-          <Link href={`/eventos/${e.id}`} className="after:absolute after:inset-0 hover:text-brand-700">{e.name}</Link>
+          <Link href={`/eventos/${e.id}${open?.query ?? ""}`} onClick={open?.onOpen} className="after:absolute after:inset-0 hover:text-brand-700">{e.name}</Link>
         </h3>
         <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-ink-500">
           {e.location && <span>📍 {e.location}</span>}
@@ -307,14 +360,19 @@ function EventRow({ e, todayIso, index }: { e: PublicEvent; todayIso: string; in
 
 /** La lista: in cima i **prossimi eventi** (dal più vicino), poi quelli già
  *  fatti (dal più recente), a pagine da 12, con il mese come titolo. */
-function ListView({ events, todayIso }: { events: PublicEvent[]; todayIso: string }) {
+const PAGE_SIZE = 12;
+
+function ListView({ events, todayIso, page, onPage }: { events: PublicEvent[]; todayIso: string; page: number; onPage: (page: number) => void }) {
   const { t, fmt } = useI18n();
   const ordered = useMemo(() => {
     const next = events.filter((e) => e.ends_on >= todayIso).sort((a, b) => a.starts_on.localeCompare(b.starts_on));
     const past = events.filter((e) => e.ends_on < todayIso).sort((a, b) => b.starts_on.localeCompare(a.starts_on));
     return [...next.map((e) => ({ e, past: false })), ...past.map((e) => ({ e, past: true }))];
   }, [events, todayIso]);
-  const paged = usePaged(ordered, 12);
+  // La pagina sta nello stato del calendario (si ritrova tornando da un evento).
+  const pages = Math.max(1, Math.ceil(ordered.length / PAGE_SIZE));
+  const current = Math.min(page, pages);
+  const paged = { page: current, pages, items: ordered.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE) };
   const top = useRef<HTMLDivElement>(null);
   if (events.length === 0) return <Empty text={t("site.ev.none")} />;
   const upcoming = ordered.filter((x) => !x.past).length;
@@ -353,7 +411,7 @@ function ListView({ events, todayIso }: { events: PublicEvent[]; todayIso: strin
           </div>
         </section>
       ))}
-      <Pagination page={paged.page} pages={paged.pages} onChange={(p) => { paged.setPage(p); top.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }} />
+      <Pagination page={paged.page} pages={paged.pages} onChange={(p) => { onPage(p); top.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }} />
     </div>
   );
 }

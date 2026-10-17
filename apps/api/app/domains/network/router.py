@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import get_db
 from app.core.deps import CurrentUser, get_current_user, require_permission
 from app.core.rate_limit import rate_limit
-from app.core.storage import UploadValidationError, upload_media
+from app.core.storage import AVATAR_MAX_SIDE, UploadValidationError, upload_media
 from app.domains.customers.schemas import CustomerCreate, CustomerRead
 from app.domains.network import collaboration_documents
 from app.domains.network import service as network_service
@@ -515,7 +515,8 @@ async def upload_agent_photo(
     file_bytes = await file.read()
     try:
         photo_url = upload_media(
-            file_bytes=file_bytes, content_type=file.content_type or "", key_prefix="photos/promoters"
+            file_bytes=file_bytes, content_type=file.content_type or "", key_prefix="photos/promoters",
+            max_side=AVATAR_MAX_SIDE,
         )
     except UploadValidationError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc

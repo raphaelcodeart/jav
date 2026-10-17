@@ -49,7 +49,7 @@ export function CompetitionsPanel() {
   return (
     <div>
       <PageHeader eyebrow={t("comp.eyebrow")} title={t("nav.club-competitions")} subtitle={t("comp.subtitle")} actions={<Tabs value={when} onChange={(k) => setWhen(k as "events" | "next" | "past" | "calendar")} items={[{ key: "events", label: `🗓️ ${t("comp.eventsTab")}` }, { key: "next", label: t("comp.upcoming") }, { key: "past", label: t("comp.past") }, { key: "calendar", label: `📅 ${t("jcal.tabEvents")}` }]} />} />
-      {when === "events" ? <AreaEvents /> : when === "calendar" ? <JavCalendar mode="member" /> : (
+      {when === "events" ? <AreaEvents returnHref="/customer?tab=club-competitions" /> : when === "calendar" ? <JavCalendar mode="member" /> : (
         <>
           {isLoading && <div className="space-y-4"><Skeleton className="h-40" /><Skeleton className="h-40" /></div>}
           {error && <EmptyState title={t("comp.unavailable")} text={(error as Error).message} />}

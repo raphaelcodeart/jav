@@ -53,6 +53,17 @@ punti nel Jav Ranking, livello e medaglie conquistate. Sotto, il **riepilogo
 della famiglia**: quanto c'è da pagare, cosa è scaduto, quanto hai pagato in
 questa stagione e le ultime prove caricate.
 
+**La foto** si cambia toccando il cerchio: scelta la foto, la sposti col dito
+(o col mouse) e la ingrandisci con il cursore o con due dita, vedendo subito
+come starà nel cerchio; poi **Usa questa foto**. Lo stesso nella scheda
+dell'atleta della segreteria, per le foto degli allenatori nel sito del club e
+per clienti e promoter nella console. Le foto si salvano già ridotte e senza i
+dati nascosti del telefono (come la posizione GPS).
+
+Negli **eventi** (Gare / Gare e stage), aprendo un evento compare in alto
+**← Torna al calendario**: riporta allo stesso punto del calendario (vista,
+mese, filtri, pagina).
+
 ### 2.2 Aggiungere un figlio
 
 Nome, cognome, data di nascita, sesso: basta. **Il piano lo sceglie il
