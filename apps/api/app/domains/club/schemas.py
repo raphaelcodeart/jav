@@ -800,6 +800,8 @@ class ClubStaffRead(BaseModel):
     user_id: uuid.UUID
     email: str
     role: str
+    #: Nome e cognome dal profilo (l'email per chi non ne ha uno).
+    name: str | None = None
     #: Solo appena creato e solo se l'email d'invito non è partita: il link
     #: di primo accesso da consegnare a mano (vale 7 giorni).
     invite_link: str | None = None

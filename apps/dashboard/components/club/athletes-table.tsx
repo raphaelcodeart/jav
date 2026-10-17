@@ -53,8 +53,8 @@ function SortTh({ k, sort, onSort, children, className }: {
 }) {
   const on = sort.key === k;
   return (
-    <th className={cn("whitespace-nowrap px-2.5 py-2.5 text-left font-semibold", className)} aria-sort={on ? (sort.dir === 1 ? "ascending" : "descending") : "none"}>
-      <button type="button" onClick={() => onSort(k)} className={cn("inline-flex cursor-pointer items-center gap-1 uppercase tracking-wider hover:text-ink-900", on && "text-brand-700")}>
+    <th className={cn("px-1.5 py-2.5 text-left align-bottom font-semibold", className)} aria-sort={on ? (sort.dir === 1 ? "ascending" : "descending") : "none"}>
+      <button type="button" onClick={() => onSort(k)} className={cn("inline-flex cursor-pointer items-end gap-1 text-left uppercase leading-tight tracking-wide hover:text-ink-900", on && "text-brand-700")}>
         {children}
         <span aria-hidden="true" className={cn("text-[10px]", !on && "opacity-30")}>{on && sort.dir === -1 ? "▼" : "▲"}</span>
       </button>
@@ -63,7 +63,7 @@ function SortTh({ k, sort, onSort, children, className }: {
 }
 
 function Th({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <th className={cn("whitespace-nowrap px-2.5 py-2.5 text-left font-semibold uppercase tracking-wider", className)}>{children}</th>;
+  return <th className={cn("px-1.5 py-2.5 text-left align-bottom font-semibold uppercase leading-tight tracking-wide", className)}>{children}</th>;
 }
 
 export function AthletesTable({ onOpen }: { onOpen: (a: AdminAthlete) => void }) {
@@ -191,21 +191,21 @@ export function AthletesTable({ onOpen }: { onOpen: (a: AdminAthlete) => void })
       ) : (
         <div className="overflow-hidden rounded-3xl bg-white shadow-soft ring-1 ring-ink-900/5">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[68rem] text-sm">
-              <thead className="bg-ink-50/80 text-[11px] text-ink-500">
+            <table className="w-full min-w-[48rem] text-sm">
+              <thead className="bg-ink-50/80 text-[10px] text-ink-500">
                 <tr>
-                  <Th className="w-20">{t("athTable.role")}</Th>
-                  <SortTh k="member" sort={sort} onSort={sortBy}>{t("athTable.memberShort")}</SortTh>
-                  <Th>{t("athTable.license")}</Th>
+                  <Th className="w-16">{t("athTable.role")}</Th>
+                  <SortTh k="member" sort={sort} onSort={sortBy} className="w-14 max-w-[4rem]">{t("athTable.memberShort")}</SortTh>
+                  <Th className="w-20 max-w-[5.5rem]">{t("athTable.license")}</Th>
                   <SortTh k="name" sort={sort} onSort={sortBy} className="sticky left-0 z-10 bg-ink-50 shadow-[6px_0_8px_-6px_rgba(15,23,42,0.15)]">{t("athTable.name")}</SortTh>
-                  <SortTh k="birth" sort={sort} onSort={sortBy}>{t("athTable.birth")}</SortTh>
-                  <SortTh k="fedAge" sort={sort} onSort={sortBy}>{t("athTable.fedAge")}</SortTh>
-                  <Th>{t("athTable.gender")}</Th>
+                  <SortTh k="birth" sort={sort} onSort={sortBy}><span title={t("athTable.birth")}>{t("athTable.birthShort")}</span></SortTh>
+                  <SortTh k="fedAge" sort={sort} onSort={sortBy} className="w-16 max-w-[4.5rem]">{t("athTable.fedAge")}</SortTh>
+                  <Th className="w-10">{t("athTable.genderShort")}</Th>
                   <Th>{t("athTable.belt")} · {t("athTable.plan")}</Th>
                   <Th>{t("athTable.guardian")}</Th>
                   <Th>{t("athTable.contact")}</Th>
                   <Th>{t("athTable.certificate")}</Th>
-                  <SortTh k="due" sort={sort} onSort={sortBy} className="text-right">{t("athTable.due")}</SortTh>
+                  <SortTh k="due" sort={sort} onSort={sortBy} className="w-16 max-w-[4.5rem] text-right">{t("athTable.due")}</SortTh>
                 </tr>
               </thead>
               <tbody className="divide-y divide-ink-100">
@@ -217,13 +217,13 @@ export function AthletesTable({ onOpen }: { onOpen: (a: AdminAthlete) => void })
                   return (
                     <tr key={a.id} onClick={() => onOpen(a)} className="group cursor-pointer transition-colors hover:bg-brand-50/40">
                       {/* Che cosa è nel club: atleta, genitore, treinador… */}
-                      <td className="px-2.5 py-2.5 align-middle">
-                        <PersonMarks kinds={roles.length ? roles : ["ATHLETE"]} size="md" className="flex-wrap" />
+                      <td className="px-1.5 py-2 align-middle">
+                        <PersonMarks kinds={roles.length ? roles : ["ATHLETE"]} size="md" className="max-w-[4.5rem] flex-wrap" />
                       </td>
-                      <td className="px-2.5 py-2.5 font-mono text-xs font-semibold text-ink-700">
+                      <td className="px-1.5 py-2 font-mono text-xs font-semibold text-ink-700">
                         {a.member_number ? `#${a.member_number}` : <span className="text-ink-300">—</span>}
                       </td>
-                      <td className="px-2.5 py-2.5">
+                      <td className="px-1.5 py-2">
                         {a.federation_number ? (
                           <span className="block">
                             <span className="font-mono text-xs font-semibold text-ink-800">{a.federation_number}</span>
@@ -235,7 +235,7 @@ export function AthletesTable({ onOpen }: { onOpen: (a: AdminAthlete) => void })
                           </span>
                         ) : <Badge tone="warning">{t("athTable.licenseNone")}</Badge>}
                       </td>
-                      <td className="sticky left-0 z-10 bg-white px-2.5 py-2.5 shadow-[6px_0_8px_-6px_rgba(15,23,42,0.15)] group-hover:bg-brand-50">
+                      <td className="sticky left-0 z-10 bg-white px-1.5 py-2 shadow-[6px_0_8px_-6px_rgba(15,23,42,0.15)] group-hover:bg-brand-50">
                         <span className="flex items-center gap-3">
                           {a.photo_url ? (
                             // eslint-disable-next-line @next/next/no-img-element -- foto della scheda
@@ -245,7 +245,7 @@ export function AthletesTable({ onOpen }: { onOpen: (a: AdminAthlete) => void })
                               {a.first_name.slice(0, 1)}{a.last_name.slice(0, 1)}
                             </span>
                           )}
-                          <span className="min-w-0 max-w-[15rem]">
+                          <span className="min-w-0 max-w-[9.5rem]">
                             <span className="block truncate font-semibold text-ink-900 group-hover:text-brand-700">{a.last_name}, {a.first_name}</span>
                             {/* Chi l'ha portato nel club. */}
                             <span className="mt-0.5 flex items-center gap-1 text-[11px] text-ink-500">
@@ -259,49 +259,51 @@ export function AthletesTable({ onOpen }: { onOpen: (a: AdminAthlete) => void })
                           </span>
                         </span>
                       </td>
-                      <td className="whitespace-nowrap px-2.5 py-2.5 tabular-nums">{fmt.shortDate(a.birth_date)}</td>
-                      <td className="px-2.5 py-2.5">
-                        <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-xl bg-ink-900 px-2 font-display text-sm text-white" title={t("athTable.fedAgeHint")}>
+                      <td className="whitespace-nowrap px-1.5 py-2 text-xs tabular-nums">{fmt.shortDate(a.birth_date)}</td>
+                      <td className="px-1.5 py-2">
+                        <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-lg bg-ink-900 px-1.5 font-display text-sm text-white" title={t("athTable.fedAgeHint")}>
                           {a.federal_age ?? a.season_age}
                         </span>
                       </td>
-                      <td className="px-2.5 py-2.5">
-                        <span className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold",
+                      <td className="px-1.5 py-2">
+                        <span title={a.sex === "F" ? t("athTable.female") : t("athTable.male")}
+                          className={cn("inline-flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold",
                           a.sex === "F" ? "bg-pink-50 text-pink-700 ring-1 ring-pink-200" : "bg-sky-50 text-sky-700 ring-1 ring-sky-200")}>
-                          {a.sex === "F" ? "♀" : "♂"} {a.sex === "F" ? t("athTable.female") : t("athTable.male")}
+                          {a.sex === "F" ? "♀" : "♂"}
                         </span>
                       </td>
-                      <td className="px-2.5 py-2.5">
+                      <td className="px-1.5 py-2">
                         <span className="block" title={a.belt?.label ?? ""}><BeltBadge belt={a.belt} size="sm" showLabel={false} /></span>
-                        <span className="mt-1 block max-w-[10rem] truncate text-[11px] text-ink-600">
+                        <span className="mt-1 block max-w-[7rem] truncate text-[11px] text-ink-600">
                           {a.plan?.name ?? <Badge tone="warning">{t("athTable.noPlan")}</Badge>}
                           {a.plan_locked && <span title={t("athTable.planLocked")} className="ml-1">🔒</span>}
                         </span>
                       </td>
-                      <td className="px-2.5 py-2.5">
+                      <td className="px-1.5 py-2">
                         {a.is_self ? <span className="text-xs font-semibold text-ink-500">{t("athTable.self")}</span> : (
-                          <span className="block max-w-[11rem]">
+                          <span className="block max-w-[7rem]">
                             <span className="block truncate text-sm font-semibold text-ink-800">{a.guardian_name ?? "—"}</span>
                             <span className="block truncate text-[11px] text-ink-500">{a.guardian_email ?? ""}</span>
                           </span>
                         )}
                       </td>
-                      <td className="whitespace-nowrap px-2.5 py-2.5" onClick={(e) => e.stopPropagation()}>
+                      <td className="whitespace-nowrap px-1.5 py-2" onClick={(e) => e.stopPropagation()}>
                         {a.guardian_phone ? (
                           <span className="flex items-center gap-1.5">
-                            <a href={`tel:${a.guardian_phone.replace(/\s+/g, "")}`} className="text-xs font-semibold text-ink-800 hover:text-brand-700">{a.guardian_phone}</a>
+                            <a href={`tel:${a.guardian_phone.replace(/\s+/g, "")}`} className="text-[11px] font-semibold tabular-nums text-ink-800 hover:text-brand-700">{a.guardian_phone}</a>
                             {wa && <a href={wa} target="_blank" rel="noopener noreferrer" title="WhatsApp" className="flex h-6 w-6 items-center justify-center rounded-full bg-[#25D366] text-[11px] text-white">✆</a>}
                           </span>
                         ) : a.guardian_email ? (
                           <a href={`mailto:${a.guardian_email}`} className="text-xs text-brand-700 hover:underline">✉️ Email</a>
                         ) : <span className="text-ink-300">—</span>}
                       </td>
-                      <td className="px-2.5 py-2.5">
-                        <Badge tone={cert === "VALID" ? "success" : cert === "EXPIRING" ? "warning" : cert === "EXPIRED" ? "danger" : "neutral"} dot>
+                      <td className="px-1.5 py-2">
+                        <span className="inline-flex items-center gap-1 whitespace-nowrap text-[11px] font-semibold text-ink-700">
+                          <span aria-hidden="true" className={cn("h-2 w-2 rounded-full", cert === "VALID" ? "bg-emerald-500" : cert === "EXPIRING" ? "bg-amber-400" : cert === "EXPIRED" ? "bg-rose-500" : "bg-ink-300")} />
                           {t.dyn(`athTable.cert.${cert}`, cert)}
-                        </Badge>
+                        </span>
                       </td>
-                      <td className="whitespace-nowrap px-2.5 py-2.5 text-right font-semibold tabular-nums">
+                      <td className="whitespace-nowrap px-1.5 py-2 text-right font-semibold tabular-nums">
                         {a.due_cents > 0 ? <span className={a.overdue_count ? "text-rose-600" : "text-ink-900"}>{fmt.euro(a.due_cents)}</span> : <span className="text-emerald-600">✓</span>}
                       </td>
                     </tr>

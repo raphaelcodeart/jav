@@ -237,7 +237,20 @@ proprio club**: entrando, l'area si apre direttamente sul club. Le sezioni:
   nel **suo colore** (si sceglie nel popup: 8 colori pronti o «Altro
   colore»), l'età, la mensilità grande, l'iscrizione annuale, quanti atleti
   ha, il giorno di scadenza e i mesi in cui si paga (si accendono e spengono
-  toccandoli). Un gruppo in uso non si cancella: si disattiva.
+  toccandoli). Un gruppo in uso non si cancella: si disattiva. Sotto ogni
+  gruppo, **🗓️ Turmas e horários** mostra in sintesi i giorni della
+  settimana; con **Gerir** si vedono le turmas del gruppo (treinador, età,
+  iscritti), si aggiungono o tolgono orari e si crea una turma nuova con le
+  età del gruppo già scritte. La pagina **Turmas e horários** resta per
+  vedere e gestire tutti gli orari insieme. Una turma appartiene a un gruppo
+  quando le loro età si toccano (la stessa regola del sito e di JAVBOT); una
+  turma senza età non è di nessun gruppo, e la pagina lo segnala.
+- **Marcar presenças**: in alto i giorni del mese con lezioni, come bottoni
+  (verdi se le presenze sono già segnate, gialli se mancano, grigi i
+  prossimi; frecce per cambiare mese): un tocco apre la giornata. Resta anche
+  il campo della data.
+- **Atleti**: la pagina è a tutta larghezza e la tabella sta nello schermo a
+  1440 px (con il menu ridotto anche su schermi più piccoli).
 - **Quote**: nel quadro del mese e nell'elenco, una quota che ha una prova di
   pagamento mostra **🧾 Vedi la prova di pagamento** (in rosso se era stata
   rifiutata): la ricevuta si apre lì, da controllare prima di segnare pagata.

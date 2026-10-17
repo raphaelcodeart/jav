@@ -45,6 +45,8 @@ interface AppShellProps {
       than deliberately centered. Default false preserves the existing
       title/subtitle-on-left, actions-on-right layout. */
   centerHeaderActions?: boolean;
+  /** La pagina a tutta larghezza (tabelle larghe, come la tabella atleti). */
+  wide?: boolean;
   /** Session 76: il carrello nella barra in alto, visibile da ogni scheda.
       Sta qui e non dentro lo Shop perché un carrello che si vede solo
       mentre si compra è un carrello che il cliente perde appena apre "I
@@ -400,6 +402,7 @@ export function AppShell({
   headerActions,
   showCart = false,
   centerHeaderActions = false,
+  wide = false,
 }: AppShellProps) {
   const [moreOpen, setMoreOpen] = useState(false);
   const { t } = useI18n();
@@ -542,7 +545,7 @@ export function AppShell({
           leaves `transform: none` once it settles, so fixed-position modals
           inside never get re-anchored to <main> (see globals.css). */}
       <div className={`${contentPad} transition-[padding] duration-300`}>
-        <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 pb-32 lg:pb-10">
+        <main className={`mx-auto ${wide ? "max-w-none" : "max-w-7xl"} px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 pb-32 lg:pb-10`}>
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={activeKey}

@@ -9,7 +9,8 @@ import { Field, Input, Textarea } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
-import { clubGet, clubSend, type Plan } from "@/lib/club";
+import { CourseModal } from "@/components/club/course-modal";
+import { clubGet, clubSend, type Course, type Plan } from "@/lib/club";
 import { cn } from "@/lib/cn";
 import { useI18n } from "@/lib/i18n/provider";
 
@@ -39,7 +40,11 @@ export function PlansPanel() {
   const toast = useToast();
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: ["club", "admin", "plans"], queryFn: () => clubGet<Plan[]>(A("/plans")) });
+  const { data: courses } = useQuery({ queryKey: ["club", "admin", "courses"], queryFn: () => clubGet<Course[]>(A("/courses")) });
   const [editing, setEditing] = useState<{ plan: Plan | null; index: number } | null>(null);
+  // Le turmas senza età non vanno in nessun gruppo (la stessa regola del sito
+  // e di JAVBOT, site.py::plan_slots): lo si dice, invece di nasconderle.
+  const ageless = (courses ?? []).filter((c) => c.active && c.min_age == null && c.max_age == null);
   const plans = [...(data ?? [])].sort((a, b) => Number(b.active) - Number(a.active) || a.min_age - b.min_age);
 
   async function remove(p: Plan) {
@@ -69,11 +74,16 @@ export function PlansPanel() {
         <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
           <AnimatePresence initial={false}>
             {plans.map((p, i) => (
-              <PlanCard key={p.id} plan={p} color={planColor(p, i)} index={i} fmt={fmt}
+              <PlanCard key={p.id} plan={p} color={planColor(p, i)} index={i} fmt={fmt} courses={courses ?? []}
                 onEdit={() => setEditing({ plan: p, index: i })} onDelete={() => remove(p)} />
             ))}
           </AnimatePresence>
         </div>
+      )}
+      {ageless.length > 0 && (
+        <p className="rounded-2xl bg-amber-50 p-4 text-sm text-amber-900 ring-1 ring-amber-200">
+          ⚠️ {t("groups.ageless", { n: ageless.length, names: ageless.map((c) => c.name).join(", ") })}
+        </p>
       )}
       {editing && <PlanModal plan={editing.plan} index={editing.index} onClose={() => setEditing(null)} />}
     </div>
@@ -84,8 +94,8 @@ function ages(p: Pick<Plan, "min_age" | "max_age">, t: ReturnType<typeof useI18n
   return p.max_age != null ? t("plans.ageRange", { min: p.min_age, max: p.max_age }) : t("plans.agePlus", { min: p.min_age });
 }
 
-function PlanCard({ plan: p, color, index, fmt, onEdit, onDelete }: {
-  plan: Plan; color: string; index: number; fmt: ReturnType<typeof useI18n>["fmt"]; onEdit: () => void; onDelete: () => void;
+function PlanCard({ plan: p, color, index, fmt, courses, onEdit, onDelete }: {
+  plan: Plan; color: string; index: number; fmt: ReturnType<typeof useI18n>["fmt"]; courses: Course[]; onEdit: () => void; onDelete: () => void;
 }) {
   const { t } = useI18n();
   const ink = inkOn(color);
@@ -138,6 +148,8 @@ function PlanCard({ plan: p, color, index, fmt, onEdit, onDelete }: {
           </div>
           <p className="mt-1.5 text-[11px] text-ink-500">{t("plans.billedCount", { n: p.billing_months.length })}</p>
         </div>
+
+        <GroupSchedule plan={p} color={color} courses={courses} />
 
         <div className="mt-auto flex gap-2 pt-1">
           <Button size="sm" variant="secondary" className="flex-1" onClick={onEdit}>✏️ {t("plans.edit")}</Button>
@@ -263,5 +275,111 @@ function PlanModal({ plan, index, onClose }: { plan: Plan | null; index: number;
         </button>
       </div>
     </Modal>
+  );
+}
+
+/** Le turmas di un gruppo: quelle la cui fascia d'età tocca quella del
+ *  gruppo (site.py::plan_slots, la stessa regola del sito e di JAVBOT). In
+ *  sintesi i giorni della settimana; aprendo «Gerir», ogni turma con il
+ *  treinador e gli orari, da aggiungere o togliere, e una turma nuova con le
+ *  età del gruppo già scritte. La pagina «Turmas e horários» resta per vedere
+ *  tutti gli orari insieme. */
+function GroupSchedule({ plan, color, courses }: { plan: Plan; color: string; courses: Course[] }) {
+  const { t } = useI18n();
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Course | "new" | null>(null);
+  const [draft, setDraft] = useState<Record<string, { weekday: string; from: string; to: string }>>({});
+  const pMin = plan.min_age ?? 0;
+  const pMax = plan.max_age ?? 999;
+  const mine = courses.filter((c) => c.active && (c.min_age != null || c.max_age != null)
+    && (c.min_age ?? 0) <= pMax && pMin <= (c.max_age ?? 999));
+  const slots = mine.flatMap((c) => c.slots.map((s) => ({ ...s, course: c.name })))
+    .sort((a, b) => a.weekday - b.weekday || a.starts_at.localeCompare(b.starts_at));
+  const ink = inkOn(color);
+
+  async function act(fn: () => Promise<unknown>, ok: string) {
+    try {
+      await fn();
+      await queryClient.invalidateQueries({ queryKey: ["club"] });
+      toast({ tone: "success", title: ok });
+    } catch (e) {
+      toast({ tone: "error", title: t("common.failed"), text: (e as Error).message });
+    }
+  }
+
+  return (
+    <div className="rounded-2xl ring-1 ring-ink-900/5">
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open}
+        className="flex w-full cursor-pointer items-center justify-between gap-2 rounded-2xl px-3 py-2.5 text-left hover:bg-ink-50">
+        <span className="text-xs font-semibold text-ink-700">🗓️ {t("groups.title")} · {t("groups.perWeek", { n: slots.length })}</span>
+        <span className="text-xs font-bold text-brand-700">{open ? t("groups.close") : t("groups.manage")} {open ? "▲" : "▼"}</span>
+      </button>
+      {/* In sintesi: i turni della settimana */}
+      {!open && slots.length > 0 && (
+        <div className="flex flex-wrap gap-1 px-3 pb-3">
+          {slots.map((s) => (
+            <span key={s.id} className="rounded-lg px-2 py-0.5 text-[11px] font-semibold" style={{ background: `${color}1a`, color: "#1f2328" }}>
+              {t.dyn(`site.weekdayShort.${s.weekday}`, String(s.weekday))} {s.starts_at.slice(0, 5)}
+            </span>
+          ))}
+        </div>
+      )}
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+            <div className="space-y-3 px-3 pb-3">
+              {mine.length === 0 && <p className="rounded-xl bg-ink-50 p-3 text-xs text-ink-500">{t("groups.empty")}</p>}
+              {mine.map((c) => {
+                const d = draft[c.id] ?? { weekday: "0", from: "18:00", to: "19:00" };
+                return (
+                  <div key={c.id} className="rounded-xl bg-ink-50/70 p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-ink-900">{c.name}</p>
+                        <p className="text-[11px] text-ink-500">
+                          🧑‍🏫 {c.instructor_name ?? t("groups.noCoach")} · {t("groups.ages", { min: c.min_age ?? 0, max: c.max_age ?? "+" })} · 👥 {c.athletes_count}
+                        </p>
+                      </div>
+                      <button type="button" onClick={() => setEditing(c)} className="shrink-0 cursor-pointer rounded-lg px-2 py-1 text-xs font-semibold text-brand-700 hover:bg-white">✏️</button>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {c.slots.map((s) => (
+                        <span key={s.id} className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: color, color: ink }}>
+                          {t.dyn(`site.weekdayShort.${s.weekday}`, String(s.weekday))} {s.starts_at.slice(0, 5)}–{s.ends_at.slice(0, 5)}
+                          <button type="button" aria-label={t("ca.slot.remove")} className="cursor-pointer opacity-70 hover:opacity-100"
+                            onClick={() => window.confirm(t("groups.removeSlot")) && act(() => clubSend(A(`/slots/${s.id}`), "DELETE"), t("ca.slot.removed"))}>✕</button>
+                        </span>
+                      ))}
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      <select value={d.weekday} onChange={(e) => setDraft((x) => ({ ...x, [c.id]: { ...d, weekday: e.target.value } }))} aria-label={t("ca.slot.day")}
+                        className="h-8 rounded-lg bg-white px-2 text-xs ring-1 ring-ink-200">
+                        {[0, 1, 2, 3, 4, 5, 6].map((i) => <option key={i} value={i}>{t.dyn(`site.weekday.${i}`, String(i))}</option>)}
+                      </select>
+                      <input type="time" value={d.from} onChange={(e) => setDraft((x) => ({ ...x, [c.id]: { ...d, from: e.target.value } }))} aria-label={t("ca.slot.from")} className="h-8 rounded-lg bg-white px-2 text-xs ring-1 ring-ink-200" />
+                      <input type="time" value={d.to} onChange={(e) => setDraft((x) => ({ ...x, [c.id]: { ...d, to: e.target.value } }))} aria-label={t("ca.slot.to")} className="h-8 rounded-lg bg-white px-2 text-xs ring-1 ring-ink-200" />
+                      <button type="button" className="h-8 cursor-pointer rounded-lg bg-ink-900 px-3 text-xs font-semibold text-white hover:bg-ink-800"
+                        onClick={() => act(() => clubSend(A(`/courses/${c.id}/slots`), "POST", { weekday: Number(d.weekday), starts_at: d.from, ends_at: d.to, room: null }), t("ca.slot.added"))}>
+                        ＋ {t("groups.addSlot")}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+              <button type="button" onClick={() => setEditing("new")}
+                className="w-full cursor-pointer rounded-xl border-2 border-dashed border-ink-200 py-2 text-xs font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700">
+                ＋ {t("groups.newCourse")}
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      {editing && (
+        <CourseModal course={editing === "new" ? null : editing}
+          defaults={{ name: plan.name, min_age: plan.min_age, max_age: plan.max_age }} onClose={() => setEditing(null)} />
+      )}
+    </div>
   );
 }

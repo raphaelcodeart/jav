@@ -83,6 +83,7 @@ export function AdminConsole({ email, isSuperAdmin }: { email?: string; isSuperA
       roleLabel={isSuperAdmin ? t("console.roleSuper") : t("console.roleAdmin")}
       email={email}
       navItems={navItems}
+      wide={clubSection === "athletes"}
       activeKey={active}
       onNavigate={(k) => setActive(k as Key)}
       headerActions={<ClubSwitcher currentId={current?.id ?? null} onChoose={(id) => choose(id, id ? (clubSection ? active : "club:overview") : "clubs")} />}

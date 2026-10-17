@@ -1832,9 +1832,13 @@ async def admin_update_club_settings(
 async def admin_list_staff(
     current_user: ClubUser = Depends(require_club_permission(MANAGE)), db: AsyncSession = Depends(get_db)
 ) -> list[ClubStaffRead]:
+    from app.domains.club.people import _names
+
     rows = await clubs_service.list_clubs(db, organization_id=current_user.organization_id)
     mine = next((c for c in rows if c["id"] == current_user.club_id), None)
-    return [ClubStaffRead(**m) for m in (mine["staff"] if mine else [])]
+    staff = mine["staff"] if mine else []
+    names = await _names(db, {m["user_id"] for m in staff})
+    return [ClubStaffRead(**{**m, "name": names.get(m["user_id"])}) for m in staff]
 
 
 @admin_router.post("/staff", response_model=ClubStaffRead, status_code=status.HTTP_201_CREATED)

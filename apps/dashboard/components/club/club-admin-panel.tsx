@@ -31,6 +31,7 @@ import { AthleteMarks } from "@/components/club/person-marks";
 import { AthletesTable } from "@/components/club/athletes-table";
 import { ProofsPanel, ReceiptViewer } from "@/components/club/proofs-panel";
 import { PlansPanel } from "@/components/club/plans-panel";
+import { CourseModal } from "@/components/club/course-modal";
 import { SlotEditModal } from "@/components/club/slot-edit-modal";
 import { ContactInbox } from "@/components/club/contact-inbox";
 import { AthletePublicPageSection } from "@/components/club/athlete-public-page";
@@ -950,40 +951,6 @@ function Courses() {
     </div>
   );
 }
-
-function CourseModal({ course: c, onClose }: { course: Course | null; onClose: () => void }) {
-  const [name, setName] = useState(c?.name ?? "");
-  const [description, setDescription] = useState(c?.description ?? "");
-  const [level, setLevel] = useState(c?.level ?? "");
-  const [minAge, setMinAge] = useState(c?.min_age != null ? String(c.min_age) : "");
-  const [maxAge, setMaxAge] = useState(c?.max_age != null ? String(c.max_age) : "");
-  const [active, setActive] = useState(c?.active ?? true);
-  const { t } = useI18n();
-  const [busy, setBusy] = useState(false);
-  const run = useRun();
-  async function save() {
-    setBusy(true);
-    const body = { name, description: description || null, level: level || null, min_age: minAge ? Number(minAge) : null, max_age: maxAge ? Number(maxAge) : null, active };
-    const ok = await run(() => (c ? clubSend(A(`/courses/${c.id}`), "PATCH", body) : clubSend(A("/courses"), "POST", body)), c ? t("ca.course.updated") : t("ca.course.created"));
-    setBusy(false);
-    if (ok) onClose();
-  }
-  return (
-    <Modal open onClose={onClose} title={c ? t("ca.course.editTitle") : t("ca.course.new")} footer={<><Button variant="ghost" onClick={onClose}>{t("common.cancel")}</Button><Button loading={busy} onClick={save} disabled={!name}>{t("common.save")}</Button></>}>
-      <div className="space-y-4">
-        <Field label={t("ca.name")} htmlFor="co-name"><Input id="co-name" value={name} onChange={(e) => setName(e.target.value)} placeholder={t("ca.course.namePh")} /></Field>
-        <Field label={t("ca.level")} htmlFor="co-level"><Input id="co-level" value={level} onChange={(e) => setLevel(e.target.value)} placeholder={t("ca.course.levelPh")} /></Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label={t("ca.minAge")} htmlFor="co-min"><Input id="co-min" type="number" value={minAge} onChange={(e) => setMinAge(e.target.value)} /></Field>
-          <Field label={t("ca.maxAge")} htmlFor="co-max"><Input id="co-max" type="number" value={maxAge} onChange={(e) => setMaxAge(e.target.value)} /></Field>
-        </div>
-        <Field label={t("ca.description")} htmlFor="co-desc"><Textarea id="co-desc" value={description} onChange={(e) => setDescription(e.target.value)} /></Field>
-        <label className="flex items-center gap-2 text-sm text-ink-700"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="accent-brand-500 h-4 w-4" /> {t("ca.course.active")}</label>
-      </div>
-    </Modal>
-  );
-}
-
 
 // --- Ordini dello Shop ------------------------------------------------------------------------
 

@@ -1627,3 +1627,17 @@ checkout le rifiuta comunque. Lo shop del club vende sempre.
   partner Suplementos24» e si mostrano tradotti finché l'amministratore non
   li cambia (`sections.*.custom`, `labels_custom`); la Loja si apre sul primo
   negozio con prodotti.
+
+## Gruppi con turmas, giorni delle presenze
+
+- **Turmas dentro i gruppi** (`plans-panel.tsx::GroupSchedule`): le turmas di
+  un gruppo sono quelle la cui fascia d'età tocca quella del piano
+  (`site.py::plan_slots`, la regola del sito e di JAVBOT); niente colonna
+  nuova. Il popup della turma è `course-modal.tsx` (anche dalla pagina Turmas)
+  e ora sceglie il treinador tra gli istruttori (`GET /club/admin/staff` dà
+  anche il `name`). Le turmas senza età sono segnalate in «Planos e preços».
+- **Giorni delle presenze** (`attendance-tool.tsx::DayStrip`): le lezioni del
+  mese da `GET /club/staff/lessons?from&to` (massimo due mesi), raggruppate per
+  giorno con presenze segnate e iscritti.
+- **Pagine larghe**: `AppShell` ha `wide` (main senza `max-w-7xl`), usato
+  dalla tabella atleti in segreteria e nella console.
