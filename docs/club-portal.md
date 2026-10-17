@@ -2003,3 +2003,66 @@ impedisce più le iscrizioni; si torna indietro con lo stesso bottone.
   tutte le turmas e le note sugli atleti.
 - Treinador: **Eventos** (relatório dell'evento fatto, risultati) e
   **Caderno** (relatório della lezione e note per atleta).
+
+## Judogi: calcolatore, ordini e lista dei desideri (migrazione 0039)
+
+Il calcolatore del sito vecchio (`judoartevida.com/jav/fatos`) e i «pedidos de
+fato» del gestionale vecchio diventano una cosa sola, in `club/judogi.py`
+(rotte in `club/judogi_router.py`).
+
+**Il conto** è quello di prima, calcolato sempre sul server:
+
+    totale = max(0, listino[tipo][marca][colore][taglia]
+                    + personalizzazione obbligatoria
+                    − round(listino[judogi restituito] × permuta %))
+
+- **Il listino è un dato** (`club_judogi_prices`: tipo, marca, colore, taglia,
+  prezzo, attivo), non un array nel codice. Ogni club parte con quello del
+  calcolatore vecchio (`judogi.base_catalog()`: 4 tipi, 333 righe), caricato
+  dalla migrazione nei club esistenti e da `clubs.create_club` nei nuovi; la
+  segreteria lo cambia da **Judogi → Listino** (o lo ricarica se è vuoto).
+  Due refusi corretti: il bianco da Treino 100 e 110 cm di Tochi Gi e NKL
+  costava 13 e 14 €, ora 23 e 24.
+- **Personalizzazione** (35 €) e **permuta** (50%) sono regole del club
+  (`clubs.settings["judogi"]`, **Judogi → Regole**).
+- **La taglia** si sceglie dall'altezza fra quelle che esistono per quel
+  judogi: la prima non più piccola (il cotone si ritira, i bambini crescono),
+  oltre l'ultima l'ultima. Il vecchio diceva «nessuna marca» a 95 cm.
+- Il browser manda le scelte, mai un prezzo: `GET /club/judogi/catalog`
+  (l'albero tipo → colore → marca → taglie con la taglia consigliata per
+  `height_cm`) e `POST /club/judogi/quote`.
+
+**Chi ordina** (`judogi.my_athletes`): il **titolare** per ognuno dei suoi
+atleti; l'**atleta maggiorenne** (età reale ≥ 18) con il suo accesso, per sé.
+L'atleta minorenne vede tutto ma **non compra**.
+
+**L'ordine** (`POST /club/judogi/orders`) ricalcola il conto, controlla il
+nome da ricamare (**sotto i 13 anni solo il nome proprio**, come prima) e lo
+congela su `club_equipment_orders` (listino, personalizzazione, permuta,
+codice del colore; `color` resta il nome, letto da `obligations.py`). Nasce la
+quota **`EQUIPMENT`** dell'atleta (`period` = id dell'ordine, quindi una sola),
+con scadenza a 14 giorni: si paga come ogni altra quota. Lo stesso judogi per
+lo stesso atleta può essere **in attesa una volta sola** (indice unico
+parziale): due clic non fanno due ordini. La segreteria riceve la notifica
+`CLUB_JUDOGI_ORDER`.
+
+**La segreteria** (menu **Judogi**): ordini per stato (Pendente → Em
+preparação → Entregue, o Cancelado) con ricerca e **CSV per il fornitore**
+(per default i pendenti); il titolare riceve `CLUB_JUDOGI_ORDER_STATUS`.
+Un ordine annullato non si riapre; la sua quota, se non è pagata né dentro una
+prova, se ne va con lui (una pagata resta: il rimborso lo decide la
+segreteria). Gli ordini importati dal gestionale vecchio senza prezzo si
+prezzano a mano («Definir o valor»), e solo allora nasce la quota. La
+segreteria può anche ordinare per un atleta (`POST /club/admin/judogi/orders`).
+
+**La lista dei desideri** (`club_wishlist_items`): nella **Loja** dell'area
+dell'atleta il minorenne mette ♡ a un prodotto dello Shop o salva il judogi del
+calcolatore; il titolare riceve `CLUB_WISHLIST_ADDED` (pallino sulla voce Shop).
+In cima allo Shop della famiglia c'è «Os desejos dos teus filhos»: per un
+judogi si apre il calcolatore già compilato e l'ordine chiude il desiderio
+(`wish_id`); per un prodotto si apre la scheda dello Shop con l'atleta scelto,
+e l'ordine dello Shop per quell'atleta chiude i desideri di quel prodotto
+(`jav_market.create_order` → `judogi.mark_products_ordered`). Oppure «Já
+comprado» / «Fica para outra vez» (`PATCH /club/wishlist/{id}`): l'atleta
+riceve `CLUB_WISHLIST_DECIDED`. Un prodotto aperto una volta sola per atleta,
+un solo judogi desiderato alla volta (il nuovo sostituisce il vecchio).

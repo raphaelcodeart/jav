@@ -69,7 +69,11 @@ function Section({ n, title, done, children }: { n: number; title: string; done?
  *  (never the whole price), bonifico istantaneo for the rest, and the
  *  delivery address. Every amount is recomputed by the server.
  */
-export function JavMarketProductModal({ product, onClose }: { product: JavMarketProductRead; onClose: () => void }) {
+/** `initialAthleteId`: l'atleta già scelto (il desiderio di un figlio, o
+ *  la Loja aperta dall'area di quell'atleta). */
+export function JavMarketProductModal({ product, onClose, initialAthleteId = null }: {
+  product: JavMarketProductRead; onClose: () => void; initialAthleteId?: string | null;
+}) {
   const { t, fmt } = useI18n();
   const euro = fmt.euro;
   const javCash = (cents: number) => javCashIn(cents, fmt.tag);
@@ -120,7 +124,7 @@ export function JavMarketProductModal({ product, onClose }: { product: JavMarket
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [placedOrder, setPlacedOrder] = useState<JavMarketOrderRead | null>(null);
   // The family athlete the equipment is for (docs/club-portal.md); optional.
-  const [athleteId, setAthleteId] = useState<string | null>(null);
+  const [athleteId, setAthleteId] = useState<string | null>(initialAthleteId);
   const { add: addToCart } = useCartActions();
   const [cartMessage, setCartMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -206,6 +210,8 @@ export function JavMarketProductModal({ product, onClose }: { product: JavMarket
       await queryClient.invalidateQueries({ queryKey: ["customer", "wallet"] });
       await queryClient.invalidateQueries({ queryKey: ["wallet"] });
       await queryClient.invalidateQueries({ queryKey: ["customer", "orders"] });
+      // Un ordine per un atleta chiude i suoi desideri di quel prodotto (club/judogi.py).
+      await queryClient.invalidateQueries({ queryKey: ["club", "wishlist"] });
       if (order.status === "PAID") {
         setStep("success");
         return;

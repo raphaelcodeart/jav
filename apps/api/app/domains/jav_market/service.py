@@ -714,6 +714,22 @@ async def customer_products_page(
     return {**page, "jav_open": row.enabled}
 
 
+async def customer_product(
+    db: AsyncSession, *, organization_id: uuid.UUID, product_id: uuid.UUID, viewer_club_id: uuid.UUID | None,
+) -> dict | None:
+    """Una scheda sola, per aprire un prodotto fuori dalla griglia (il
+    desiderio di un figlio nella lista dei desideri, club/judogi.py). Solo
+    se chi guarda lo vedrebbe anche nella vetrina."""
+    product = await db.get(JavMarketProduct, product_id)
+    if (product is None or product.organization_id != organization_id or product.status != "ACTIVE"
+            or product.club_id not in (None, viewer_club_id)):
+        return None
+    row = await get_settings_row(db, organization_id=organization_id)
+    discount = await rules.get_bank_transfer_discount_percentage(db, organization_id=organization_id)
+    return await shop_card(db, product=product, settings=row, bank_transfer_discount_percentage=discount,
+                           sellers=await seller_names(db, {product.club_id}))
+
+
 # --- Checkout -------------------------------------------------------------------------------------
 
 
@@ -1043,6 +1059,15 @@ async def create_order(
             note=f"Acquisto {riepilogo}", idempotency_key=f"jav-market-order:{order.id}:credit",
         )
         order.credit_debit_transaction_id = debit.id
+    if athlete_id is not None:
+        # Il desiderio dell'atleta per questi prodotti è esaudito
+        # (club/judogi.py, lista dei desideri).
+        from app.domains.club.judogi import mark_products_ordered
+
+        await mark_products_ordered(
+            db, athlete_id=athlete_id, product_ids={item["product_id"] for item in quote["items"]},
+            order_id=order.id, actor_user_id=actor_user_id,
+        )
     await db.commit()
     await db.refresh(order)
     await _send_order_email(db, order=order)

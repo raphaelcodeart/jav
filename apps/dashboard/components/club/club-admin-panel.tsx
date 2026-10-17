@@ -48,6 +48,7 @@ import { EventReportsPanel } from "@/components/club/event-reports";
 import { useI18n } from "@/lib/i18n/provider";
 import { feeLabel } from "@/lib/fee-label";
 import { shareOrCopyLink } from "@/lib/share-link";
+import { JudogiAdminPanel } from "@/components/club/judogi-admin-panel";
 import {
   CERTIFICATE_LABELS,
   FEE_KIND_LABELS,
@@ -76,7 +77,7 @@ import {
 export type ClubSection =
   | "overview" | "people" | "athletes" | "plans" | "accounting" | "fees" | "proofs" | "absence" | "certificates"
   | "competitions" | "courses" | "calendar" | "attendance" | "daylog" | "lessons" | "belts" | "ranking" | "workhours"
-  | "shop-orders" | "site" | "messages" | "news" | "javbot" | "documents" | "settings";
+  | "shop-orders" | "judogi" | "site" | "messages" | "news" | "javbot" | "documents" | "settings";
 type Section = ClubSection;
 
 /** Le sezioni del club, nell'ordine e con i gruppi del menu laterale: la
@@ -92,6 +93,8 @@ export const CLUB_SECTIONS: { key: ClubSection; icon: string; group: "people" | 
   { key: "absence", icon: "📉", group: "money" },
   { key: "plans", icon: "📋", group: "money" },
   { key: "shop-orders", icon: "🛍️", group: "money" },
+  // Gli ordini dei judogi, il listino del calcolatore e la permuta.
+  { key: "judogi", icon: "🎽", group: "money" },
   { key: "courses", icon: "🗓️", group: "activity" },
   { key: "calendar", icon: "📅", group: "activity" },
   { key: "attendance", icon: "✅", group: "activity" },
@@ -187,6 +190,7 @@ export function ClubAdminPanel({ section: controlled, onGo, canInvest = false }:
         {section === "ranking" && features.ranking && <RankingPanel admin />}
         {section === "workhours" && <StaffManagementPanel />}
         {section === "shop-orders" && <ClubShopPanel familyOrders={<ShopOrders />} />}
+        {section === "judogi" && <JudogiAdminPanel />}
         {section === "site" && <ClubSiteEditor />}
         {section === "messages" && <ContactInbox mode="club" />}
         {section === "javbot" && <KnowledgePanel mode="club" />}

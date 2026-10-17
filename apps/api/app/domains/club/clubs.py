@@ -149,6 +149,10 @@ async def create_club(
     )
     db.add(club)
     await db.flush()
+    # Il listino dei judogi di partenza: la segreteria poi lo cambia.
+    from app.domains.club.judogi import seed_prices
+
+    await seed_prices(db, club=club)
     await audit_service.record(
         db, organization_id=organization_id, actor_user_id=actor_user_id,
         action="clubs.created", entity_type="club", entity_id=str(club.id),
