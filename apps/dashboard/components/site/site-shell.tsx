@@ -9,7 +9,7 @@ import { getSession } from "@/lib/session";
 import { CookieSettingsButton } from "@/components/legal/cookie-settings-button";
 import { LEGAL } from "@/lib/legal";
 import { publicSite } from "@/lib/public-site";
-import { SocialIcons, WhatsAppButton, type SocialLink } from "@/components/site/social-icons";
+import { SocialGlyph, SocialIcons, whatsappUrl, type SocialLink } from "@/components/site/social-icons";
 
 const NETWORK_SOCIALS = [
   ["facebook", "Facebook"], ["instagram", "Instagram"], ["youtube", "YouTube"], ["tiktok", "TikTok"],
@@ -67,7 +67,14 @@ export async function SiteShell({ children }: { children: ReactNode }) {
             <ul className="space-y-2 text-sm">
               <li><a className="hover:text-white" href={`mailto:${JAV_CONTACTS.email}`}>{JAV_CONTACTS.email}</a></li>
               <li><a className="hover:text-white" href={JAV_CONTACTS.phoneHref}>{JAV_CONTACTS.phone}</a></li>
-              <li><WhatsAppButton phone={JAV_CONTACTS.phone} label="WhatsApp" className="h-9 px-3" /></li>
+              {/* WhatsApp: una riga come email e telefono, con la sua icona. */}
+              {whatsappUrl(JAV_CONTACTS.phone) && (
+                <li>
+                  <a className="inline-flex items-center gap-2 hover:text-white" href={whatsappUrl(JAV_CONTACTS.phone)!} target="_blank" rel="noopener noreferrer">
+                    <SocialGlyph kind="whatsapp" className="h-4 w-4 text-[#25D366]" /> WhatsApp
+                  </a>
+                </li>
+              )}
               <li><Link className="font-semibold text-white hover:text-accent-300" href="/contactos">{t("site.footer.writeUs")} →</Link></li>
             </ul>
           </div>

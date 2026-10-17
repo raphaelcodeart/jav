@@ -1572,9 +1572,9 @@ checkout le rifiuta comunque. Lo shop del club vende sempre.
 - **I social del club**: Instagram, Facebook, YouTube e ora **TikTok**
   (`club_sites.tiktok_url`, migrazione 0030), dalla segreteria in Sito →
   contatti; compaiono nella pagina del club.
-- **WhatsApp**: nella pagina `/contactos` è una scheda come le altre
-  (email, telefono, WhatsApp, dove siamo) con l'icona di WhatsApp; nel piè di
-  pagina e nella scheda contatti del club è il bottone verde sotto il
-  telefono. Apre la chat con lo stesso numero (`wa.me`, un numero di 9 cifre
+- **WhatsApp**: una voce come le altre, con l'icona di WhatsApp, subito
+  sotto il telefono: scheda nella pagina `/contactos` (email, telefono,
+  WhatsApp, dove siamo), riga nel piè di pagina, voce nelle informazioni
+  della pagina del club. Apre la chat con lo stesso numero (`wa.me`, un numero di 9 cifre
   senza prefisso diventa +351; `components/site/social-icons.tsx`).
 

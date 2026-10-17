@@ -13,7 +13,7 @@ import { AthleteRanking } from "@/components/site/ranking-explorer";
 import { ageRange, siteI18n } from "@/components/site/i18n";
 import { Reveal } from "@/components/site/reveal";
 import { SiteShell } from "@/components/site/site-shell";
-import { SocialIcons, WhatsAppButton, type SocialLink } from "@/components/site/social-icons";
+import { SocialGlyph, SocialIcons, whatsappUrl, type SocialLink } from "@/components/site/social-icons";
 import { themeStyle } from "@/lib/brand";
 import { cn } from "@/lib/cn";
 import type { Formatters, Translator } from "@/lib/i18n/translate";
@@ -526,7 +526,12 @@ function InfoCard({ club, socials, t }: { club: ClubPage; socials: SocialLink[];
       {club.contact_phone && (
         <Info icon="📞" label={t("site.club.phone")}>
           <a className="hover:text-club-ink" href={`tel:${club.contact_phone.replace(/\s+/g, "")}`}>{club.contact_phone}</a>
-          <WhatsAppButton phone={club.contact_phone} label={t("site.contacts.whatsapp")} className="mt-2 flex w-fit" />
+        </Info>
+      )}
+      {/* WhatsApp: una voce come il telefono, con la sua icona, subito sotto. */}
+      {club.contact_phone && whatsappUrl(club.contact_phone) && (
+        <Info icon={<SocialGlyph kind="whatsapp" className="h-5 w-5 text-[#25D366]" />} label="WhatsApp">
+          <a className="hover:text-club-ink" href={whatsappUrl(club.contact_phone)!} target="_blank" rel="noopener noreferrer">{t("site.contacts.whatsapp")}</a>
         </Info>
       )}
       {club.contact_email && (
@@ -544,7 +549,7 @@ function InfoCard({ club, socials, t }: { club: ClubPage; socials: SocialLink[];
   );
 }
 
-function Info({ icon, label, children }: { icon: string; label: string; children: ReactNode }) {
+function Info({ icon, label, children }: { icon: ReactNode; label: string; children: ReactNode }) {
   return (
     <div className="flex gap-3">
       <span className="mt-0.5 text-lg leading-none" aria-hidden="true">{icon}</span>

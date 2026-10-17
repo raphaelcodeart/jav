@@ -630,9 +630,9 @@ il telefono, compresa la foto della ricevuta e del certificato.
   Incolla gli indirizzi di Facebook, Instagram, YouTube e TikTok: le icone
   compaiono in fondo a ogni pagina del sito. Vuoto = nessuna icona.
 - **Social del club**: Sito del club → contatti, anche TikTok.
-- **WhatsApp**: nella pagina Contactos c'è la scheda WhatsApp subito sotto il
-  telefono; nel piè di pagina e nelle pagine dei club c'è il bottone verde
-  sotto il numero. Aprono la chat con quel numero.
+- **WhatsApp**: subito sotto il telefono, con l'icona di WhatsApp, nella
+  pagina Contactos, nel piè di pagina e nelle informazioni di ogni club.
+  Apre la chat con quel numero.
 - **Scheda del judoca**: la segreteria (o il superadmin entrato nel club)
   carica foto, video e biografia dalla scheda dell'atleta → «Pagina
   pubblica», o da Sito → Judoka; sul sito compaiono nelle schede Foto, Video
