@@ -798,3 +798,8 @@ pagina di un evento aperta dall'area, con lo stato del calendario
 (`lib/events-return.ts`). Il PNG di prova di `test_judoka_page.py` era rotto
 (ora rifiutato): ne genera uno vero. Test: `tests/test_image_optimize.py`.
 Nessuna migrazione.
+
+Poi: `/customer` aperta da un accesso solo atleta (ariel.83, con l'«indietro»
+del browser dopo il cambio di account) dava «Qualcosa è andato storto»: la
+pagina chiede i contratti, che un atleta non può leggere (403). Ora chi non ha
+il ruolo CUSTOMER viene mandato a `/area`, cioè nella sua area.
