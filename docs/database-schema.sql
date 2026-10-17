@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict Lcbo2X0fFMyLhP9cU2doXXIdukTMU2HFhDuroldHg3qRvLiNRxA2dKOHWvdF38e
+\restrict Cl17lqrz0BU9JIvI6xdnGRQBeGaCEcNItKHYnvOdDhIdX5rv73VTshkpvSMZ36g
 
 -- Dumped from database version 16.15
 -- Dumped by pg_dump version 16.15
@@ -702,6 +702,20 @@ CREATE TABLE public.club_course_athletes (
 
 
 --
+-- Name: club_course_coach_exclusions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.club_course_coach_exclusions (
+    club_id uuid NOT NULL,
+    course_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    created_by_user_id uuid,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
 -- Name: club_course_slots; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -806,6 +820,10 @@ CREATE TABLE public.club_equipment_orders (
     updated_at timestamp with time zone NOT NULL,
     id uuid NOT NULL,
     created_at timestamp with time zone NOT NULL,
+    base_price_cents bigint,
+    customization_cents bigint,
+    trade_in_discount_cents bigint,
+    color_code character varying(24),
     CONSTRAINT ck_club_equipment_orders_kimono_type CHECK (((kimono_type)::text = ANY ((ARRAY['FIJ_APPROVED'::character varying, 'TRAINING'::character varying, 'SEMI_COMPETITION'::character varying, 'COMPETITION_NOT_APPROVED'::character varying])::text[]))),
     CONSTRAINT ck_club_equipment_orders_price_non_negative CHECK (((price_cents IS NULL) OR (price_cents >= 0))),
     CONSTRAINT ck_club_equipment_orders_size_range CHECK (((size_cm >= 80) AND (size_cm <= 220))),
@@ -856,7 +874,12 @@ CREATE TABLE public.club_event_reports (
     narrative text,
     updated_at timestamp with time zone,
     id uuid NOT NULL,
-    created_at timestamp with time zone NOT NULL
+    created_at timestamp with time zone NOT NULL,
+    article_title character varying(200),
+    article text,
+    article_source character varying(8),
+    article_generated_at timestamp with time zone,
+    CONSTRAINT ck_club_event_reports_ck_club_event_reports_article_source CHECK (((article_source IS NULL) OR ((article_source)::text = ANY ((ARRAY['TEMPLATE'::character varying, 'AI'::character varying, 'MANUAL'::character varying])::text[]))))
 );
 
 
@@ -989,6 +1012,28 @@ CREATE TABLE public.club_functions (
     created_at timestamp with time zone NOT NULL,
     CONSTRAINT ck_club_functions_function CHECK (((function)::text = ANY ((ARRAY['COACH'::character varying, 'ASSISTANT_COACH'::character varying, 'MONITOR'::character varying, 'ASSISTANT_MONITOR'::character varying])::text[]))),
     CONSTRAINT ck_club_functions_one_person CHECK (((user_id IS NULL) <> (athlete_id IS NULL)))
+);
+
+
+--
+-- Name: club_judogi_prices; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.club_judogi_prices (
+    organization_id uuid NOT NULL,
+    club_id uuid NOT NULL,
+    kimono_type character varying(24) NOT NULL,
+    brand character varying(60) NOT NULL,
+    color character varying(24) NOT NULL,
+    size_cm smallint NOT NULL,
+    price_cents bigint NOT NULL,
+    active boolean DEFAULT true NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT ck_club_judogi_prices_color CHECK (((color)::text = ANY ((ARRAY['WHITE'::character varying, 'BLUE'::character varying, 'PINK'::character varying, 'WHITE_PINK_STRIPES'::character varying])::text[]))),
+    CONSTRAINT ck_club_judogi_prices_kimono_type CHECK (((kimono_type)::text = ANY ((ARRAY['FIJ_APPROVED'::character varying, 'TRAINING'::character varying, 'SEMI_COMPETITION'::character varying, 'COMPETITION_NOT_APPROVED'::character varying])::text[]))),
+    CONSTRAINT ck_club_judogi_prices_price_non_negative CHECK ((price_cents >= 0)),
+    CONSTRAINT ck_club_judogi_prices_size_range CHECK (((size_cm >= 80) AND (size_cm <= 220)))
 );
 
 
@@ -1389,6 +1434,33 @@ CREATE TABLE public.club_transport_requests (
     id uuid NOT NULL,
     created_at timestamp with time zone NOT NULL,
     CONSTRAINT ck_club_transport_requests_status CHECK (((status)::text = ANY ((ARRAY['DRAFT'::character varying, 'SENT'::character varying])::text[])))
+);
+
+
+--
+-- Name: club_wishlist_items; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.club_wishlist_items (
+    organization_id uuid NOT NULL,
+    club_id uuid NOT NULL,
+    athlete_id uuid NOT NULL,
+    requested_by_user_id uuid,
+    kind character varying(8) NOT NULL,
+    product_id uuid,
+    variant_id uuid,
+    config jsonb,
+    note character varying(300),
+    status character varying(10) DEFAULT 'OPEN'::character varying NOT NULL,
+    equipment_order_id uuid,
+    jav_market_order_id uuid,
+    decided_by_user_id uuid,
+    decided_at timestamp with time zone,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT ck_club_wishlist_items_kind CHECK (((kind)::text = ANY ((ARRAY['PRODUCT'::character varying, 'JUDOGI'::character varying])::text[]))),
+    CONSTRAINT ck_club_wishlist_items_status CHECK (((status)::text = ANY ((ARRAY['OPEN'::character varying, 'ORDERED'::character varying, 'DISMISSED'::character varying])::text[]))),
+    CONSTRAINT ck_club_wishlist_items_target CHECK (((((kind)::text = 'PRODUCT'::text) AND (product_id IS NOT NULL)) OR (((kind)::text = 'JUDOGI'::text) AND (config IS NOT NULL))))
 );
 
 
@@ -3100,6 +3172,14 @@ ALTER TABLE ONLY public.club_course_athletes
 
 
 --
+-- Name: club_course_coach_exclusions pk_club_course_coach_exclusions; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_course_coach_exclusions
+    ADD CONSTRAINT pk_club_course_coach_exclusions PRIMARY KEY (id);
+
+
+--
 -- Name: club_course_slots pk_club_course_slots; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3193,6 +3273,14 @@ ALTER TABLE ONLY public.club_fees
 
 ALTER TABLE ONLY public.club_functions
     ADD CONSTRAINT pk_club_functions PRIMARY KEY (id);
+
+
+--
+-- Name: club_judogi_prices pk_club_judogi_prices; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_judogi_prices
+    ADD CONSTRAINT pk_club_judogi_prices PRIMARY KEY (id);
 
 
 --
@@ -3345,6 +3433,14 @@ ALTER TABLE ONLY public.club_staff_tasks
 
 ALTER TABLE ONLY public.club_transport_requests
     ADD CONSTRAINT pk_club_transport_requests PRIMARY KEY (id);
+
+
+--
+-- Name: club_wishlist_items pk_club_wishlist_items; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_wishlist_items
+    ADD CONSTRAINT pk_club_wishlist_items PRIMARY KEY (id);
 
 
 --
@@ -4068,6 +4164,14 @@ ALTER TABLE ONLY public.club_course_athletes
 
 
 --
+-- Name: club_course_coach_exclusions uq_club_course_coach_exclusions_course_user; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_course_coach_exclusions
+    ADD CONSTRAINT uq_club_course_coach_exclusions_course_user UNIQUE (course_id, user_id);
+
+
+--
 -- Name: club_course_staff uq_club_course_staff_course_user; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4137,6 +4241,14 @@ ALTER TABLE ONLY public.club_functions
 
 ALTER TABLE ONLY public.club_functions
     ADD CONSTRAINT uq_club_functions_club_user UNIQUE (club_id, user_id);
+
+
+--
+-- Name: club_judogi_prices uq_club_judogi_prices_item; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_judogi_prices
+    ADD CONSTRAINT uq_club_judogi_prices_item UNIQUE (club_id, kimono_type, brand, color, size_cm);
 
 
 --
@@ -4912,6 +5024,27 @@ CREATE INDEX ix_club_course_athletes_course_id ON public.club_course_athletes US
 
 
 --
+-- Name: ix_club_course_coach_exclusions_club_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_club_course_coach_exclusions_club_id ON public.club_course_coach_exclusions USING btree (club_id);
+
+
+--
+-- Name: ix_club_course_coach_exclusions_course_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_club_course_coach_exclusions_course_id ON public.club_course_coach_exclusions USING btree (course_id);
+
+
+--
+-- Name: ix_club_course_coach_exclusions_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_club_course_coach_exclusions_user_id ON public.club_course_coach_exclusions USING btree (user_id);
+
+
+--
 -- Name: ix_club_course_slots_course_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5147,6 +5280,13 @@ CREATE INDEX ix_club_functions_club_id ON public.club_functions USING btree (clu
 --
 
 CREATE INDEX ix_club_functions_organization_id ON public.club_functions USING btree (organization_id);
+
+
+--
+-- Name: ix_club_judogi_prices_club_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_club_judogi_prices_club_id ON public.club_judogi_prices USING btree (club_id);
 
 
 --
@@ -5420,6 +5560,27 @@ CREATE INDEX ix_club_transport_requests_club_id ON public.club_transport_request
 --
 
 CREATE INDEX ix_club_transport_requests_organization_id ON public.club_transport_requests USING btree (organization_id);
+
+
+--
+-- Name: ix_club_wishlist_items_athlete_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_club_wishlist_items_athlete_id ON public.club_wishlist_items USING btree (athlete_id);
+
+
+--
+-- Name: ix_club_wishlist_items_club_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_club_wishlist_items_club_id ON public.club_wishlist_items USING btree (club_id);
+
+
+--
+-- Name: ix_club_wishlist_items_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_club_wishlist_items_status ON public.club_wishlist_items USING btree (status);
 
 
 --
@@ -6501,6 +6662,13 @@ CREATE UNIQUE INDEX uq_club_athletes_one_self_per_guardian ON public.club_athlet
 
 
 --
+-- Name: uq_club_equipment_orders_pending_same; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uq_club_equipment_orders_pending_same ON public.club_equipment_orders USING btree (athlete_id, kimono_type, color, brand, size_cm) WHERE ((status)::text = 'PENDING'::text);
+
+
+--
 -- Name: uq_club_fees_guardian_membership; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -6512,6 +6680,20 @@ CREATE UNIQUE INDEX uq_club_fees_guardian_membership ON public.club_fees USING b
 --
 
 CREATE UNIQUE INDEX uq_club_payment_proofs_club_receipt ON public.club_payment_proofs USING btree (club_id, receipt_number) WHERE (receipt_number IS NOT NULL);
+
+
+--
+-- Name: uq_club_wishlist_items_open_judogi; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uq_club_wishlist_items_open_judogi ON public.club_wishlist_items USING btree (athlete_id) WHERE (((status)::text = 'OPEN'::text) AND ((kind)::text = 'JUDOGI'::text));
+
+
+--
+-- Name: uq_club_wishlist_items_open_product; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uq_club_wishlist_items_open_product ON public.club_wishlist_items USING btree (athlete_id, product_id) WHERE (((status)::text = 'OPEN'::text) AND ((kind)::text = 'PRODUCT'::text));
 
 
 --
@@ -7340,6 +7522,38 @@ ALTER TABLE ONLY public.club_course_athletes
 
 
 --
+-- Name: club_course_coach_exclusions fk_club_course_coach_exclusions_club_id_clubs; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_course_coach_exclusions
+    ADD CONSTRAINT fk_club_course_coach_exclusions_club_id_clubs FOREIGN KEY (club_id) REFERENCES public.clubs(id);
+
+
+--
+-- Name: club_course_coach_exclusions fk_club_course_coach_exclusions_course_id_club_courses; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_course_coach_exclusions
+    ADD CONSTRAINT fk_club_course_coach_exclusions_course_id_club_courses FOREIGN KEY (course_id) REFERENCES public.club_courses(id) ON DELETE CASCADE;
+
+
+--
+-- Name: club_course_coach_exclusions fk_club_course_coach_exclusions_created_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_course_coach_exclusions
+    ADD CONSTRAINT fk_club_course_coach_exclusions_created_by_user_id_users FOREIGN KEY (created_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: club_course_coach_exclusions fk_club_course_coach_exclusions_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_course_coach_exclusions
+    ADD CONSTRAINT fk_club_course_coach_exclusions_user_id_users FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
 -- Name: club_course_slots fk_club_course_slots_course_id_club_courses; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -7689,6 +7903,22 @@ ALTER TABLE ONLY public.club_functions
 
 ALTER TABLE ONLY public.club_functions
     ADD CONSTRAINT fk_club_functions_user_id_users FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: club_judogi_prices fk_club_judogi_prices_club_id_clubs; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_judogi_prices
+    ADD CONSTRAINT fk_club_judogi_prices_club_id_clubs FOREIGN KEY (club_id) REFERENCES public.clubs(id);
+
+
+--
+-- Name: club_judogi_prices fk_club_judogi_prices_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_judogi_prices
+    ADD CONSTRAINT fk_club_judogi_prices_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
 
 
 --
@@ -8185,6 +8415,78 @@ ALTER TABLE ONLY public.club_transport_requests
 
 ALTER TABLE ONLY public.club_transport_requests
     ADD CONSTRAINT fk_club_transport_requests_sent_by_user_id_users FOREIGN KEY (sent_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: club_wishlist_items fk_club_wishlist_items_athlete_id_club_athletes; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_wishlist_items
+    ADD CONSTRAINT fk_club_wishlist_items_athlete_id_club_athletes FOREIGN KEY (athlete_id) REFERENCES public.club_athletes(id) ON DELETE CASCADE;
+
+
+--
+-- Name: club_wishlist_items fk_club_wishlist_items_club_id_clubs; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_wishlist_items
+    ADD CONSTRAINT fk_club_wishlist_items_club_id_clubs FOREIGN KEY (club_id) REFERENCES public.clubs(id);
+
+
+--
+-- Name: club_wishlist_items fk_club_wishlist_items_decided_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_wishlist_items
+    ADD CONSTRAINT fk_club_wishlist_items_decided_by_user_id_users FOREIGN KEY (decided_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: club_wishlist_items fk_club_wishlist_items_equipment_order_id_club_equipment_orders; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_wishlist_items
+    ADD CONSTRAINT fk_club_wishlist_items_equipment_order_id_club_equipment_orders FOREIGN KEY (equipment_order_id) REFERENCES public.club_equipment_orders(id) ON DELETE SET NULL;
+
+
+--
+-- Name: club_wishlist_items fk_club_wishlist_items_jav_market_order_id_jav_market_orders; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_wishlist_items
+    ADD CONSTRAINT fk_club_wishlist_items_jav_market_order_id_jav_market_orders FOREIGN KEY (jav_market_order_id) REFERENCES public.jav_market_orders(id) ON DELETE SET NULL;
+
+
+--
+-- Name: club_wishlist_items fk_club_wishlist_items_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_wishlist_items
+    ADD CONSTRAINT fk_club_wishlist_items_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: club_wishlist_items fk_club_wishlist_items_product_id_jav_market_products; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_wishlist_items
+    ADD CONSTRAINT fk_club_wishlist_items_product_id_jav_market_products FOREIGN KEY (product_id) REFERENCES public.jav_market_products(id) ON DELETE CASCADE;
+
+
+--
+-- Name: club_wishlist_items fk_club_wishlist_items_requested_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_wishlist_items
+    ADD CONSTRAINT fk_club_wishlist_items_requested_by_user_id_users FOREIGN KEY (requested_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: club_wishlist_items fk_club_wishlist_items_variant_id_jav_market_variants; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_wishlist_items
+    ADD CONSTRAINT fk_club_wishlist_items_variant_id_jav_market_variants FOREIGN KEY (variant_id) REFERENCES public.jav_market_variants(id) ON DELETE SET NULL;
 
 
 --
@@ -9871,5 +10173,5 @@ ALTER TABLE ONLY public.wallets
 -- PostgreSQL database dump complete
 --
 
-\unrestrict Lcbo2X0fFMyLhP9cU2doXXIdukTMU2HFhDuroldHg3qRvLiNRxA2dKOHWvdF38e
+\unrestrict Cl17lqrz0BU9JIvI6xdnGRQBeGaCEcNItKHYnvOdDhIdX5rv73VTshkpvSMZ36g
 

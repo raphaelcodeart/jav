@@ -868,3 +868,37 @@ database di test propri, e unito qui:
   terzo gioco «Randori do Clube» con punti tra amici del club e limiti.
   Test: `test_game_fights.py`.
 Test completi: 621 passati, 1 fallito già noto.
+
+## 17/10/2026 — Judogi e lista dei desideri, relatório final, treinador che vede tutto (migrazioni 0037–0039)
+
+Tre lavori in parallelo (due agenti in worktree separati, ognuno con il suo
+database di test), uniti qui:
+- **Relatório final** (0037, `club/event_articles.py`): dal relatório di una
+  prova nasce un articolo breve «di giornale» (risultati, racconto, spese,
+  foto) da correggere a mano; prima lo si riscriveva per il sito o per
+  WhatsApp. Il testo automatico usa solo i dati salvati; l'IA è pronta ma
+  spenta (`EVENT_REPORT_AI_ENABLED`). Scheda «Relatórios finais» con lettura
+  impaginata e PDF di tutti gli articoli («Crónicas das provas»). La pagina
+  delle prove ha ora una barra con pulsanti grandi e ricerca (`ProvasBar`),
+  e il popup «Novo relatório» la ricerca e il filtro «Só com inscritos e já
+  concluídos». Test: `test_club_event_articles.py`.
+- **Treinador** (0038, `club_course_coach_exclusions`): a Lagos i due
+  treinador non vedevano nessuno perché nessuna turma aveva un titolare o
+  adjunto assegnato, e la turma era l'unico legame fra treinador e atleti.
+  Ora di regola ogni treinador vede tutte le turmas del club e i loro atleti
+  (più gli attivi senza turma); la segreteria può togliergli una turma dal
+  modulo del corso, dove si scelgono anche gli adjuntos (rotta che esisteva
+  ma nessuna schermata usava). I compensi restano del titolare. Test:
+  `test_club_coach_visibility.py`.
+- **Judogi** (0039): il calcolatore del vecchio software (tipo, colore,
+  marca, taglia, personalizzazione 35 €, permuta al 50%) ora è un listino nel
+  database per club (`club_judogi_prices`, caricato dal catalogo vecchio con
+  i refusi 13/14 € corretti), conto rifatto dal server, taglia = la prima
+  disponibile ≥ altezza (il vecchio calcolatore non trovava marche per
+  95 cm). L'ordine congela il conto e crea la quota `EQUIPMENT`, che si paga
+  come tutte le altre. Ordina il titolare per i suoi atleti o l'atleta
+  maggiorenne per sé; il minorenne vede la «Loja» (prodotti e calcolatore)
+  ma mette solo nei desideri (`club_wishlist_items`) e il titolare riceve la
+  notifica, poi ordina, compra o rifiuta. Segreteria: ordini, stati, CSV per
+  il fornitore, listino. Test: `test_club_judogi.py`.
+Test completi: 647 passati, 1 fallito già noto (`test_organizations`). Con `-e SMTP_HOST=`: senza, i test che mandano email provano a entrare nel server SMTP vero e falliscono (535).
