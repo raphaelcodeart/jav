@@ -1334,13 +1334,16 @@ solo il periodo: ogni importo nasce sul server.
   intestazioni e riga del mese si ripetono in cima a ogni pagina, così il
   calendario continua senza interruzioni.
 - Il **flyer del mese** (`render_flyer`, `GET /club/[staff/]calendar/flyer?year&month`,
-  bottone «🎨 Scarica flyer del mese» con il mese da scegliere): una pagina A4
-  verticale da appendere o mandare su WhatsApp, con il logo JAV
-  (`app/assets/jav-logo.png`), il mese in grande, la cintura gialla e una
-  scheda per prova (giorno, tipo e livello, nome, luogo, escalões, scadenza
-  delle iscrizioni). Due colonne fino a 10 prove, poi tre; oltre una pagina
-  continua nella seguente con la testata ridotta. Senza prove, «Sem eventos
-  neste mês».
+  bottone «🎨 Scarica flyer del mese» con il mese da scegliere): **sempre una
+  pagina A4**. In alto la barra dorata «EVENTOS DO MÊS · OUTUBRO 2026» con il
+  numero di eventi; sotto il logo JudoArteVida del sito
+  (`app/assets/judoartevida-logo.jpg`) e le icone rotonde di Facebook,
+  Instagram, YouTube e del sito, cliccabili, prese dai «Social della rete»
+  (`organizations.service.network_socials`; un social senza indirizzo non
+  compare). Gli eventi sono righe larghe quanto la pagina: data nel colore del
+  tipo, tipo e livello, nome, luogo ed escalões, scadenza delle iscrizioni.
+  L'altezza delle righe si adatta al numero di eventi; sotto i 21 punti si
+  passa a due colonne. Test: `tests/test_flyer.py`.
 
 ### La prova di pagamento dall'area dell'atleta
 - Il titolare, o **l'atleta stesso con il suo accesso dai 18 anni di età

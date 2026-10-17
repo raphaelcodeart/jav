@@ -620,7 +620,9 @@ il telefono, compresa la foto della ricevuta e del certificato.
   spesa. «Cartellino» sono le ore di sempre; «Messaggi» le conversazioni con
   lo staff.
 - **Calendario**: accanto a «Scarica PDF» scegli il mese e premi **🎨 Scarica
-  flyer del mese**: una pagina con il logo JAV da appendere o mandare.
+  flyer del mese**: una pagina sola (anche con tanti eventi) con la barra
+  dorata del mese, il logo JudoArteVida, i social e il sito, e una riga per
+  evento; da appendere o mandare su WhatsApp.
 
 ## Sito: shop e «Crea il tuo club»
 

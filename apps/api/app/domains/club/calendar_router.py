@@ -88,8 +88,13 @@ async def _flyer(db: AsyncSession, user: ClubUser, year: int, month: int) -> Res
     rows = await calendar.calendar_events(db, scope=user.scope, date_from=first, date_to=last)
     club = await db.get(Club, user.club_id)
     today = (await club_now(db, club_id=user.club_id)).date()
+    from app.core.config import get_settings
+    from app.domains.organizations.service import network_socials
+
     pdf = calendar.render_flyer(events=rows, year=year, month=month,
-                                club_name=club.name if club else "JudoArteVida", generated_on=today)
+                                club_name=club.name if club else "JudoArteVida", generated_on=today,
+                                socials=await network_socials(db, organization_id=user.organization_id),
+                                site_url=get_settings().public_app_base_url)
     name = f"flyer-judoartevida-{year:04d}-{month:02d}.pdf"
     return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
