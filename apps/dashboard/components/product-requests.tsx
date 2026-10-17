@@ -156,10 +156,9 @@ export function ProductRequestBanner({
 
   return (
     <>
-      <div className="relative overflow-hidden rounded-2xl border border-brand-500/30 bg-gradient-to-br from-brand-600/15 via-brand-400/10 to-transparent p-5 sm:p-6">
-        <div className="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-brand-500/10 blur-2xl pointer-events-none" />
+      <div className="relative overflow-hidden rounded-2xl border border-ink-200 bg-ink-50 p-5 sm:p-6">
         <div className="relative flex flex-col sm:flex-row sm:items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-brand-500/15 border border-brand-500/30 flex items-center justify-center shrink-0">
+          <div className="w-12 h-12 rounded-2xl bg-white border border-ink-200 shadow-sm flex items-center justify-center shrink-0">
             <svg className="w-6 h-6 text-brand-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0zM11 8v6m-3-3h6" />
             </svg>

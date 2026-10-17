@@ -78,3 +78,31 @@ async def test_the_athletes_table_says_who_brought_each_family(db, scope):
     assert [a.id for a in found] == [a_invited.id]
     found = await club_service.search_athletes(db, scope=scope, q=written.email[:12])
     assert [a.id for a in found] == [a_written.id]
+
+
+async def test_a_parent_of_the_club_can_become_a_coach_with_the_same_account(db, scope):
+    from sqlalchemy import select
+
+    from app.domains.club import clubs as clubs_service
+    from app.domains.club.service import ClubValidationError
+    from app.domains.rbac.models import Role, UserRole
+    from tests.test_club_multi import _other_club, _roles
+
+    await _roles(db, scope.organization_id, "INSTRUCTOR")
+    admin = await _user(db, scope, "admin")
+    parent = await _user(db, scope, "papa")
+
+    user, link = await clubs_service.add_staff(db, scope=scope, actor_user_id=admin.id, email=parent.email, role="INSTRUCTOR")
+    assert user.id == parent.id and link is None
+    codes = (await db.execute(
+        select(Role.code).join(UserRole, UserRole.role_id == Role.id).where(UserRole.user_id == parent.id)
+    )).scalars().all()
+    assert "INSTRUCTOR" in codes
+    # Due volte no, e una persona di un altro club nemmeno.
+    import pytest
+    with pytest.raises(ClubValidationError):
+        await clubs_service.add_staff(db, scope=scope, actor_user_id=admin.id, email=parent.email, role="INSTRUCTOR")
+    other = await _other_club(db, scope.organization_id, name="Altro Club")
+    stranger = await _user(db, other, "altro")
+    with pytest.raises(ClubValidationError):
+        await clubs_service.add_staff(db, scope=scope, actor_user_id=admin.id, email=stranger.email, role="INSTRUCTOR")

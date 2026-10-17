@@ -779,7 +779,17 @@ async def unenrol_my_athlete(
 async def admin_list_plans(
     current_user: ClubUser = Depends(require_club_permission(MANAGE)), db: AsyncSession = Depends(get_db)
 ) -> list[PlanRead]:
-    return [PlanRead.model_validate(p) for p in await club_service.list_plans(db, scope=current_user.scope)]
+    plans = await club_service.list_plans(db, scope=current_user.scope)
+    counts = dict(
+        (
+            await db.execute(
+                select(ClubAthlete.plan_id, func.count())
+                .where(ClubAthlete.club_id == current_user.scope.club_id, ClubAthlete.status == "ACTIVE")
+                .group_by(ClubAthlete.plan_id)
+            )
+        ).all()
+    )
+    return [PlanRead.model_validate(p).model_copy(update={"athletes_count": counts.get(p.id, 0)}) for p in plans]
 
 
 @admin_router.post("/plans", response_model=PlanRead, status_code=status.HTTP_201_CREATED)
@@ -1024,7 +1034,9 @@ async def admin_list_fees(
         for a in (await db.execute(select(ClubAthlete).where(ClubAthlete.id.in_({f.athlete_id for f in fees})))).scalars()
     } if fees else {}
     today = _today()
-    return [FeeRead(**family_service.fee_dict(f, today=today, athlete=athletes.get(f.athlete_id))) for f in fees]
+    rows = [family_service.fee_dict(f, today=today, athlete=athletes.get(f.athlete_id)) for f in fees]
+    club_service.attach_proofs(rows, await club_service.latest_proofs_of_fees(db, fee_ids=[f.id for f in fees]))
+    return [FeeRead(**r) for r in rows]
 
 
 @admin_router.post("/fees/{fee_id}/waive", response_model=FeeRead)

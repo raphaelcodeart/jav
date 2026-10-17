@@ -28,7 +28,20 @@ export function useDualRoleAreas() {
   return {
     hasBothRoles: roles.includes("CUSTOMER") && roles.includes("PROMOTER"),
     isCustomerArea: pathname?.startsWith("/customer") ?? false,
+    clubAreas: clubAreasFor(roles).filter((a) => !pathname?.startsWith(a.href)),
   };
+}
+
+/** Le aree del club di chi ha più ruoli: un genitore che si allena e
+ *  insegna passa da famiglia ad atleta a treinador dal menu utente. Senza
+ *  questo l'area treinador si apriva solo scrivendo /staff. */
+export function clubAreasFor(roles: string[]): { href: string; key: "family" | "athlete" | "coach" | "secretary"; icon: string }[] {
+  const out: { href: string; key: "family" | "athlete" | "coach" | "secretary"; icon: string }[] = [];
+  if (roles.includes("SECRETARY")) out.push({ href: "/club", key: "secretary", icon: "🗂️" });
+  if (roles.includes("CUSTOMER")) out.push({ href: "/customer", key: "family", icon: "👪" });
+  if (roles.includes("CUSTOMER") || roles.includes("ATHLETE")) out.push({ href: "/atleta", key: "athlete", icon: "🥋" });
+  if (roles.includes("INSTRUCTOR")) out.push({ href: "/staff", key: "coach", icon: "🧑‍🏫" });
+  return out.length > 1 ? out : [];
 }
 
 /** Always-visible customer/promoter toggle for anyone who holds BOTH roles --

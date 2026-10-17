@@ -183,7 +183,12 @@ export function CustomerProductsPanel({
   // sorpresa del 22% al momento di pagare.
   const { t } = useI18n();
   const marketplaceVatPercentage = marketplaceConfig?.vat_percentage ?? 0;
-  const marketplaceLabels = marketplaceConfig?.labels ?? { jav_market: "Fai la Spesa con Jav" };
+  // I nomi predefiniti si traducono; uno scelto dall'amministratore resta il suo.
+  const marketplaceLabels = {
+    jav_market: marketplaceConfig?.labels_custom?.jav_market && marketplaceConfig.labels?.jav_market
+      ? marketplaceConfig.labels.jav_market
+      : t("shopSection.jav_market"),
+  };
   const [shopTarget, setShopTarget] = useState<JavMarketProductRead | null>(null);
   // Only the contract catalog depends on who is looking -- the shop grid
   // sells the same products to everyone -- so this is not fetched at all
@@ -197,6 +202,7 @@ export function CustomerProductsPanel({
   const customerKind = myCustomer?.kind ?? null;
 
   const [activeCategory, setActiveCategory] = useState<ShopTab>(visibleCategories[0] ?? "INTERNAL");
+  const [touchedTab, setTouchedTab] = useState(false);
   // Gli strumenti per navigare lo shop scelto (Session 73): la categoria e
   // la ricerca lavorano insieme, e cambiano solo la griglia -- mai il
   // checkout, mai una scheda prodotto.
@@ -246,7 +252,10 @@ export function CustomerProductsPanel({
   const visibleTabs: { key: ShopTab; label: string }[] = [
     ...CATEGORY_TABS.filter((tab) => visibleCategories.includes(tab.key))
       .filter((tab) => onlyOneCategoryAsked || (sectionConfig?.[sectionKeyOf[tab.key]]?.enabled ?? true))
-      .map((tab) => ({ key: tab.key, label: sectionConfig?.[sectionKeyOf[tab.key]]?.label ?? tab.label })),
+      .map((tab) => {
+        const section = sectionConfig?.[sectionKeyOf[tab.key]];
+        return { key: tab.key, label: section?.custom ? section.label : t.dyn(`shopSection.${sectionKeyOf[tab.key]}`, section?.label ?? tab.label) };
+      }),
     ...(showShopTab && javMarketShop.shopTotal > 0
       ? [{ key: "JAV_MARKET" as ShopTab, label: marketplaceLabels.jav_market }]
       : []),
@@ -255,9 +264,16 @@ export function CustomerProductsPanel({
   // A section switched off (or a Shop that ran out of products) must
   // never leave the Shop showing an empty body: fall back to the first tab
   // that actually exists, derived during render, never synced in an effect.
-  const activeTab: ShopTab = visibleTabs.some((t) => t.key === activeCategory)
-    ? activeCategory
-    : visibleTabs[0]?.key ?? activeCategory;
+  // Finché il cliente non sceglie, si apre il primo negozio che ha prodotti:
+  // aprire su uno vuoto sembrava un negozio chiuso.
+  const tabCount = (key: ShopTab) =>
+    key === "JAV_MARKET"
+      ? javMarketShop.shopTotal
+      : (products ?? []).filter((p) => p.category === key && p.status === "ACTIVE" && p.current_version?.status === "ACTIVE").length;
+  const preferred = touchedTab ? activeCategory : (visibleTabs.find((tab) => tabCount(tab.key) > 0)?.key ?? activeCategory);
+  const activeTab: ShopTab = visibleTabs.some((t) => t.key === preferred)
+    ? preferred
+    : visibleTabs[0]?.key ?? preferred;
 
   const shopCards: JavMarketProductRead[] = showShopTab && activeTab === "JAV_MARKET" ? javMarketShop.items : [];
 
@@ -354,7 +370,7 @@ export function CustomerProductsPanel({
     <div className="space-y-6">
       <div>
         <h3 className="text-lg font-semibold text-slate-900">
-          {contractsOnly ? "I pacchetti Jav" : showShopTab && !referralCode ? "Fai la spesa con Jav" : "Prodotti & Servizi"}
+          {contractsOnly ? "I pacchetti Jav" : showShopTab && !referralCode ? t("shop.title") : "Prodotti & Servizi"}
         </h3>
         <p className="text-xs text-slate-500">
           {referralCode
@@ -362,7 +378,7 @@ export function CustomerProductsPanel({
             : contractsOnly
               ? "Apri “Dettagli” per leggere ogni pacchetto. Per attivarli usa “Attiva nuovo contratto”: una pratica può contenere uno o più contratti."
               : showShopTab
-                ? "Usa il tuo JavCash nello Shop, con consegna a casa."
+                ? t("shop.subtitle")
                 : "Le iscrizioni, i corsi e gli abbonamenti disponibili per il tuo profilo."}
         </p>
       </div>
@@ -383,6 +399,7 @@ export function CustomerProductsPanel({
               aria-pressed={chosen}
               onClick={() => {
                 setActiveCategory(tab.key);
+                setTouchedTab(true);
                 // Cambiando negozio si riparte dalla vetrina piena: la
                 // ricerca e la categoria di prima erano di un altro shop.
                 showEverything();
@@ -397,7 +414,7 @@ export function CustomerProductsPanel({
                 {tab.label}
               </span>
               <span className={`block text-[11px] mt-1 ${chosen ? "text-white/80" : " text-slate-500"}`}>
-                {count > 0 ? `${count} ${count === 1 ? "prodotto" : "prodotti"}` : "Nessun prodotto"}
+                {count > 0 ? t("shop.productCount", { n: count }) : t("shop.noProducts")}
               </span>
             </button>
           );
@@ -410,7 +427,7 @@ export function CustomerProductsPanel({
       )}
       {showShopTab && activeTab === "JAV_MARKET" && !javMarketShop.javOpen && (
         <p className="rounded-2xl bg-amber-50 p-3 text-sm text-amber-900 ring-1 ring-amber-200">
-          🛍️ Gli acquisti dei prodotti JudoArteVida apriranno presto: per ora puoi guardarli e scegliere.
+          🛍️ {t("shop.comingSoon")}
         </p>
       )}
 

@@ -59,13 +59,99 @@ async def invite_link(db: AsyncSession, *, organization_id: uuid.UUID, club: Clu
             .where(Wallet.user_id == user_id, WalletTransaction.source == WALLET_SOURCE)
         )
     ).scalar_one()
+    wallet = (await db.execute(select(Wallet).where(Wallet.user_id == user_id))).scalars().first()
     return {
         "code": code.code,
         "path": f"/c/{club.slug}?invito={code.code}",
         "invited_count": invited,
         "earned_cents": int(earned),
         "credit_per_month_cents": get_pricing(club)["referral_credit_cents"],
+        "balance_cents": int(wallet.balance_cents) if wallet else 0,
+        "network": await _network(db, club=club, user_id=user_id, wallet_id=wallet.id if wallet else None),
     }
+
+
+async def _network(db: AsyncSession, *, club: Club, user_id: uuid.UUID, wallet_id: uuid.UUID | None) -> list[dict]:
+    """La rete di chi invita: ogni atleta delle famiglie entrate dal suo link,
+    con le mensilità pagate e il credito che gli ha reso (i crediti stornati
+    da un rifiuto non contano). Solo nome e iniziale del cognome: è la rete di
+    un genitore, non l'anagrafe del club."""
+    from sqlalchemy import func
+
+    from app.domains.customers.models import Customer
+    from app.domains.friend_referrals.models import FriendReferral
+    from app.domains.wallets.models import WalletTransaction
+
+    rows = (
+        await db.execute(
+            select(Customer.user_id, FriendReferral.created_at)
+            .join(FriendReferral, FriendReferral.referred_customer_id == Customer.id)
+            .where(FriendReferral.referrer_user_id == user_id, FriendReferral.source == SOURCE_CLUB_LINK)
+        )
+    ).all()
+    joined = {guardian: when for guardian, when in rows if guardian is not None}
+    if not joined:
+        return []
+    athletes = list(
+        (
+            await db.execute(
+                select(ClubAthlete)
+                .where(ClubAthlete.club_id == club.id, ClubAthlete.guardian_user_id.in_(joined))
+                .order_by(ClubAthlete.first_name)
+            )
+        ).scalars()
+    )
+    ids = [a.id for a in athletes]
+    paid = dict(
+        (
+            await db.execute(
+                select(ClubFee.athlete_id, func.count())
+                .where(ClubFee.athlete_id.in_(ids), ClubFee.kind == "MONTHLY", ClubFee.status == "PAID")
+                .group_by(ClubFee.athlete_id)
+            )
+        ).all()
+    ) if ids else {}
+    credit: dict[uuid.UUID, int] = {}
+    if wallet_id is not None and ids:
+        reversed_ids = select(WalletTransaction.reverses_transaction_id).where(
+            WalletTransaction.reverses_transaction_id.is_not(None)
+        )
+        credits = (
+            await db.execute(
+                select(WalletTransaction.idempotency_key, WalletTransaction.amount_cents).where(
+                    WalletTransaction.to_wallet_id == wallet_id, WalletTransaction.source == WALLET_SOURCE,
+                    WalletTransaction.id.not_in(reversed_ids),
+                )
+            )
+        ).all()
+        # La chiave del credito è «club-referral:<quota>:<pagamento>».
+        fee_ids: dict[uuid.UUID, int] = {}
+        for key, amount in credits:
+            try:
+                fee_id = uuid.UUID((key or "").split(":")[1])
+            except (IndexError, ValueError):
+                continue
+            fee_ids[fee_id] = fee_ids.get(fee_id, 0) + int(amount)
+        if fee_ids:
+            owners = dict(
+                (await db.execute(select(ClubFee.id, ClubFee.athlete_id).where(ClubFee.id.in_(fee_ids)))).all()
+            )
+            for fee_id, amount in fee_ids.items():
+                athlete_id = owners.get(fee_id)
+                if athlete_id is not None:
+                    credit[athlete_id] = credit.get(athlete_id, 0) + amount
+    return [
+        {
+            "athlete_id": a.id,
+            "name": f"{a.first_name} {a.last_name[:1]}.",
+            "photo_url": a.photo_url,
+            "status": a.status,
+            "joined_on": joined[a.guardian_user_id].date(),
+            "months_paid": int(paid.get(a.id, 0)),
+            "credit_cents": credit.get(a.id, 0),
+        }
+        for a in athletes
+    ]
 
 
 async def record_club_invite(

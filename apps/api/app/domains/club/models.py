@@ -182,6 +182,9 @@ class ClubPlan(UUIDPKMixin, TimestampMixin, Base):
         ARRAY(SmallInteger), default=lambda: list(DEFAULT_BILLING_MONTHS)
     )
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    #: Il colore del gruppo (#RRGGBB), scelto dalla segreteria: la fascia della
+    #: sua scheda in «Piani e prezzi». NULL = un colore dalla tavolozza.
+    color: Mapped[str | None] = mapped_column(String(7), nullable=True)
 
 
 class ClubAthlete(UUIDPKMixin, TimestampMixin, Base):

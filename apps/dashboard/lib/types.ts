@@ -961,8 +961,10 @@ export type ShopSectionKey = "internal" | "partner" | "dropshipping";
 export type MarketplaceConfigRead = {
   /** Il nome con cui il cliente vede lo Shop (impostazione dell'admin). */
   labels: { jav_market: string };
+  /** false finché il nome è quello predefinito: allora si mostra tradotto. */
+  labels_custom?: { jav_market?: boolean };
   /** Session 72: the Shop's own sections, each renamable and switchable. */
-  sections: Record<ShopSectionKey, { label: string; enabled: boolean }>;
+  sections: Record<ShopSectionKey, { label: string; enabled: boolean; custom?: boolean }>;
   bank_transfer_discount_percentage: number;
   /** Session 78: l'aliquota che si **aggiunge** al prezzo esposto (22% se
       l'amministratore non la cambia).

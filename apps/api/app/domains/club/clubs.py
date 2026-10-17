@@ -281,9 +281,9 @@ async def add_staff(
             select(User).where(User.organization_id == scope.organization_id, func.lower(User.email) == email)
         )
     ).scalar_one_or_none()
-    if existing is not None:
-        # Un account c'è già: un'email è una persona, e una persona di un
-        # altro club (o della piattaforma) non si sposta da qui.
+    if existing is not None and existing.club_id != club.id:
+        # Un'email è una persona, e una persona di un altro club (o della
+        # piattaforma) non si sposta da qui.
         raise ClubValidationError(f"Esiste già un account con l'email {email}.")
     role_row = (
         await db.execute(
@@ -294,6 +294,23 @@ async def add_staff(
     ).scalars().first()
     if role_row is None:
         raise ClubValidationError("Il ruolo non è configurato: rilancia app.seed.bootstrap.")
+    if existing is not None:
+        # Già del club (un genitore, un atleta adulto che diventa treinador):
+        # lo stesso account prende anche il ruolo, con la password che ha.
+        has = (
+            await db.execute(select(UserRole).where(UserRole.user_id == existing.id, UserRole.role_id == role_row.id))
+        ).scalar_one_or_none()
+        if has is not None:
+            raise ClubValidationError(f"{email} fa già parte dello staff con questo ruolo.")
+        db.add(UserRole(user_id=existing.id, organization_id=scope.organization_id, role_id=role_row.id))
+        await audit_service.record(
+            db, organization_id=scope.organization_id, actor_user_id=actor_user_id,
+            action="clubs.staff_added", entity_type="club", entity_id=str(club.id),
+            new_value={"email": email, "role": role, "existing_account": True},
+        )
+        await db.commit()
+        await db.refresh(existing)
+        return existing, None
     user = User(
         organization_id=scope.organization_id, club_id=club.id, email=email,
         password_hash=hash_password(secrets.token_urlsafe(32)), status="ACTIVE",

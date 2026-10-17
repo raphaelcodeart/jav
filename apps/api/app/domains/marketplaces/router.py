@@ -14,6 +14,8 @@ router = APIRouter(prefix="/marketplaces", tags=["marketplaces"])
 class ShopSectionRead(BaseModel):
     label: str
     enabled: bool
+    #: False finché è il nome predefinito: il frontend lo traduce.
+    custom: bool = False
 
 
 class ShopSectionUpdate(BaseModel):
@@ -23,6 +25,7 @@ class ShopSectionUpdate(BaseModel):
 
 class MarketplaceConfigRead(BaseModel):
     labels: dict[str, str]
+    labels_custom: dict[str, bool] = {}
     #: The Shop's own sections (internal / partner / dropshipping).
     sections: dict[str, ShopSectionRead]
     bank_transfer_discount_percentage: int

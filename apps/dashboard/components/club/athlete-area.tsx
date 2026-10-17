@@ -200,6 +200,21 @@ function Area({ id, section, onGo }: { id: string; section: AreaSection; onGo: (
               </li>
             ))}
           </ul>
+
+          {/* --- Segna la tua presenza: porta alle lezioni --- */}
+          <motion.button type="button" onClick={() => onGo("lessons")} whileHover={{ y: -3 }} whileTap={{ scale: 0.98 }}
+            className="relative flex w-full cursor-pointer items-center gap-4 overflow-hidden rounded-[2rem] bg-gradient-to-br from-brand-500 via-brand-600 to-ink-900 p-6 text-left text-white shadow-lift">
+            <span aria-hidden="true" className="pointer-events-none absolute -right-4 -top-6 select-none font-display text-[8rem] leading-none text-white/10">柔</span>
+            <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white/15 text-4xl ring-1 ring-white/25 animate-pulse-ring" aria-hidden="true">🥋</span>
+            <span className="relative min-w-0 flex-1">
+              <span className="block font-display text-2xl leading-tight sm:text-3xl">{t("athleteArea.markCta")}</span>
+              <span className="mt-1 block text-sm text-white/85">{t("athleteArea.markCtaText")}</span>
+            </span>
+            <span className="relative hidden rounded-2xl bg-accent-400 px-4 py-3 font-bold text-ink-900 shadow sm:block">{t("athleteArea.markCtaButton")} →</span>
+          </motion.button>
+
+          {/* --- Invita un amico, come nella sua pagina --- */}
+          <InviteCard withNetwork={false} />
         </>
       )}
 

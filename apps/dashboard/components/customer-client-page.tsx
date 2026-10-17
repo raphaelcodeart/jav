@@ -500,7 +500,6 @@ export function CustomerClientPage({ email, organizationId }: CustomerClientPage
 
       {activeTab === "products" && (
         <div className="space-y-6">
-          <SectionBanner image="products" alt="Shop" />
           <CustomerProductsPanel
             visibleCategories={["PARTNER", "DROPSHIPPING"]}
             showShopTab

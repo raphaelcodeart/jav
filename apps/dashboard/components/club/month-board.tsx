@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { AthleteMarks } from "@/components/club/person-marks";
 import { ProofPicker } from "@/components/ui/proof-picker";
+import { feeLabel, ReceiptViewer } from "@/components/club/proofs-panel";
 import { clubGet, clubSend, type Fee, type MonthBoard, type MonthBoardState, type MonthRow } from "@/lib/club";
 import { cn } from "@/lib/cn";
 import { useI18n } from "@/lib/i18n/provider";
@@ -123,8 +124,12 @@ function initials(r: MonthRow) {
 }
 
 /** Il riquadro di un atleta: chi, gruppo, quanto, stato, e il bottone. */
-function PersonBox({ row, onPay, index }: { row: MonthRow; onPay: (fees: Fee[], title: string) => void; index: number }) {
+function PersonBox({ row, onPay, onProof, index }: {
+  row: MonthRow; onPay: (fees: Fee[], title: string) => void; onProof: (fee: Fee) => void; index: number;
+}) {
   const { t, fmt } = useI18n();
+  // La prova mandata dalla famiglia (anche rifiutata): si apre da qui.
+  const withProof = [...(row.fee ? [row.fee] : []), ...row.arrears, ...row.other_due].find((f) => f.proof_id);
   const style = MONTH_STATE_STYLE[row.state];
   const extra = [...row.arrears, ...row.other_due];
   const toPay = [...(row.fee && (row.state === "DUE" || row.state === "OVERDUE") ? [row.fee] : []), ...extra];
@@ -159,14 +164,21 @@ function PersonBox({ row, onPay, index }: { row: MonthRow; onPay: (fees: Fee[], 
         <ul className="mt-2 space-y-1">
           {extra.slice(0, 3).map((f) => (
             <li key={f.id} className="flex items-center justify-between gap-2 rounded-xl bg-ink-50 px-2.5 py-1 text-xs text-ink-700">
-              <span className="truncate">{KIND_ICONS[f.kind] ?? "•"} {f.description}</span>
+              <span className="truncate">{KIND_ICONS[f.kind] ?? "•"} {feeLabel(f, t, fmt)}</span>
               <span className="shrink-0 font-semibold">{fmt.euro(f.amount_cents)}</span>
             </li>
           ))}
           {extra.length > 3 && <li className="text-[11px] text-ink-500">+ {extra.length - 3}</li>}
         </ul>
       )}
-      <div className="mt-auto pt-3">
+      <div className="mt-auto space-y-2 pt-3">
+        {withProof && (
+          <button type="button" onClick={() => onProof(withProof)}
+            className={cn("flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold ring-1 transition",
+              withProof.proof_status === "REJECTED" ? "bg-rose-50 text-rose-800 ring-rose-200 hover:bg-rose-100" : "bg-sky-50 text-sky-800 ring-sky-200 hover:bg-sky-100")}>
+            🧾 {withProof.proof_status === "REJECTED" ? t("fees.viewRejectedProof") : t("fees.viewProof")}
+          </button>
+        )}
         {toPay.length > 0 ? (
           <Button className="w-full" onClick={() => onPay(toPay, name)}>
             ✓ {toPay.length === 1 ? t("month.markPaid") : t("month.markAllPaid", { amount: fmt.euro(toPay.reduce((s, f) => s + f.amount_cents, 0)) })}
@@ -188,6 +200,7 @@ export function MonthBoardPanel({ compact = false, onOpen }: { compact?: boolean
   const [group, setGroup] = useState("");
   const [q, setQ] = useState("");
   const [paying, setPaying] = useState<{ fees: Fee[]; title: string } | null>(null);
+  const [viewingProof, setViewingProof] = useState<{ id: string; status?: string | null } | null>(null);
   const { data, isLoading, error } = useQuery({
     queryKey: ["club", "admin", "month", period],
     queryFn: () => clubGet<MonthBoard>(`/admin/month?period=${period}`),
@@ -288,12 +301,14 @@ export function MonthBoardPanel({ compact = false, onOpen }: { compact?: boolean
       ) : (
         <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
           <AnimatePresence initial={false}>
-            {rows.map((r, i) => <PersonBox key={r.athlete_id} row={r} index={i} onPay={(fees, title) => setPaying({ fees, title })} />)}
+            {rows.map((r, i) => <PersonBox key={r.athlete_id} row={r} index={i} onPay={(fees, title) => setPaying({ fees, title })}
+              onProof={(f) => setViewingProof(f.proof_id ? { id: f.proof_id, status: f.proof_status } : null)} />)}
           </AnimatePresence>
         </ul>
       )}
       {tt.none > 0 && filter === "all" && <p className="text-xs text-ink-500">{t("month.noneNote", { n: tt.none })}</p>}
       {paying && <QuickPayModal fees={paying.fees} title={paying.title} onClose={() => setPaying(null)} />}
+      <ReceiptViewer proof={viewingProof} onClose={() => setViewingProof(null)} />
     </div>
   );
 }
@@ -360,7 +375,7 @@ function QuickPayModal({ fees, title, onClose }: { fees: Fee[]; title: string; o
                 <input type="checkbox" className="h-5 w-5 accent-brand-600" checked={selected.has(f.id)}
                   onChange={(e) => setSelected((s) => { const n = new Set(s); if (e.target.checked) n.add(f.id); else n.delete(f.id); return n; })} />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold text-ink-900">{KIND_ICONS[f.kind] ?? "•"} {f.description}</span>
+                  <span className="block truncate text-sm font-semibold text-ink-900">{KIND_ICONS[f.kind] ?? "•"} {feeLabel(f, t, fmt)}</span>
                   <span className="block text-xs text-ink-500">{t("club.dueOnCap", { date: fmt.shortDate(f.due_date) })}{f.overdue ? ` · ${t("month.state.OVERDUE")}` : ""}</span>
                 </span>
                 <span className="font-display text-ink-900">{fmt.euro(f.amount_cents)}</span>
@@ -436,7 +451,7 @@ export function FamilyMonthCard({ board, onPay }: { board: MonthBoard; onPay: (f
               </div>
               {[...r.arrears, ...r.other_due].map((f) => (
                 <p key={f.id} className="mt-1.5 flex justify-between gap-2 text-xs text-ink-600">
-                  <span className="truncate">{KIND_ICONS[f.kind] ?? "•"} {f.description}</span><span className="shrink-0 font-semibold">{fmt.euro(f.amount_cents)}</span>
+                  <span className="truncate">{KIND_ICONS[f.kind] ?? "•"} {feeLabel(f, t, fmt)}</span><span className="shrink-0 font-semibold">{fmt.euro(f.amount_cents)}</span>
                 </p>
               ))}
             </li>

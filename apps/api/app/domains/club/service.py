@@ -1184,6 +1184,32 @@ async def list_proofs(
     return list((await db.execute(stmt.order_by(ClubPaymentProof.created_at.desc()).limit(limit))).scalars())
 
 
+async def latest_proofs_of_fees(db: AsyncSession, *, fee_ids: list[uuid.UUID]) -> dict[uuid.UUID, dict]:
+    """L'ultima prova di pagamento collegata a ogni quota, anche rifiutata:
+    la segreteria la apre dalla quota per controllarla prima di segnarla
+    pagata, o per vedere che cosa la famiglia aveva mandato."""
+    if not fee_ids:
+        return {}
+    rows = (
+        await db.execute(
+            select(ClubPaymentProofFee.fee_id, ClubPaymentProof.id, ClubPaymentProof.status)
+            .join(ClubPaymentProof, ClubPaymentProof.id == ClubPaymentProofFee.proof_id)
+            .where(ClubPaymentProofFee.fee_id.in_(fee_ids))
+            .order_by(ClubPaymentProof.created_at.desc())
+        )
+    ).all()
+    out: dict[uuid.UUID, dict] = {}
+    for fee_id, proof_id, status in rows:
+        out.setdefault(fee_id, {"proof_id": proof_id, "proof_status": status})
+    return out
+
+
+def attach_proofs(fee_rows: list[dict], proofs: dict[uuid.UUID, dict]) -> None:
+    """Aggiunge `proof_id`/`proof_status` ai dizionari delle quote (fee_dict)."""
+    for row in fee_rows:
+        row.update(proofs.get(row["id"], {}))
+
+
 async def fees_by_proof(db: AsyncSession, *, proof_ids: list[uuid.UUID]) -> dict[uuid.UUID, list[ClubFee]]:
     if not proof_ids:
         return {}

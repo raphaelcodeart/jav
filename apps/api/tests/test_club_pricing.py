@@ -159,6 +159,11 @@ async def test_an_invited_family_paying_a_month_credits_the_inviter_once(db, sco
     )
     assert info["invited_count"] == 1
     assert info["path"].startswith(f"/c/{(await db.get(Club, scope.club_id)).slug}?invito=")
+    # La rete: Rui, una mensilità pagata, 5 € resi (il credito stornato dal
+    # rifiuto non conta due volte); il saldo è quello del wallet.
+    assert info["balance_cents"] == 500
+    [rui] = info["network"]
+    assert (rui["name"], rui["months_paid"], rui["credit_cents"]) == ("Rui B.", 1, 500)
 
 
 async def test_wallet_credit_pays_fees_and_comes_back_if_the_proof_is_rejected(db, scope, monkeypatch):

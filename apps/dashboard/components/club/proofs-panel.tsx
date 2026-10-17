@@ -50,7 +50,7 @@ function range(period: Period): { from?: string; to?: string } {
 /** La quota nella lingua di chi guarda: il server scrive la descrizione in
  *  italiano («Quota di ottobre 2026»), qui si ricostruisce da tipo e periodo
  *  quando sono quelli normali; per il resto (rate, gare) resta la sua. */
-function feeLabel(f: AdminProof["fees"][number], t: ReturnType<typeof useI18n>["t"], fmt: ReturnType<typeof useI18n>["fmt"]) {
+export function feeLabel(f: AdminProof["fees"][number], t: ReturnType<typeof useI18n>["t"], fmt: ReturnType<typeof useI18n>["fmt"]) {
   const kind = t.dyn(`club.feeKind.${f.kind}`, "");
   const month = /^(\d{4})-(\d{2})$/.exec(f.period);
   if (kind && f.kind === "MONTHLY" && month) {
@@ -302,8 +302,13 @@ function ProofCard({ proof: p, index, onView, onReject }: { proof: AdminProof; i
   );
 }
 
-/** La ricevuta dentro la pagina: l'immagine o il PDF, senza aprire schede. */
-function ReceiptViewer({ proof, onClose }: { proof: AdminProof | null; onClose: () => void }) {
+/** La ricevuta dentro la pagina: l'immagine o il PDF, senza aprire schede.
+ *  Basta l'id della prova: la si apre anche da una quota (lista delle quote,
+ *  quadro del mese) per controllarla prima di segnarla pagata. */
+export function ReceiptViewer({ proof, onClose }: {
+  proof: { id: string; receipt_number?: string | null; original_filename?: string | null; status?: string | null } | null;
+  onClose: () => void;
+}) {
   const { t } = useI18n();
   const { data, isLoading, error } = useQuery({
     queryKey: ["club", "admin", "proof-url", proof?.id],
@@ -311,9 +316,10 @@ function ReceiptViewer({ proof, onClose }: { proof: AdminProof | null; onClose: 
     enabled: !!proof,
     staleTime: 60_000,
   });
-  const pdf = /\.pdf$/i.test(proof?.original_filename ?? "");
+  const pdf = /\.pdf$/i.test(proof?.original_filename ?? "") || /\.pdf(\?|$)/i.test(data?.url ?? "");
   return (
-    <Modal open={!!proof} onClose={onClose} size="xl" title={`🧾 ${proof?.receipt_number ?? t("proofs.receipt")}`} subtitle={proof?.original_filename ?? undefined}
+    <Modal open={!!proof} onClose={onClose} size="xl" title={`🧾 ${proof?.receipt_number ?? t("proofs.receipt")}`}
+      subtitle={proof?.status === "REJECTED" ? `✕ ${t("proofs.rejected")}` : (proof?.original_filename ?? undefined)}
       footer={data ? <a href={data.url} target="_blank" rel="noopener noreferrer" className="text-sm font-semibold text-brand-700 hover:underline">{t("proofs.openNew")} ↗</a> : undefined}>
       {isLoading ? <Skeleton className="h-[60vh]" /> : error ? (
         <p className="rounded-2xl bg-rose-50 p-4 text-sm text-rose-700">{t("proofs.viewFailed")}</p>

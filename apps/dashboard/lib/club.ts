@@ -47,6 +47,10 @@ export interface Plan extends PlanSummary {
   due_day: number;
   billing_months: number[];
   active: boolean;
+  /** Il colore del gruppo (#RRGGBB); null = la tavolozza. */
+  color?: string | null;
+  /** Gli atleti attivi con questo piano (elenco della segreteria). */
+  athletes_count?: number;
 }
 
 export interface Fee {
@@ -75,6 +79,9 @@ export interface Fee {
   cash_received_by_name?: string | null;
   waive_reason: string | null;
   competition_id: string | null;
+  /** L'ultima prova collegata (anche rifiutata): solo negli elenchi della segreteria. */
+  proof_id?: string | null;
+  proof_status?: "ACCEPTED" | "REJECTED" | string | null;
   /** Corsi JAV: il corso a cui la mensilità è attribuita (null = senza corso). */
   course_id?: string | null;
 }
@@ -390,6 +397,10 @@ export interface Invite {
   invited_count: number;
   earned_cents: number;
   credit_per_month_cents: number;
+  /** Il saldo JavCash di chi invita. */
+  balance_cents?: number;
+  /** Gli atleti delle famiglie entrate dal link (club/referrals.py::_network). */
+  network?: { athlete_id: string; name: string; photo_url: string | null; status: string; joined_on: string; months_paid: number; credit_cents: number }[];
 }
 
 export interface AthleteEligibility {

@@ -138,6 +138,11 @@ async def club_month(db: AsyncSession, *, scope: ClubScope, period: str | None, 
     )).all()) if rows else {}
     for r in rows:
         r["guardian_email"] = emails.get(r["guardian_user_id"])
+    # La prova di ogni quota, da aprire dal quadro prima di segnarla pagata.
+    from app.domains.club import service as club_service
+
+    fee_rows = [f for r in rows for f in ([r["fee"]] if r["fee"] else []) + r["arrears"] + r["other_due"]]
+    club_service.attach_proofs(fee_rows, await club_service.latest_proofs_of_fees(db, fee_ids=[f["id"] for f in fee_rows]))
     return {
         "period": period, "first_day": first, "last_day": last,
         "is_current": first <= today <= last,

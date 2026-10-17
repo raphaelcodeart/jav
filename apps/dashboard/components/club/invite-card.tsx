@@ -13,7 +13,7 @@ import { shareOrCopyLink } from "@/lib/share-link";
  *  quando si pagano le quote (apps/api/app/domains/club/referrals.py). Si
  *  condivide con un tocco su WhatsApp, Facebook, Telegram, X o per email, o si
  *  copia. Sotto, che cosa comprende l'iscrizione annuale: le famiglie lo chiedono. */
-export function InviteCard() {
+export function InviteCard({ withNetwork = true }: { withNetwork?: boolean }) {
   const { t, fmt } = useI18n();
   const toast = useToast();
   const [copied, setCopied] = useState(false);
@@ -50,6 +50,7 @@ export function InviteCard() {
   }
 
   return (
+    <div className="space-y-5">
     <section className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-emerald-500 via-teal-600 to-ink-900 p-6 text-white shadow-lift sm:p-7">
       <motion.span aria-hidden="true" className="pointer-events-none absolute -right-6 -top-8 select-none text-[8rem] leading-none opacity-20"
         animate={{ rotate: [-6, 6, -6] }} transition={{ duration: 6, repeat: Infinity }}>🤝</motion.span>
@@ -100,6 +101,62 @@ export function InviteCard() {
         <p className="relative mt-4 border-t border-white/20 pt-3 text-xs text-white/80">
           <span className="font-semibold text-white">{t("invite.enrollmentIncludes")}</span> {pricing.enrollment_includes}
         </p>
+      )}
+    </section>
+    {withNetwork && <InviteNetwork invite={invite} />}
+    </div>
+  );
+}
+
+/** La rete di chi invita: gli atleti entrati dal suo link, con le mensilità
+ *  pagate e quanto gli hanno reso, e il saldo JavCash da usare sulle quote. */
+function InviteNetwork({ invite }: { invite: Invite }) {
+  const { t, fmt } = useI18n();
+  const network = invite.network ?? [];
+  const months = network.reduce((s, n) => s + n.months_paid, 0);
+  return (
+    <section className="rounded-[2rem] bg-white p-5 shadow-soft ring-1 ring-ink-900/5 sm:p-6">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-3xl bg-gradient-to-br from-accent-300 to-accent-500 p-4 text-ink-900 shadow-soft">
+          <p className="text-[11px] font-bold uppercase tracking-widest opacity-75">🪙 {t("invite.balance")}</p>
+          <p className="mt-1 font-display text-3xl">{fmt.euro(invite.balance_cents ?? 0)}</p>
+          <p className="mt-1 text-xs opacity-80">{t("invite.balanceHint")}</p>
+        </div>
+        <div className="rounded-3xl bg-ink-50 p-4">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-ink-400">👥 {t("invite.networkPeople")}</p>
+          <p className="mt-1 font-display text-3xl text-ink-900">{network.length}</p>
+        </div>
+        <div className="rounded-3xl bg-ink-50 p-4">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-ink-400">📅 {t("invite.networkMonths")}</p>
+          <p className="mt-1 font-display text-3xl text-ink-900">{months}</p>
+        </div>
+      </div>
+
+      <h3 className="mt-6 text-lg text-ink-900">{t("invite.networkTitle")}</h3>
+      {network.length === 0 ? (
+        <p className="mt-2 rounded-2xl bg-ink-50 p-4 text-sm text-ink-500">{t("invite.networkEmpty", { amount: fmt.euro(invite.credit_per_month_cents) })}</p>
+      ) : (
+        <ul className="mt-3 grid gap-3 sm:grid-cols-2">
+          {network.map((n, i) => (
+            <motion.li key={n.athlete_id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 8) * 0.04 }}
+              className="flex items-center gap-3 rounded-2xl bg-ink-50/70 p-3 ring-1 ring-ink-900/5">
+              {n.photo_url ? (
+                // eslint-disable-next-line @next/next/no-img-element -- foto della scheda dell'atleta
+                <img src={n.photo_url} alt="" className="h-12 w-12 shrink-0 rounded-full object-cover ring-2 ring-white" />
+              ) : (
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-teal-700 font-display text-white">{n.name.slice(0, 1)}</span>
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-semibold text-ink-900">{n.name}</p>
+                <p className="text-xs text-ink-500">{t("invite.since", { date: fmt.shortDate(n.joined_on) })}{n.status !== "ACTIVE" ? ` · ${t("invite.inactive")}` : ""}</p>
+              </div>
+              <div className="shrink-0 text-right">
+                <p className="text-sm font-bold text-ink-900">{t("invite.monthsPaid", { n: n.months_paid })}</p>
+                <p className="text-xs font-semibold text-emerald-700">+{fmt.euro(n.credit_cents)}</p>
+              </div>
+            </motion.li>
+          ))}
+        </ul>
       )}
     </section>
   );

@@ -289,7 +289,7 @@ function UserMenu({ email, roleLabel, onOpenSettings }: { email?: string; roleLa
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, []);
 
-  const { hasBothRoles, isCustomerArea } = useDualRoleAreas();
+  const { hasBothRoles, isCustomerArea, clubAreas } = useDualRoleAreas();
   const { t } = useI18n();
 
   async function handleLogout() {
@@ -327,6 +327,12 @@ function UserMenu({ email, roleLabel, onOpenSettings }: { email?: string; roleLa
               <p className="truncate text-sm font-semibold text-ink-900">{email}</p>
               <p className="truncate text-xs text-ink-500">{roleLabel}</p>
             </div>
+            {clubAreas.map((area) => (
+              <Link key={area.href} href={area.href} onClick={() => setOpen(false)} className={itemClass}>
+                <span className="w-4 text-center" aria-hidden="true">{area.icon}</span>
+                {t(`shell.area.${area.key}`)}
+              </Link>
+            ))}
             {hasBothRoles && (
               <Link href={isCustomerArea ? "/promoter" : "/customer"} onClick={() => setOpen(false)} className={itemClass}>
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

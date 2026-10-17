@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import Image from "next/image";
+import Link from "next/link";
 import { motion } from "motion/react";
 import type { ReactNode } from "react";
 import { BeltBadge } from "@/components/ui/belt";
@@ -52,9 +53,10 @@ export function AuthLayout({ children, title, subtitle }: { children: ReactNode;
 
       <div className="relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-md flex-col items-center justify-center px-4 py-10">
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-6 flex items-center gap-3">
-          <div className="rounded-2xl bg-white p-1.5 shadow-soft ring-1 ring-ink-100">
+          {/* Il logo porta al sito pubblico. */}
+          <Link href="/" aria-label="Judo Arte e Vida" className="rounded-2xl bg-white p-1.5 shadow-soft ring-1 ring-ink-100 transition hover:-translate-y-0.5 hover:shadow-lift">
             <Image src="/judoartevida-logo.jpg" alt="Judo Arte e Vida" width={120} height={52} priority className="h-12 w-auto" />
-          </div>
+          </Link>
         </motion.div>
         <motion.div
           initial={{ opacity: 0, y: 24, scale: 0.98 }}

@@ -62,8 +62,10 @@ MAX_CREDIT_PERCENTAGE = 99
 #: Lo Shop, con il catalogo scritto a mano dall'amministratore.
 JAV_MARKET = "jav_market"
 MARKETPLACES = (JAV_MARKET,)
+#: I nomi predefiniti, in italiano. Finché l'amministratore non li cambia,
+#: il frontend mostra la traduzione (`*_custom` = False nella config).
 DEFAULT_LABELS = {
-    JAV_MARKET: "Fai la Spesa con Jav",
+    JAV_MARKET: "Prodotti partner Suplementos24",
 }
 
 #: The Shop's own sections -- the ones backed by `catalog.products`,
@@ -77,8 +79,8 @@ DROPSHIPPING = "dropshipping"
 SECTIONS = (INTERNAL, PARTNER, DROPSHIPPING)
 DEFAULT_SECTION_LABELS = {
     INTERNAL: "Jav",
-    PARTNER: "Prodotti Partner",
-    DROPSHIPPING: "Offerte Jav",
+    PARTNER: "Judogi, cinture e abbigliamento judo",
+    DROPSHIPPING: "Equipaggiamento sportivo del club",
 }
 
 
@@ -186,13 +188,16 @@ async def get_sections(db: AsyncSession, *, organization_id: uuid.UUID) -> dict[
         sections[key] = {
             "label": label or DEFAULT_SECTION_LABELS[key],
             "enabled": bool(saved.get("enabled", True)),
+            "custom": bool(label) and label != DEFAULT_SECTION_LABELS[key],
         }
     return sections
 
 
 async def get_config(db: AsyncSession, *, organization_id: uuid.UUID) -> dict:
     return {
-        "labels": await get_labels(db, organization_id=organization_id),
+        "labels": (labels := await get_labels(db, organization_id=organization_id)),
+        # Un nome uguale al predefinito non è una scelta: si mostra tradotto.
+        "labels_custom": {key: labels[key] != DEFAULT_LABELS[key] for key in MARKETPLACES},
         "sections": await get_sections(db, organization_id=organization_id),
         "bank_transfer_discount_percentage": await get_bank_transfer_discount_percentage(
             db, organization_id=organization_id

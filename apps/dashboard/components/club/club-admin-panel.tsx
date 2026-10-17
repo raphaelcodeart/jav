@@ -29,7 +29,8 @@ import { EVENT_KIND_STYLE, EventIcon } from "@/components/club/event-icon";
 import { ClubDocumentsPanel } from "@/components/club/club-documents";
 import { AthleteMarks } from "@/components/club/person-marks";
 import { AthletesTable } from "@/components/club/athletes-table";
-import { ProofsPanel } from "@/components/club/proofs-panel";
+import { ProofsPanel, ReceiptViewer } from "@/components/club/proofs-panel";
+import { PlansPanel } from "@/components/club/plans-panel";
 import { SlotEditModal } from "@/components/club/slot-edit-modal";
 import { ContactInbox } from "@/components/club/contact-inbox";
 import { AthletePublicPageSection } from "@/components/club/athlete-public-page";
@@ -163,7 +164,7 @@ export function ClubAdminPanel({ section: controlled, onGo, canInvest = false }:
         {section === "overview" && <Overview onGo={go} />}
         {section === "people" && <PeoplePanel canInvest={canInvest} />}
         {section === "athletes" && <Athletes />}
-        {section === "plans" && <Plans />}
+        {section === "plans" && <PlansPanel />}
         {section === "accounting" && <ClubAccounting />}
         {section === "fees" && <Fees />}
         {section === "proofs" && <ProofsPanel />}
@@ -310,80 +311,6 @@ function AthleteAdminModal({ athlete, plans, onClose }: { athlete: AdminAthlete;
   );
 }
 
-// --- Piani ------------------------------------------------------------------------------------
-
-function Plans() {
-  const { t } = useI18n();
-  const { data, isLoading } = useQuery({ queryKey: ["club", "admin", "plans"], queryFn: () => clubGet<Plan[]>(A("/plans")) });
-  const [editing, setEditing] = useState<Plan | "new" | null>(null);
-  const run = useRun();
-  return (
-    <div className="space-y-4">
-      <div className="flex justify-end"><Button onClick={() => setEditing("new")} icon={<span>＋</span>}>Nuovo piano</Button></div>
-      {isLoading ? <Skeleton className="h-48" /> : (data ?? []).length === 0 ? <EmptyState title="Nessun piano" text="Crea i piani per fascia d'età: il sistema li assegna da solo agli atleti." action={<Button onClick={() => setEditing("new")}>Crea il primo piano</Button>} /> : (
-        <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          {(data ?? []).map((p) => (
-            <motion.div key={p.id} whileHover={{ y: -3 }} className="glass-card rounded-3xl p-5">
-              <div className="flex items-start justify-between gap-2">
-                <h3 className="text-base text-ink-900">{p.name}</h3>
-                {!p.active && <Badge tone="neutral">Disattivo</Badge>}
-              </div>
-              <p className="text-sm text-ink-500">{p.min_age}{p.max_age != null ? `–${p.max_age}` : "+"} anni · scadenza il {p.due_day} del mese</p>
-              <p className="font-display text-3xl text-ink-900 mt-3">{euro(p.monthly_fee_cents)}<span className="text-sm text-ink-500 font-sans"> /mese</span></p>
-              <p className="text-xs text-ink-500">{t("clubAdmin.planEnrollment", { amount: euro(p.enrollment_fee_cents) })}</p>
-              <div className="flex gap-2 mt-4">
-                <Button size="sm" variant="secondary" onClick={() => setEditing(p)}>Modifica</Button>
-                <Button size="sm" variant="ghost" onClick={() => window.confirm(`Eliminare il piano «${p.name}»?`) && run(() => clubSend(A(`/plans/${p.id}`), "DELETE"), "Piano eliminato")}>Elimina</Button>
-              </div>
-            </motion.div>
-          ))}
-        </div>
-      )}
-      {editing && <PlanModal plan={editing === "new" ? null : editing} onClose={() => setEditing(null)} />}
-    </div>
-  );
-}
-
-function PlanModal({ plan, onClose }: { plan: Plan | null; onClose: () => void }) {
-  const { t } = useI18n();
-  const [name, setName] = useState(plan?.name ?? "");
-  const [description, setDescription] = useState(plan?.description ?? "");
-  const [minAge, setMinAge] = useState(String(plan?.min_age ?? 4));
-  const [maxAge, setMaxAge] = useState(plan?.max_age != null ? String(plan.max_age) : "");
-  const [monthly, setMonthly] = useState(plan ? String(plan.monthly_fee_cents / 100) : "");
-  const [enrollment, setEnrollment] = useState(plan ? String(plan.enrollment_fee_cents / 100) : "0");
-  const [dueDay, setDueDay] = useState(String(plan?.due_day ?? 10));
-  const [active, setActive] = useState(plan?.active ?? true);
-  const [busy, setBusy] = useState(false);
-  const run = useRun();
-  const cents = (v: string) => Math.round(Number(v.replace(",", ".")) * 100) || 0;
-  async function save() {
-    setBusy(true);
-    const body = { name, description: description || null, min_age: Number(minAge), max_age: maxAge ? Number(maxAge) : null, monthly_fee_cents: cents(monthly), enrollment_fee_cents: cents(enrollment), due_day: Number(dueDay), active };
-    const ok = await run(() => (plan ? clubSend(A(`/plans/${plan.id}`), "PATCH", body) : clubSend(A("/plans"), "POST", body)), plan ? "Piano aggiornato" : "Piano creato");
-    setBusy(false);
-    if (ok) onClose();
-  }
-  return (
-    <Modal open onClose={onClose} title={plan ? "Modifica piano" : "Nuovo piano"} footer={<><Button variant="ghost" onClick={onClose}>Annulla</Button><Button loading={busy} onClick={save} disabled={!name || !monthly}>Salva</Button></>}>
-      <div className="space-y-4">
-        <Field label="Nome" htmlFor="pl-name"><Input id="pl-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="es. Bambini 4–7 anni" /></Field>
-        <Field label="Descrizione" htmlFor="pl-desc"><Textarea id="pl-desc" value={description} onChange={(e) => setDescription(e.target.value)} /></Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Età minima" hint="Al 1° settembre" htmlFor="pl-min"><Input id="pl-min" type="number" min={0} value={minAge} onChange={(e) => setMinAge(e.target.value)} /></Field>
-          <Field label="Età massima" hint="Vuoto = nessun limite" htmlFor="pl-max"><Input id="pl-max" type="number" min={0} value={maxAge} onChange={(e) => setMaxAge(e.target.value)} /></Field>
-        </div>
-        <div className="grid grid-cols-3 gap-3">
-          <Field label="Mensile (€)" htmlFor="pl-month"><Input id="pl-month" inputMode="decimal" value={monthly} onChange={(e) => setMonthly(e.target.value)} /></Field>
-          <Field label="Iscrizione (€)" hint={t("clubAdmin.planEnrollmentHint")} htmlFor="pl-enr"><Input id="pl-enr" inputMode="decimal" value={enrollment} onChange={(e) => setEnrollment(e.target.value)} /></Field>
-          <Field label="Scade il giorno" htmlFor="pl-due"><Input id="pl-due" type="number" min={1} max={28} value={dueDay} onChange={(e) => setDueDay(e.target.value)} /></Field>
-        </div>
-        <label className="flex items-center gap-2 text-sm text-ink-700"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="accent-brand-500 h-4 w-4" /> Piano attivo</label>
-      </div>
-    </Modal>
-  );
-}
-
 // --- Quote ------------------------------------------------------------------------------------
 
 /** Le quote: prima il quadro del mese (chi manca questo mese), poi l'elenco
@@ -408,6 +335,7 @@ function FeesList() {
   const { data, isLoading } = useQuery({ queryKey: ["club", "admin", "fees", qs], queryFn: () => clubGet<Fee[]>(A(`/fees?${qs}`)) });
   const run = useRun();
   const [paying, setPaying] = useState<Fee | null>(null);
+  const [viewingProof, setViewingProof] = useState<{ id: string; status?: string | null } | null>(null);
   const total = (data ?? []).reduce((s, f) => s + f.amount_cents, 0);
   const paged = usePaged(data ?? [], 25);
   return (
@@ -439,6 +367,12 @@ function FeesList() {
                   <FeeStatusPill status={f.status} overdue={f.overdue} />
                   {f.waive_reason && <p className="text-[11px] text-ink-500 mt-1">{f.waive_reason}</p>}
                   <PaidHow fee={f} />
+                  {f.proof_id && (
+                    <button type="button" onClick={() => setViewingProof({ id: f.proof_id!, status: f.proof_status })}
+                      className={`mt-1.5 inline-flex cursor-pointer items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ${f.proof_status === "REJECTED" ? "bg-rose-50 text-rose-800 ring-rose-200" : "bg-sky-50 text-sky-800 ring-sky-200"}`}>
+                      🧾 {f.proof_status === "REJECTED" ? t("fees.viewRejectedProof") : t("fees.viewProof")}
+                    </button>
+                  )}
                 </TD>
                 <TD className="text-right font-semibold">{euro(f.amount_cents)}</TD>
                 <TD className="text-right whitespace-nowrap">
@@ -458,6 +392,7 @@ function FeesList() {
       )}
       <Pagination page={paged.page} pages={paged.pages} onChange={(p) => { paged.setPage(p); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
       {paying && <MarkPaidModal fee={paying} onClose={() => setPaying(null)} />}
+      <ReceiptViewer proof={viewingProof} onClose={() => setViewingProof(null)} />
     </div>
   );
 }

@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict oT4kchr1XPCYMFbhPmFzbdomjwOhZQH9ihEo4bhQrI1YVXQKoH5Z1NXxkIt5EJW
+\restrict 0SpUJQhaf9Eln4YEHtGNGYNj1mh9wKTxPsfjmTnRgsKQP9bSRTHnhNrjZww1ag1
 
 -- Dumped from database version 16.15
 -- Dumped by pg_dump version 16.15
@@ -1018,6 +1018,7 @@ CREATE TABLE public.club_plans (
     id uuid NOT NULL,
     created_at timestamp with time zone NOT NULL,
     club_id uuid NOT NULL,
+    color character varying(7),
     CONSTRAINT ck_club_plans_age_range CHECK (((max_age IS NULL) OR (max_age >= min_age))),
     CONSTRAINT ck_club_plans_due_day_range CHECK (((due_day >= 1) AND (due_day <= 28))),
     CONSTRAINT ck_club_plans_enrollment_fee_non_negative CHECK ((enrollment_fee_cents >= 0)),
@@ -9434,5 +9435,5 @@ ALTER TABLE ONLY public.wallets
 -- PostgreSQL database dump complete
 --
 
-\unrestrict oT4kchr1XPCYMFbhPmFzbdomjwOhZQH9ihEo4bhQrI1YVXQKoH5Z1NXxkIt5EJW
+\unrestrict 0SpUJQhaf9Eln4YEHtGNGYNj1mh9wKTxPsfjmTnRgsKQP9bSRTHnhNrjZww1ag1
 

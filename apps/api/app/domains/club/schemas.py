@@ -64,6 +64,7 @@ class PlanWrite(BaseModel):
     due_day: int = Field(default=10, ge=1, le=28)
     billing_months: list[int] | None = None
     active: bool = True
+    color: str | None = Field(default=None, pattern="^#[0-9A-Fa-f]{6}$")
 
 
 class PlanUpdate(BaseModel):
@@ -76,6 +77,7 @@ class PlanUpdate(BaseModel):
     due_day: int | None = Field(default=None, ge=1, le=28)
     billing_months: list[int] | None = None
     active: bool | None = None
+    color: str | None = Field(default=None, pattern="^#[0-9A-Fa-f]{6}$")
 
 
 class PlanRead(BaseModel):
@@ -91,6 +93,9 @@ class PlanRead(BaseModel):
     due_day: int
     billing_months: list[int]
     active: bool
+    color: str | None = None
+    #: Gli atleti attivi con questo piano (solo nell'elenco della segreteria).
+    athletes_count: int = 0
 
 
 # --- Atleti ---------------------------------------------------------------------------------------
@@ -166,6 +171,10 @@ class FeeRead(BaseModel):
     competition_id: uuid.UUID | None
     #: Nei corsi JAV: il corso a cui la mensilità è attribuita (NULL = senza corso).
     course_id: uuid.UUID | None = None
+    #: L'ultima prova di pagamento collegata (anche rifiutata), solo negli
+    #: elenchi della segreteria: la si apre dalla quota.
+    proof_id: uuid.UUID | None = None
+    proof_status: str | None = None
 
 
 class CertificateStatusRead(BaseModel):
@@ -894,6 +903,17 @@ class PricingWrite(BaseModel):
     enrollment_includes: str | None = Field(default=None, max_length=300)
 
 
+class InvitedAthleteRead(BaseModel):
+    athlete_id: uuid.UUID
+    #: «Nome I.»: la rete di un genitore, non l'anagrafe.
+    name: str
+    photo_url: str | None
+    status: str
+    joined_on: date
+    months_paid: int
+    credit_cents: int
+
+
 class InviteRead(BaseModel):
     code: str
     #: Da attaccare all'indirizzo del sito: /c/<slug>?invito=<codice>.
@@ -901,6 +921,10 @@ class InviteRead(BaseModel):
     invited_count: int
     earned_cents: int
     credit_per_month_cents: int
+    #: Il saldo JavCash di chi invita: si usa per pagare le quote.
+    balance_cents: int = 0
+    #: Gli atleti delle famiglie entrate dal suo link.
+    network: list[InvitedAthleteRead] = []
 
 
 class CreditCodeRequest(BaseModel):
