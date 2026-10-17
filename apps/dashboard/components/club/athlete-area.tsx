@@ -94,6 +94,7 @@ export function AthleteAreaPage({ initialId }: { initialId: string | null }) {
 
   return (
     <AppShell
+      clubBranding
       roleLabel={t("area.roleLabel")}
       navItems={navItems}
       activeKey={section}

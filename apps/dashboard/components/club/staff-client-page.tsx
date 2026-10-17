@@ -55,7 +55,7 @@ export function StaffClientPage({ email }: { email?: string }) {
   const hidden = features.courses ? ["belts", "ranking", "events"] : ["earnings"];
   const navItems = all.filter((n) => !hidden.includes(n.key));
   return (
-    <AppShell roleLabel={t("coach.role")} email={email} navItems={navItems} activeKey={tab} onNavigate={(k) => go(k)}>
+    <AppShell clubBranding roleLabel={t("coach.role")} email={email} navItems={navItems} activeKey={tab} onNavigate={(k) => go(k)}>
       {tab === "home" && <CoachHome onNavigate={go} />}
       {tab === "attendance" && (
         <>

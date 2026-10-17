@@ -24,7 +24,7 @@ export function SecretaryClientPage({ email }: { email?: string }) {
   }));
   return (
     <AppShell roleLabel={club ? `${t("clubs.role.SECRETARY")} · ${club.name}` : t("clubs.role.SECRETARY")} email={email}
-      navItems={navItems} activeKey={section} onNavigate={(k) => setSection(k as ClubSection)} wide={section === "athletes"}>
+      navItems={navItems} activeKey={section} onNavigate={(k) => setSection(k as ClubSection)} wide={section === "athletes"} clubBranding>
       <ClubAdminPanel section={section} onGo={setSection} />
     </AppShell>
   );

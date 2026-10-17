@@ -15,10 +15,12 @@ pubblicato: un club in bozza o un atleta senza consenso non esistono.
 import uuid
 from datetime import date
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
+from app.core.deps import CurrentUser, get_current_user
 from app.core.rate_limit import rate_limit
 from app.domains.club import service as club_service
 from app.domains.club import site as site_service
@@ -427,3 +429,30 @@ async def update_public_profile(
     return PublicProfileConsentRead(**await site_service.update_consent(
         db, athlete=athlete, actor_user_id=current_user.user_id, changes=payload.model_dump(exclude_unset=True),
     ))
+
+
+# --- I colori e il logo del club nelle aree riservate -----------------------------------------
+
+
+@site_family_router.get("/branding")
+async def club_branding(
+    request: Request,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Il tema del club per le aree riservate (segreteria, treinador, famiglia,
+    atleta): nome, logo e i tre colori scelti nell'editor del sito. Lo legge
+    chiunque appartenga al club, qualunque ruolo abbia; il superadmin quello
+    del club in cui è entrato. Senza colori o senza logo il frontend usa JAV."""
+    from app.domains.club.scope import CLUB_HEADER, resolve_club
+    from app.domains.club.site_models import ClubSite
+
+    club = await resolve_club(db, current_user=current_user, requested=request.headers.get(CLUB_HEADER))
+    site = (await db.execute(select(ClubSite).where(ClubSite.club_id == club.id))).scalar_one_or_none()
+    return {
+        "name": club.name,
+        "logo_url": site.logo_url if site else None,
+        "brand_primary": site.brand_primary if site else None,
+        "brand_secondary": site.brand_secondary if site else None,
+        "brand_accent": site.brand_accent if site else None,
+    }

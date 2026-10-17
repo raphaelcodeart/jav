@@ -114,3 +114,31 @@ export function themeStyle(theme: BrandTheme): Record<string, string> {
     "--club-cover-to": theme.cover_to,
   };
 }
+
+/** Le sfumature 50…950 di un colore, come le scale di Tailwind: verso il
+ *  bianco le chiare, verso il nero le scure. Il 500 è il colore scelto, ma
+ *  scurito quanto basta perché un testo bianco sopra si legga (i bottoni). */
+const SHADES: [number, number][] = [
+  [50, 0.92], [100, 0.84], [200, 0.68], [300, 0.48], [400, 0.24], [500, 0],
+  [600, -0.14], [700, -0.28], [800, -0.42], [900, -0.54], [950, -0.72],
+];
+
+export function shadeScale(color: string, readableBase = true): Record<number, string> {
+  const base = readableBase ? toward(color, INK, WHITE, 3.0) : color;
+  const out: Record<number, string> = {};
+  for (const [step, w] of SHADES) out[step] = w >= 0 ? mix(base, WHITE, w) : mix(base, INK, -w);
+  return out;
+}
+
+/** Le variabili CSS che ridipingono `brand-*` e `accent-*` di globals.css con
+ *  i colori del club: le aree riservate (segreteria, treinador, famiglia,
+ *  atleta) prendono il tema del loro club. Senza colori scelti: nessuna
+ *  variabile, resta JAV. */
+export function paletteVars(primary: string | null, secondary: string | null, accent: string | null): Record<string, string> {
+  if (!primary) return {};
+  const theme = brandTheme(primary, secondary, accent);
+  const vars: Record<string, string> = {};
+  for (const [step, value] of Object.entries(shadeScale(theme.primary))) vars[`--color-brand-${step}`] = value;
+  for (const [step, value] of Object.entries(shadeScale(theme.accent, false))) vars[`--color-accent-${step}`] = value;
+  return vars;
+}

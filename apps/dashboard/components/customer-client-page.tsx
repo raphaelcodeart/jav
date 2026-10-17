@@ -406,6 +406,7 @@ export function CustomerClientPage({ email, organizationId }: CustomerClientPage
 
   return (
     <AppShell
+      clubBranding
       roleLabel={t("customer.roleLabel")}
       email={email}
       navItems={navItems}

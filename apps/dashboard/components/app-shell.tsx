@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AccountGate } from "@/components/account-gate";
 import { AreaSwitcher, useDualRoleAreas } from "@/components/area-switcher";
+import { useClubBranding, type ClubBranding } from "@/lib/club-branding";
 import { ShopCartButton, ShopCartPanel } from "@/components/shop-cart";
 import { CartCheckoutModal, CartCheckoutShop } from "@/components/cart-checkout-modal";
 import { LanguageSwitcher } from "@/components/language-switcher";
@@ -47,6 +48,9 @@ interface AppShellProps {
   centerHeaderActions?: boolean;
   /** La pagina a tutta larghezza (tabelle larghe, come la tabella atleti). */
   wide?: boolean;
+  /** Le aree di un club (segreteria, treinador, famiglia, atleta): colori e
+   *  logo del club (lib/club-branding.ts). La console della piattaforma no. */
+  clubBranding?: boolean;
   /** Session 76: il carrello nella barra in alto, visibile da ogni scheda.
       Sta qui e non dentro lo Shop perché un carrello che si vede solo
       mentre si compra è un carrello che il cliente perde appena apre "I
@@ -253,7 +257,25 @@ function NotificationBell({ onOpenNotification }: { onOpenNotification: (n: Noti
   );
 }
 
-function LogoMark({ compact = false }: { compact?: boolean }) {
+/** In alto a sinistra: il logo del club nelle sue aree (se l'ha caricato),
+ *  altrimenti JAV. */
+function LogoMark({ compact = false, branding }: { compact?: boolean; branding?: ClubBranding | null }) {
+  if (branding?.logo_url) {
+    return (
+      <div className="flex items-center gap-3 min-w-0">
+        <motion.div whileHover={{ rotate: -6, scale: 1.05 }} className="shrink-0 rounded-2xl bg-white shadow-soft ring-1 ring-ink-100 p-1">
+          {/* eslint-disable-next-line @next/next/no-img-element -- logo caricato dal club */}
+          <img src={branding.logo_url} alt={branding.name} className={compact ? "h-9 w-9 object-contain" : "h-11 w-11 object-contain"} />
+        </motion.div>
+        {!compact && (
+          <div className="min-w-0 leading-tight">
+            <p className="font-display text-base leading-tight text-ink-900 line-clamp-2">{branding.name}</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-ink-400 truncate">JAV · Judo Arte e Vida</p>
+          </div>
+        )}
+      </div>
+    );
+  }
   return (
     <div className="flex items-center gap-3 min-w-0">
       <motion.div whileHover={{ rotate: -6, scale: 1.05 }} className="shrink-0 rounded-2xl bg-white shadow-soft ring-1 ring-ink-100 p-1">
@@ -403,7 +425,9 @@ export function AppShell({
   showCart = false,
   centerHeaderActions = false,
   wide = false,
+  clubBranding = false,
 }: AppShellProps) {
+  const branding = useClubBranding(clubBranding);
   const [moreOpen, setMoreOpen] = useState(false);
   const { t } = useI18n();
   // Il carrello vive qui, non dentro lo Shop: si apre da qualunque scheda, e
@@ -443,7 +467,7 @@ export function AppShell({
       <aside className={`hidden lg:flex fixed inset-y-0 left-0 z-30 p-3 transition-[width] duration-300 ${sidebarWidth}`}>
         <div className="flex h-full w-full flex-col rounded-3xl bg-white/90 backdrop-blur-xl ring-1 ring-ink-200/70 shadow-soft overflow-hidden">
           <div className={`flex items-center ${collapsed ? "justify-center" : "justify-between"} px-4 pt-5 pb-4`}>
-            <LogoMark compact={collapsed} />
+            <LogoMark compact={collapsed} branding={branding} />
           </div>
 
           <nav className="flex-1 overflow-y-auto overflow-x-hidden px-3 space-y-1">
@@ -514,7 +538,7 @@ export function AppShell({
         <div className="flex items-center justify-between gap-3 px-4 sm:px-6 lg:px-8 h-[72px] bg-white/75 backdrop-blur-xl border-b border-ink-100/80">
           <div className="flex items-center gap-3 min-w-0">
             <div className="lg:hidden">
-              <LogoMark compact />
+              <LogoMark compact branding={branding} />
             </div>
             <div className="min-w-0 hidden sm:block">
               {/* The greeting depends on the user's clock, which the server

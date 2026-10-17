@@ -184,6 +184,9 @@ function SiteForm({ site }: { site: SiteAdmin }) {
         }),
       });
       queryClient.setQueryData(["club", "site"], saved);
+      // I colori e il logo nuovi ridipingono subito l'area della segreteria
+      // (lib/club-branding.ts); le altre aree del club entro un minuto.
+      void queryClient.invalidateQueries({ queryKey: ["club", "branding"] });
       toast({ tone: "success", title: t("siteEditor.saved"), text: saved.published ? t("siteEditor.savedLive") : t("siteEditor.savedDraft") });
     } catch (e) {
       toast({ tone: "error", title: t("siteEditor.saveFailed"), text: (e as Error).message });

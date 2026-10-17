@@ -1946,3 +1946,17 @@ le iscrizioni restano tracciate). Per questi eventi il conto alla rovescia non
 compare. Il conto alla rovescia (`components/site/countdown.tsx`, istante da
 `lib/event-time.ts::moment`) mostra la chiusura delle iscrizioni finché sono
 aperte, poi l'inizio della gara; nella pagina della gara tutti e due, grandi.
+
+## Il tema del club nelle aree riservate
+
+Segreteria, treinador, famiglia e atleta vedono i **colori e il logo del loro
+club** (quelli dell'editor del sito: `club_sites.brand_primary/secondary/accent`,
+`logo_url`). `GET /club/branding` (qualunque utente del club; il superadmin
+quello del club in cui è entrato) → `lib/club-branding.ts::useClubBranding`,
+che genera le scale `brand-*` (dal colore principale, scurito quanto basta per
+il testo bianco) e `accent-*` (`lib/brand.ts::paletteVars`) e le scrive su
+`<html>`, così valgono anche per le finestre in portale. `AppShell clubBranding`
+mostra in alto il logo e il nome del club (JAV se il club non ha un logo). La
+console della piattaforma resta JAV. È dinamico: salvando il sito la segreteria
+vede subito i colori nuovi; le altre aree li rileggono entro un minuto o
+tornando sulla scheda.
