@@ -657,19 +657,17 @@ probabilmente il problema è un altro. Documentati per intero in
     un reload `nginx -t` dice "syntax ok" ma il comportamento non cambia,
     ricrea il container prima di sospettare altro.
 11. **`/backend/*` risponde 500 "invalid URL prefix in http://" su OGNI
-    richiesta**: `location /backend/ { rewrite ^/backend/(.*)$ /$1 break; set
-    $api_upstream api:8000; proxy_pass http://$api_upstream; }` — combinare un
-    `rewrite ... break` con una VARIABILE in `proxy_pass` innesca questo bug
-    nginx reale (non solo teorico: riprodotto su questo server). Fix: per
-    `/backend/` usa un `proxy_pass` STATICO senza variabile
-    (`proxy_pass http://api:8000/;`, senza `rewrite`, con `/` finale sia sulla
-    location che sul target — nginx allora fa da solo lo strip del prefisso,
-    ma SOLO perché non c'è una variabile di mezzo). Con un target statico
-    perdi la ri-risoluzione DNS automatica se il container `api` viene
-    ricreato con un IP diverso mentre nginx resta su — accettabile per
-    `/backend/` (accesso sviluppatore, non il traffico applicativo vero),
-    NON accettabile per `location /` (il proxy verso `dashboard`), che infatti
-    resta con la variabile + `resolver`.
+    richiesta**: succede se in `location /backend/` il `set $variabile` sta
+    DOPO `rewrite ... break`: `break` ferma tutto il modulo rewrite, `set`
+    compreso, e `proxy_pass http://$variabile` resta vuoto. Il `set` va
+    PRIMA del `rewrite` (com'è oggi in `nginx.conf`). Una volta `/backend/`
+    aveva un target statico (`proxy_pass http://api:8000/;`) per evitare
+    questo errore, ma così, dopo ogni deploy che ricrea `api` con un IP
+    nuovo, `/backend/*` rispondeva **502** finché non si riavviava nginx. E
+    `/backend/api/public-site/*` lo usa il calendario degli eventi nell'area
+    di atleti e famiglie (17/10/2026: «Não consigo carregar os eventos»).
+    Verifica dopo un deploy:
+    `curl -s -o /dev/null -w '%{http_code}' https://<dominio>/backend/health` → 200.
 12. **Upload foto (customer/promoter/product) fallisce con
     `SignatureDoesNotMatch` su OGNI richiesta a MinIO**: due cause distinte,
     entrambe reali su questo server, controllale entrambe:

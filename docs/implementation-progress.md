@@ -781,3 +781,10 @@ spagnolo, francese e tedesco tradotti interi (es.ts, fr.ts, de.ts); JAVBOT e
 giochi rispondono in portoghese a chi sceglie spagnolo e in inglese a chi
 sceglie francese o tedesco. Test: `tests/test_network_socials.py`.
 
+
+Poi: nell'area degli atleti «Provas e estágios» diceva «Não consigo carregar
+os eventos». Il calendario chiama `/backend/api/public-site/events`, e
+`/backend/` in nginx aveva un target statico: dopo il deploy, che ha ricreato
+`api` con un IP nuovo, rispondeva 502. Ora usa variabile + resolver, con il
+`set` prima del `rewrite` (guida di migrazione, punto 11). Nessuna
+migrazione.
