@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { BranchMemberRead } from "@/lib/types";
 import { LevelLegend, TreeNodeRenderer, type TreeNode } from "@/components/network-tree";
 import { NetworkNodeDetailModal } from "@/components/network-node-detail-modal";
+import { useI18n } from "@/lib/i18n/provider";
 
 function buildTree(members: BranchMemberRead[]): TreeNode | null {
   if (!members || members.length === 0) return null;
@@ -46,6 +47,7 @@ function buildTree(members: BranchMemberRead[]): TreeNode | null {
 }
 
 export function BranchVisualizer({ members }: { members: BranchMemberRead[] }) {
+  const { t } = useI18n();
   const rootNode = buildTree(members);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<{ agentId: string; displayName: string } | null>(null);
@@ -57,7 +59,7 @@ export function BranchVisualizer({ members }: { members: BranchMemberRead[] }) {
   };
 
   if (!rootNode) {
-    return <p className="text-sm text-slate-500">Nessun membro della rete da visualizzare.</p>;
+    return <p className="text-sm text-slate-500">{t("net.adminPromNet.empty")}</p>;
   }
 
   const maxDepth = members.reduce((max, m) => Math.max(max, m.depth), 0);
@@ -66,11 +68,11 @@ export function BranchVisualizer({ members }: { members: BranchMemberRead[] }) {
     <div className="glass-card rounded-2xl p-6 border-slate-200 bg-white/70">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div>
-          <h3 className="text-lg font-semibold text-slate-900">Visualizzazione Albero Rete</h3>
-          <p className="text-xs text-slate-500">Struttura gerarchica dei tuoi promoter affiliati</p>
+          <h3 className="text-lg font-semibold text-slate-900">{t("net.branchViz.title")}</h3>
+          <p className="text-xs text-slate-500">{t("net.branchViz.subtitle")}</p>
         </div>
         <span className="px-3 py-1 text-xs font-semibold rounded-full bg-violet-500/10 text-violet-400 border border-violet-500/20 shrink-0">
-          {members.length} Agenti Totali
+          {t("net.adminNet.total", { n: members.length })}
         </span>
       </div>
 

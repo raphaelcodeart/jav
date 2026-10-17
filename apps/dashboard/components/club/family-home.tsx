@@ -21,6 +21,7 @@ import { FamilyMonthCard } from "@/components/club/month-board";
 import { PayModal } from "@/components/club/pay-modal";
 import { clubGet, type AthleteSeasonMonths, type Family } from "@/lib/club";
 import { useI18n } from "@/lib/i18n/provider";
+import { feeLabel } from "@/lib/fee-label";
 
 /** The parent's home: one card per child, three big buttons, and what is
  *  due -- nothing else competes for attention. */
@@ -213,7 +214,7 @@ export function FamilyHome({ onNavigate, familyOverride }: { onNavigate: (key: s
                 {family.due_fees.slice(0, 6).map((f, i) => (
                   <motion.div key={f.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }} className="flex items-center justify-between gap-3 rounded-2xl bg-white ring-1 ring-ink-100 px-4 py-3">
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-ink-900 truncate">{f.description}</p>
+                      <p className="text-sm font-semibold text-ink-900 truncate">{feeLabel(f, t, fmt)}</p>
                       <p className="text-xs text-ink-500">{f.athlete_name} · {t("club.dueOn", { date: shortDate(f.due_date) })}</p>
                     </div>
                     <div className="text-right shrink-0">

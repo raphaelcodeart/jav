@@ -4,9 +4,10 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ContractRequestsList, type WizardTarget } from "@/components/contract-requests-list";
 import { ContractRequestWizard } from "@/components/contract-request-wizard";
-import { CUSTOMER_KIND_LABELS, NewCustomerForm } from "@/components/new-customer-form";
+import { NewCustomerForm } from "@/components/new-customer-form";
 import { Pagination, usePagination } from "@/components/pagination";
 import { friendlyApiError } from "@/lib/api-error";
+import { useI18n } from "@/lib/i18n/provider";
 import type { AgentProfileRead, CustomerRead } from "@/lib/types";
 
 type WizardCustomer = {
@@ -32,7 +33,7 @@ function toWizardCustomer(c: CustomerRead): WizardCustomer {
   return { id: c.id, kind: c.kind, email: c.email, firstName: c.first_name, lastName: c.last_name, pec: c.pec, fiscalCode: c.fiscal_code };
 }
 
-const FLOW = ["Cliente", "Dati e contratti", "Documenti", "Offerta per ogni contratto", "Il cliente paga"];
+const FLOW = ["customer", "data", "documents", "offer", "pays"] as const;
 
 /** Activating contracts for somebody else (Sessions 66-67): the promoter's
  *  "Miei Clienti" and the administration's "Nuovo Contratto" are the same
@@ -55,6 +56,7 @@ export function PraticheForCustomersPanel({
       cliente» della home promoter porta qui, non alla lista. */
   startWithNewCustomer?: boolean;
 }) {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const customersKey = mode === "promoter" ? ["network", "customers", "mine"] : ["admin", "customers"];
   const { data: customers, error: customersError } = useQuery({
@@ -83,17 +85,16 @@ export function PraticheForCustomersPanel({
       {/* The two ways in, always in sight. */}
       <div className="glass-card rounded-2xl p-5 sm:p-6 border-slate-200 bg-white/70 space-y-5">
         <div>
-          <h3 className="text-lg font-bold text-slate-900">Attiva contratti per un cliente</h3>
+          <h3 className="text-lg font-bold text-slate-900">{t("ctr.pfc.title")}</h3>
           <p className="text-xs text-slate-500 mt-1 max-w-3xl">
-            Gli stessi passaggi che fa il cliente quando attiva da solo, senza il pagamento: quando invii la pratica il
-            cliente riceve un&apos;email e paga dalla sua area.
+            {t("ctr.pfc.intro")}{" "}
             {mode === "promoter"
-              ? " Resta scritto che l'hai compilata tu e le provvigioni sono tue."
-              : " Scegli tu a quale promoter attribuirla."}
+              ? t("ctr.pfc.introPromoter")
+              : t("ctr.pfc.introAdmin")}
           </p>
           <ol className="mt-3 flex flex-wrap items-center gap-1.5">
-            {FLOW.map((label, i) => (
-              <li key={label} className="flex items-center gap-1.5">
+            {FLOW.map((step, i) => (
+              <li key={step} className="flex items-center gap-1.5">
                 <span
                   className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-semibold border ${
                     i === FLOW.length - 1
@@ -104,7 +105,7 @@ export function PraticheForCustomersPanel({
                   <span className="w-4 h-4 rounded-full bg-brand-600 text-white text-[9px] font-bold flex items-center justify-center">
                     {i + 1}
                   </span>
-                  {label}
+                  {t(`ctr.pfc.flow.${step}`)}
                 </span>
                 {i < FLOW.length - 1 && <span className="text-slate-600 text-xs">→</span>}
               </li>
@@ -115,15 +116,15 @@ export function PraticheForCustomersPanel({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <ActionCard
             active={action === "new"}
-            title="Nuovo cliente"
-            text="Registralo adesso e attiva subito i suoi contratti. Riceve l'invito a impostare la password."
+            title={t("ctr.pfc.newCustomer")}
+            text={t("ctr.pfc.newCustomerText")}
             icon="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
             onClick={() => setAction(action === "new" ? null : "new")}
           />
           <ActionCard
             active={action === "existing"}
-            title="Cliente già registrato"
-            text="Aggiungi uno o più contratti a un cliente che hai già: cercalo per nome, email o codice fiscale."
+            title={t("ctr.pfc.existingCustomer")}
+            text={t("ctr.pfc.existingCustomerText")}
             icon="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
             onClick={() => setAction(action === "existing" ? null : "existing")}
           />
@@ -131,7 +132,7 @@ export function PraticheForCustomersPanel({
 
         {action === "new" && (
           <div className="p-4 sm:p-5 rounded-2xl border border-brand-500/25 bg-brand-500/5">
-            <p className="text-sm font-bold text-slate-900 mb-3">1 · Dati del nuovo cliente</p>
+            <p className="text-sm font-bold text-slate-900 mb-3">{t("ctr.pfc.newCustomerData")}</p>
             <NewCustomerForm
               mode={mode}
               agents={agents}
@@ -146,7 +147,7 @@ export function PraticheForCustomersPanel({
 
         {action === "existing" && (
           <div className="p-4 sm:p-5 rounded-2xl border border-brand-500/25 bg-brand-500/5 space-y-3">
-            <p className="text-sm font-bold text-slate-900">1 · Per quale cliente?</p>
+            <p className="text-sm font-bold text-slate-900">{t("ctr.pfc.whichCustomer")}</p>
             {mode === "admin" && <ProducerSelect agents={agents} value={producerAgentId} onChange={setProducerAgentId} />}
             <CustomerPicker
               mode={mode}
@@ -164,8 +165,8 @@ export function PraticheForCustomersPanel({
           <div className="flex gap-2">
             {(
               [
-                ["customers", `I miei clienti${customers ? ` (${customers.length})` : ""}`],
-                ["pratiche", "Tutte le pratiche"],
+                ["customers", customers ? t("ctr.pfc.myCustomersN", { n: customers.length }) : t("ctr.pfc.myCustomers")],
+                ["pratiche", t("ctr.pfc.allPratiche")],
               ] as const
             ).map(([key, label]) => (
               <button
@@ -203,10 +204,10 @@ export function PraticheForCustomersPanel({
       ) : (
         <div className="space-y-3">
           <div>
-            <h3 className="text-sm font-bold text-slate-900">Pratiche aperte dall&apos;amministrazione</h3>
+            <h3 className="text-sm font-bold text-slate-900">{t("ctr.pfc.adminPratiche")}</h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Riprendi le bozze da qui. Verifiche, approvazioni e bonifici da confermare di tutte le pratiche sono in{" "}
-              <strong>Pratiche</strong>.
+              {t("ctr.pfc.adminPraticheHint")}{" "}
+              <strong>{t("ctr.pfc.pratiche")}</strong>.
             </p>
           </div>
           <ContractRequestsList
@@ -283,17 +284,18 @@ function ProducerSelect({
   value: string;
   onChange: (value: string) => void;
 }) {
+  const { t } = useI18n();
   return (
     <label className="block">
       <span className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">
-        Promoter a cui attribuire la pratica
+        {t("ctr.pfc.attributeTo")}
       </span>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="w-full max-w-md rounded-lg glass-input px-3 py-2 text-sm bg-white focus:border-brand-500"
       >
-        <option value="">Il promoter del cliente (predefinito)</option>
+        <option value="">{t("ctr.pfc.defaultPromoter")}</option>
         {(agents ?? [])
           .filter((a) => a.status === "ACTIVE")
           .map((a) => (
@@ -302,7 +304,7 @@ function ProducerSelect({
             </option>
           ))}
       </select>
-      <span className="block text-[10px] text-slate-500 mt-1">Decide chi guadagna le provvigioni di questa pratica.</span>
+      <span className="block text-[10px] text-slate-500 mt-1">{t("ctr.pfc.attributeHint")}</span>
     </label>
   );
 }
@@ -320,6 +322,7 @@ function CustomerPicker({
   onPick: (customer: CustomerRead) => void;
   onLoginCreated: () => void;
 }) {
+  const { t } = useI18n();
   const [search, setSearch] = useState("");
   const [needsLogin, setNeedsLogin] = useState<CustomerRead | null>(null);
   const [busy, setBusy] = useState(false);
@@ -345,7 +348,7 @@ function CustomerPicker({
       setNeedsLogin(null);
       onPick(updated);
     } catch (err: any) {
-      setLoginError(err.message || "Impossibile creare l'accesso.");
+      setLoginError(err.message || t("ctr.pfc.loginError"));
     } finally {
       setBusy(false);
     }
@@ -355,17 +358,16 @@ function CustomerPicker({
     return (
       <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 space-y-3">
         <p className="text-sm font-semibold text-amber-700">
-          {needsLogin.display_name} non ha ancora un accesso alla sua area
+          {t("ctr.pfc.noLogin", { name: needsLogin.display_name })}
         </p>
         <p className="text-xs text-slate-600">
-          Senza accesso non potrebbe pagare la pratica.
+          {t("ctr.pfc.noLoginWhy")}
           {mode === "admin" ? (
             <>
-              {" "}Creiamo l&apos;account su <strong>{needsLogin.email}</strong> e gli mandiamo l&apos;email per impostare la
-              password, poi apri la pratica.
+              {" "}{t("ctr.pfc.noLoginAdminBefore")} <strong>{needsLogin.email}</strong> {t("ctr.pfc.noLoginAdminAfter")}
             </>
           ) : (
-            " Per creargli l'accesso scrivi al Supporto."
+            ` ${t("ctr.pfc.noLoginPromoter")}`
           )}
         </p>
         {loginError && <p className="text-xs text-rose-400">{loginError}</p>}
@@ -376,17 +378,17 @@ function CustomerPicker({
               disabled={busy}
               className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-bold text-white cursor-pointer disabled:opacity-50"
             >
-              {busy ? "Creazione..." : "Crea l'accesso e continua"}
+              {busy ? t("ctr.pfc.creating") : t("ctr.pfc.createLoginContinue")}
             </button>
           )}
           <button
             onClick={() => onPick(needsLogin)}
             className="px-4 py-2 rounded-xl bg-slate-900/5 text-xs font-semibold text-slate-700 cursor-pointer"
           >
-            Continua comunque
+            {t("ctr.pfc.continueAnyway")}
           </button>
           <button onClick={() => setNeedsLogin(null)} className="px-3 py-2 text-xs text-slate-400 cursor-pointer">
-            Indietro
+            {t("ctr.pfc.back")}
           </button>
         </div>
       </div>
@@ -399,14 +401,14 @@ function CustomerPicker({
         autoFocus
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        placeholder="Cerca per nome, email, telefono, codice fiscale, partita IVA..."
+        placeholder={t("ctr.pfc.searchPlaceholder")}
         className="w-full rounded-lg glass-input px-3 py-2 text-sm focus:border-brand-500"
       />
       {error && <p className="text-xs text-rose-400">{error.message}</p>}
       <div className="max-h-72 overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-200">
         {matches.length === 0 ? (
           <p className="px-4 py-6 text-center text-xs text-slate-500">
-            {customers === undefined ? "Caricamento..." : "Nessun cliente trovato. È nuovo? Usa “Nuovo cliente”."}
+            {customers === undefined ? t("ctr.common.loading") : t("ctr.pfc.noMatchNew")}
           </p>
         ) : (
           matches.slice(0, 60).map((c) => (
@@ -418,13 +420,13 @@ function CustomerPicker({
               <span className="min-w-0">
                 <span className="block text-sm font-semibold text-slate-900 truncate">{c.display_name}</span>
                 <span className="block text-[11px] text-slate-500 truncate">
-                  {CUSTOMER_KIND_LABELS[c.kind] ?? c.kind}
+                  {t.dyn(`ctr.kind.${c.kind}`, c.kind)}
                   {c.email ? ` · ${c.email}` : ""}
                   {c.fiscal_code ? ` · ${c.fiscal_code}` : ""}
-                  {!c.user_id && <span className="text-amber-700"> · senza accesso</span>}
+                  {!c.user_id && <span className="text-amber-700"> · {t("ctr.pfc.withoutLogin")}</span>}
                 </span>
               </span>
-              <span className="text-[11px] font-semibold text-brand-600 shrink-0">Attiva contratti →</span>
+              <span className="text-[11px] font-semibold text-brand-600 shrink-0">{t("ctr.pfc.activateArrow")}</span>
             </button>
           ))
         )}
@@ -448,6 +450,7 @@ function MyCustomersList({
   onActivate: (customer: CustomerRead) => void;
   onOpenWizard: (customer: CustomerRead, target: WizardTarget) => void;
 }) {
+  const { t } = useI18n();
   const [search, setSearch] = useState("");
   const needle = search.trim().toLowerCase();
   const filtered = (customers ?? []).filter(
@@ -465,16 +468,16 @@ function MyCustomersList({
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Cerca tra i tuoi clienti..."
+          placeholder={t("ctr.pfc.searchMine")}
           className="w-full max-w-md rounded-lg glass-input px-3 py-2 text-sm focus:border-brand-500"
         />
       )}
       <div className="glass-card rounded-2xl border-slate-200 bg-white/70 divide-y divide-slate-200 overflow-hidden">
         {customers === undefined ? (
-          <p className="text-center py-8 text-slate-500 text-sm">Caricamento...</p>
+          <p className="text-center py-8 text-slate-500 text-sm">{t("ctr.common.loading")}</p>
         ) : filtered.length === 0 ? (
           <p className="text-center py-8 text-slate-500 text-sm">
-            {customers.length === 0 ? "Non hai ancora nessun cliente: inizia da “Nuovo cliente”." : "Nessun cliente trovato."}
+            {customers.length === 0 ? t("ctr.pfc.noCustomersYet") : t("ctr.pfc.noMatch")}
           </p>
         ) : (
           pagination.pageItems.map((c) => (
@@ -485,16 +488,16 @@ function MyCustomersList({
                     <span className="font-semibold text-slate-900">{c.display_name}</span>
                     {c.email_verified ? (
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
-                        Account attivo
+                        {t("ctr.pfc.accountActive")}
                       </span>
                     ) : (
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-amber-500/10 text-amber-700 border-amber-500/20">
-                        In attesa di primo accesso
+                        {t("ctr.pfc.awaitingFirstLogin")}
                       </span>
                     )}
                   </div>
                   <p className="text-xs text-slate-500 mt-1">
-                    {CUSTOMER_KIND_LABELS[c.kind] ?? c.kind} · {c.email}
+                    {t.dyn(`ctr.kind.${c.kind}`, c.kind)} · {c.email}
                     {c.phone ? ` · ${c.phone}` : ""}
                   </p>
                 </div>
@@ -503,13 +506,13 @@ function MyCustomersList({
                     onClick={() => onToggle(c.id)}
                     className="px-3 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 text-xs font-semibold transition cursor-pointer"
                   >
-                    {expandedCustomerId === c.id ? "Nascondi pratiche" : "Pratiche"}
+                    {expandedCustomerId === c.id ? t("ctr.pfc.hidePratiche") : t("ctr.pfc.pratiche")}
                   </button>
                   <button
                     onClick={() => onActivate(c)}
                     className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold shadow-lg shadow-brand-500/20 transition cursor-pointer"
                   >
-                    + Attiva contratti
+                    {t("ctr.pfc.activatePlus")}
                   </button>
                 </div>
               </div>
@@ -522,7 +525,7 @@ function MyCustomersList({
           ))
         )}
       </div>
-      <Pagination {...pagination} label="clienti" />
+      <Pagination {...pagination} label={t("ctr.pfc.customersLower")} />
     </div>
   );
 }

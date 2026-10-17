@@ -5,13 +5,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pagination, usePagination } from "@/components/pagination";
 import { friendlyApiError } from "@/lib/api-error";
 import type { FriendReferralAdminClaimRead } from "@/lib/types";
+import { useI18n } from "@/lib/i18n/provider";
 
-const STATUS_TABS: { key: string; label: string }[] = [
-  { key: "REQUESTED", label: "Da gestire" },
-  { key: "FULFILLED", label: "Consegnati" },
-  { key: "REJECTED", label: "Non accolti" },
-  { key: "ALL", label: "Tutti" },
-];
+// Tab labels: net.claims.tab.<key>
+const STATUS_TABS = ["REQUESTED", "FULFILLED", "REJECTED", "ALL"] as const;
 
 const STATUS_COLORS: Record<string, string> = {
   REQUESTED: "bg-amber-500/10 text-amber-700 border-amber-500/20",
@@ -19,20 +16,10 @@ const STATUS_COLORS: Record<string, string> = {
   REJECTED: "bg-rose-500/10 text-rose-400 border-rose-500/20",
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  REQUESTED: "Da gestire",
-  FULFILLED: "Consegnato",
-  REJECTED: "Non accolto",
-};
-
 async function fetchClaims(status: string): Promise<FriendReferralAdminClaimRead[]> {
   const res = await fetch(`/api/proxy/friend-referrals/admin/reward-claims?status_filter=${status}`);
   if (!res.ok) throw new Error("Impossibile caricare le richieste omaggio.");
   return res.json();
-}
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString("it-IT", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 /** "Omaggi Inviti": the requests customers send when they hit a
@@ -43,6 +30,9 @@ function formatDate(iso: string): string {
  *  decided case by case. The note written here is shown back to the customer.
  */
 export function AdminFriendReferralClaimsPanel() {
+  const { t, fmt } = useI18n();
+  const formatDate = (iso: string) =>
+    fmt.date(new Date(iso), { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState("REQUESTED");
   const [handlingId, setHandlingId] = useState<string | null>(null);
@@ -71,7 +61,7 @@ export function AdminFriendReferralClaimsPanel() {
       setNote("");
       await queryClient.invalidateQueries({ queryKey: ["admin", "friend-referral-claims"] });
     } catch (err: any) {
-      setActionError(err.message || "Impossibile aggiornare la richiesta.");
+      setActionError(err.message || t("net.claims.updateError"));
     } finally {
       setLoadingId(null);
     }
@@ -80,33 +70,30 @@ export function AdminFriendReferralClaimsPanel() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-lg font-semibold text-slate-900">Omaggi Invita un amico</h3>
+        <h3 className="text-lg font-semibold text-slate-900">{t("net.claims.title")}</h3>
         <p className="text-xs text-slate-500 mt-1">
-          Richieste inviate da chi ha raggiunto 5, 10, 15… amici invitati con un contratto
-          <strong> attivo</strong>. Il premio previsto è una <strong>gift card da 25 euro</strong>, e si
-          ripete a ogni multiplo di 5 &mdash; non solo per i primi 5. Non viene accreditato in
-          automatico: decidete voi cosa consegnare e lo segnate qui, e la nota che scrivete viene
-          mostrata al cliente.
+          {t("net.claims.intro1")} <strong>{t("net.claims.intro2")}</strong>{t("net.claims.intro3")}{" "}
+          <strong>{t("net.claims.intro4")}</strong>{t("net.claims.intro5")}
         </p>
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {STATUS_TABS.map((tab) => (
+        {STATUS_TABS.map((key) => (
           <button
-            key={tab.key}
-            onClick={() => setStatusFilter(tab.key)}
+            key={key}
+            onClick={() => setStatusFilter(key)}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer border ${
-              statusFilter === tab.key
+              statusFilter === key
                 ? "bg-brand-600 text-white border-brand-500"
                 : " bg-slate-900/5 text-slate-600 border-slate-300 hover:bg-slate-100"
             }`}
           >
-            {tab.label}
+            {t(`net.claims.tab.${key}`)}
           </button>
         ))}
       </div>
 
-      {error && <p className="text-sm text-rose-400">Impossibile caricare le richieste.</p>}
+      {error && <p className="text-sm text-rose-400">{t("net.claims.loadError")}</p>}
       {actionError && (
         <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs">
           {actionError}
@@ -115,9 +102,9 @@ export function AdminFriendReferralClaimsPanel() {
 
       <div className="glass-card rounded-2xl border-slate-200 bg-white/70 divide-y divide-slate-200 overflow-hidden">
         {claims === undefined ? (
-          <p className="text-center py-8 text-slate-500 text-sm">Caricamento...</p>
+          <p className="text-center py-8 text-slate-500 text-sm">{t("net.adminComm.loading")}</p>
         ) : claims.length === 0 ? (
-          <p className="text-center py-8 text-slate-500 text-sm">Nessuna richiesta in questo stato.</p>
+          <p className="text-center py-8 text-slate-500 text-sm">{t("net.claims.empty")}</p>
         ) : (
           pagination.pageItems.map((c) => (
             <div key={c.id} className="p-5">
@@ -126,17 +113,17 @@ export function AdminFriendReferralClaimsPanel() {
                   <div className="flex items-center gap-2 flex-wrap mb-1">
                     <span className="font-medium text-slate-900">{c.referrer_name}</span>
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${STATUS_COLORS[c.status]}`}>
-                      {STATUS_LABELS[c.status] ?? c.status}
+                      {t.dyn(`net.claims.status.${c.status}`, c.status)}
                     </span>
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-brand-500/10 text-brand-600 border-brand-500/20">
-                      {c.milestone} amici attivi
+                      {t("net.claims.milestone", { n: c.milestone })}
                     </span>
                   </div>
                   <p className="text-xs text-slate-500">
-                    {c.referrer_email} · richiesto il {formatDate(c.requested_at)}
-                    {c.handled_at ? ` · gestito il ${formatDate(c.handled_at)}` : ""}
+                    {c.referrer_email} · {t("net.claims.requestedOn", { date: formatDate(c.requested_at) })}
+                    {c.handled_at ? ` · ${t("net.claims.handledOn", { date: formatDate(c.handled_at) })}` : ""}
                   </p>
-                  {c.note && <p className="text-xs text-slate-500 mt-1">Nota: {c.note}</p>}
+                  {c.note && <p className="text-xs text-slate-500 mt-1">{t("net.claims.note", { note: c.note })}</p>}
                 </div>
                 {c.status === "REQUESTED" && handlingId !== c.id && (
                   <button
@@ -147,7 +134,7 @@ export function AdminFriendReferralClaimsPanel() {
                     }}
                     className="shrink-0 px-4 py-2 rounded-xl bg-brand-600/10 hover:bg-brand-600/20 border border-brand-500/20 text-brand-600 text-xs font-semibold transition cursor-pointer"
                   >
-                    Gestisci
+                    {t("net.claims.handle")}
                   </button>
                 )}
               </div>
@@ -156,13 +143,13 @@ export function AdminFriendReferralClaimsPanel() {
                 <div className="mt-4 pt-4 border-t border-slate-200 space-y-3">
                   <div className="space-y-1">
                     <label className=" font-semibold text-slate-600 uppercase block">
-                      Nota per il cliente (opzionale)
+                      {t("net.claims.noteLabel")}
                     </label>
                     <input
                       value={note}
                       onChange={(e) => setNote(e.target.value)}
                       maxLength={500}
-                      placeholder="Es. Gift card da 25 euro inviata via email"
+                      placeholder={t("net.claims.notePlaceholder")}
                       className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500"
                     />
                   </div>
@@ -172,20 +159,20 @@ export function AdminFriendReferralClaimsPanel() {
                       disabled={loadingId === c.id}
                       className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50"
                     >
-                      {loadingId === c.id ? "..." : "Omaggio consegnato"}
+                      {loadingId === c.id ? "..." : t("net.claims.fulfil")}
                     </button>
                     <button
                       onClick={() => handle(c.id, "REJECTED")}
                       disabled={loadingId === c.id}
                       className="px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50"
                     >
-                      {loadingId === c.id ? "..." : "Non accolgo"}
+                      {loadingId === c.id ? "..." : t("net.claims.reject")}
                     </button>
                     <button
                       onClick={() => setHandlingId(null)}
                       className="px-4 py-1.5 rounded-lg bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 text-xs font-semibold transition cursor-pointer"
                     >
-                      Annulla
+                      {t("common.cancel")}
                     </button>
                   </div>
                 </div>
@@ -194,7 +181,7 @@ export function AdminFriendReferralClaimsPanel() {
           ))
         )}
       </div>
-      <Pagination {...pagination} label="richieste" />
+      <Pagination {...pagination} label={t("net.claims.pagLabel")} />
     </div>
   );
 }

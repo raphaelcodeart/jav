@@ -254,12 +254,17 @@ qui l'essenziale.
   `fmt.euro` / `fmt.shortDate`, mai con `"it-IT"` scritto a mano. Per le
   etichette che arrivano come codice dall'API (cinture, livelli, traguardi)
   `t.dyn(\`chiave.${codice}\`, etichettaApi)`.
-  **Tradotto**: sito pubblico, login e recupero password, barra e menu, area
-  famiglie, area atleta, area staff, quasi tutta la segreteria del club.
-  Ancora solo in italiano: la console della piattaforma (clienti, promoter,
-  prodotti, impostazioni), l'area promoter, carrello e wallet, contratti, e i
-  messaggi che arrivano dal backend (errori, notifiche, email, motivi di non
-  idoneità a una gara). JAVBOT e i giochi parlano pt, en, it: spagnolo →
+  **Tradotto**: tutta l'interfaccia — sito, login, aree di famiglia, atleta,
+  treinador, segreteria, console della piattaforma, promoter, Shop, carrello,
+  ordini, wallet, contratti (verificato il 17/10/2026 aprendo ogni sezione in
+  portoghese). Restano in italiano solo i testi che **scrive il backend**:
+  errori dell'API, notifiche, email, motivi di non idoneità, descrizioni
+  delle quote (le più comuni le ricostruisce `lib/fee-label.ts::feeLabel` da
+  tipo e periodo: usarla dove si mostra una quota). Le chiavi nuove hanno
+  prefissi per area: `ca.` segreteria, `adm.` console, `mkt.` Shop della
+  console, `shopx.` Shop delle famiglie, `ctr.` contratti, `net.` rete e
+  promoter, `acct.` conti/wallet/assistenza, `clubx.` club, `plans.`,
+  `proofs.`, `athTable.`. JAVBOT e i giochi parlano pt, en, it: spagnolo →
   portoghese, francese/tedesco/ucraino → inglese (`javbot/texts.py::NEAREST_LANG`,
   `game/service.py::_lang`). Una lingua nuova: un file in `messages/`, la
   voce in `config.ts` (tag Intl e nome), la bandiera, `translate.ts`, le

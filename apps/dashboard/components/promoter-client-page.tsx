@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { ShareButtons } from "@/components/share-buttons";
@@ -21,6 +21,7 @@ import { SectionBanner } from "@/components/section-banner";
 import { SupportTicketsPanel } from "@/components/support-tickets-panel";
 import { WalletPanel } from "@/components/wallet-panel";
 import type { AgentProfileRead, BranchMemberRead, PromoterCodeRead, RankRead } from "@/lib/types";
+import { useI18n } from "@/lib/i18n/provider";
 
 interface PromoterClientPageProps {
   me: AgentProfileRead | null;
@@ -190,6 +191,12 @@ const PROMOTER_VALID_TABS = [
 ] as const;
 
 export function PromoterClientPage({ me, branch, email, organizationId }: PromoterClientPageProps) {
+  const { t } = useI18n();
+  const navLabel = (key: string, fallback: string) => t.dyn(`net.promoter.nav.${key.replace(/-/g, "_")}`, fallback);
+  const navItems = useMemo(
+    () => NAV_ITEMS.map((item) => ({ ...item, label: t.dyn(`net.promoter.nav.${item.key.replace(/-/g, "_")}`, item.label) })),
+    [t],
+  );
   const [activeTab, setActiveTab] = useState<"azienda" | "network" | "invita-amici" | "customers" | "commissions" | "simulator" | "support" | "documentation" | "wallet">("azienda");
   // «Inserisci un nuovo cliente» dalla home: apre «Miei Clienti» gia' sul
   // form del nuovo cliente. Qualsiasi altra navigazione lo spegne, cosi'
@@ -232,28 +239,28 @@ export function PromoterClientPage({ me, branch, email, organizationId }: Promot
 
   return (
     <AppShell
-      roleLabel="Area Promoter"
+      roleLabel={t("net.promoter.roleLabel")}
       email={email}
-      navItems={NAV_ITEMS}
+      navItems={navItems}
       activeKey={activeTab}
       onNavigate={(key) => {
         setOpenNewCustomer(false);
         setActiveTab(key as typeof activeTab);
       }}
-      headerTitle={`Benvenuto, ${me?.display_name || "Promoter"}`}
+      headerTitle={t("net.promoter.welcome", { name: me?.display_name || t("net.promoter.fallbackName") })}
       centerHeaderActions
       headerActions={
         me ? (
           <div className="w-full flex flex-wrap items-center justify-between gap-4 bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3 glass-card">
             <div className="flex flex-wrap items-center gap-4">
               <div>
-                <p className=" font-bold text-slate-500 uppercase tracking-wider">Codice Promoter</p>
+                <p className=" font-bold text-slate-500 uppercase tracking-wider">{t("net.promoter.code")}</p>
                 <p className="font-mono text-base text-amber-700 font-semibold">{me.promoter_code}</p>
               </div>
               <div className="h-8 w-px bg-slate-200" />
               <div>
-                <p className=" font-bold text-slate-500 uppercase tracking-wider">Qualifica Attuale</p>
-                <p className="text-2xl text-brand-600 font-bold leading-tight">{me.rank_code || "Nessuna"}</p>
+                <p className=" font-bold text-slate-500 uppercase tracking-wider">{t("net.promoter.currentRank")}</p>
+                <p className="text-2xl text-brand-600 font-bold leading-tight">{me.rank_code || t("net.promoter.noRank")}</p>
                 {rankName && <p className="text-[10px] text-slate-500 mt-0.5">{rankName}</p>}
               </div>
             </div>
@@ -264,11 +271,11 @@ export function PromoterClientPage({ me, branch, email, organizationId }: Promot
                 pills would wrap onto three lines and push the page down. */}
             <div className="flex flex-col items-start sm:items-end gap-1.5">
               <p className=" font-bold text-slate-500 uppercase tracking-wider">
-                Condividi il tuo link
+                {t("net.promoter.shareLink")}
               </p>
               <ShareButtons
                 url={personalLink}
-                text="Iscriviti a Jav con il mio link:"
+                text={t("net.promoter.shareText")}
                 hideLabelsOnMobile
               />
             </div>
@@ -281,18 +288,18 @@ export function PromoterClientPage({ me, branch, email, organizationId }: Promot
           <svg className="w-12 h-12 text-rose-400 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <h3 className="text-lg font-semibold text-slate-900">Nessun profilo agente</h3>
+          <h3 className="text-lg font-semibold text-slate-900">{t("net.promoter.noProfile.title")}</h3>
           <p className="text-sm text-slate-500 mt-2">
-            Non è stato trovato alcun profilo promoter collegato a questo account. Contatta l&apos;amministratore del sistema per l&apos;assegnazione.
+            {t("net.promoter.noProfile.body")}
           </p>
         </div>
       ) : (
         <div>
           {activeTab === "azienda" && (
             <div className="space-y-6">
-              <SectionBanner image="contracts" alt="La mia Azienda" compact>
+              <SectionBanner image="contracts" alt={navLabel("azienda", "La mia Azienda")} compact>
                 <div>
-                  <p className="text-[11px] font-semibold text-brand-600 uppercase tracking-wider">Bentornato</p>
+                  <p className="text-[11px] font-semibold text-brand-600 uppercase tracking-wider">{t("net.promoter.welcomeBack")}</p>
                   <h2 className="text-lg sm:text-xl font-bold text-slate-900 truncate max-w-[70vw] sm:max-w-none">{me.display_name}</h2>
                 </div>
               </SectionBanner>
@@ -313,7 +320,7 @@ export function PromoterClientPage({ me, branch, email, organizationId }: Promot
               {/* Quick-access section shortcuts, same pattern as the admin
                   Panoramica -- makes the rest of the promoter area one click
                   away instead of only reachable via the sidebar. */}
-              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Accesso rapido</p>
+              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">{t("net.promoter.quickAccess")}</p>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                 {QUICK_LINKS.map((link) => (
                   <button
@@ -329,9 +336,9 @@ export function PromoterClientPage({ me, branch, email, organizationId }: Promot
                     </span>
                     <span className="min-w-0">
                       <span className="block text-sm font-semibold text-slate-900 truncate">
-                        {link.label}
+                        {navLabel(link.key, link.label)}
                       </span>
-                      <span className="block text-[11px] text-slate-500 truncate">{link.description}</span>
+                      <span className="block text-[11px] text-slate-500 truncate">{t.dyn(`net.promoter.quick.${link.key}`, link.description)}</span>
                     </span>
                   </button>
                 ))}
@@ -349,7 +356,7 @@ export function PromoterClientPage({ me, branch, email, organizationId }: Promot
 
           {activeTab === "customers" && (
             <div className="space-y-6">
-              <SectionBanner image="customers" alt="Miei Clienti" />
+              <SectionBanner image="customers" alt={navLabel("customers", "Miei Clienti")} />
               <NetworkCustomersPanel
                 key={openNewCustomer ? "new-customer" : "list"}
                 startWithNewCustomer={openNewCustomer}
@@ -359,14 +366,14 @@ export function PromoterClientPage({ me, branch, email, organizationId }: Promot
 
           {activeTab === "network" && (
             <div className="space-y-6">
-              <SectionBanner image="network" alt="Rete Commerciale" />
+              <SectionBanner image="network" alt={navLabel("network", "Rete Commerciale")} />
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div className="flex items-center gap-3 text-xs">
                   <span className="px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-700 border border-amber-500/20 font-semibold">
-                    {branch.length} agenti nel ramo
+                    {t("net.promoter.agentsInBranch", { n: branch.length })}
                   </span>
                   <span className="px-2.5 py-1 rounded-full bg-brand-500/10 text-brand-600 border border-brand-500/20 font-semibold">
-                    Profondità massima: {maxDepth} / 12 livelli
+                    {t("net.promoter.maxDepth", { n: maxDepth })}
                   </span>
                 </div>
                 <RecruitForm onRecruited={() => router.refresh()} />
@@ -377,9 +384,9 @@ export function PromoterClientPage({ me, branch, email, organizationId }: Promot
                   <BranchVisualizer members={branch} />
                 </div>
                 <div className="glass-card rounded-2xl p-6 border-slate-200 bg-white/70">
-                  <h3 className="text-lg font-semibold text-slate-900 mb-2">Dettaglio Ramo</h3>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">{t("net.promoter.branchDetail")}</h3>
                   <p className="text-xs text-slate-500 mb-6">
-                    Elenco tabellare di tutti i collaboratori diretti e indiretti, fino a 12 livelli di profondità.
+                    {t("net.promoter.branchDetailHint")}
                   </p>
                   <div className="overflow-x-auto">
                     <BranchTable members={branch} />
@@ -391,11 +398,11 @@ export function PromoterClientPage({ me, branch, email, organizationId }: Promot
 
           {activeTab === "commissions" && (
             <div className="max-w-4xl mx-auto space-y-6">
-              <SectionBanner image="commissions" alt="Movimenti Provvigioni" />
+              <SectionBanner image="commissions" alt={navLabel("commissions", "Movimenti Provvigioni")} />
               <div className="glass-card rounded-2xl p-6 border-slate-200 bg-white/70">
-                <h3 className="text-lg font-semibold text-slate-900 mb-2">Estratto Conto Provvigioni</h3>
+                <h3 className="text-lg font-semibold text-slate-900 mb-2">{t("net.promoter.statementTitle")}</h3>
                 <p className="text-xs text-slate-500 mb-6">
-                  Storico dei gettoni personali e delle differenze imprenditoriali maturate sui contratti attivi.
+                  {t("net.promoter.statementHint")}
                 </p>
                 <MyCommissions />
               </div>
@@ -404,31 +411,31 @@ export function PromoterClientPage({ me, branch, email, organizationId }: Promot
 
           {activeTab === "simulator" && (
             <div className="max-w-5xl mx-auto space-y-6">
-              <SectionBanner image="commissions" alt="Simulatore Provvigioni" />
+              <SectionBanner image="commissions" alt={navLabel("simulator", "Simulatore Provvigioni")} />
               <CommissionSimulator agentId={me.id} />
             </div>
           )}
 
           {activeTab === "support" && (
             <div className="space-y-6">
-              <SectionBanner image="support" alt="Supporto" />
+              <SectionBanner image="support" alt={navLabel("support", "Supporto")} />
               <SupportTicketsPanel
-                title="Supporto"
-                subtitle="Hai bisogno di aiuto dall'amministrazione? Apri un ticket: lo vedrai qui appena ricevi risposta."
+                title={navLabel("support", "Supporto")}
+                subtitle={t("net.promoter.supportSubtitle")}
               />
             </div>
           )}
 
           {activeTab === "documentation" && (
             <div className="space-y-6">
-              <SectionBanner image="documentation" alt="Documentazione" />
+              <SectionBanner image="documentation" alt={navLabel("documentation", "Documentazione")} />
               <DocumentationFeed />
             </div>
           )}
 
           {activeTab === "wallet" && (
             <div className="space-y-6">
-              <SectionBanner image="wallets" alt="Wallet" />
+              <SectionBanner image="wallets" alt={navLabel("wallet", "Wallet")} />
               <WalletPanel />
             </div>
           )}

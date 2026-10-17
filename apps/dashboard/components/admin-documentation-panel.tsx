@@ -5,18 +5,13 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { PhotoUpload } from "@/components/photo-upload";
 import { friendlyApiError } from "@/lib/api-error";
 import type { DocumentationPostRead } from "@/lib/types";
+import { useI18n } from "@/lib/i18n/provider";
 
-const AUDIENCE_LABELS: Record<string, string> = {
-  CUSTOMER: "Solo clienti",
-  PROMOTER: "Solo promoter",
-  BOTH: "Clienti e promoter",
-};
 const AUDIENCE_COLORS: Record<string, string> = {
   CUSTOMER: "bg-sky-500/10 text-sky-400 border-sky-500/20",
   PROMOTER: "bg-brand-500/10 text-brand-600 border-brand-500/20",
   BOTH: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
 };
-const STATUS_LABELS: Record<string, string> = { PUBLISHED: "Pubblicato", ARCHIVED: "Archiviato" };
 
 async function fetchPosts(): Promise<DocumentationPostRead[]> {
   const res = await fetch("/api/proxy/documentation/admin");
@@ -29,6 +24,7 @@ async function fetchPosts(): Promise<DocumentationPostRead[]> {
  * needs its own accept filter and reads back .pdf_url/.pdf_filename instead,
  * not worth generalizing PhotoUpload for a single extra caller. */
 function PdfUpload({ postId, currentFilename, onUploaded }: { postId: string; currentFilename: string | null; onUploaded: (pdfUrl: string, filename: string) => void }) {
+  const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +42,7 @@ function PdfUpload({ postId, currentFilename, onUploaded }: { postId: string; cu
       const updated: DocumentationPostRead = await res.json();
       if (updated.pdf_url) onUploaded(updated.pdf_url, updated.pdf_filename ?? file.name);
     } catch (err: any) {
-      setError(err.message || "Caricamento PDF fallito. Riprova.");
+      setError(err.message || t("acct.docs.pdfFailed"));
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = "";
@@ -60,7 +56,7 @@ function PdfUpload({ postId, currentFilename, onUploaded }: { postId: string; cu
         htmlFor={`pdf-input-${postId}`}
         className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 cursor-pointer transition"
       >
-        {uploading ? "Caricamento..." : currentFilename ? `Sostituisci PDF (${currentFilename})` : "Carica PDF"}
+        {uploading ? t("acct.photo.uploading") : currentFilename ? t("acct.docs.replacePdf", { name: currentFilename }) : t("acct.docs.uploadPdf")}
       </label>
       {error && <p className="text-[11px] text-rose-400">{error}</p>}
     </div>
@@ -68,6 +64,7 @@ function PdfUpload({ postId, currentFilename, onUploaded }: { postId: string; cu
 }
 
 export function AdminDocumentationPanel() {
+  const { t, fmt } = useI18n();
   const queryClient = useQueryClient();
   const { data: posts, error: loadError } = useQuery({
     queryKey: ["admin", "documentation"],
@@ -130,7 +127,7 @@ export function AdminDocumentationPanel() {
       // Jump straight into editing so the admin can attach image/PDF right away.
       openEdit(created);
     } catch (err: any) {
-      setCreateError(err.message || "Impossibile creare il post.");
+      setCreateError(err.message || t("acct.docs.createError"));
     } finally {
       setCreateLoading(false);
     }
@@ -156,7 +153,7 @@ export function AdminDocumentationPanel() {
       setEditingPost(null);
       await queryClient.invalidateQueries({ queryKey: ["admin", "documentation"] });
     } catch (err: any) {
-      setEditError(err.message || "Impossibile salvare le modifiche.");
+      setEditError(err.message || t("acct.docs.saveError"));
     } finally {
       setEditLoading(false);
     }
@@ -188,7 +185,7 @@ export function AdminDocumentationPanel() {
       setDeletingPost(null);
       await queryClient.invalidateQueries({ queryKey: ["admin", "documentation"] });
     } catch (err: any) {
-      setDeleteError(err.message || "Impossibile eliminare il post.");
+      setDeleteError(err.message || t("acct.docs.deleteError"));
     } finally {
       setDeleteLoading(false);
     }
@@ -198,24 +195,23 @@ export function AdminDocumentationPanel() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <p className="text-xs text-slate-500 max-w-2xl">
-          Pubblica materiale per i clienti (guide, novità) o per i promoter (listini, materiale formativo) --
-          scegli per ognuno chi lo vede. Come un post: testo, e facoltativamente una foto, un PDF da scaricare e un link video.
+          {t("acct.docs.intro")}
         </p>
         <button
           onClick={() => setShowCreate(true)}
           className="shrink-0 px-4 py-2 rounded-xl text-xs font-semibold bg-brand-600 hover:bg-brand-500 text-white shadow-lg shadow-brand-500/20 transition cursor-pointer"
         >
-          + Nuovo Post
+          + {t("acct.docs.newPost")}
         </button>
       </div>
 
-      {loadError && <p className="text-sm text-rose-400">Impossibile caricare la documentazione.</p>}
+      {loadError && <p className="text-sm text-rose-400">{t("acct.docFeed.loadError")}</p>}
 
       <div className="grid gap-4 sm:grid-cols-2">
         {posts === undefined ? (
-          <p className="text-sm text-slate-500 col-span-2 text-center py-8">Caricamento...</p>
+          <p className="text-sm text-slate-500 col-span-2 text-center py-8">{t("acct.common.loading")}</p>
         ) : posts.length === 0 ? (
-          <p className="text-sm text-slate-500 col-span-2 text-center py-8">Nessun post pubblicato ancora.</p>
+          <p className="text-sm text-slate-500 col-span-2 text-center py-8">{t("acct.docs.empty")}</p>
         ) : (
           posts.map((p) => (
             <div key={p.id} className="glass-card rounded-2xl border-slate-200 bg-white/70 overflow-hidden flex flex-col">
@@ -226,37 +222,37 @@ export function AdminDocumentationPanel() {
               <div className="p-5 flex flex-col gap-2 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${AUDIENCE_COLORS[p.audience]}`}>
-                    {AUDIENCE_LABELS[p.audience]}
+                    {t.dyn(`acct.docs.audience.${p.audience}`, p.audience)}
                   </span>
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${p.status === "PUBLISHED" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-slate-500/10 text-slate-400 border-slate-500/20"}`}>
-                    {STATUS_LABELS[p.status]}
+                    {t.dyn(`acct.docs.status.${p.status}`, p.status)}
                   </span>
                 </div>
                 <h3 className="text-sm font-bold text-slate-900">{p.title}</h3>
                 {p.body && <p className="text-xs text-slate-500 line-clamp-3 whitespace-pre-wrap">{p.body}</p>}
                 <div className="flex items-center gap-3 text-[10px] text-slate-500 mt-1">
-                  {p.pdf_url && <span>📎 PDF allegato</span>}
-                  {p.video_url && <span>🎬 Video allegato</span>}
-                  <span className="ml-auto">{new Date(p.created_at).toLocaleDateString("it-IT")}</span>
+                  {p.pdf_url && <span>📎 {t("acct.docs.pdfAttached")}</span>}
+                  {p.video_url && <span>🎬 {t("acct.docs.videoAttached")}</span>}
+                  <span className="ml-auto">{new Date(p.created_at).toLocaleDateString(fmt.tag)}</span>
                 </div>
                 <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-200">
                   <button
                     onClick={() => openEdit(p)}
                     className="px-2.5 py-1.5 rounded-lg bg-brand-600/10 hover:bg-brand-600/20 border border-brand-500/20 text-brand-600 text-xs font-semibold transition cursor-pointer"
                   >
-                    Modifica
+                    {t("acct.docs.edit")}
                   </button>
                   <button
                     onClick={() => handleToggleStatus(p)}
                     className="px-2.5 py-1.5 rounded-lg bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 text-xs font-semibold transition cursor-pointer"
                   >
-                    {p.status === "PUBLISHED" ? "Archivia" : "Ripubblica"}
+                    {p.status === "PUBLISHED" ? t("acct.docs.archive") : t("acct.docs.republish")}
                   </button>
                   <button
                     onClick={() => setDeletingPost(p)}
                     className="ml-auto px-2.5 py-1.5 rounded-lg bg-rose-600/10 hover:bg-rose-600/20 border border-rose-500/20 text-rose-400 text-xs font-semibold transition cursor-pointer"
                   >
-                    Elimina
+                    {t("acct.docs.delete")}
                   </button>
                 </div>
               </div>
@@ -269,7 +265,7 @@ export function AdminDocumentationPanel() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
           <div className="w-full max-w-lg glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-slate-900">Nuovo Post</h3>
+              <h3 className="text-lg font-bold text-slate-900">{t("acct.docs.newPost")}</h3>
               <button onClick={() => setShowCreate(false)}
                 className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-900 transition cursor-pointer">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -280,31 +276,31 @@ export function AdminDocumentationPanel() {
 
             <form onSubmit={handleCreate} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 uppercase block">Titolo</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">{t("acct.docs.title")}</label>
                 <input required value={title} onChange={(e) => setTitle(e.target.value)}
                   className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 uppercase block">Testo</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">{t("acct.docs.body")}</label>
                 <textarea rows={4} value={body} onChange={(e) => setBody(e.target.value)}
                   className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500 resize-none" />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 uppercase block">Chi lo vede</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">{t("acct.docs.audienceLabel")}</label>
                 <select value={audience} onChange={(e) => setAudience(e.target.value)}
                   className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-white focus:border-brand-500">
-                  <option value="BOTH">Clienti e promoter</option>
-                  <option value="CUSTOMER">Solo clienti</option>
-                  <option value="PROMOTER">Solo promoter</option>
+                  <option value="BOTH">{t("acct.docs.audience.BOTH")}</option>
+                  <option value="CUSTOMER">{t("acct.docs.audience.CUSTOMER")}</option>
+                  <option value="PROMOTER">{t("acct.docs.audience.PROMOTER")}</option>
                 </select>
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 uppercase block">Link video (opzionale)</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">{t("acct.docs.videoLink")}</label>
                 <input type="url" value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)}
                   placeholder="https://youtube.com/..."
                   className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
               </div>
-              <p className="text-[11px] text-slate-500">Dopo aver creato il post potrai allegare una foto e un PDF.</p>
+              <p className="text-[11px] text-slate-500">{t("acct.docs.afterCreate")}</p>
 
               {createError && (
                 <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs">{createError}</div>
@@ -313,11 +309,11 @@ export function AdminDocumentationPanel() {
               <div className="flex justify-end gap-3 mt-4">
                 <button type="button" onClick={() => setShowCreate(false)}
                   className="px-4 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 text-xs font-semibold text-slate-600 border border-slate-200 transition cursor-pointer">
-                  Annulla
+                  {t("common.cancel")}
                 </button>
                 <button type="submit" disabled={createLoading}
                   className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50">
-                  {createLoading ? "Creazione..." : "Crea Post"}
+                  {createLoading ? t("acct.docs.creating") : t("acct.docs.create")}
                 </button>
               </div>
             </form>
@@ -329,7 +325,7 @@ export function AdminDocumentationPanel() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
           <div className="w-full max-w-lg glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-slate-900">Modifica Post</h3>
+              <h3 className="text-lg font-bold text-slate-900">{t("acct.docs.editPost")}</h3>
               <button onClick={() => setEditingPost(null)}
                 className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-900 transition cursor-pointer">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -340,7 +336,7 @@ export function AdminDocumentationPanel() {
 
             <div className="mb-5 pb-5 border-b border-slate-200 space-y-4">
               <div>
-                <label className="text-xs font-semibold text-slate-600 uppercase block mb-2">Foto</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block mb-2">{t("acct.docs.photo")}</label>
                 <PhotoUpload
                   currentUrl={editImageUrl}
                   uploadPath={`documentation/${editingPost.id}/image`}
@@ -368,26 +364,26 @@ export function AdminDocumentationPanel() {
 
             <form onSubmit={handleEditSave} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 uppercase block">Titolo</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">{t("acct.docs.title")}</label>
                 <input required value={editTitle} onChange={(e) => setEditTitle(e.target.value)}
                   className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 uppercase block">Testo</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">{t("acct.docs.body")}</label>
                 <textarea rows={4} value={editBody} onChange={(e) => setEditBody(e.target.value)}
                   className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500 resize-none" />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 uppercase block">Chi lo vede</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">{t("acct.docs.audienceLabel")}</label>
                 <select value={editAudience} onChange={(e) => setEditAudience(e.target.value)}
                   className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-white focus:border-brand-500">
-                  <option value="BOTH">Clienti e promoter</option>
-                  <option value="CUSTOMER">Solo clienti</option>
-                  <option value="PROMOTER">Solo promoter</option>
+                  <option value="BOTH">{t("acct.docs.audience.BOTH")}</option>
+                  <option value="CUSTOMER">{t("acct.docs.audience.CUSTOMER")}</option>
+                  <option value="PROMOTER">{t("acct.docs.audience.PROMOTER")}</option>
                 </select>
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 uppercase block">Link video (opzionale)</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">{t("acct.docs.videoLink")}</label>
                 <input type="url" value={editVideoUrl} onChange={(e) => setEditVideoUrl(e.target.value)}
                   placeholder="https://youtube.com/..."
                   className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
@@ -400,11 +396,11 @@ export function AdminDocumentationPanel() {
               <div className="flex justify-end gap-3 mt-4">
                 <button type="button" onClick={() => setEditingPost(null)}
                   className="px-4 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 text-xs font-semibold text-slate-600 border border-slate-200 transition cursor-pointer">
-                  Chiudi
+                  {t("common.close")}
                 </button>
                 <button type="submit" disabled={editLoading}
                   className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50">
-                  {editLoading ? "Salvataggio..." : "Salva Modifiche"}
+                  {editLoading ? t("acct.gate.saving") : t("acct.docs.saveChanges")}
                 </button>
               </div>
             </form>
@@ -415,9 +411,9 @@ export function AdminDocumentationPanel() {
       {deletingPost && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
           <div className="w-full max-w-md glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up">
-            <h3 className="text-lg font-bold text-slate-900 mb-2">Eliminare &ldquo;{deletingPost.title}&rdquo;?</h3>
+            <h3 className="text-lg font-bold text-slate-900 mb-2">{t("acct.docs.deleteTitle", { title: deletingPost.title })}</h3>
             <p className="text-xs text-slate-500 mb-4">
-              Il post sparirà subito dal feed di chi lo vedeva. Questa azione non si può annullare.
+              {t("acct.docs.deleteText")}
             </p>
             {deleteError && (
               <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs mb-4">{deleteError}</div>
@@ -427,14 +423,14 @@ export function AdminDocumentationPanel() {
                 onClick={() => setDeletingPost(null)}
                 className="px-4 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 text-xs font-semibold text-slate-600 border border-slate-200 transition cursor-pointer"
               >
-                Annulla
+                {t("common.cancel")}
               </button>
               <button
                 onClick={handleDelete}
                 disabled={deleteLoading}
                 className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50"
               >
-                {deleteLoading ? "Eliminazione..." : "Elimina"}
+                {deleteLoading ? t("acct.tickets.deleting") : t("acct.docs.delete")}
               </button>
             </div>
           </div>

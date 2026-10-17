@@ -8,34 +8,31 @@ import type {
   CustomerRead,
   ProductCatalogRead,
 } from "@/lib/types";
+import { useI18n } from "@/lib/i18n/provider";
 
-const KIND_LABELS: Record<string, string> = {
-  PRIVATE: "Privato",
-  SOLE_PROPRIETOR: "Partita IVA",
-  COMPANY: "Azienda",
-  CONDOMINIUM: "Condominio",
-};
+const CUSTOMER_KINDS = ["PRIVATE", "SOLE_PROPRIETOR", "COMPANY", "CONDOMINIUM"];
 const PRIVATE_LIKE = new Set(["PRIVATE", "SOLE_PROPRIETOR"]);
 
 async function fetchCustomers(): Promise<CustomerRead[]> {
   const res = await fetch("/api/proxy/customers");
-  if (!res.ok) throw new Error("Impossibile caricare i clienti.");
+  if (!res.ok) throw new Error("customers fetch failed");
   return res.json();
 }
 
 async function fetchProducts(): Promise<ProductCatalogRead[]> {
   const res = await fetch("/api/proxy/products");
-  if (!res.ok) throw new Error("Impossibile caricare i prodotti.");
+  if (!res.ok) throw new Error("products fetch failed");
   return res.json();
 }
 
 async function fetchAgents(): Promise<AgentListItemRead[]> {
   const res = await fetch("/api/proxy/network/agents");
-  if (!res.ok) throw new Error("Impossibile caricare i promoter.");
+  if (!res.ok) throw new Error("agents fetch failed");
   return res.json();
 }
 
 export function AdminCreateContractPanel({ onCreated }: { onCreated: (contract: ContractRead) => void }) {
+  const { t } = useI18n();
   const { data: customers } = useQuery({ queryKey: ["admin", "customers"], queryFn: fetchCustomers });
   const { data: products } = useQuery({ queryKey: ["admin", "products"], queryFn: fetchProducts });
   const { data: agents } = useQuery({ queryKey: ["admin", "agents"], queryFn: fetchAgents });
@@ -115,14 +112,14 @@ export function AdminCreateContractPanel({ onCreated }: { onCreated: (contract: 
       }
 
       if (!selectedCustomerId) {
-        throw new Error("Seleziona un cliente.");
+        throw new Error(t("ctr.create.selectCustomerError"));
       }
       const newContract = await createContract(selectedCustomerId);
       onCreated(newContract);
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch (err: any) {
-      setSubmitError(err.message || "Impossibile creare il contratto.");
+      setSubmitError(err.message || t("ctr.create.error"));
     } finally {
       setSubmitting(false);
     }
@@ -130,14 +127,14 @@ export function AdminCreateContractPanel({ onCreated }: { onCreated: (contract: 
 
   return (
     <div className="max-w-2xl mx-auto glass-card rounded-2xl p-8 border-slate-200 bg-white/70">
-      <h3 className="text-lg font-semibold text-slate-900 mb-2">Crea un Nuovo Contratto</h3>
+      <h3 className="text-lg font-semibold text-slate-900 mb-2">{t("ctr.create.title")}</h3>
       <p className="text-xs text-slate-500 mb-6">
-        Collega un cliente (nuovo o esistente), un&apos;offerta e il promoter/venditore che ha originato la vendita.
+        {t("ctr.create.subtitle")}
       </p>
 
       {success && (
         <div className="p-4 mb-6 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-center animate-scale-up">
-          Contratto creato con successo.
+          {t("ctr.create.success")}
         </div>
       )}
 
@@ -150,7 +147,7 @@ export function AdminCreateContractPanel({ onCreated }: { onCreated: (contract: 
                 ? "bg-gradient-to-r from-brand-600 to-brand-400 text-white border-transparent"
                 : " bg-slate-900/5 text-slate-500 border-slate-200"
             }`}>
-            Nuovo Cliente
+            {t("ctr.create.newCustomer")}
           </button>
           <button type="button" onClick={() => setCustomerMode("existing")}
             className={`flex-1 px-4 py-2 rounded-xl text-xs font-semibold transition cursor-pointer border ${
@@ -158,17 +155,17 @@ export function AdminCreateContractPanel({ onCreated }: { onCreated: (contract: 
                 ? "bg-gradient-to-r from-brand-600 to-brand-400 text-white border-transparent"
                 : " bg-slate-900/5 text-slate-500 border-slate-200"
             }`}>
-            Cliente Esistente
+            {t("ctr.create.existingCustomer")}
           </button>
         </div>
 
         {customerMode === "existing" ? (
           <div className="space-y-4">
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-600 uppercase block">Cliente</label>
+              <label className="text-xs font-semibold text-slate-600 uppercase block">{t("ctr.create.customer")}</label>
               <select required value={selectedCustomerId} onChange={(e) => setSelectedCustomerId(e.target.value)}
                 className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-white focus:border-brand-500">
-                <option value="">— Seleziona cliente —</option>
+                <option value="">{t("ctr.create.selectCustomer")}</option>
                 {(customers ?? []).map((c) => (
                   <option key={c.id} value={c.id}>{c.display_name} ({c.email})</option>
                 ))}
@@ -178,11 +175,11 @@ export function AdminCreateContractPanel({ onCreated }: { onCreated: (contract: 
         ) : (
           <div className="space-y-4">
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-600 uppercase block">Tipologia Cliente</label>
+              <label className="text-xs font-semibold text-slate-600 uppercase block">{t("ctr.create.customerKind")}</label>
               <select value={kind} onChange={(e) => setKind(e.target.value)}
                 className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-white focus:border-brand-500">
-                {Object.entries(KIND_LABELS).map(([code, label]) => (
-                  <option key={code} value={code}>{label}</option>
+                {CUSTOMER_KINDS.map((code) => (
+                  <option key={code} value={code}>{t.dyn(`ctr.kind.${code}`, code)}</option>
                 ))}
               </select>
             </div>
@@ -190,19 +187,19 @@ export function AdminCreateContractPanel({ onCreated }: { onCreated: (contract: 
             {PRIVATE_LIKE.has(kind) ? (
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-600 uppercase block">Nome Cliente</label>
+                  <label className="text-xs font-semibold text-slate-600 uppercase block">{t("ctr.create.firstName")}</label>
                   <input required value={firstName} onChange={(e) => setFirstName(e.target.value)}
                     className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-600 uppercase block">Cognome Cliente</label>
+                  <label className="text-xs font-semibold text-slate-600 uppercase block">{t("ctr.create.lastName")}</label>
                   <input required value={lastName} onChange={(e) => setLastName(e.target.value)}
                     className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
                 </div>
               </div>
             ) : (
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 uppercase block">Ragione Sociale</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">{t("ctr.create.companyName")}</label>
                 <input required value={companyName} onChange={(e) => setCompanyName(e.target.value)}
                   className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
               </div>
@@ -210,12 +207,12 @@ export function AdminCreateContractPanel({ onCreated }: { onCreated: (contract: 
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 uppercase block">Codice Fiscale</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">{t("ctr.f.fiscalCode")}</label>
                 <input value={fiscalCode} onChange={(e) => setFiscalCode(e.target.value)}
                   className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 uppercase block">Partita IVA</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">{t("ctr.create.vatNumber")}</label>
                 <input value={vatNumber} onChange={(e) => setVatNumber(e.target.value)}
                   className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
               </div>
@@ -223,19 +220,19 @@ export function AdminCreateContractPanel({ onCreated }: { onCreated: (contract: 
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 uppercase block">Email Cliente</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">{t("ctr.create.email")}</label>
                 <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                   className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 uppercase block">Cellulare</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">{t("ctr.create.mobile")}</label>
                 <input value={phone} onChange={(e) => setPhone(e.target.value)}
                   className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
               </div>
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-600 uppercase block">PEC (opzionale)</label>
+              <label className="text-xs font-semibold text-slate-600 uppercase block">{t("ctr.create.pecOptional")}</label>
               <input type="email" value={pec} onChange={(e) => setPec(e.target.value)}
                 placeholder="nome@pec.it"
                 className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
@@ -246,10 +243,10 @@ export function AdminCreateContractPanel({ onCreated }: { onCreated: (contract: 
 
         <div className="pt-2 border-t border-slate-200 space-y-4">
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-600 uppercase block">Offerta</label>
+            <label className="text-xs font-semibold text-slate-600 uppercase block">{t("ctr.create.offer")}</label>
             <select required value={productVersionId} onChange={(e) => setProductVersionId(e.target.value)}
               className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-white focus:border-brand-500">
-              <option value="">— Seleziona offerta —</option>
+              <option value="">{t("ctr.create.selectOffer")}</option>
               {activeProducts.map((p) => (
                 <option key={p.id} value={p.current_version!.id}>{p.current_version!.name} ({p.code})</option>
               ))}
@@ -257,10 +254,10 @@ export function AdminCreateContractPanel({ onCreated }: { onCreated: (contract: 
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-600 uppercase block">Promoter / Venditore</label>
+            <label className="text-xs font-semibold text-slate-600 uppercase block">{t("ctr.create.promoterSeller")}</label>
             <select required value={producerAgentId} onChange={(e) => setProducerAgentId(e.target.value)}
               className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-white focus:border-brand-500">
-              <option value="">— Seleziona promoter —</option>
+              <option value="">{t("ctr.create.selectPromoter")}</option>
               {(agents ?? []).map((a) => (
                 <option key={a.id} value={a.id}>{a.display_name} ({a.promoter_code})</option>
               ))}
@@ -268,16 +265,16 @@ export function AdminCreateContractPanel({ onCreated }: { onCreated: (contract: 
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-600 uppercase block">IBAN per Addebito (opzionale)</label>
+            <label className="text-xs font-semibold text-slate-600 uppercase block">{t("ctr.create.ibanOptional")}</label>
             <input value={iban} onChange={(e) => setIban(e.target.value)}
               placeholder="IT00A0000000000000000000000"
               className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500 uppercase" />
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-600 uppercase block">Note (opzionale)</label>
+            <label className="text-xs font-semibold text-slate-600 uppercase block">{t("ctr.create.notesOptional")}</label>
             <textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)}
-              placeholder="Contesto utile per l'amministrazione: come è arrivato il cliente, promozione di riferimento, preferenze di contatto..."
+              placeholder={t("ctr.create.notesPlaceholder")}
               className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500 resize-none" />
           </div>
         </div>
@@ -290,7 +287,7 @@ export function AdminCreateContractPanel({ onCreated }: { onCreated: (contract: 
 
         <button type="submit" disabled={submitting}
           className="w-full rounded-xl bg-gradient-to-r from-brand-600 to-brand-400 hover:from-brand-500 hover:to-brand-400 py-3 text-sm font-semibold text-white shadow-lg transition duration-300 disabled:opacity-50 cursor-pointer mt-2">
-          {submitting ? "Creazione in corso..." : "Genera Contratto"}
+          {submitting ? t("ctr.create.submitting") : t("ctr.create.submit")}
         </button>
       </form>
     </div>

@@ -31,10 +31,10 @@ import { useI18n } from "@/lib/i18n/provider";
 import type { ContractRead, CustomerRead } from "@/lib/types";
 import { useEventsReturn } from "@/lib/events-return";
 
-async function fetchMyCustomerRecord(): Promise<CustomerRead | null> {
+async function fetchMyCustomerRecord(errorText: string): Promise<CustomerRead | null> {
   const res = await fetch("/api/proxy/customers/me");
   if (res.status === 404) return null;
-  if (!res.ok) throw new Error("Impossibile caricare la tua anagrafica.");
+  if (!res.ok) throw new Error(errorText);
   return res.json();
 }
 
@@ -389,13 +389,13 @@ export function CustomerClientPage({ email, organizationId }: CustomerClientPage
     router.replace("/customer", { scroll: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  const { t } = useI18n();
   const { data: myCustomer } = useQuery({
     queryKey: ["customer", "me", "record"],
-    queryFn: fetchMyCustomerRecord,
+    queryFn: () => fetchMyCustomerRecord(t("acct.customer.recordError")),
   });
 
   const isClubTab = (CLUB_TABS as readonly string[]).includes(activeTab);
-  const { t } = useI18n();
   // The labels above stay as the Italian source; the menu shows them in the
   // chosen language, falling back to them for a key not translated yet.
   // Nei corsi JAV nelle scuole non ci sono gare né ranking: le voci spariscono.
@@ -424,13 +424,12 @@ export function CustomerClientPage({ email, organizationId }: CustomerClientPage
     >
       {activeTab === "contracts" && (
         <div className="space-y-6">
-          <SectionBanner image="contracts" alt="I miei Contratti" />
+          <SectionBanner image="contracts" alt={t("nav.contracts")} />
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl border border-brand-500/25 bg-gradient-to-br from-brand-500/10 to-transparent">
             <div>
-              <h3 className="text-base font-bold text-slate-900">Le tue pratiche di attivazione</h3>
+              <h3 className="text-base font-bold text-slate-900">{t("acct.customer.practicesTitle")}</h3>
               <p className="text-xs text-slate-500 mt-1">
-                Una pratica può contenere uno o più contratti, ognuno con il suo pacchetto. Dati, documenti e
-                pagamento li gestisci una volta sola.
+                {t("acct.customer.practicesText")}
               </p>
             </div>
             <button
@@ -440,7 +439,7 @@ export function CustomerClientPage({ email, organizationId }: CustomerClientPage
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
               </svg>
-              Attiva nuovo contratto
+              {t("acct.customer.activateContract")}
             </button>
           </div>
           {/* I pacchetti non si sfogliano più qui (Session 83): si scelgono,
@@ -459,9 +458,9 @@ export function CustomerClientPage({ email, organizationId }: CustomerClientPage
 
       {activeTab === "jav-contracts" && (
         <div className="space-y-6">
-          <SectionBanner image="contracts" alt="Area Cliente" compact>
+          <SectionBanner image="contracts" alt={t("acct.area.customer")} compact>
             <div>
-              <p className="text-[11px] font-semibold text-brand-600 uppercase tracking-wider">Bentornato</p>
+              <p className="text-[11px] font-semibold text-brand-600 uppercase tracking-wider">{t("acct.customer.welcomeBack")}</p>
               <h2 className="text-lg sm:text-xl font-bold text-slate-900 truncate max-w-[70vw] sm:max-w-none">{email}</h2>
             </div>
           </SectionBanner>
@@ -472,7 +471,7 @@ export function CustomerClientPage({ email, organizationId }: CustomerClientPage
           <DashboardWalletStats />
 
           <div>
-            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2.5">Accesso rapido</p>
+            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2.5">{t("acct.customer.quickAccess")}</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
               {HOME_QUICK_LINKS.map((link) => (
                 <button
@@ -485,9 +484,9 @@ export function CustomerClientPage({ email, organizationId }: CustomerClientPage
                   </span>
                   <span className="min-w-0">
                     <span className="block text-sm font-semibold text-slate-900 truncate">
-                      {link.label}
+                      {t.dyn(`acct.quick.${link.key}.label`, link.label)}
                     </span>
-                    <span className="block text-[11px] text-slate-500 truncate">{link.description}</span>
+                    <span className="block text-[11px] text-slate-500 truncate">{t.dyn(`acct.quick.${link.key}.description`, link.description)}</span>
                   </span>
                 </button>
               ))}
@@ -510,24 +509,24 @@ export function CustomerClientPage({ email, organizationId }: CustomerClientPage
 
       {activeTab === "product-requests" && (
         <div className="space-y-6">
-          <SectionBanner image="products" alt="Le mie richieste" />
+          <SectionBanner image="products" alt={t("nav.product-requests")} />
           <CustomerProductRequestsPanel />
         </div>
       )}
 
       {activeTab === "orders" && (
         <div className="space-y-6">
-          <SectionBanner image="products" alt="I miei Ordini" />
+          <SectionBanner image="products" alt={t("nav.orders")} />
           <CustomerOrdersPanel />
         </div>
       )}
 
       {activeTab === "support" && (
         <div className="space-y-6">
-          <SectionBanner image="support" alt="Supporto & Assistenza" />
+          <SectionBanner image="support" alt={t("nav.support")} />
           <SupportTicketsPanel
-            title="Supporto & Assistenza"
-            subtitle="Apri un ticket per problemi tecnici, fatturazione o domande sul tuo contratto: un operatore ti risponderà qui."
+            title={t("nav.support")}
+            subtitle={t("acct.customer.supportSubtitle")}
           />
         </div>
       )}
@@ -544,14 +543,14 @@ export function CustomerClientPage({ email, organizationId }: CustomerClientPage
 
       {activeTab === "documentation" && (
         <div className="space-y-6">
-          <SectionBanner image="documentation" alt="Documentazione" />
+          <SectionBanner image="documentation" alt={t("nav.documentation")} />
           <DocumentationFeed />
         </div>
       )}
 
       {activeTab === "wallet" && (
         <div className="space-y-6">
-          <SectionBanner image="wallets" alt="Wallet" />
+          <SectionBanner image="wallets" alt={t("nav.wallet")} />
           <WalletPanel />
         </div>
       )}

@@ -7,13 +7,7 @@ import { friendlyApiError } from "@/lib/api-error";
 import { downloadCsv } from "@/lib/csv-export";
 import { Pagination, usePagination } from "@/components/pagination";
 import { JavCashAmount } from "@/components/jav-cash-amount";
-
-const TYPE_LABELS: Record<string, string> = {
-  ADMIN_CREDIT: "Ricarica/Cashback",
-  TRANSFER: "Trasferimento",
-  PURCHASE_DEBIT: "Pagamento ordine (crediti)",
-  REVERSAL: "Storno",
-};
+import { useI18n } from "@/lib/i18n/provider";
 
 const TYPE_COLORS: Record<string, string> = {
   ADMIN_CREDIT: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
@@ -22,42 +16,31 @@ const TYPE_COLORS: Record<string, string> = {
   REVERSAL: "bg-rose-500/10 text-rose-400 border-rose-500/20",
 };
 
-// Finer-grained label than TYPE_LABELS alone -- distinguishes a plain admin
-// top-up from the lines an order cashback always writes together, without
-// needing to read the free-text note.
-const SOURCE_LABELS: Record<string, string> = {
-  MANUAL_ADMIN: "Ricarica manuale",
-  WELCOME_BONUS: "Omaggio di benvenuto",
-  ORDER_CASHBACK_BASE: "Cashback ordine",
-  ORDER_CASHBACK_BONUS: "Bonus 5% cashback ordine",
-  // Automatic, surcharge-free credit on a paid Jav contract --
-  // deliberately a different rule from the 5% order one above.
-  CONTRACT_CASHBACK: "Cashback contratto Jav",
-};
-
-function transactionLabel(t: { type: string; source: string | null }): string {
-  const sourceLabel = t.source ? SOURCE_LABELS[t.source] : undefined;
-  return sourceLabel ?? TYPE_LABELS[t.type] ?? t.type;
+// Same labels as wallet-panel.tsx: a finer-grained one per source when the
+// type alone would not tell a plain top-up from an order cashback.
+function transactionLabel(tx: { type: string; source: string | null }, t: ReturnType<typeof useI18n>["t"]): string {
+  const sourceLabel = tx.source ? t.dyn(`acct.wallet.source.${tx.source}`, "") : "";
+  return sourceLabel || t.dyn(`acct.wallet.type.${tx.type}`, tx.type);
 }
 
 // The wallet only ever holds JavCash, never real EUR -- see
 // wallet-panel.tsx's identical helper.
-function javCash(cents: number): string {
-  return `${(cents / 100).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} JavCash`;
+function javCash(cents: number, tag: string): string {
+  return `${(cents / 100).toLocaleString(tag, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} JavCash`;
 }
 
-async function fetchWallets(): Promise<WalletAdminListItemRead[]> {
+async function fetchWallets(t: ReturnType<typeof useI18n>["t"]): Promise<WalletAdminListItemRead[]> {
   const res = await fetch("/api/proxy/wallets/admin");
-  if (!res.ok) throw new Error("Impossibile caricare i wallet.");
+  if (!res.ok) throw new Error(t("acct.adminWallets.loadError"));
   return res.json();
 }
 
-async function fetchTransactions(type?: string): Promise<WalletTransactionRead[]> {
+async function fetchTransactions(t: ReturnType<typeof useI18n>["t"], type?: string): Promise<WalletTransactionRead[]> {
   const search = new URLSearchParams();
   if (type && type !== "ALL") search.set("type", type);
   const qs = search.toString();
   const res = await fetch(`/api/proxy/wallets/admin/transactions${qs ? `?${qs}` : ""}`);
-  if (!res.ok) throw new Error("Impossibile caricare le transazioni.");
+  if (!res.ok) throw new Error(t("acct.stats.txError"));
   return res.json();
 }
 
@@ -71,6 +54,7 @@ interface AdminWalletsPanelProps {
 }
 
 export function AdminWalletsPanel({ isSuperAdmin = false }: AdminWalletsPanelProps = {}) {
+  const { t, fmt } = useI18n();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("ALL");
@@ -86,11 +70,11 @@ export function AdminWalletsPanel({ isSuperAdmin = false }: AdminWalletsPanelPro
 
   const { data: wallets, error: walletsError } = useQuery({
     queryKey: ["admin", "wallets", "all"],
-    queryFn: fetchWallets,
+    queryFn: () => fetchWallets(t),
   });
   const { data: transactions, error: transactionsError, isLoading } = useQuery({
     queryKey: ["admin", "wallets", "transactions", typeFilter],
-    queryFn: () => fetchTransactions(typeFilter),
+    queryFn: () => fetchTransactions(t, typeFilter),
   });
 
   const filteredWallets = (wallets ?? []).filter(
@@ -107,11 +91,11 @@ export function AdminWalletsPanel({ isSuperAdmin = false }: AdminWalletsPanelPro
 
   const totalBalance = (wallets ?? []).reduce((sum, w) => sum + w.balance_cents, 0);
   const totalCredited = (transactions ?? [])
-    .filter((t) => t.type === "ADMIN_CREDIT")
-    .reduce((sum, t) => sum + t.amount_cents, 0);
+    .filter((tx) => tx.type === "ADMIN_CREDIT")
+    .reduce((sum, tx) => sum + tx.amount_cents, 0);
 
   async function handleReverse(transactionId: string) {
-    const reason = window.prompt("Motivo dello storno:");
+    const reason = window.prompt(t("acct.adminWallets.reversePrompt"));
     if (!reason) return;
     setReversingId(transactionId);
     setReverseError(null);
@@ -124,7 +108,7 @@ export function AdminWalletsPanel({ isSuperAdmin = false }: AdminWalletsPanelPro
       if (!res.ok) throw new Error(await friendlyApiError(res));
       await queryClient.invalidateQueries({ queryKey: ["admin", "wallets"] });
     } catch (err: any) {
-      setReverseError(err.message || "Impossibile stornare la transazione.");
+      setReverseError(err.message || t("acct.adminWallets.reverseError"));
     } finally {
       setReversingId(null);
     }
@@ -151,7 +135,7 @@ export function AdminWalletsPanel({ isSuperAdmin = false }: AdminWalletsPanelPro
     e.preventDefault();
     const amountCents = Math.round(parseFloat(topUpAmount.replace(",", ".")) * 100);
     if (!Number.isFinite(amountCents) || amountCents <= 0) {
-      setTopUpError("Inserisci un importo valido.");
+      setTopUpError(t("acct.wallet.invalidAmount"));
       return;
     }
     setTopUpLoading(true);
@@ -171,7 +155,7 @@ export function AdminWalletsPanel({ isSuperAdmin = false }: AdminWalletsPanelPro
       setTopUpForUserId(null);
       await queryClient.invalidateQueries({ queryKey: ["admin", "wallets"] });
     } catch (err: any) {
-      setTopUpError(err.message || "Impossibile ricaricare il wallet.");
+      setTopUpError(err.message || t("acct.adminWallets.topUpError"));
     } finally {
       setTopUpLoading(false);
     }
@@ -180,10 +164,10 @@ export function AdminWalletsPanel({ isSuperAdmin = false }: AdminWalletsPanelPro
   function handleExportCsv() {
     downloadCsv(
       `wallet_transazioni_${new Date().toISOString().slice(0, 10)}`,
-      ["ID", "Tipo", "Da", "A", "Importo (JavCash)", "Nota", "Data"],
-      (transactions ?? []).map((t) => [
-        t.id, transactionLabel(t), t.from_display_name ?? "Sistema", t.to_display_name ?? "Sistema",
-        (t.amount_cents / 100).toFixed(2), t.note ?? "", t.created_at,
+      ["ID", t("acct.col.type"), t("acct.col.from"), t("acct.col.to"), t("acct.wallet.amountLabel"), t("acct.col.note"), t("acct.col.date")],
+      (transactions ?? []).map((tx) => [
+        tx.id, transactionLabel(tx, t), tx.from_display_name ?? t("acct.wallet.system"), tx.to_display_name ?? t("acct.wallet.system"),
+        (tx.amount_cents / 100).toFixed(2), tx.note ?? "", tx.created_at,
       ])
     );
   }
@@ -193,44 +177,44 @@ export function AdminWalletsPanel({ isSuperAdmin = false }: AdminWalletsPanelPro
       {/* KPI */}
       <div className="grid grid-cols-2 gap-4">
         <div className="glass-card rounded-2xl p-4 border-slate-200 bg-white/70">
-          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Saldo totale wallet</p>
-          <p className="text-xl font-bold text-slate-900">{javCash(totalBalance)}</p>
+          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">{t("acct.adminWallets.totalBalance")}</p>
+          <p className="text-xl font-bold text-slate-900">{javCash(totalBalance, fmt.tag)}</p>
         </div>
         <div className="glass-card rounded-2xl p-4 border-slate-200 bg-white/70">
-          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Totale ricaricato (nel filtro)</p>
-          <p className="text-xl font-bold text-emerald-400">{javCash(totalCredited)}</p>
+          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">{t("acct.adminWallets.totalCredited")}</p>
+          <p className="text-xl font-bold text-emerald-400">{javCash(totalCredited, fmt.tag)}</p>
         </div>
       </div>
 
       {/* Wallet balances */}
       <div className="glass-card rounded-2xl border-slate-200 bg-white/70 overflow-hidden">
         <div className="p-5 pb-3 flex items-center justify-between gap-4">
-          <h3 className="text-sm font-semibold text-slate-900">Saldi per utente</h3>
+          <h3 className="text-sm font-semibold text-slate-900">{t("acct.adminWallets.balances")}</h3>
           <input
             type="text"
-            placeholder="Cerca per nome, email o indirizzo..."
+            placeholder={t("acct.adminWallets.search")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="rounded-xl glass-input px-3 py-1.5 text-xs max-w-xs focus:border-brand-500"
           />
         </div>
-        {walletsError && <p className="px-5 pb-3 text-sm text-rose-400">Impossibile caricare i wallet.</p>}
+        {walletsError && <p className="px-5 pb-3 text-sm text-rose-400">{t("acct.adminWallets.loadError")}</p>}
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-left text-xs">
             <thead>
               <tr className="border-b border-slate-200 text-slate-500 font-semibold">
-                <th className="py-2 px-5">Utente</th>
-                <th className="py-2 px-5">Ruoli</th>
-                <th className="py-2 px-5">Indirizzo</th>
-                <th className="py-2 px-5 text-right">Saldo</th>
-                <th className="py-2 px-5 text-right">Azioni</th>
+                <th className="py-2 px-5">{t("acct.col.user")}</th>
+                <th className="py-2 px-5">{t("acct.col.roles")}</th>
+                <th className="py-2 px-5">{t("acct.col.address")}</th>
+                <th className="py-2 px-5 text-right">{t("acct.col.balance")}</th>
+                <th className="py-2 px-5 text-right">{t("acct.col.actions")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
               {wallets === undefined ? (
-                <tr><td colSpan={5} className="text-center py-6 text-slate-500">Caricamento...</td></tr>
+                <tr><td colSpan={5} className="text-center py-6 text-slate-500">{t("acct.common.loading")}</td></tr>
               ) : filteredWallets.length === 0 ? (
-                <tr><td colSpan={5} className="text-center py-6 text-slate-500">Nessun wallet trovato.</td></tr>
+                <tr><td colSpan={5} className="text-center py-6 text-slate-500">{t("acct.adminWallets.none")}</td></tr>
               ) : (
                 walletsPagination.pageItems.map((w) => (
                   <Fragment key={w.id}>
@@ -248,10 +232,10 @@ export function AdminWalletsPanel({ isSuperAdmin = false }: AdminWalletsPanelPro
                             onClick={() => openTopUp(w.user_id)}
                             className="px-2.5 py-1 rounded-lg bg-brand-600/10 hover:bg-brand-600/20 border border-brand-500/20 text-brand-600 text-[11px] font-semibold transition cursor-pointer"
                           >
-                            {topUpForUserId === w.user_id ? "Annulla" : "Ricarica"}
+                            {topUpForUserId === w.user_id ? t("common.cancel") : t("acct.adminWallets.topUp")}
                           </button>
                         ) : (
-                          <span className="text-[10px] text-slate-500" title="Solo il Super Admin può caricare cashback">—</span>
+                          <span className="text-[10px] text-slate-500" title={t("acct.adminWallets.superOnly")}>—</span>
                         )}
                       </td>
                     </tr>
@@ -260,7 +244,7 @@ export function AdminWalletsPanel({ isSuperAdmin = false }: AdminWalletsPanelPro
                         <td colSpan={5} className="px-5 py-3">
                           <form onSubmit={(e) => handleTopUp(e, w.user_id)} className="flex items-end gap-2">
                             <div className="space-y-1 flex-1 max-w-[160px]">
-                              <label className=" font-semibold text-slate-600 uppercase block">Importo (JavCash)</label>
+                              <label className=" font-semibold text-slate-600 uppercase block">{t("acct.wallet.amountLabel")}</label>
                               <input
                                 required
                                 autoFocus
@@ -272,17 +256,17 @@ export function AdminWalletsPanel({ isSuperAdmin = false }: AdminWalletsPanelPro
                               />
                             </div>
                             <div className="space-y-1 flex-1">
-                              <label className=" font-semibold text-slate-600 uppercase block">Nota (opzionale)</label>
+                              <label className=" font-semibold text-slate-600 uppercase block">{t("acct.wallet.noteLabel")}</label>
                               <input
                                 value={topUpNote}
                                 onChange={(e) => setTopUpNote(e.target.value)}
-                                placeholder="Cashback ordine..."
+                                placeholder={t("acct.adminWallets.notePlaceholder")}
                                 className="w-full rounded-lg glass-input px-3 py-1.5 text-sm focus:border-brand-500"
                               />
                             </div>
                             <button type="submit" disabled={topUpLoading}
                               className="px-4 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50 shrink-0">
-                              {topUpLoading ? "..." : "Conferma"}
+                              {topUpLoading ? "..." : t("common.confirm")}
                             </button>
                           </form>
                           {topUpError && (
@@ -298,7 +282,7 @@ export function AdminWalletsPanel({ isSuperAdmin = false }: AdminWalletsPanelPro
           </table>
         </div>
         <div className="px-5 pb-4">
-          <Pagination {...walletsPagination} label="wallet" />
+          <Pagination {...walletsPagination} label={t("acct.adminWallets.walletPlural")} />
         </div>
       </div>
 
@@ -309,10 +293,10 @@ export function AdminWalletsPanel({ isSuperAdmin = false }: AdminWalletsPanelPro
           onChange={(e) => setTypeFilter(e.target.value)}
           className="rounded-xl glass-input px-3 py-2 text-xs bg-white focus:border-brand-500"
         >
-          <option value="ALL">Tutti i tipi</option>
-          <option value="ADMIN_CREDIT">Solo ricariche/cashback</option>
-          <option value="TRANSFER">Solo trasferimenti</option>
-          <option value="REVERSAL">Solo storni</option>
+          <option value="ALL">{t("acct.adminWallets.allTypes")}</option>
+          <option value="ADMIN_CREDIT">{t("acct.adminWallets.onlyCredits")}</option>
+          <option value="TRANSFER">{t("acct.adminWallets.onlyTransfers")}</option>
+          <option value="REVERSAL">{t("acct.adminWallets.onlyReversals")}</option>
         </select>
         <button
           onClick={handleExportCsv}
@@ -321,14 +305,14 @@ export function AdminWalletsPanel({ isSuperAdmin = false }: AdminWalletsPanelPro
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
           </svg>
-          Esporta CSV
+          {t("acct.common.exportCsv")}
         </button>
       </div>
 
       {reverseError && (
         <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs">{reverseError}</div>
       )}
-      {transactionsError && <p className="text-sm text-rose-400">Impossibile caricare le transazioni.</p>}
+      {transactionsError && <p className="text-sm text-rose-400">{t("acct.stats.txError")}</p>}
 
       {/* Global transaction ledger */}
       <div className="glass-card rounded-2xl border-slate-200 bg-white/70 overflow-hidden">
@@ -336,61 +320,61 @@ export function AdminWalletsPanel({ isSuperAdmin = false }: AdminWalletsPanelPro
           <table className="w-full border-collapse text-left text-xs">
             <thead>
               <tr className="border-b border-slate-200 text-slate-500 font-semibold">
-                <th className="py-3 px-5">Da</th>
-                <th className="py-3 px-5">A</th>
-                <th className="py-3 px-5">Tipo</th>
-                <th className="py-3 px-5 text-right">Importo</th>
-                <th className="py-3 px-5">Data</th>
-                <th className="py-3 px-5 text-right">Azioni</th>
+                <th className="py-3 px-5">{t("acct.col.from")}</th>
+                <th className="py-3 px-5">{t("acct.col.to")}</th>
+                <th className="py-3 px-5">{t("acct.col.type")}</th>
+                <th className="py-3 px-5 text-right">{t("acct.col.amount")}</th>
+                <th className="py-3 px-5">{t("acct.col.date")}</th>
+                <th className="py-3 px-5 text-right">{t("acct.col.actions")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
               {isLoading && (
-                <tr><td colSpan={6} className="text-center py-8 text-slate-500">Caricamento...</td></tr>
+                <tr><td colSpan={6} className="text-center py-8 text-slate-500">{t("acct.common.loading")}</td></tr>
               )}
               {!isLoading && (transactions ?? []).length === 0 && (
-                <tr><td colSpan={6} className="text-center py-8 text-slate-500">Nessuna transazione.</td></tr>
+                <tr><td colSpan={6} className="text-center py-8 text-slate-500">{t("acct.wallet.noTx")}</td></tr>
               )}
-              {transactionsPagination.pageItems.map((t) => (
-                <Fragment key={t.id}>
+              {transactionsPagination.pageItems.map((tx) => (
+                <Fragment key={tx.id}>
                   <tr
                     className=" text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
-                    onClick={() => setExpandedId(expandedId === t.id ? null : t.id)}
+                    onClick={() => setExpandedId(expandedId === tx.id ? null : tx.id)}
                   >
-                    <td className="py-3 px-5">{t.from_display_name ?? "Sistema"}</td>
-                    <td className="py-3 px-5">{t.to_display_name ?? "Sistema"}</td>
+                    <td className="py-3 px-5">{tx.from_display_name ?? t("acct.wallet.system")}</td>
+                    <td className="py-3 px-5">{tx.to_display_name ?? t("acct.wallet.system")}</td>
                     <td className="py-3 px-5">
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${TYPE_COLORS[t.type] ?? ""}`}>
-                        {transactionLabel(t)}
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${TYPE_COLORS[tx.type] ?? ""}`}>
+                        {transactionLabel(tx, t)}
                       </span>
                     </td>
-                    <td className="py-3 px-5 text-right font-semibold text-brand-600"><JavCashAmount cents={t.amount_cents} /></td>
-                    <td className="py-3 px-5">{new Date(t.created_at).toLocaleString("it-IT")}</td>
+                    <td className="py-3 px-5 text-right font-semibold text-brand-600"><JavCashAmount cents={tx.amount_cents} /></td>
+                    <td className="py-3 px-5">{new Date(tx.created_at).toLocaleString(fmt.tag)}</td>
                     <td className="py-3 px-5 text-right">
-                      {t.type !== "REVERSAL" && (
+                      {tx.type !== "REVERSAL" && (
                         <button
-                          onClick={(e) => { e.stopPropagation(); handleReverse(t.id); }}
-                          disabled={reversingId === t.id}
+                          onClick={(e) => { e.stopPropagation(); handleReverse(tx.id); }}
+                          disabled={reversingId === tx.id}
                           className="px-2.5 py-1 rounded-lg bg-rose-600/10 hover:bg-rose-600/20 border border-rose-500/20 text-rose-400 text-[11px] font-semibold transition cursor-pointer disabled:opacity-50"
                         >
-                          {reversingId === t.id ? "..." : "Storna"}
+                          {reversingId === tx.id ? "..." : t("acct.adminWallets.reverse")}
                         </button>
                       )}
                     </td>
                   </tr>
-                  {expandedId === t.id && (
+                  {expandedId === tx.id && (
                     <tr className=" bg-slate-900/[0.02]">
                       <td colSpan={6} className="px-5 py-4 text-xs space-y-1.5">
-                        {t.note && <p><span className="text-slate-500">Nota:</span> <span className=" text-slate-600">{t.note}</span></p>}
-                        {t.reference_contract_id && (
-                          <p><span className="text-slate-500">Contratto collegato:</span> <span className="font-mono text-slate-600">{t.reference_contract_id}</span></p>
+                        {tx.note && <p><span className="text-slate-500">{t("acct.adminWallets.noteColon")}</span> <span className=" text-slate-600">{tx.note}</span></p>}
+                        {tx.reference_contract_id && (
+                          <p><span className="text-slate-500">{t("acct.adminWallets.linkedContract")}</span> <span className="font-mono text-slate-600">{tx.reference_contract_id}</span></p>
                         )}
-                        {t.reference_order_id && (
-                          <p><span className="text-slate-500">Ordine collegato:</span> <span className="font-mono text-slate-600">{t.reference_order_id}</span> <span className="text-slate-600">(vedi Ordini)</span></p>
+                        {tx.reference_order_id && (
+                          <p><span className="text-slate-500">{t("acct.adminWallets.linkedOrder")}</span> <span className="font-mono text-slate-600">{tx.reference_order_id}</span> <span className="text-slate-600">{t("acct.adminWallets.seeOrders")}</span></p>
                         )}
-                        {t.from_address && <p><span className="text-slate-500">Indirizzo mittente:</span> <span className="font-mono text-slate-600">{t.from_address}</span></p>}
-                        {t.to_address && <p><span className="text-slate-500">Indirizzo destinatario:</span> <span className="font-mono text-slate-600">{t.to_address}</span></p>}
-                        <p className="font-mono text-[10px] text-slate-500">{t.id}</p>
+                        {tx.from_address && <p><span className="text-slate-500">{t("acct.adminWallets.fromAddress")}</span> <span className="font-mono text-slate-600">{tx.from_address}</span></p>}
+                        {tx.to_address && <p><span className="text-slate-500">{t("acct.adminWallets.toAddress")}</span> <span className="font-mono text-slate-600">{tx.to_address}</span></p>}
+                        <p className="font-mono text-[10px] text-slate-500">{tx.id}</p>
                       </td>
                     </tr>
                   )}
@@ -400,7 +384,7 @@ export function AdminWalletsPanel({ isSuperAdmin = false }: AdminWalletsPanelPro
           </table>
         </div>
         <div className="px-5 pb-4">
-          <Pagination {...transactionsPagination} label="transazioni" />
+          <Pagination {...transactionsPagination} label={t("acct.wallet.txPlural")} />
         </div>
       </div>
     </div>

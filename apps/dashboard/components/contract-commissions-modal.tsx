@@ -5,34 +5,11 @@ import { useState } from "react";
 import { ContractCommissionLog } from "@/components/contract-commission-preview";
 import { friendlyApiError } from "@/lib/api-error";
 import type { CommissionMovementDetailRead } from "@/lib/types";
-
-const MOVEMENT_TYPE_LABELS: Record<string, string> = {
-  PERSONAL_TOKEN: "Gettone personale",
-  ENTREPRENEURIAL_DIFFERENCE: "Differenza imprenditoriale",
-  // Paid once per contract to the promoter who ORIGINALLY brought the
-  // customer in -- never to the upline, never to whoever filled the
-  // contract in. Additive to the movements above, not a replacement.
-  FIRST_REFERRER_BONUS: "Bonus primo invito",
-  PERSONAL_BONUS: "Bonus personale",
-  REVERSAL: "Storno",
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  ACCRUED: "Maturata",
-  PAYABLE: "Liquidabile",
-  SCHEDULED: "Programmata",
-  PAID: "Pagata",
-  REVERSED: "Stornata",
-  CANCELLED: "Annullata",
-};
-
-function euro(cents: number): string {
-  return (cents / 100).toLocaleString("it-IT", { style: "currency", currency: "EUR" });
-}
+import { useI18n } from "@/lib/i18n/provider";
 
 async function fetchContractMovements(contractId: string): Promise<CommissionMovementDetailRead[]> {
   const res = await fetch(`/api/proxy/commissions/movements?contract_id=${contractId}`);
-  if (!res.ok) throw new Error("Impossibile caricare le provvigioni di questo contratto.");
+  if (!res.ok) throw new Error("commission movements fetch failed");
   return res.json();
 }
 
@@ -43,6 +20,8 @@ export function ContractCommissionsModal({
   contractId: string;
   onClose: () => void;
 }) {
+  const { t, fmt } = useI18n();
+  const euro = fmt.euro;
   const queryClient = useQueryClient();
   const [payingId, setPayingId] = useState<string | null>(null);
   const [payingAll, setPayingAll] = useState(false);
@@ -75,7 +54,7 @@ export function ContractCommissionsModal({
       if (!res.ok) throw new Error(await friendlyApiError(res));
       await queryClient.invalidateQueries({ queryKey: ["admin", "commissions"] });
     } catch (err: any) {
-      setPayError(err.message || "Impossibile registrare il pagamento.");
+      setPayError(err.message || t("ctr.comm.payError"));
     } finally {
       setPayingId(null);
     }
@@ -97,7 +76,7 @@ export function ContractCommissionsModal({
       if (!res.ok) throw new Error(await friendlyApiError(res));
       await queryClient.invalidateQueries({ queryKey: ["admin", "commissions"] });
     } catch (err: any) {
-      setPayError(err.message || "Impossibile registrare il pagamento.");
+      setPayError(err.message || t("ctr.comm.payError"));
     } finally {
       setPayingAll(false);
     }
@@ -108,13 +87,13 @@ export function ContractCommissionsModal({
       <div className="w-full max-w-3xl max-h-[85vh] overflow-y-auto glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up">
         <div className="flex items-start justify-between mb-4 gap-3">
           <div>
-            <h3 className="text-lg font-bold text-slate-900">Provvigioni generate da questo contratto</h3>
+            <h3 className="text-lg font-bold text-slate-900">{t("ctr.comm.title")}</h3>
             <div className="flex items-center gap-2 mt-0.5 flex-wrap">
               {first && (
                 <>
                   <span className="text-xs text-slate-500">{first.customer_name} — {first.product_name}</span>
                   <span className="text-slate-600">·</span>
-                  <span className="text-xs text-slate-500">Prodotto da {first.producer_name}</span>
+                  <span className="text-xs text-slate-500">{t("ctr.comm.producedBy", { name: first.producer_name })}</span>
                 </>
               )}
             </div>
@@ -127,7 +106,7 @@ export function ContractCommissionsModal({
                 disabled={payingAll}
                 className="px-3 py-1.5 rounded-lg bg-emerald-600/10 hover:bg-emerald-600/20 border border-emerald-500/20 text-emerald-400 text-xs font-semibold transition cursor-pointer disabled:opacity-50"
               >
-                {payingAll ? "Liquidazione..." : "Paga tutte ora"}
+                {payingAll ? t("ctr.comm.settling") : t("ctr.comm.payAllNow")}
               </button>
             )}
             <button
@@ -142,7 +121,7 @@ export function ContractCommissionsModal({
         </div>
 
         {error && (
-          <p className="text-sm text-rose-400 mb-4">Impossibile caricare le provvigioni di questo contratto.</p>
+          <p className="text-sm text-rose-400 mb-4">{t("ctr.comm.loadError")}</p>
         )}
         {payError && (
           <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs mb-4">{payError}</div>
@@ -150,44 +129,44 @@ export function ContractCommissionsModal({
 
         <div className="grid grid-cols-3 gap-3 mb-5">
           <div className="rounded-xl bg-slate-900/5 p-3 text-center">
-            <p className="text-[10px] text-slate-500 uppercase">Totale movimenti</p>
+            <p className="text-[10px] text-slate-500 uppercase">{t("ctr.comm.totalMovements")}</p>
             <p className="text-lg font-bold text-slate-900">{isLoading ? "…" : euro(totalAll)}</p>
           </div>
           <div className="rounded-xl bg-sky-500/10 border border-sky-500/20 p-3 text-center">
-            <p className="text-[10px] text-sky-300 uppercase">Maturate</p>
+            <p className="text-[10px] text-sky-300 uppercase">{t("ctr.comm.accruedPl")}</p>
             <p className="text-lg font-bold text-sky-400">{isLoading ? "…" : euro(totalAccrued)}</p>
           </div>
           <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/20 p-3 text-center">
-            <p className="text-[10px] text-emerald-300 uppercase">Pagate</p>
+            <p className="text-[10px] text-emerald-300 uppercase">{t("ctr.comm.paidPl")}</p>
             <p className="text-lg font-bold text-emerald-400">{isLoading ? "…" : euro(totalPaid)}</p>
           </div>
         </div>
 
-        <h4 className="text-sm font-semibold text-slate-900 mb-2">Registro provvigioni</h4>
+        <h4 className="text-sm font-semibold text-slate-900 mb-2">{t("ctr.comm.log")}</h4>
         <div className="mb-5">
           <ContractCommissionLog contractId={contractId} />
         </div>
 
-        <h4 className="text-sm font-semibold text-slate-900 mb-2">Movimenti scritti in contabilità</h4>
+        <h4 className="text-sm font-semibold text-slate-900 mb-2">{t("ctr.comm.ledgerMovements")}</h4>
         <div className="overflow-x-auto rounded-xl border border-slate-200">
           <table className="w-full border-collapse text-left text-xs">
             <thead>
               <tr className="border-b border-slate-200 text-slate-500 font-semibold bg-slate-900/[0.02]">
-                <th className="py-2 px-3">Promoter beneficiario</th>
-                <th className="py-2 px-3">Livello</th>
-                <th className="py-2 px-3">Qualifica</th>
-                <th className="py-2 px-3">Tipo</th>
-                <th className="py-2 px-3 text-right">Importo</th>
-                <th className="py-2 px-3">Stato</th>
-                <th className="py-2 px-3 text-right">Azioni</th>
+                <th className="py-2 px-3">{t("ctr.comm.col.beneficiary")}</th>
+                <th className="py-2 px-3">{t("ctr.comm.col.level")}</th>
+                <th className="py-2 px-3">{t("ctr.comm.col.rank")}</th>
+                <th className="py-2 px-3">{t("ctr.comm.col.type")}</th>
+                <th className="py-2 px-3 text-right">{t("ctr.comm.col.amount")}</th>
+                <th className="py-2 px-3">{t("ctr.comm.col.status")}</th>
+                <th className="py-2 px-3 text-right">{t("ctr.comm.col.actions")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
               {isLoading && (
-                <tr><td colSpan={7} className="text-center py-8 text-slate-500">Caricamento...</td></tr>
+                <tr><td colSpan={7} className="text-center py-8 text-slate-500">{t("ctr.common.loading")}</td></tr>
               )}
               {!isLoading && sorted.length === 0 && (
-                <tr><td colSpan={7} className="text-center py-8 text-slate-500">Nessuna provvigione ancora calcolata per questo contratto.</td></tr>
+                <tr><td colSpan={7} className="text-center py-8 text-slate-500">{t("ctr.comm.empty")}</td></tr>
               )}
               {sorted.map((m) => (
                 <tr key={m.id} className=" text-slate-600">
@@ -196,10 +175,10 @@ export function ContractCommissionsModal({
                     <div className="text-[10px] text-slate-500 font-mono">{m.agent_promoter_code}</div>
                   </td>
                   <td className="py-2 px-3">
-                    {m.depth_from_producer === 0 ? "Produttore" : `${m.depth_from_producer}° livello`}
+                    {m.depth_from_producer === 0 ? t("ctr.comm.producer") : t("ctr.comm.nthLevel", { n: m.depth_from_producer ?? 0 })}
                   </td>
                   <td className="py-2 px-3 text-brand-600 font-semibold">{m.rank_at_calculation ?? "—"}</td>
-                  <td className="py-2 px-3">{MOVEMENT_TYPE_LABELS[m.movement_type] ?? m.movement_type}</td>
+                  <td className="py-2 px-3">{t.dyn(`ctr.comm.movementType.${m.movement_type}`, m.movement_type)}</td>
                   <td className="py-2 px-3 text-right font-semibold text-brand-600">{euro(m.amount_cents)}</td>
                   <td className="py-2 px-3">
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
@@ -207,7 +186,7 @@ export function ContractCommissionsModal({
                         ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                         : "bg-sky-500/10 text-sky-400 border-sky-500/20"
                     }`}>
-                      {STATUS_LABELS[m.status] ?? m.status}
+                      {t.dyn(`ctr.comm.movementStatus.${m.status}`, m.status)}
                     </span>
                   </td>
                   <td className="py-2 px-3 text-right">
@@ -217,7 +196,7 @@ export function ContractCommissionsModal({
                         disabled={payingId === m.id}
                         className="px-2.5 py-1 rounded-lg bg-emerald-600/10 hover:bg-emerald-600/20 border border-emerald-500/20 text-emerald-400 text-[11px] font-semibold transition cursor-pointer disabled:opacity-50"
                       >
-                        {payingId === m.id ? "..." : "Segna come pagata"}
+                        {payingId === m.id ? "..." : t("ctr.comm.markPaid")}
                       </button>
                     )}
                   </td>

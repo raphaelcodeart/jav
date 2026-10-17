@@ -2,31 +2,11 @@
 
 import { useQuery } from "@tanstack/react-query";
 import type { ContractStatusHistoryRead } from "@/lib/types";
-
-const STATUS_LABELS: Record<string, string> = {
-  DRAFT: "Bozza",
-  SUBMITTED: "Inviata",
-  DOCUMENTS_PENDING: "Documenti mancanti",
-  UNDER_REVIEW: "In revisione",
-  APPROVED: "Approvata",
-  PAYMENT_PENDING: "In attesa di pagamento",
-  PAID: "Pagata",
-  ACTIVATION_PENDING: "In attivazione",
-  ACTIVE: "Attiva",
-  SUSPENDED: "Sospesa",
-  CANCELLED: "Cessata",
-  EXPIRED: "Scaduta",
-  RENEWED: "Rinnovata",
-  REJECTED: "Respinta",
-};
-
-function label(status: string): string {
-  return STATUS_LABELS[status] ?? status;
-}
+import { useI18n } from "@/lib/i18n/provider";
 
 async function fetchStatusHistory(contractId: string): Promise<ContractStatusHistoryRead[]> {
   const res = await fetch(`/api/proxy/contracts/${contractId}/status-history`);
-  if (!res.ok) throw new Error("Impossibile caricare lo storico del contratto.");
+  if (!res.ok) throw new Error("status-history fetch failed");
   return res.json();
 }
 
@@ -37,6 +17,8 @@ export function ContractStatusHistoryModal({
   contractId: string;
   onClose: () => void;
 }) {
+  const { t, fmt } = useI18n();
+  const label = (status: string) => t.dyn(`ctr.status.${status}`, status);
   const { data: history, error, isLoading } = useQuery({
     queryKey: ["admin", "contracts", "status-history", contractId],
     queryFn: () => fetchStatusHistory(contractId),
@@ -47,7 +29,7 @@ export function ContractStatusHistoryModal({
       <div className="w-full max-w-lg max-h-[85vh] overflow-y-auto glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up">
         <div className="flex items-start justify-between mb-4 gap-3">
           <div>
-            <h3 className="text-lg font-bold text-slate-900">Storico stato contratto</h3>
+            <h3 className="text-lg font-bold text-slate-900">{t("ctr.history.title")}</h3>
             <div className="font-mono text-[10px] text-slate-500 mt-1">{contractId}</div>
           </div>
           <button
@@ -61,11 +43,11 @@ export function ContractStatusHistoryModal({
         </div>
 
         {error && (
-          <p className="text-sm text-rose-400 mb-4">Impossibile caricare lo storico di questo contratto.</p>
+          <p className="text-sm text-rose-400 mb-4">{t("ctr.history.loadError")}</p>
         )}
-        {isLoading && <p className="text-sm text-slate-500 py-8 text-center">Caricamento...</p>}
+        {isLoading && <p className="text-sm text-slate-500 py-8 text-center">{t("ctr.common.loading")}</p>}
         {!isLoading && history && history.length === 0 && (
-          <p className="text-sm text-slate-500 py-8 text-center">Nessun passaggio di stato registrato.</p>
+          <p className="text-sm text-slate-500 py-8 text-center">{t("ctr.history.empty")}</p>
         )}
 
         {!isLoading && history && history.length > 0 && (
@@ -83,16 +65,16 @@ export function ContractStatusHistoryModal({
                   <span className="text-sm font-semibold text-slate-900">{label(h.to_status)}</span>
                 </div>
                 <div className="text-[11px] text-slate-500 mt-0.5">
-                  {new Date(h.created_at).toLocaleString("it-IT")} · {h.actor_name}
+                  {new Date(h.created_at).toLocaleString(fmt.tag)} · {h.actor_name}
                 </div>
                 {h.reason && (
                   <div className="text-xs text-slate-600 mt-1">
-                    <span className="text-slate-500">Motivazione: </span>{h.reason}
+                    <span className="text-slate-500">{t("ctr.history.reason")} </span>{h.reason}
                   </div>
                 )}
                 {h.notes && (
                   <div className="text-xs text-slate-500 mt-1">
-                    <span className="text-slate-500">Note: </span>{h.notes}
+                    <span className="text-slate-500">{t("ctr.history.notes")} </span>{h.notes}
                   </div>
                 )}
               </li>

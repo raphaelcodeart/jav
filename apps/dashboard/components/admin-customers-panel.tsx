@@ -9,24 +9,8 @@ import { PhotoUpload } from "@/components/photo-upload";
 import { UnlockAccountModal } from "@/components/admin-unlock-account-modal";
 import { friendlyApiError } from "@/lib/api-error";
 import { downloadCsv } from "@/lib/csv-export";
+import { useI18n } from "@/lib/i18n/provider";
 import type { AgentListItemRead, ContractRead, CustomerDetailRead, CustomerRead, WalletRead } from "@/lib/types";
-
-const CONTRACT_STATUS_LABELS: Record<string, string> = {
-  DRAFT: "Bozza",
-  SUBMITTED: "Inviata",
-  DOCUMENTS_PENDING: "Documenti mancanti",
-  UNDER_REVIEW: "In revisione",
-  APPROVED: "Approvata",
-  PAYMENT_PENDING: "In attesa di pagamento",
-  PAID: "Pagata",
-  ACTIVATION_PENDING: "In attivazione",
-  ACTIVE: "Attiva",
-  SUSPENDED: "Sospesa",
-  CANCELLED: "Cessata",
-  EXPIRED: "Scaduta",
-  RENEWED: "Rinnovata",
-  REJECTED: "Respinta",
-};
 
 function contractStatusColor(status: string): string {
   if (status === "ACTIVE" || status === "RENEWED") return "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
@@ -68,10 +52,6 @@ async function fetchCustomerWallet(userId: string): Promise<WalletRead | null> {
   return res.json();
 }
 
-function euro(cents: number): string {
-  return (cents / 100).toLocaleString("it-IT", { style: "currency", currency: "EUR" });
-}
-
 function CustomerAvatar({ url, size = 36 }: { url: string | null; size?: number }) {
   return (
     <div
@@ -90,19 +70,14 @@ function CustomerAvatar({ url, size = 36 }: { url: string | null; size?: number 
   );
 }
 
-const KIND_LABELS: Record<string, string> = {
-  PRIVATE: "Privato",
-  SOLE_PROPRIETOR: "Partita IVA",
-  COMPANY: "Azienda",
-  CONDOMINIUM: "Condominio",
-};
-
 const PRIVATE_LIKE = new Set(["PRIVATE", "SOLE_PROPRIETOR"]);
 
 export function AdminCustomersPanel({
   initialActiveOnly = false,
   isSuperAdmin = false,
 }: { initialActiveOnly?: boolean; isSuperAdmin?: boolean } = {}) {
+  const { t, fmt } = useI18n();
+  const kindLabel = (kind: string) => t.dyn(`adm.kind.${kind}`, kind);
   const queryClient = useQueryClient();
   // Session 88: il superadmin sblocca un cliente fermo ai controlli d'ingresso.
   const [unlocking, setUnlocking] = useState<CustomerRead | null>(null);
@@ -156,7 +131,7 @@ export function AdminCustomersPanel({
     if (!viewingDetail?.user_id) return;
     const amountCents = Math.round(parseFloat(topUpAmount.replace(",", ".")) * 100);
     if (!Number.isFinite(amountCents) || amountCents <= 0) {
-      setTopUpError("Inserisci un importo valido.");
+      setTopUpError(t("adm.cust.invalidAmount"));
       return;
     }
     setTopUpLoading(true);
@@ -182,7 +157,7 @@ export function AdminCustomersPanel({
       await queryClient.invalidateQueries({ queryKey: ["admin", "wallets", "by-user", viewingDetail.user_id] });
       setTimeout(() => setTopUpSuccess(false), 3000);
     } catch (err: any) {
-      setTopUpError(err.message || "Impossibile ricaricare il wallet.");
+      setTopUpError(err.message || t("adm.cust.topUpFailed"));
     } finally {
       setTopUpLoading(false);
     }
@@ -200,7 +175,7 @@ export function AdminCustomersPanel({
       if (!res.ok) throw new Error(await friendlyApiError(res));
       await queryClient.invalidateQueries({ queryKey: ["admin", "customers"] });
     } catch (err: any) {
-      setFreezeError(err.message || "Impossibile aggiornare lo stato dell'account.");
+      setFreezeError(err.message || t("adm.cust.freezeFailed"));
     } finally {
       setFreezeLoadingId(null);
     }
@@ -255,7 +230,7 @@ export function AdminCustomersPanel({
       await queryClient.invalidateQueries({ queryKey: ["admin", "customers", "detail", editingCustomer.id] });
       setTimeout(() => setReassignSuccess(false), 3000);
     } catch (err: any) {
-      setReassignError(err.message || "Impossibile riassegnare il promoter.");
+      setReassignError(err.message || t("adm.cust.reassignFailed"));
     } finally {
       setReassignLoading(false);
     }
@@ -318,7 +293,7 @@ export function AdminCustomersPanel({
       setEditingCustomer(null);
       await queryClient.invalidateQueries({ queryKey: ["admin", "customers"] });
     } catch (err: any) {
-      setEditError(err.message || "Impossibile salvare le modifiche.");
+      setEditError(err.message || t("adm.cust.editFailed"));
     } finally {
       setEditLoading(false);
     }
@@ -331,7 +306,7 @@ export function AdminCustomersPanel({
   const [loginError, setLoginError] = useState<string | null>(null);
 
   async function handleCreateLogin(c: CustomerRead) {
-    if (!window.confirm(`Creare l'accesso per ${c.display_name} e inviare a ${c.email} l'email per impostare la password?`)) return;
+    if (!window.confirm(t("adm.cust.createLoginConfirm", { name: c.display_name, email: c.email }))) return;
     setLoginLoadingId(c.id);
     setLoginError(null);
     try {
@@ -339,7 +314,7 @@ export function AdminCustomersPanel({
       if (!res.ok) throw new Error(await friendlyApiError(res));
       await queryClient.invalidateQueries({ queryKey: ["admin", "customers"] });
     } catch (err: any) {
-      setLoginError(err.message || "Impossibile creare l'accesso.");
+      setLoginError(err.message || t("adm.cust.createLoginFailed"));
     } finally {
       setLoginLoadingId(null);
     }
@@ -361,10 +336,10 @@ export function AdminCustomersPanel({
   const handleExportCsv = () => {
     downloadCsv(
       `clienti_${new Date().toISOString().slice(0, 10)}`,
-      ["ID", "Nome", "Tipologia", "Email", "Telefono", "Codice Fiscale", "Partita IVA", "Ha un contratto attivo"],
+      ["ID", t("adm.cust.name"), t("adm.cust.kind"), "Email", t("adm.cust.phone"), t("adm.cust.fiscalCode"), t("adm.cust.vatNumber"), t("adm.cust.hasActiveContract")],
       filtered.map((c) => [
         c.id, c.display_name, c.kind, c.email, c.phone ?? "", c.fiscal_code ?? "", c.vat_number ?? "",
-        customerIdsWithActiveContract.has(c.id) ? "Sì" : "No",
+        customerIdsWithActiveContract.has(c.id) ? t("adm.cust.yes") : t("adm.cust.no"),
       ])
     );
   };
@@ -375,7 +350,7 @@ export function AdminCustomersPanel({
         <div className="w-full sm:max-w-xs relative">
           <input
             type="text"
-            placeholder="Cerca cliente..."
+            placeholder={t("adm.cust.search")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full rounded-xl glass-input pl-10 pr-4 py-2 text-xs focus:border-brand-500"
@@ -387,7 +362,7 @@ export function AdminCustomersPanel({
         <div className="flex items-center gap-2 shrink-0">
           <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer whitespace-nowrap">
             <input type="checkbox" checked={activeOnly} onChange={(e) => setActiveOnly(e.target.checked)} className="cursor-pointer" />
-            Solo con contratto attivo
+            {t("adm.cust.activeOnly")}
           </label>
           <button
             onClick={handleExportCsv}
@@ -402,12 +377,12 @@ export function AdminCustomersPanel({
             onClick={() => setShowCreate(true)}
             className="px-4 py-2 rounded-xl text-xs font-semibold bg-brand-600 hover:bg-brand-500 text-white shadow-lg shadow-brand-500/20 transition cursor-pointer"
           >
-            + Nuovo Cliente
+            + {t("adm.cust.newCustomer")}
           </button>
         </div>
       </div>
 
-      {loadError && <p className="text-sm text-rose-400">Impossibile caricare i clienti.</p>}
+      {loadError && <p className="text-sm text-rose-400">{t("adm.cust.loadFailed")}</p>}
       {freezeError && <p className="text-sm text-rose-400">{freezeError}</p>}
       {loginError && <p className="text-sm text-rose-400">{loginError}</p>}
 
@@ -417,21 +392,21 @@ export function AdminCustomersPanel({
             <thead>
               <tr className="border-b border-slate-200 text-slate-500 font-semibold">
                 <th className="py-3 px-6"></th>
-                <th className="py-3 px-6">Nominativo</th>
-                <th className="py-3 px-6">Tipo</th>
+                <th className="py-3 px-6">{t("adm.cust.fullName")}</th>
+                <th className="py-3 px-6">{t("adm.cust.type")}</th>
                 <th className="py-3 px-6">Email</th>
-                <th className="py-3 px-6">Telefono</th>
-                <th className="py-3 px-6 text-right">Azioni</th>
+                <th className="py-3 px-6">{t("adm.cust.phone")}</th>
+                <th className="py-3 px-6 text-right">{t("adm.client.actions")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
               {customers === undefined ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-8 text-slate-500">Caricamento...</td>
+                  <td colSpan={6} className="text-center py-8 text-slate-500">{t("adm.overview.loading")}</td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-8 text-slate-500">Nessun cliente trovato.</td>
+                  <td colSpan={6} className="text-center py-8 text-slate-500">{t("adm.cust.noneFound")}</td>
                 </tr>
               ) : (
                 pagination.pageItems.map((c) => (
@@ -440,16 +415,16 @@ export function AdminCustomersPanel({
                     <td className="py-4 px-6">
                       <p className="font-medium text-slate-900">{c.display_name}</p>
                       <p className="text-[10px] text-slate-500">{c.email}</p>
-                      <p className="text-[10px] text-slate-500">Iscritto: {new Date(c.created_at).toLocaleDateString("it-IT")}</p>
+                      <p className="text-[10px] text-slate-500">{t("adm.cust.joined", { date: fmt.shortDate(c.created_at) })}</p>
                       {!c.user_id && (
                         <span className="inline-block mt-1.5 px-1.5 py-0.5 rounded text-[9px] font-bold border bg-amber-500/10 text-amber-700 border-amber-500/20">
-                          Senza accesso
+                          {t("adm.cust.noLogin")}
                         </span>
                       )}
                       {c.user_id && (
                         <div className="flex items-center gap-1 mt-1.5">
                           <span
-                            title={c.email_verified ? "Email verificata" : "Email non verificata"}
+                            title={c.email_verified ? t("adm.cust.emailVerified") : t("adm.cust.emailNotVerified")}
                             className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${
                               c.email_verified
                                 ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
@@ -459,39 +434,39 @@ export function AdminCustomersPanel({
                             Email {c.email_verified ? "✓" : "✗"}
                           </span>
                           <span
-                            title={c.privacy_accepted ? "Privacy accettata" : "Privacy non accettata"}
+                            title={c.privacy_accepted ? t("adm.unlock.privacyAccepted") : t("adm.cust.privacyNotAccepted")}
                             className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${
                               c.privacy_accepted
                                 ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                                 : "bg-rose-500/10 text-rose-400 border-rose-500/20"
                             }`}
                           >
-                            Privacy {c.privacy_accepted ? "✓" : "✗"}
+                            {t("adm.cust.privacyBadge")} {c.privacy_accepted ? "✓" : "✗"}
                           </span>
                           {c.profile_complete != null && (
                             <span
-                              title={c.profile_complete ? "Codice fiscale e residenza compilati" : "Manca il codice fiscale o la residenza"}
+                              title={c.profile_complete ? t("adm.cust.profileComplete") : t("adm.cust.profileIncomplete")}
                               className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${
                                 c.profile_complete
                                   ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                                   : "bg-rose-500/10 text-rose-400 border-rose-500/20"
                               }`}
                             >
-                              Profilo {c.profile_complete ? "✓" : "✗"}
+                              {t("adm.cust.profileBadge")} {c.profile_complete ? "✓" : "✗"}
                             </span>
                           )}
                           {isSuperAdmin && (!c.email_verified || !c.privacy_accepted || c.profile_complete === false) && (
                             <button
                               onClick={() => setUnlocking(c)}
-                              title="Segna come fatti i controlli che mancano: il cliente potrà entrare"
+                              title={t("adm.cust.unlockTitle")}
                               className="px-1.5 py-0.5 rounded text-[9px] font-bold border border-brand-500/40 text-brand-600 hover:bg-brand-500/10 cursor-pointer"
                             >
-                              Sblocca
+                              {t("adm.cust.unlock")}
                             </button>
                           )}
                           {c.user_status === "FROZEN" && (
                             <span className="px-1.5 py-0.5 rounded text-[9px] font-bold border bg-sky-500/10 text-sky-400 border-sky-500/20">
-                              Congelato
+                              {t("adm.cust.frozen")}
                             </span>
                           )}
                         </div>
@@ -499,7 +474,7 @@ export function AdminCustomersPanel({
                     </td>
                     <td className="py-4 px-6">
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-amber-500/10 text-amber-700 border-amber-500/20">
-                        {KIND_LABELS[c.kind] ?? c.kind}
+                        {kindLabel(c.kind)}
                       </span>
                     </td>
                     <td className="py-4 px-6">{c.email}</td>
@@ -509,24 +484,24 @@ export function AdminCustomersPanel({
                         {c.user_id ? (
                           <button
                             onClick={() => setWizardFor({ customer: c, producer: null })}
-                            title="Attiva contratti per questo cliente"
+                            title={t("adm.cust.activateContractsTitle")}
                             className="px-2.5 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[11px] font-bold transition cursor-pointer whitespace-nowrap"
                           >
-                            + Contratti
+                            + {t("adm.client.contracts")}
                           </button>
                         ) : (
                           <button
                             onClick={() => handleCreateLogin(c)}
                             disabled={loginLoadingId === c.id}
-                            title="Il cliente non ha un accesso: senza, non può pagare i contratti"
+                            title={t("adm.cust.noLoginTitle")}
                             className="px-2.5 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-700 text-[11px] font-bold transition cursor-pointer whitespace-nowrap disabled:opacity-50"
                           >
-                            {loginLoadingId === c.id ? "Creazione..." : "Crea accesso"}
+                            {loginLoadingId === c.id ? t("adm.cust.creating") : t("adm.cust.createLogin")}
                           </button>
                         )}
                         <button
                           onClick={() => openView(c.id)}
-                          title="Mostra dettagli"
+                          title={t("adm.cust.showDetails")}
                           className="p-1.5 rounded-lg bg-slate-900/5 hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition cursor-pointer"
                         >
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -536,7 +511,7 @@ export function AdminCustomersPanel({
                         </button>
                         <button
                           onClick={() => openEdit(c)}
-                          title="Modifica cliente"
+                          title={t("adm.cust.editCustomer")}
                           className="p-1.5 rounded-lg bg-brand-600/10 hover:bg-brand-600/20 border border-brand-500/20 text-brand-600 transition cursor-pointer"
                         >
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -547,7 +522,7 @@ export function AdminCustomersPanel({
                           <button
                             onClick={() => handleToggleFreeze(c.user_id!, c.user_status === "FROZEN")}
                             disabled={freezeLoadingId === c.user_id}
-                            title={c.user_status === "FROZEN" ? "Riattiva account" : "Congela account (blocca l'accesso)"}
+                            title={c.user_status === "FROZEN" ? t("adm.cust.reactivate") : t("adm.cust.freeze")}
                             className={`p-1.5 rounded-lg border transition cursor-pointer disabled:opacity-50 ${
                               c.user_status === "FROZEN"
                                 ? "bg-emerald-600/10 hover:bg-emerald-600/20 border-emerald-500/20 text-emerald-400"
@@ -574,7 +549,7 @@ export function AdminCustomersPanel({
           </table>
         </div>
         <div className="px-6 pb-5">
-          <Pagination {...pagination} label="clienti" />
+          <Pagination {...pagination} label={t("adm.cust.customersLower")} />
         </div>
       </div>
 
@@ -605,7 +580,7 @@ export function AdminCustomersPanel({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
           <div className="w-full max-w-lg glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-slate-900">Nuovo Cliente</h3>
+              <h3 className="text-lg font-bold text-slate-900">{t("adm.cust.newCustomer")}</h3>
               <button
                 onClick={() => setShowCreate(false)}
                 className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-900 transition cursor-pointer"
@@ -617,12 +592,12 @@ export function AdminCustomersPanel({
             </div>
 
             <p className="text-xs text-slate-500 mb-4">
-              Il cliente riceve l&apos;email per impostare la password: così potrà pagare i contratti che attivi per lui.
+              {t("adm.cust.newCustomerHint")}
             </p>
             <NewCustomerForm
               mode="admin"
               agents={agentsForReassign}
-              submitLabel="Registra e attiva i contratti"
+              submitLabel={t("adm.cust.registerAndActivate")}
               onCancel={() => setShowCreate(false)}
               onCreated={async (customer, promoterAgentId) => {
                 setShowCreate(false);
@@ -638,7 +613,7 @@ export function AdminCustomersPanel({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
           <div className="w-full max-w-lg glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-slate-900">Dettagli Cliente</h3>
+              <h3 className="text-lg font-bold text-slate-900">{t("adm.cust.details")}</h3>
               <button onClick={() => setViewingId(null)}
                 className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-900 transition cursor-pointer">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -647,15 +622,15 @@ export function AdminCustomersPanel({
               </button>
             </div>
 
-            {viewError && <p className="text-sm text-rose-400">Impossibile caricare i dettagli.</p>}
-            {!viewingDetail && !viewError && <p className="text-sm text-slate-500 text-center py-8">Caricamento...</p>}
+            {viewError && <p className="text-sm text-rose-400">{t("adm.cust.detailsFailed")}</p>}
+            {!viewingDetail && !viewError && <p className="text-sm text-slate-500 text-center py-8">{t("adm.overview.loading")}</p>}
 
             {viewingDetail && (
               <div className="space-y-4 text-sm">
                 <div>
                   <p className="text-lg font-semibold text-slate-900">{viewingDetail.display_name}</p>
                   <span className="inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold border bg-amber-500/10 text-amber-700 border-amber-500/20">
-                    {KIND_LABELS[viewingDetail.kind] ?? viewingDetail.kind}
+                    {kindLabel(viewingDetail.kind)}
                   </span>
                 </div>
 
@@ -665,7 +640,7 @@ export function AdminCustomersPanel({
                     <p className=" text-slate-700">{viewingDetail.email}</p>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-500 uppercase font-semibold">Telefono</span>
+                    <span className="text-[10px] text-slate-500 uppercase font-semibold">{t("adm.cust.phone")}</span>
                     <p className=" text-slate-700">{viewingDetail.phone ?? "—"}</p>
                   </div>
                   <div>
@@ -673,27 +648,27 @@ export function AdminCustomersPanel({
                     <p className=" text-slate-700">{viewingDetail.pec ?? "—"}</p>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-500 uppercase font-semibold">Codice Fiscale</span>
+                    <span className="text-[10px] text-slate-500 uppercase font-semibold">{t("adm.cust.fiscalCode")}</span>
                     <p className="font-mono text-xs text-slate-700">{viewingDetail.fiscal_code ?? "—"}</p>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-500 uppercase font-semibold">Partita IVA</span>
+                    <span className="text-[10px] text-slate-500 uppercase font-semibold">{t("adm.cust.vatNumber")}</span>
                     <p className="font-mono text-xs text-slate-700">{viewingDetail.vat_number ?? "—"}</p>
                   </div>
                 </div>
 
                 <div>
-                  <p className="text-[10px] text-slate-500 uppercase font-semibold mb-2">Contratti</p>
+                  <p className="text-[10px] text-slate-500 uppercase font-semibold mb-2">{t("adm.client.contracts")}</p>
                   {customerContracts.length === 0 ? (
-                    <p className="text-xs text-slate-500">Nessun contratto per questo cliente.</p>
+                    <p className="text-xs text-slate-500">{t("adm.cust.noContracts")}</p>
                   ) : (
                     <div className="rounded-xl border border-slate-200 overflow-hidden">
                       <table className="w-full text-left text-xs">
                         <thead>
                           <tr className=" bg-slate-900/5 text-slate-500">
-                            <th className="py-2 px-3 font-semibold">Prodotto</th>
-                            <th className="py-2 px-3 font-semibold">Stato</th>
-                            <th className="py-2 px-3 font-semibold">Scadenza</th>
+                            <th className="py-2 px-3 font-semibold">{t("adm.client.product")}</th>
+                            <th className="py-2 px-3 font-semibold">{t("adm.client.status")}</th>
+                            <th className="py-2 px-3 font-semibold">{t("adm.client.csv.expiry")}</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200">
@@ -704,25 +679,25 @@ export function AdminCustomersPanel({
                                 className="cursor-pointer hover:bg-slate-100 transition-colors text-slate-600"
                               >
                                 <td className="py-2 px-3">
-                                  <div className="font-medium text-slate-900">{c.product_name ?? "Prodotto"}</div>
+                                  <div className="font-medium text-slate-900">{c.product_name ?? t("adm.client.product")}</div>
                                 </td>
                                 <td className="py-2 px-3">
                                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${contractStatusColor(c.status)}`}>
-                                    {CONTRACT_STATUS_LABELS[c.status] ?? c.status}
+                                    {t.dyn(`adm.contractStatus.${c.status}`, c.status)}
                                   </span>
                                 </td>
                                 <td className="py-2 px-3">
-                                  {c.expires_at ? new Date(c.expires_at).toLocaleDateString("it-IT") : "—"}
+                                  {c.expires_at ? fmt.shortDate(c.expires_at) : "—"}
                                 </td>
                               </tr>
                               {expandedContractId === c.id && (
                                 <tr className=" bg-slate-900/5">
                                   <td colSpan={3} className="py-3 px-3 text-slate-600 space-y-1">
-                                    <div><span className="text-slate-500">Creato:</span> {new Date(c.created_at).toLocaleDateString("it-IT")}</div>
+                                    <div><span className="text-slate-500">{t("adm.cust.created")}</span> {fmt.shortDate(c.created_at)}</div>
                                     {c.activated_at && (
-                                      <div><span className="text-slate-500">Attivato:</span> {new Date(c.activated_at).toLocaleDateString("it-IT")}</div>
+                                      <div><span className="text-slate-500">{t("adm.cust.activated")}</span> {fmt.shortDate(c.activated_at)}</div>
                                     )}
-                                    {c.notes && <div><span className="text-slate-500">Note:</span> {c.notes}</div>}
+                                    {c.notes && <div><span className="text-slate-500">{t("adm.cust.notes")}</span> {c.notes}</div>}
                                     <div className="font-mono text-[10px] text-slate-500">{c.id}</div>
                                   </td>
                                 </tr>
@@ -737,7 +712,7 @@ export function AdminCustomersPanel({
 
                 {viewingDetail.addresses.length > 0 && (
                   <div>
-                    <p className="text-[10px] text-slate-500 uppercase font-semibold mb-2">Indirizzi</p>
+                    <p className="text-[10px] text-slate-500 uppercase font-semibold mb-2">{t("adm.cust.addresses")}</p>
                     <div className="space-y-2">
                       {viewingDetail.addresses.map((a) => (
                         <div key={a.id} className="p-3 rounded-xl bg-slate-900/5 border border-slate-200 text-xs text-slate-600">
@@ -753,14 +728,14 @@ export function AdminCustomersPanel({
                     <p className="text-[10px] text-slate-500 uppercase font-semibold mb-2">Wallet</p>
                     <div className="p-4 rounded-xl bg-slate-900/5 border border-slate-200 space-y-3">
                       {viewingWallet === undefined ? (
-                        <p className="text-xs text-slate-500">Caricamento...</p>
+                        <p className="text-xs text-slate-500">{t("adm.overview.loading")}</p>
                       ) : viewingWallet === null ? (
-                        <p className="text-xs text-slate-500">Nessun wallet ancora -- verrà creato alla prima ricarica.</p>
+                        <p className="text-xs text-slate-500">{t("adm.cust.noWallet")}</p>
                       ) : (
                         <div className="flex items-center justify-between">
                           <div>
-                            <span className="text-[10px] text-slate-500 uppercase font-semibold">Saldo</span>
-                            <p className="text-lg font-bold text-slate-900">{euro(viewingWallet.balance_cents)}</p>
+                            <span className="text-[10px] text-slate-500 uppercase font-semibold">{t("adm.cust.balance")}</span>
+                            <p className="text-lg font-bold text-slate-900">{fmt.euro(viewingWallet.balance_cents)}</p>
                           </div>
                           <span className="font-mono text-[10px] text-slate-500">{viewingWallet.address}</span>
                         </div>
@@ -768,7 +743,7 @@ export function AdminCustomersPanel({
 
                       <form onSubmit={handleTopUp} className="flex items-end gap-2 pt-2 border-t border-slate-200">
                         <div className="space-y-1 flex-1">
-                          <label className=" font-semibold text-slate-600 uppercase block">Importo (EUR)</label>
+                          <label className=" font-semibold text-slate-600 uppercase block">{t("adm.cust.amountEur")}</label>
                           <input
                             required
                             inputMode="decimal"
@@ -779,24 +754,24 @@ export function AdminCustomersPanel({
                           />
                         </div>
                         <div className="space-y-1 flex-1">
-                          <label className=" font-semibold text-slate-600 uppercase block">Nota (opzionale)</label>
+                          <label className=" font-semibold text-slate-600 uppercase block">{t("adm.cust.noteOptional")}</label>
                           <input
                             value={topUpNote}
                             onChange={(e) => setTopUpNote(e.target.value)}
-                            placeholder="Cashback ordine..."
+                            placeholder={t("adm.cust.notePlaceholder")}
                             className="w-full rounded-lg glass-input px-3 py-1.5 text-sm focus:border-brand-500"
                           />
                         </div>
                         <button type="submit" disabled={topUpLoading}
                           className="px-4 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50 shrink-0">
-                          {topUpLoading ? "..." : "Ricarica"}
+                          {topUpLoading ? "..." : t("adm.cust.topUp")}
                         </button>
                       </form>
                       {topUpError && (
                         <div className="p-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs">{topUpError}</div>
                       )}
                       {topUpSuccess && (
-                        <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs">Wallet ricaricato con successo.</div>
+                        <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs">{t("adm.cust.topUpDone")}</div>
                       )}
                     </div>
                   </div>
@@ -813,7 +788,7 @@ export function AdminCustomersPanel({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
           <div className="w-full max-w-lg glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-slate-900">Modifica Cliente</h3>
+              <h3 className="text-lg font-bold text-slate-900">{t("adm.cust.editCustomer")}</h3>
               <button onClick={() => setEditingCustomer(null)}
                 className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-900 transition cursor-pointer">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -823,7 +798,7 @@ export function AdminCustomersPanel({
             </div>
 
             <div className="mb-5 pb-5 border-b border-slate-200">
-              <label className="text-xs font-semibold text-slate-600 uppercase block mb-2">Foto profilo</label>
+              <label className="text-xs font-semibold text-slate-600 uppercase block mb-2">{t("adm.cust.photo")}</label>
               <PhotoUpload
                 crop
                 currentUrl={editPhotoUrl}
@@ -840,19 +815,19 @@ export function AdminCustomersPanel({
               {PRIVATE_LIKE.has(editingCustomer.kind) ? (
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-600 uppercase block">Nome</label>
+                    <label className="text-xs font-semibold text-slate-600 uppercase block">{t("adm.cust.firstName")}</label>
                     <input required value={editFirstName} onChange={(e) => setEditFirstName(e.target.value)}
                       className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-600 uppercase block">Cognome</label>
+                    <label className="text-xs font-semibold text-slate-600 uppercase block">{t("adm.cust.lastName")}</label>
                     <input required value={editLastName} onChange={(e) => setEditLastName(e.target.value)}
                       className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
                   </div>
                 </div>
               ) : (
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-600 uppercase block">Ragione sociale</label>
+                  <label className="text-xs font-semibold text-slate-600 uppercase block">{t("adm.cust.companyName")}</label>
                   <input required value={editCompanyName} onChange={(e) => setEditCompanyName(e.target.value)}
                     className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
                 </div>
@@ -865,7 +840,7 @@ export function AdminCustomersPanel({
                     className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-600 uppercase block">Telefono</label>
+                  <label className="text-xs font-semibold text-slate-600 uppercase block">{t("adm.cust.phone")}</label>
                   <input value={editPhone} onChange={(e) => setEditPhone(e.target.value)}
                     className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
                 </div>
@@ -880,12 +855,12 @@ export function AdminCustomersPanel({
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-600 uppercase block">Codice Fiscale</label>
+                  <label className="text-xs font-semibold text-slate-600 uppercase block">{t("adm.cust.fiscalCode")}</label>
                   <input value={editFiscalCode} onChange={(e) => setEditFiscalCode(e.target.value)}
                     className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-600 uppercase block">Partita IVA</label>
+                  <label className="text-xs font-semibold text-slate-600 uppercase block">{t("adm.cust.vatNumber")}</label>
                   <input value={editVatNumber} onChange={(e) => setEditVatNumber(e.target.value)}
                     className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
                 </div>
@@ -898,19 +873,19 @@ export function AdminCustomersPanel({
               <div className="flex justify-end gap-3 mt-4">
                 <button type="button" onClick={() => setEditingCustomer(null)}
                   className="px-4 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 text-xs font-semibold text-slate-600 border border-slate-200 transition cursor-pointer">
-                  Annulla
+                  {t("common.cancel")}
                 </button>
                 <button type="submit" disabled={editLoading}
                   className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50">
-                  {editLoading ? "Salvataggio..." : "Salva Modifiche"}
+                  {editLoading ? t("adm.client.saving") : t("adm.cust.saveChanges")}
                 </button>
               </div>
             </form>
 
             <div className="mt-6 pt-5 border-t border-slate-200">
-              <label className="text-xs font-semibold text-slate-600 uppercase block mb-2">Promoter di riferimento</label>
+              <label className="text-xs font-semibold text-slate-600 uppercase block mb-2">{t("adm.cust.refPromoter")}</label>
               <p className="text-xs text-slate-500 mb-3">
-                Attualmente attribuito a: <span className="font-semibold text-slate-900">{editingDetail?.current_promoter_name ?? "—"}</span>
+                {t("adm.cust.currentlyAssigned")} <span className="font-semibold text-slate-900">{editingDetail?.current_promoter_name ?? "—"}</span>
               </p>
               <form onSubmit={handleReassign} className="space-y-3">
                 <select
@@ -919,7 +894,7 @@ export function AdminCustomersPanel({
                   onChange={(e) => setReassignAgentId(e.target.value)}
                   className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-white focus:border-brand-500"
                 >
-                  <option value="">— Seleziona nuovo promoter —</option>
+                  <option value="">{t("adm.cust.selectPromoter")}</option>
                   {(agentsForReassign ?? [])
                     .filter((a) => a.id !== editingDetail?.current_promoter_agent_id)
                     .map((a) => (
@@ -930,18 +905,18 @@ export function AdminCustomersPanel({
                   required
                   value={reassignReason}
                   onChange={(e) => setReassignReason(e.target.value)}
-                  placeholder="Motivo della riassegnazione..."
+                  placeholder={t("adm.cust.reassignReason")}
                   className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500"
                 />
                 {reassignError && (
                   <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs">{reassignError}</div>
                 )}
                 {reassignSuccess && (
-                  <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs">Promoter riassegnato con successo.</div>
+                  <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs">{t("adm.cust.reassignDone")}</div>
                 )}
                 <button type="submit" disabled={reassignLoading}
                   className="w-full px-4 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 text-xs font-semibold text-slate-600 border border-slate-300 transition cursor-pointer disabled:opacity-50">
-                  {reassignLoading ? "Riassegnazione..." : "Riassegna Promoter"}
+                  {reassignLoading ? t("adm.cust.reassigning") : t("adm.cust.reassign")}
                 </button>
               </form>
             </div>

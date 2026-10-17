@@ -4,22 +4,16 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { downloadCsv } from "@/lib/csv-export";
 import { Pagination, usePagination } from "@/components/pagination";
-import {
-  euro, formatDate, javCash, movementCategory, movementDirection, movementLabel, movementSignedAmountCents,
-  shortCode,
-} from "@/lib/accounting-format";
+import { movementCategory, movementDirection, movementSignedAmountCents, shortCode } from "@/lib/accounting-format";
 import type { FinancialMovementRead } from "@/lib/types";
 import { JavCashAmount } from "@/components/jav-cash-amount";
-import { AccountingDetailModal } from "@/components/accounting-detail-modal";
-import { movementDetailRef, movementEntity } from "@/lib/accounting-format";
+import { AccountingDetailModal, useAccountingFormat } from "@/components/accounting-detail-modal";
+import { movementDetailRef } from "@/lib/accounting-format";
+import { useI18n } from "@/lib/i18n/provider";
 
 type MovementFilter = "ALL" | "JAVCASH" | "BANK_TRANSFER";
 
-const FILTER_TABS: { key: MovementFilter; label: string }[] = [
-  { key: "ALL", label: "Tutte" },
-  { key: "JAVCASH", label: "JavCash" },
-  { key: "BANK_TRANSFER", label: "Bonifico" },
-];
+const FILTER_TABS: MovementFilter[] = ["ALL", "JAVCASH", "BANK_TRANSFER"];
 
 const CATEGORY_COLORS: Record<string, string> = {
   Ricarica: "bg-sky-500/10 text-sky-400 border-sky-500/20",
@@ -32,14 +26,15 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 function DirectionBadge({ direction }: { direction: "in" | "out" }) {
+  const { t } = useI18n();
   return direction === "in" ? (
-    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/15 text-emerald-400 shrink-0" title="Entrata">
+    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/15 text-emerald-400 shrink-0" title={t("acct.csv.in")}>
       <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
       </svg>
     </span>
   ) : (
-    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-rose-500/15 text-rose-400 shrink-0" title="Uscita">
+    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-rose-500/15 text-rose-400 shrink-0" title={t("acct.csv.out")}>
       <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 10l7-7m0 0l7 7m-7-7v18" />
       </svg>
@@ -48,6 +43,7 @@ function DirectionBadge({ direction }: { direction: "in" | "out" }) {
 }
 
 function CurrencyBadge({ m }: { m: FinancialMovementRead }) {
+  const { t } = useI18n();
   if (m.currency === "JAVCASH") {
     return (
       <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-brand-500/10 border border-brand-500/20 text-brand-600 text-[11px] font-bold whitespace-nowrap">
@@ -64,14 +60,14 @@ function CurrencyBadge({ m }: { m: FinancialMovementRead }) {
       <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M14.121 15.536c-1.171 1.952-3.07 1.952-4.242 0-1.172-1.953-1.172-5.119 0-7.072 1.171-1.952 3.07-1.952 4.242 0M8 10.5h4m-4 3h4" />
       </svg>
-      {m.payment_method === "BANK_TRANSFER" ? "Bonifico" : "Euro"}
+      {m.payment_method === "BANK_TRANSFER" ? t("acct.paymentMethod.BANK_TRANSFER") : t("acct.mv.euro")}
     </span>
   );
 }
 
-async function fetchAllMovements(): Promise<FinancialMovementRead[]> {
+async function fetchAllMovements(errorText: string): Promise<FinancialMovementRead[]> {
   const res = await fetch("/api/proxy/accounting/admin");
-  if (!res.ok) throw new Error("Impossibile caricare la contabilità.");
+  if (!res.ok) throw new Error(errorText);
   return res.json();
 }
 
@@ -82,9 +78,12 @@ async function fetchAllMovements(): Promise<FinancialMovementRead[]> {
     badge, currency/method badge, category pill) so a movement reads
     identically whether the customer or an admin is looking at it. */
 export function AdminAccountingPanel() {
+  const { t } = useI18n();
+  const { euro, formatDate, javCash, movementLabel, movementEntity, categoryLabel, paymentMethodLabel, plainAmount } =
+    useAccountingFormat();
   const { data: movements, error } = useQuery({
     queryKey: ["admin", "accounting", "all"],
-    queryFn: fetchAllMovements,
+    queryFn: () => fetchAllMovements(t("acct.accounting.loadError")),
   });
 
   const [customerId, setCustomerId] = useState<string>("ALL");
@@ -138,54 +137,53 @@ export function AdminAccountingPanel() {
 
   function handleExportCsv() {
     downloadCsv(
-      `contabilita-admin-${new Date().toISOString().slice(0, 10)}.csv`,
-      ["Data", "Cliente", "Tipo", "Movimento", "Descrizione", "Valuta", "Metodo di pagamento", "Entrata/Uscita", "Importo", "Nota"],
+      `${t("acct.accounting.csvName")}-admin-${new Date().toISOString().slice(0, 10)}.csv`,
+      [t("acct.col.date"), t("acct.col.customer"), t("acct.col.type"), t("acct.csv.movement"), t("acct.csv.description"), t("acct.csv.currency"), t("acct.csv.paymentMethod"), t("acct.csv.inOut"), t("acct.col.amount"), t("acct.col.note")],
       filteredList.map((m) => [
         formatDate(m.created_at),
         m.customer_display_name ?? "",
-        movementCategory(m),
+        categoryLabel(m),
         movementLabel(m),
         m.product_name ?? "",
         m.currency === "JAVCASH" ? "JavCash" : "EUR",
-        m.payment_method ? "Bonifico" : "",
-        movementDirection(m) === "in" ? "Entrata" : "Uscita",
-        (Math.abs(m.amount_cents) / 100).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        m.payment_method ? paymentMethodLabel(m.payment_method) : "",
+        movementDirection(m) === "in" ? t("acct.csv.in") : t("acct.csv.out"),
+        plainAmount(Math.abs(m.amount_cents)),
         m.note ?? "",
       ])
     );
   }
 
   if (error) {
-    return <p className="text-sm text-rose-400">Impossibile caricare la contabilità.</p>;
+    return <p className="text-sm text-rose-400">{t("acct.accounting.loadError")}</p>;
   }
 
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-semibold text-slate-900">Contabilità</h3>
+        <h3 className="text-lg font-semibold text-slate-900">{t("acct.accounting.title")}</h3>
         <p className="text-xs text-slate-500 mt-1">
-          Ogni movimento JavCash e ogni pagamento reale (bonifico) di tutti i clienti, in un unico posto.
-          Filtra per cliente per vedere il suo estratto conto personale.
+          {t("acct.adminAccounting.subtitle")}
         </p>
       </div>
 
       {/* Customer filter */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="space-y-1">
-          <label className=" font-semibold text-slate-600 uppercase block">Cliente</label>
+          <label className=" font-semibold text-slate-600 uppercase block">{t("acct.col.customer")}</label>
           <select
             value={customerId}
             onChange={(e) => setCustomerId(e.target.value)}
             className="w-full max-w-xs rounded-xl glass-input px-3 py-2 text-sm bg-white focus:border-brand-500"
           >
-            <option value="ALL">Tutti i clienti ({customers.length})</option>
+            <option value="ALL">{t("acct.adminAccounting.allCustomers", { n: customers.length })}</option>
             {customers.map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
         </div>
         <div className="space-y-1 flex-1 min-w-[200px]">
-          <label className=" font-semibold text-slate-600 uppercase block">Cerca</label>
+          <label className=" font-semibold text-slate-600 uppercase block">{t("acct.adminAccounting.search")}</label>
           <div className="relative">
             <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />
@@ -194,7 +192,7 @@ export function AdminAccountingPanel() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Prodotto, cliente, tipo movimento..."
+              placeholder={t("acct.adminAccounting.searchPlaceholder")}
               className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-900/5 border border-slate-300 text-sm text-slate-900 placeholder:text-slate-500 focus:outline-none focus:border-brand-500/50 transition"
             />
           </div>
@@ -204,13 +202,13 @@ export function AdminAccountingPanel() {
       {/* Totals -- scoped to the selected customer, or org-wide when "Tutti" */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="glass-card rounded-2xl p-5 border-slate-200 bg-gradient-to-br from-brand-500/10 to-transparent">
-          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Saldo netto JavCash</p>
+          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">{t("acct.adminAccounting.netJavcash")}</p>
           <p className={`text-xl font-bold ${totalJavCashCents < 0 ? "text-rose-400" : "text-brand-600"}`}>
             {javCash(totalJavCashCents)}
           </p>
         </div>
         <div className="glass-card rounded-2xl p-5 border-slate-200 bg-white/70">
-          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Incassato con Bonifico</p>
+          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">{t("acct.adminAccounting.collectedBank")}</p>
           <p className="text-xl font-bold text-slate-900">{euro(totalBankTransferCents)}</p>
         </div>
       </div>
@@ -219,18 +217,18 @@ export function AdminAccountingPanel() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2">
           {FILTER_TABS.map((tab) => {
-            const count = scopedList.filter((m) => matchesFilter(m, tab.key)).length;
+            const count = scopedList.filter((m) => matchesFilter(m, tab)).length;
             return (
               <button
-                key={tab.key}
-                onClick={() => setFilter(tab.key)}
+                key={tab}
+                onClick={() => setFilter(tab)}
                 className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold border transition cursor-pointer ${
-                  filter === tab.key
+                  filter === tab
                     ? "bg-brand-600 border-brand-600 text-white"
                     : " bg-slate-900/5 border-slate-300 text-slate-600 hover:bg-slate-100"
                 }`}
               >
-                {tab.label}
+                {t.dyn(`acct.adminAccounting.filter.${tab}`, tab)}
                 <span className="ml-1.5 opacity-70">({count})</span>
               </button>
             );
@@ -241,7 +239,7 @@ export function AdminAccountingPanel() {
           disabled={filteredList.length === 0}
           className="px-3.5 py-1.5 rounded-xl text-xs font-semibold border border-slate-300 text-slate-600 hover:bg-slate-100 transition cursor-pointer disabled:opacity-40"
         >
-          Scarica report CSV
+          {t("acct.adminAccounting.downloadCsv")}
         </button>
       </div>
 
@@ -251,20 +249,20 @@ export function AdminAccountingPanel() {
           <table className="w-full border-collapse text-left text-xs">
             <thead>
               <tr className="border-b border-slate-200 text-slate-500 font-semibold">
-                <th className="py-2 px-5">Data</th>
+                <th className="py-2 px-5">{t("acct.col.date")}</th>
                 <th className="py-2 px-5"></th>
-                {customerId === "ALL" && <th className="py-2 px-5">Cliente</th>}
-                <th className="py-2 px-5">Tipo</th>
-                <th className="py-2 px-5">Movimento</th>
-                <th className="py-2 px-5">Valuta</th>
-                <th className="py-2 px-5 text-right">Importo</th>
+                {customerId === "ALL" && <th className="py-2 px-5">{t("acct.col.customer")}</th>}
+                <th className="py-2 px-5">{t("acct.col.type")}</th>
+                <th className="py-2 px-5">{t("acct.csv.movement")}</th>
+                <th className="py-2 px-5">{t("acct.csv.currency")}</th>
+                <th className="py-2 px-5 text-right">{t("acct.col.amount")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
               {movements === undefined ? (
-                <tr><td colSpan={7} className="text-center py-6 text-slate-500">Caricamento...</td></tr>
+                <tr><td colSpan={7} className="text-center py-6 text-slate-500">{t("acct.common.loading")}</td></tr>
               ) : filteredList.length === 0 ? (
-                <tr><td colSpan={7} className="text-center py-6 text-slate-500">Nessuna transazione in questa categoria.</td></tr>
+                <tr><td colSpan={7} className="text-center py-6 text-slate-500">{t("acct.adminAccounting.empty")}</td></tr>
               ) : (
                 pagination.pageItems.map((m) => {
                   const direction = movementDirection(m);
@@ -295,7 +293,7 @@ export function AdminAccountingPanel() {
                       )}
                       <td className="py-2.5 px-5">
                         <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold border ${CATEGORY_COLORS[category]}`}>
-                          {category}
+                          {categoryLabel(m)}
                         </span>
                       </td>
                       <td className="py-2.5 px-5">
@@ -332,7 +330,7 @@ export function AdminAccountingPanel() {
           </table>
         </div>
         <div className="px-5 pb-4">
-          <Pagination {...pagination} label="movimenti" />
+          <Pagination {...pagination} label={t("acct.accounting.movementsPlural")} />
         </div>
       </div>
 

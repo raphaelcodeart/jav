@@ -43,6 +43,7 @@ export interface PodiumEntry {
 /** The ranking podium: 2nd, 1st, 3rd, rising from the floor one after the
  *  other, with the points rolling up. */
 export function Podium({ entries }: { entries: PodiumEntry[] }) {
+  const { t } = useI18n();
   const order = [entries[1], entries[0], entries[2]];
   const heights = ["h-24", "h-32", "h-20"];
   const medals = ["from-ink-200 to-ink-400", "from-accent-300 to-accent-500", "from-amber-600 to-amber-800"];
@@ -69,7 +70,7 @@ export function Podium({ entries }: { entries: PodiumEntry[] }) {
             <p className="text-xs sm:text-sm font-semibold text-ink-900 text-center truncate w-full">
               {e.href ? <Link href={e.href} className="hover:text-brand-700">{e.name}</Link> : e.name}
             </p>
-            <p className="font-display text-brand-600 text-sm"><CountUp value={e.points} /> pt</p>
+            <p className="font-display text-brand-600 text-sm"><CountUp value={e.points} /> {t("clubx.pointsShort")}</p>
             <div className={cn("mt-2 w-full rounded-t-2xl bg-gradient-to-b flex items-start justify-center pt-2 shadow-soft", heights[i], medals[i])}>
               <span className="font-display text-2xl text-white drop-shadow">{places[i]}</span>
             </div>
@@ -194,6 +195,7 @@ export function AthleteCard({
 
 /** A wallet balance as a spinning gold coin and a rolling number. */
 export function CoinCounter({ cents, label = "JavCash" }: { cents: number; label?: string }) {
+  const { fmt } = useI18n();
   return (
     <div className="flex items-center gap-3">
       <motion.div
@@ -208,7 +210,7 @@ export function CoinCounter({ cents, label = "JavCash" }: { cents: number; label
       <div>
         <p className="text-xs font-semibold uppercase tracking-wider text-ink-500">{label}</p>
         <p className="font-display text-2xl text-ink-900 tabular-nums">
-          <CountUp value={cents / 100} format={(n) => n.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} />
+          <CountUp value={cents / 100} format={(n) => n.toLocaleString(fmt.tag, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} />
         </p>
       </div>
     </div>

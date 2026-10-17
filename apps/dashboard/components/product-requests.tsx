@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pagination, usePagination } from "@/components/pagination";
 import { friendlyApiError } from "@/lib/api-error";
 import type { ProductRequestDetailRead, ProductRequestRead } from "@/lib/types";
+import { useI18n } from "@/lib/i18n/provider";
 
 /** «Non hai trovato ciò che cercavi?» -- il lato cliente delle richieste di
  *  prodotto. Un sistema di ticket a sé (API /product-requests), separato da
@@ -16,6 +17,8 @@ import type { ProductRequestDetailRead, ProductRequestRead } from "@/lib/types";
  *  - `CustomerProductRequestsPanel`: la scheda «Le mie richieste», dove legge
  *    le risposte e risponde a sua volta. */
 
+/** Italian labels, still read by the staff panel; this file shows
+ *  `shopx.requests.status.*` instead. */
 export const PRODUCT_REQUEST_STATUS_LABELS: Record<string, string> = {
   OPEN: "Inviata",
   IN_PROGRESS: "In lavorazione",
@@ -39,8 +42,9 @@ export function productRequestStatusColor(status: string): string {
   }
 }
 
-export function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" });
+/** `tag` is the reader's Intl tag (`fmt.tag`). */
+export function formatDateTime(iso: string, tag?: string): string {
+  return new Date(iso).toLocaleString(tag, { dateStyle: "short", timeStyle: "short" });
 }
 
 const labelCls = "text-xs font-semibold text-slate-600 uppercase block";
@@ -55,6 +59,7 @@ function NewRequestForm({
   onCreated: (request: ProductRequestRead) => void;
   onCancel: () => void;
 }) {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const [productName, setProductName] = useState(initialName);
   const [message, setMessage] = useState("");
@@ -77,7 +82,7 @@ function NewRequestForm({
       await queryClient.invalidateQueries({ queryKey: ["product-requests", "mine"] });
       onCreated(created);
     } catch (err: unknown) {
-      setError((err as Error).message || "Impossibile inviare la richiesta.");
+      setError((err as Error).message || t("shopx.requests.sendFailed"));
     } finally {
       setLoading(false);
     }
@@ -86,37 +91,37 @@ function NewRequestForm({
   return (
     <form onSubmit={submit} className="space-y-4">
       <div className="space-y-1">
-        <label className={labelCls}>Che prodotto cerchi? *</label>
+        <label className={labelCls}>{t("shopx.requests.whatProduct")} *</label>
         <input
           required
           minLength={2}
           maxLength={255}
           value={productName}
           onChange={(e) => setProductName(e.target.value)}
-          placeholder="Es. macchina del caffè a capsule"
+          placeholder={t("shopx.requests.whatPlaceholder")}
           className={inputCls}
         />
       </div>
       <div className="space-y-1">
-        <label className={labelCls}>Raccontaci di più *</label>
+        <label className={labelCls}>{t("shopx.requests.tellMore")} *</label>
         <textarea
           required
           rows={4}
           maxLength={5000}
           value={message}
           onChange={(e) => setMessage(e.target.value)}
-          placeholder="Marca, modello, colore, taglia, quantità, quanto vorresti spendere…"
+          placeholder={t("shopx.requests.tellMorePlaceholder")}
           className={`${inputCls} resize-none`}
         />
       </div>
       <div className="space-y-1">
-        <label className={labelCls}>Link di esempio (facoltativo)</label>
+        <label className={labelCls}>{t("shopx.requests.exampleLink")}</label>
         <input
           type="url"
           maxLength={1000}
           value={referenceUrl}
           onChange={(e) => setReferenceUrl(e.target.value)}
-          placeholder="https://… un prodotto simile che hai visto online"
+          placeholder={t("shopx.requests.exampleLinkPlaceholder")}
           className={inputCls}
         />
       </div>
@@ -127,14 +132,14 @@ function NewRequestForm({
           onClick={onCancel}
           className="px-4 py-2 rounded-xl text-xs font-semibold hover:bg-slate-100 bg-slate-900/5 text-slate-600 transition cursor-pointer"
         >
-          Annulla
+          {t("common.cancel")}
         </button>
         <button
           type="submit"
           disabled={loading}
           className="px-4 py-2 rounded-xl text-xs font-semibold bg-brand-600 hover:bg-brand-500 text-white transition cursor-pointer disabled:opacity-50"
         >
-          {loading ? "Invio…" : "Invia richiesta"}
+          {loading ? t("shopx.requests.sending") : t("shopx.requests.send")}
         </button>
       </div>
     </form>
@@ -151,6 +156,7 @@ export function ProductRequestBanner({
   searchText?: string;
   onOpenRequests: () => void;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [sent, setSent] = useState<ProductRequestRead | null>(null);
 
@@ -165,10 +171,10 @@ export function ProductRequestBanner({
           </div>
           <div className="flex-1 min-w-0">
             <h3 className="text-base sm:text-lg font-bold text-slate-900 leading-snug">
-              Non hai trovato ciò che cercavi?
+              {t("shopx.requests.bannerTitle")}
             </h3>
             <p className="text-sm text-slate-600 mt-0.5">
-              Faccelo sapere: lo cerchiamo noi per te e ti rispondiamo qui, in «Le mie richieste».
+              {t("shopx.requests.bannerText")}
             </p>
           </div>
           <button
@@ -179,7 +185,7 @@ export function ProductRequestBanner({
             }}
             className="px-5 py-2.5 rounded-xl text-sm font-semibold bg-brand-600 hover:bg-brand-500 text-white shadow-lg shadow-brand-500/20 transition cursor-pointer shrink-0"
           >
-            Richiedi un prodotto
+            {t("shopx.requests.requestProduct")}
           </button>
         </div>
       </div>
@@ -192,7 +198,7 @@ export function ProductRequestBanner({
           <div
             role="dialog"
             aria-modal="true"
-            aria-label="Richiedi un prodotto"
+            aria-label={t("shopx.requests.requestProduct")}
             onClick={(e) => e.stopPropagation()}
             className="w-full sm:max-w-lg max-h-[92vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-white border border-slate-200 p-6 space-y-4"
           >
@@ -204,9 +210,9 @@ export function ProductRequestBanner({
                   </svg>
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-slate-900">Richiesta inviata!</h3>
+                  <h3 className="text-lg font-bold text-slate-900">{t("shopx.requests.sentTitle")}</h3>
                   <p className="text-sm text-slate-500 mt-1">
-                    Cerchiamo «{sent.product_name}» per te. Ti avvisiamo appena abbiamo una risposta, e la trovi in «Le mie richieste».
+                    {t("shopx.requests.sentText", { name: sent.product_name })}
                   </p>
                 </div>
                 <div className="flex justify-center gap-2">
@@ -215,7 +221,7 @@ export function ProductRequestBanner({
                     onClick={() => setOpen(false)}
                     className="px-4 py-2 rounded-xl text-xs font-semibold hover:bg-slate-100 bg-slate-900/5 text-slate-600 transition cursor-pointer"
                   >
-                    Torna allo Shop
+                    {t("shopx.requests.backToShop")}
                   </button>
                   <button
                     type="button"
@@ -225,16 +231,16 @@ export function ProductRequestBanner({
                     }}
                     className="px-4 py-2 rounded-xl text-xs font-semibold bg-brand-600 hover:bg-brand-500 text-white transition cursor-pointer"
                   >
-                    Vai a «Le mie richieste»
+                    {t("shopx.requests.goToMine")}
                   </button>
                 </div>
               </div>
             ) : (
               <>
                 <div>
-                  <h3 className="text-lg font-bold text-slate-900">Richiedi un prodotto</h3>
+                  <h3 className="text-lg font-bold text-slate-900">{t("shopx.requests.requestProduct")}</h3>
                   <p className="text-xs text-slate-500 mt-1">
-                    Dicci cosa cerchi: più dettagli ci dai, prima lo troviamo.
+                    {t("shopx.requests.formIntro")}
                   </p>
                 </div>
                 <NewRequestForm
@@ -258,6 +264,7 @@ async function getJson<T>(path: string): Promise<T> {
 }
 
 export function CustomerProductRequestsPanel() {
+  const { t, fmt } = useI18n();
   const queryClient = useQueryClient();
   const { data: requests, error: listError } = useQuery({
     queryKey: ["product-requests", "mine"],
@@ -290,7 +297,7 @@ export function CustomerProductRequestsPanel() {
       setReply("");
       await queryClient.invalidateQueries({ queryKey: ["product-requests", "mine"] });
     } catch (err: unknown) {
-      setReplyError((err as Error).message || "Impossibile inviare la risposta.");
+      setReplyError((err as Error).message || t("shopx.requests.replyFailed"));
     } finally {
       setReplyLoading(false);
     }
@@ -303,12 +310,12 @@ export function CustomerProductRequestsPanel() {
           onClick={() => setSelectedId(null)}
           className="text-xs text-slate-400 hover:text-slate-900 transition cursor-pointer flex items-center gap-1"
         >
-          ← Torna alle richieste
+          ← {t("shopx.requests.backToList")}
         </button>
         <div className="glass-card rounded-2xl p-6 border-slate-200 bg-white/70">
           <div className="flex items-start justify-between gap-4 mb-4">
             <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-brand-600">Prodotto cercato</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-brand-600">{t("shopx.requests.productSought")}</p>
               <h3 className="text-lg font-semibold text-slate-900 break-words">{detail.product_name}</h3>
               {detail.reference_url && (
                 <a
@@ -322,7 +329,7 @@ export function CustomerProductRequestsPanel() {
               )}
             </div>
             <span className={`px-3 py-1 rounded-full text-xs font-bold border shrink-0 ${productRequestStatusColor(detail.status)}`}>
-              {PRODUCT_REQUEST_STATUS_LABELS[detail.status] ?? detail.status}
+              {t.dyn(`shopx.requests.status.${detail.status}`, PRODUCT_REQUEST_STATUS_LABELS[detail.status] ?? detail.status)}
             </span>
           </div>
 
@@ -340,9 +347,9 @@ export function CustomerProductRequestsPanel() {
                   >
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        {isStaff ? "Jav" : "Tu"}
+                        {isStaff ? "Jav" : t("shopx.requests.you")}
                       </span>
-                      <span className="text-[10px] text-slate-500">{formatDateTime(m.created_at)}</span>
+                      <span className="text-[10px] text-slate-500">{formatDateTime(m.created_at, fmt.tag)}</span>
                     </div>
                     <p className="whitespace-pre-wrap break-words">{m.body}</p>
                   </div>
@@ -357,7 +364,7 @@ export function CustomerProductRequestsPanel() {
                 required
                 value={reply}
                 onChange={(e) => setReply(e.target.value)}
-                placeholder="Scrivi una risposta…"
+                placeholder={t("shopx.requests.replyPlaceholder")}
                 className="flex-1 min-w-0 rounded-xl glass-input px-3 py-2.5 text-sm focus:border-brand-500"
               />
               <button
@@ -365,11 +372,11 @@ export function CustomerProductRequestsPanel() {
                 disabled={replyLoading}
                 className="px-4 py-2 rounded-xl text-xs font-semibold bg-brand-600 hover:bg-brand-500 text-white transition cursor-pointer disabled:opacity-50"
               >
-                {replyLoading ? "Invio…" : "Invia"}
+                {replyLoading ? t("shopx.requests.sending") : t("shopx.requests.sendReply")}
               </button>
             </form>
           ) : (
-            <p className="text-xs text-slate-500">Questa richiesta è chiusa. Se cerchi altro, aprine una nuova.</p>
+            <p className="text-xs text-slate-500">{t("shopx.requests.closed")}</p>
           )}
           {replyError && <p className="text-xs text-rose-400 mt-2">{replyError}</p>}
         </div>
@@ -381,16 +388,16 @@ export function CustomerProductRequestsPanel() {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900">Le mie richieste</h2>
+          <h2 className="text-lg font-semibold text-slate-900">{t("shopx.requests.mineTitle")}</h2>
           <p className="text-sm text-slate-500 mt-1">
-            I prodotti che ci hai chiesto di cercare. Qui trovi le nostre risposte e puoi risponderci.
+            {t("shopx.requests.mineText")}
           </p>
         </div>
         <button
           onClick={() => setShowCreate((v) => !v)}
           className="px-4 py-2 rounded-xl text-xs font-semibold bg-brand-600 hover:bg-brand-500 text-white shadow-lg shadow-brand-500/20 transition cursor-pointer shrink-0"
         >
-          + Nuova richiesta
+          + {t("shopx.requests.new")}
         </button>
       </div>
 
@@ -406,15 +413,15 @@ export function CustomerProductRequestsPanel() {
         </div>
       )}
 
-      {listError && <p className="text-sm text-rose-400">Impossibile caricare le richieste.</p>}
+      {listError && <p className="text-sm text-rose-400">{t("shopx.requests.loadFailed")}</p>}
 
       <div className="space-y-3">
         {requests === undefined ? (
-          <p className="text-sm text-slate-500 text-center py-8">Caricamento…</p>
+          <p className="text-sm text-slate-500 text-center py-8">{t("shopx.loading")}</p>
         ) : requests.length === 0 ? (
           <div className="glass-card rounded-2xl p-12 text-center border-slate-200">
             <p className="text-sm text-slate-500">
-              Nessuna richiesta. Se nello Shop non trovi quello che cerchi, usa «+ Nuova richiesta»: lo cerchiamo noi.
+              {t("shopx.requests.empty")}
             </p>
           </div>
         ) : (
@@ -430,17 +437,17 @@ export function CustomerProductRequestsPanel() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-sm font-semibold text-slate-900 truncate">{r.product_name}</p>
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border shrink-0 ${productRequestStatusColor(r.status)}`}>
-                      {PRODUCT_REQUEST_STATUS_LABELS[r.status] ?? r.status}
+                      {t.dyn(`shopx.requests.status.${r.status}`, PRODUCT_REQUEST_STATUS_LABELS[r.status] ?? r.status)}
                     </span>
                     {news && (
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-brand-600 text-white shrink-0">
-                        Nuova risposta
+                        {t("shopx.requests.newReply")}
                       </span>
                     )}
                   </div>
                   <p className="text-[11px] text-slate-500 mt-1">
-                    {r.message_count} messaggi
-                    {r.last_message_at ? ` · ultimo aggiornamento ${formatDateTime(r.last_message_at)}` : ""}
+                    {t("shopx.requests.messages", { n: r.message_count })}
+                    {r.last_message_at ? ` · ${t("shopx.requests.lastUpdate", { date: formatDateTime(r.last_message_at, fmt.tag) })}` : ""}
                   </p>
                 </div>
                 <svg className="w-4 h-4 text-slate-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -451,7 +458,7 @@ export function CustomerProductRequestsPanel() {
           })
         )}
       </div>
-      <Pagination {...pagination} label="richieste" />
+      <Pagination {...pagination} label={t("shopx.requests.paginationLabel")} />
     </div>
   );
 }

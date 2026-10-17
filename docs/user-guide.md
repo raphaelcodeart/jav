@@ -233,9 +233,15 @@ proprio club**: entrando, l'area si apre direttamente sul club. Le sezioni:
   **Vedi ricevuta** la apre dentro la pagina (foto o PDF); **Rifiuta**
   chiede un motivo (ce ne sono di pronti) che la famiglia riceve, e le quote
   tornano da pagare.
-- **Piani**: le fasce d'età con quota mensile, iscrizione annuale, giorno di
-  scadenza e mesi fatturati. Un piano in uso non si cancella.
-- **Quote**: elenco con filtri. Su una quota: **segna pagata** — scegli come
+- **Piani e prezzi**: i gruppi del club, ognuno in una scheda con la fascia
+  nel **suo colore** (si sceglie nel popup: 8 colori pronti o «Altro
+  colore»), l'età, la mensilità grande, l'iscrizione annuale, quanti atleti
+  ha, il giorno di scadenza e i mesi in cui si paga (si accendono e spengono
+  toccandoli). Un gruppo in uso non si cancella: si disattiva.
+- **Quote**: nel quadro del mese e nell'elenco, una quota che ha una prova di
+  pagamento mostra **🧾 Vedi la prova di pagamento** (in rosso se era stata
+  rifiutata): la ricevuta si apre lì, da controllare prima di segnare pagata.
+  Elenco con filtri. Su una quota: **segna pagata** — scegli come
   (contanti, carta, bonifico) e, per i contanti, a chi sono stati dati (una
   persona dello staff o un nome scritto) —, **condona**, **riapri**. Sotto
   lo stato di ogni quota pagata c'è come è stata pagata. Nella scheda di un
@@ -296,7 +302,7 @@ proprio club**: entrando, l'area si apre direttamente sul club. Le sezioni:
   quote (li vedono i genitori quando pagano), l'email di contatto del club,
   il **link di registrazione** da dare alle famiglie (con il pulsante per
   copiarlo), e lo **staff**: si aggiungono istruttori o altre persone di
-  segreteria, che ricevono l'email per scegliersi la password.
+  segreteria, che ricevono l'email per scegliersi la password. Un genitore o un atleta adulto **già del club** (per esempio un papà che insegna) si aggiunge con la sua email: lo stesso account diventa anche treinador, con la password che ha già; poi in **Persone** gli si dà la funzione «Treinador». Chi ha più ruoli passa da un'area all'altra (famiglia, atleta, treinador, segreteria) dal **menu utente** in alto a destra.
 
 **Persone**: atleti, genitori, segreteria, treinador e monitor in un elenco,
 ognuno con il suo simbolo (🥋 atleta, 👪 genitore, 🗂️ segreteria, 🧑‍🏫 treinador,

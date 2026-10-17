@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import { friendlyApiError } from "@/lib/api-error";
+import { useI18n } from "@/lib/i18n/provider";
 
 /** "Scarica tutto", per l'amministrazione: tutti gli allegati più un PDF
     riassuntivo del contratto e del cliente, in un file zip costruito lato
     server (`contracts/dossier.py`). */
 export function ContractDossierActions({ contractId }: { contractId: string }) {
+  const { t } = useI18n();
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,7 +39,7 @@ export function ContractDossierActions({ contractId }: { contractId: string }) {
       link.remove();
       URL.revokeObjectURL(url);
     } catch (err: any) {
-      setError(err?.message || "Impossibile scaricare il fascicolo.");
+      setError(err?.message || t("ctr.dossier.downloadError"));
     } finally {
       setDownloading(false);
     }
@@ -54,12 +56,12 @@ export function ContractDossierActions({ contractId }: { contractId: string }) {
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" />
           </svg>
-          {downloading ? "Preparazione..." : "Scarica tutto (ZIP)"}
+          {downloading ? t("ctr.dossier.preparing") : t("ctr.dossier.downloadAll")}
         </button>
       </div>
 
       <p className="text-[10px] text-slate-500">
-        Tutti i documenti allegati più un PDF riassuntivo del contratto e del cliente.
+        {t("ctr.dossier.hint")}
       </p>
 
       {error && (

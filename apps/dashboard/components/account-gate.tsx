@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { friendlyApiError } from "@/lib/api-error";
 import { PROVINCES } from "@/lib/provinces";
+import { useI18n } from "@/lib/i18n/provider";
 
 interface MeRead {
   roles: string[];
@@ -20,6 +21,7 @@ async function fetchMe(): Promise<MeRead | null> {
 
 
 function ProfileCompletionForm({ onComplete }: { onComplete: () => void }) {
+  const { t } = useI18n();
   const [fiscalCode, setFiscalCode] = useState("");
   const [street, setStreet] = useState("");
   const [city, setCity] = useState("");
@@ -32,7 +34,7 @@ function ProfileCompletionForm({ onComplete }: { onComplete: () => void }) {
   // the field is not red before it has been typed in.
   const fiscalCodeError =
     fiscalCode.length > 0 && fiscalCode.length < 11
-      ? "Il codice fiscale deve avere 16 caratteri (11 se è una partita IVA)."
+      ? t("acct.gate.fiscalCodeError")
       : null;
 
   async function handleSubmit(e: React.FormEvent) {
@@ -55,10 +57,10 @@ function ProfileCompletionForm({ onComplete }: { onComplete: () => void }) {
           residence_postal_code: postalCode,
         }),
       });
-      if (!res.ok) throw new Error(await friendlyApiError(res, "Impossibile salvare i dati."));
+      if (!res.ok) throw new Error(await friendlyApiError(res, t("acct.gate.saveError")));
       onComplete();
     } catch (err: any) {
-      setError(err.message || "Impossibile salvare i dati.");
+      setError(err.message || t("acct.gate.saveError"));
     } finally {
       setSubmitting(false);
     }
@@ -67,7 +69,7 @@ function ProfileCompletionForm({ onComplete }: { onComplete: () => void }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-1">
-        <label className=" font-semibold text-slate-600 uppercase block">Codice Fiscale</label>
+        <label className=" font-semibold text-slate-600 uppercase block">{t("acct.gate.fiscalCode")}</label>
         <input
           required minLength={11} maxLength={16} value={fiscalCode}
           onChange={(e) => setFiscalCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))}
@@ -81,27 +83,27 @@ function ProfileCompletionForm({ onComplete }: { onComplete: () => void }) {
             11 for a P.IVA) is not something anyone should have to discover
             from an error. */}
         <p className={`text-[10px] ${fiscalCodeError ? "text-rose-400" : "text-slate-500"}`}>
-          {fiscalCodeError ?? "16 caratteri per una persona fisica, 11 per una partita IVA."}
+          {fiscalCodeError ?? t("acct.gate.fiscalCodeHint")}
         </p>
       </div>
       <div className="space-y-1">
-        <label className=" font-semibold text-slate-600 uppercase block">Indirizzo di residenza</label>
+        <label className=" font-semibold text-slate-600 uppercase block">{t("acct.gate.address")}</label>
         <input
           required value={street} onChange={(e) => setStreet(e.target.value)}
-          placeholder="Via/Piazza e numero civico"
+          placeholder={t("acct.gate.addressPlaceholder")}
           className="w-full rounded-xl glass-input px-3 py-2.5 text-sm focus:border-brand-500"
         />
       </div>
       <div className="grid grid-cols-3 gap-3">
         <div className="col-span-2 space-y-1">
-          <label className=" font-semibold text-slate-600 uppercase block">Città</label>
+          <label className=" font-semibold text-slate-600 uppercase block">{t("acct.gate.city")}</label>
           <input
             required value={city} onChange={(e) => setCity(e.target.value)}
             className="w-full rounded-xl glass-input px-3 py-2.5 text-sm focus:border-brand-500"
           />
         </div>
         <div className="space-y-1">
-          <label className=" font-semibold text-slate-600 uppercase block">Prov.</label>
+          <label className=" font-semibold text-slate-600 uppercase block">{t("acct.gate.province")}</label>
           <select
             required value={province} onChange={(e) => setProvince(e.target.value)}
             className="w-full rounded-xl glass-input px-2 py-2.5 text-sm bg-white focus:border-brand-500"
@@ -114,7 +116,7 @@ function ProfileCompletionForm({ onComplete }: { onComplete: () => void }) {
         </div>
       </div>
       <div className="space-y-1">
-        <label className=" font-semibold text-slate-600 uppercase block">CAP</label>
+        <label className=" font-semibold text-slate-600 uppercase block">{t("acct.gate.postalCode")}</label>
         <input
           required minLength={5} maxLength={5} value={postalCode}
           onChange={(e) => setPostalCode(e.target.value.replace(/\D/g, ""))}
@@ -130,13 +132,14 @@ function ProfileCompletionForm({ onComplete }: { onComplete: () => void }) {
         type="submit" disabled={submitting}
         className="w-full rounded-xl bg-gradient-to-r from-brand-600 to-brand-400 hover:from-brand-500 hover:to-brand-400 py-3 text-sm font-semibold text-white shadow-lg transition duration-300 disabled:opacity-50 cursor-pointer"
       >
-        {submitting ? "Salvataggio..." : "Continua"}
+        {submitting ? t("acct.gate.saving") : t("acct.gate.continue")}
       </button>
     </form>
   );
 }
 
 function EmailVerificationGate({ email }: { email?: string }) {
+  const { t } = useI18n();
   const [sent, setSent] = useState(false);
   const [sending, setSending] = useState(false);
 
@@ -158,20 +161,20 @@ function EmailVerificationGate({ email }: { email?: string }) {
         </svg>
       </div>
       <div>
-        <h3 className="text-base font-semibold text-slate-900">Conferma il tuo indirizzo email</h3>
+        <h3 className="text-base font-semibold text-slate-900">{t("acct.gate.verifyTitle")}</h3>
         <p className="text-sm text-slate-500 mt-1">
-          {email ? <>Ti abbiamo inviato un link di conferma a <strong className=" text-slate-700">{email}</strong>.</> : "Controlla la tua casella di posta."}
-          {" "}Clicca il link per attivare l&apos;accesso alla dashboard.
+          {email ? <>{t("acct.gate.verifySentTo")}<strong className=" text-slate-700">{email}</strong>.</> : t("acct.gate.verifyCheckInbox")}
+          {" "}{t("acct.gate.verifyClick")}
         </p>
       </div>
       {sent ? (
-        <p className="text-xs text-emerald-400">Email inviata di nuovo -- controlla anche lo spam.</p>
+        <p className="text-xs text-emerald-400">{t("acct.gate.resent")}</p>
       ) : (
         <button
           onClick={handleResend} disabled={sending}
           className="text-sm text-brand-600 hover:text-brand-600 transition cursor-pointer disabled:opacity-50"
         >
-          {sending ? "Invio in corso..." : "Non hai ricevuto l'email? Invia di nuovo"}
+          {sending ? t("acct.jcCode.sending") : t("acct.gate.resend")}
         </button>
       )}
     </div>
@@ -186,6 +189,7 @@ function EmailVerificationGate({ email }: { email?: string }) {
  * Admin-tier roles are exempt -- these gates only make sense for a
  * self-registered CUSTOMER/PROMOTER. */
 export function AccountGate({ children }: { children: ReactNode }) {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const { data: me, isLoading } = useQuery({
     queryKey: ["auth", "me", "gate"],
@@ -220,9 +224,9 @@ export function AccountGate({ children }: { children: ReactNode }) {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                   </svg>
                 </div>
-                <h3 className="text-base font-semibold text-slate-900">Completa il tuo profilo</h3>
+                <h3 className="text-base font-semibold text-slate-900">{t("acct.gate.completeTitle")}</h3>
                 <p className="text-sm text-slate-500 mt-1">
-                  Per usare la dashboard ci servono ancora il tuo codice fiscale e l&apos;indirizzo di residenza.
+                  {t("acct.gate.completeText")}
                 </p>
               </div>
               <ProfileCompletionForm onComplete={handleProfileComplete} />

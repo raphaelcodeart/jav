@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { WalletRead, WalletTransactionRead } from "@/lib/types";
+import { useI18n } from "@/lib/i18n/provider";
 
 const CASHBACK_SOURCES = new Set([
   "ORDER_CASHBACK_BASE", "ORDER_CASHBACK_BONUS", "CONTRACT_CASHBACK",
@@ -43,19 +44,19 @@ function useCountUp(value: number, durationMs = 900): number {
   return display;
 }
 
-function formatJavCash(cents: number): string {
-  return (cents / 100).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function formatJavCash(cents: number, tag: string): string {
+  return (cents / 100).toLocaleString(tag, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-async function fetchMyWallet(): Promise<WalletRead> {
+async function fetchMyWallet(t: ReturnType<typeof useI18n>["t"]): Promise<WalletRead> {
   const res = await fetch("/api/proxy/wallets/me");
-  if (!res.ok) throw new Error("Impossibile caricare il wallet.");
+  if (!res.ok) throw new Error(t("acct.stats.walletError"));
   return res.json();
 }
 
-async function fetchMyTransactions(): Promise<WalletTransactionRead[]> {
+async function fetchMyTransactions(t: ReturnType<typeof useI18n>["t"]): Promise<WalletTransactionRead[]> {
   const res = await fetch("/api/proxy/wallets/me/transactions");
-  if (!res.ok) throw new Error("Impossibile caricare le transazioni.");
+  if (!res.ok) throw new Error(t("acct.stats.txError"));
   return res.json();
 }
 
@@ -71,6 +72,7 @@ function StatCard({
   icon: React.ReactNode;
   hint?: string;
 }) {
+  const { fmt } = useI18n();
   const animated = useCountUp(cents);
   const toneClasses: Record<"orange" | "emerald" | "sky", { ring: string; glow: string; text: string; iconBg: string }> = {
     orange: { ring: "from-brand-500/20 via-brand-500/5", glow: "shadow-brand-500/10", text: "text-brand-600", iconBg: "bg-brand-500/15 text-brand-600" },
@@ -88,7 +90,7 @@ function StatCard({
       </div>
       <p className=" font-bold text-slate-500 uppercase tracking-wider mb-1">{label}</p>
       <p className={`text-3xl font-black tabular-nums ${t.text}`}>
-        {formatJavCash(animated)} <span className="text-sm font-bold align-top">JavCash</span>
+        {formatJavCash(animated, fmt.tag)} <span className="text-sm font-bold align-top">JavCash</span>
       </p>
       {hint && <p className="text-[11px] text-slate-500 mt-1.5">{hint}</p>}
     </div>
@@ -100,26 +102,27 @@ function StatCard({
     Wallet/Contabilità tabs, this is just the at-a-glance summary). Shared
     between the customer and promoter home screens. */
 export function DashboardWalletStats() {
-  const { data: wallet } = useQuery({ queryKey: ["wallet", "me"], queryFn: fetchMyWallet });
-  const { data: transactions } = useQuery({ queryKey: ["wallet", "me", "transactions"], queryFn: fetchMyTransactions });
+  const { t } = useI18n();
+  const { data: wallet } = useQuery({ queryKey: ["wallet", "me"], queryFn: () => fetchMyWallet(t) });
+  const { data: transactions } = useQuery({ queryKey: ["wallet", "me", "transactions"], queryFn: () => fetchMyTransactions(t) });
 
   const list = transactions ?? [];
   const cashbackEarnedCents = list
-    .filter((t) => t.source && CASHBACK_SOURCES.has(t.source))
-    .reduce((sum, t) => sum + t.amount_cents, 0);
+    .filter((tx) => tx.source && CASHBACK_SOURCES.has(tx.source))
+    .reduce((sum, tx) => sum + tx.amount_cents, 0);
   const spentCents = wallet
     ? list
-        .filter((t) => t.from_wallet_id === wallet.id)
-        .reduce((sum, t) => sum + t.amount_cents, 0)
+        .filter((tx) => tx.from_wallet_id === wallet.id)
+        .reduce((sum, tx) => sum + tx.amount_cents, 0)
     : 0;
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
       <StatCard
-        label="Saldo Wallet"
+        label={t("acct.stats.balance")}
         cents={wallet?.balance_cents ?? 0}
         tone="orange"
-        hint="Disponibile per i tuoi acquisti"
+        hint={t("acct.stats.balanceHint")}
         icon={
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a2 2 0 00-2-2H7a2 2 0 00-2 2m16 0v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6m16 0V9a2 2 0 00-2-2H5a2 2 0 00-2 2v3m16 0h-4a1 1 0 00-1 1v0a1 1 0 001 1h4" />
@@ -127,10 +130,10 @@ export function DashboardWalletStats() {
         }
       />
       <StatCard
-        label="Cashback Accumulato"
+        label={t("acct.stats.cashback")}
         cents={cashbackEarnedCents}
         tone="emerald"
-        hint="Totale ricevuto da ordini e contratti"
+        hint={t("acct.stats.cashbackHint")}
         icon={
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V6m0 10v2" />
@@ -138,10 +141,10 @@ export function DashboardWalletStats() {
         }
       />
       <StatCard
-        label="JavCash Consumati"
+        label={t("acct.stats.spent")}
         cents={spentCents}
         tone="sky"
-        hint="Totale speso in acquisti e trasferimenti"
+        hint={t("acct.stats.spentHint")}
         icon={
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3v-6m-3 6v-1m6-13H9a2 2 0 00-2 2v14a2 2 0 002 2h6a2 2 0 002-2V6a2 2 0 00-2-2z" />

@@ -64,9 +64,9 @@ export function AdminConsole({ email, isSuperAdmin }: { email?: string; isSuperA
     // Gli sponsor della home e delle loro pagine: chi gestisce i club (clubs.manage).
     ...(isSuperAdmin ? [{ key: "sponsors", label: t("console.sponsors"), icon: emoji("🤝"), group: "JudoArteVida" }] : []),
     // I post di JudoArteVida nella bacheca di tutti i club.
-    ...(isSuperAdmin ? [{ key: "jav-news", label: "Bacheca", icon: emoji("📰"), group: "JudoArteVida" }] : []),
+    ...(isSuperAdmin ? [{ key: "jav-news", label: t("adm.console.newsNav"), icon: emoji("📰"), group: "JudoArteVida" }] : []),
     // I testi delle email che partono dalla piattaforma e dai club.
-    ...(isSuperAdmin ? [{ key: "emails", label: "Email", icon: emoji("📧"), group: "JudoArteVida" }] : []),
+    ...(isSuperAdmin ? [{ key: "emails", label: t("adm.console.emailsNav"), icon: emoji("📧"), group: "JudoArteVida" }] : []),
     ...(isSuperAdmin ? [{ key: "javbot", label: t("console.javbot"), icon: emoji("🤖"), group: "JudoArteVida" }] : []),
     ...sectionsFor(current?.kind).map((s) => ({
       key: `club:${s.key}`, label: t.dyn(`clubNav.${s.key}`, s.key), icon: emoji(s.icon), group: clubGroup,
@@ -110,13 +110,13 @@ export function AdminConsole({ email, isSuperAdmin }: { email?: string; isSuperA
       )}
       {active === "jav-news" && (
         <>
-          <PageHeader eyebrow="JudoArteVida" title="Bacheca del circuito" subtitle="I post di JudoArteVida compaiono nella bacheca di atleti e famiglie di tutti i club, insieme ai post dei club e alle prove in arrivo." />
+          <PageHeader eyebrow="JudoArteVida" title={t("adm.console.newsTitle")} subtitle={t("adm.console.newsSubtitle")} />
           <NewsAdminPanel mode="platform" />
         </>
       )}
       {active === "emails" && (
         <>
-          <PageHeader eyebrow="JudoArteVida" title="Email" subtitle="I testi delle email automatiche: con il logo di JudoArteVida o del club che scrive. Modificali, guarda l'anteprima e mandati una prova." />
+          <PageHeader eyebrow="JudoArteVida" title={t("adm.console.emailsNav")} subtitle={t("adm.console.emailsSubtitle")} />
           <EmailTextsPanel />
         </>
       )}

@@ -11,6 +11,8 @@ import { useCartActions } from "@/components/shop-cart";
 import { vatLineLabel } from "@/lib/product-audience";
 import type { CustomerRead, JavMarketOrderRead, JavMarketProductRead, MarketQuoteRead } from "@/lib/types";
 import { JavCashConfirmCode } from "@/components/javcash-confirm-code";
+import { AddressFields, javCash as javCashIn } from "@/components/marketplace-checkout-bits";
+import { useI18n } from "@/lib/i18n/provider";
 
 const MAX_QUANTITY = 10;
 
@@ -18,14 +20,6 @@ const MAX_QUANTITY = 10;
 function bankTransferDiscount(residualCents: number, percentage: number): number {
   if (residualCents <= 0 || percentage <= 0) return 0;
   return Math.floor((residualCents * percentage + 50) / 100);
-}
-
-function euro(cents: number): string {
-  return (cents / 100).toLocaleString("it-IT", { style: "currency", currency: "EUR" });
-}
-
-function javCash(cents: number): string {
-  return `${(cents / 100).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} JavCash`;
 }
 
 async function fetchQuote(variantId: string, quantity: number): Promise<MarketQuoteRead> {
@@ -42,7 +36,7 @@ async function fetchMyCustomer(): Promise<CustomerRead | null> {
 
 async function fetchPaymentInfo(): Promise<{ iban: string | null; holder: string; instructions: string | null }> {
   const res = await fetch("/api/proxy/organizations/me/payment-info");
-  if (!res.ok) throw new Error("Impossibile caricare le coordinate di pagamento.");
+  if (!res.ok) throw new Error("payment-info");
   return res.json();
 }
 
@@ -55,18 +49,6 @@ type Address = {
   province: string;
   postal_code: string;
 };
-
-const inputClass =
-  "w-full rounded-lg glass-input px-3 py-2 text-sm focus:border-brand-500";
-
-function Field({ label, children, className = "" }: { label: string; children: React.ReactNode; className?: string }) {
-  return (
-    <label className={`block ${className}`}>
-      <span className="block font-semibold text-slate-500 uppercase tracking-wide mb-1">{label}</span>
-      {children}
-    </label>
-  );
-}
 
 function Section({ n, title, done, children }: { n: number; title: string; done?: boolean; children: React.ReactNode }) {
   return (
@@ -88,9 +70,12 @@ function Section({ n, title, done, children }: { n: number; title: string; done?
  *  delivery address. Every amount is recomputed by the server.
  */
 export function JavMarketProductModal({ product, onClose }: { product: JavMarketProductRead; onClose: () => void }) {
+  const { t, fmt } = useI18n();
+  const euro = fmt.euro;
+  const javCash = (cents: number) => javCashIn(cents, fmt.tag);
   const queryClient = useQueryClient();
   const { data: marketplaceConfig } = useMarketplaceConfig();
-  const shopLabel = marketplaceConfig?.labels.jav_market ?? "Fai la Spesa con Jav";
+  const shopLabel = marketplaceConfig?.labels.jav_market ?? t("shopx.cart.labelJavMarket");
   const firstAvailable = product.variants.find((v) => v.in_stock) ?? product.variants[0];
   const [variantId, setVariantId] = useState<string>(firstAvailable?.id ?? "");
   const [quantity, setQuantity] = useState(1);
@@ -227,7 +212,7 @@ export function JavMarketProductModal({ product, onClose }: { product: JavMarket
       }
       setStep("bank_instructions");
     } catch (err: any) {
-      setSubmitError(err.message || "Impossibile completare l'acquisto.");
+      setSubmitError(err.message || t("shopx.checkout.failed"));
     } finally {
       setSubmitLoading(false);
     }
@@ -243,10 +228,10 @@ export function JavMarketProductModal({ product, onClose }: { product: JavMarket
           <div className="min-w-0">
             <p className="text-[10px] font-bold uppercase tracking-wider text-brand-600">{shopLabel}</p>
             <h3 className="text-base font-bold text-slate-900 truncate">
-              {step === "product" ? product.name : step === "checkout" ? "Completa l'acquisto" : product.name}
+              {step === "product" ? product.name : step === "checkout" ? t("shopx.checkout.title") : product.name}
             </h3>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-900/10 text-slate-400 transition cursor-pointer" aria-label="Chiudi">
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-900/10 text-slate-400 transition cursor-pointer" aria-label={t("common.close")}>
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -286,13 +271,13 @@ export function JavMarketProductModal({ product, onClose }: { product: JavMarket
                     {euro((variant?.price_cents ?? product.min_price_cents) * quantity)}
                   </p>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    {quantity > 1 && variant ? `${euro(variant.price_cents)} cad. · ` : ""}
-                    {product.shipping_included ? "Spedizione inclusa" : "+ spedizione, calcolata al checkout"}
+                    {quantity > 1 && variant ? `${t("shopx.product.each", { price: euro(variant.price_cents) })} · ` : ""}
+                    {product.shipping_included ? t("shopx.product.shippingIncluded") : t("shopx.product.shippingAtCheckout")}
                   </p>
                   {product.bank_transfer_discount_percentage > 0 && (
                     <div className="mt-2 inline-flex flex-col gap-0.5 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-[11px]">
                       <span className="text-emerald-400">
-                        Con bonifico istantaneo -{product.bank_transfer_discount_percentage}%:{" "}
+                        {t("shopx.product.withInstantTransfer", { pct: product.bank_transfer_discount_percentage })}{" "}
                         <strong className="tabular-nums">
                           {euro(
                             ((variant?.price_cents ?? product.min_price_cents) * quantity)
@@ -307,29 +292,29 @@ export function JavMarketProductModal({ product, onClose }: { product: JavMarket
                 <div className="flex flex-wrap gap-2 text-[11px]">
                   {product.shipping_days && (
                     <span className="px-2.5 py-1 rounded-full bg-sky-500/10 border border-sky-500/20 text-sky-400 font-semibold">
-                      Consegna in {product.shipping_days} giorni
+                      {t("shopx.product.deliveryDays", { days: product.shipping_days })}
                     </span>
                   )}
                   {product.credit_discount_percentage > 0 && (
                     <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-semibold">
-                      Paghi fino al {product.credit_discount_percentage}% in JavCash
+                      {t("shopx.product.payUpToJavCash", { pct: product.credit_discount_percentage })}
                     </span>
                   )}
                   {(product.min_order_cents ?? 0) > 0 && (
                     <span className="px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-700 font-semibold">
-                      Ordine minimo {euro(product.min_order_cents ?? 0)} IVA incl.
+                      {t("shopx.product.minOrder", { amount: euro(product.min_order_cents ?? 0) })}
                     </span>
                   )}
                   {product.free_shipping_threshold_cents != null && (
                     <span className="px-2.5 py-1 rounded-full bg-sky-500/10 border border-sky-500/20 text-sky-400 font-semibold">
-                      {product.shipping_flat_cents ? `Spedizione ${euro(product.shipping_flat_cents)}, ` : ""}gratis da {euro(product.free_shipping_threshold_cents)}
+                      {product.shipping_flat_cents ? t("shopx.product.shippingFlatFreeFrom", { flat: euro(product.shipping_flat_cents), amount: euro(product.free_shipping_threshold_cents) }) : t("shopx.product.freeFrom", { amount: euro(product.free_shipping_threshold_cents) })}
                     </span>
                   )}
                 </div>
 
                 {product.variants.length > 1 && (
                   <div>
-                    <p className=" font-semibold text-slate-500 uppercase tracking-wide mb-2">Variante</p>
+                    <p className=" font-semibold text-slate-500 uppercase tracking-wide mb-2">{t("shopx.club.variant")}</p>
                     <div className="flex flex-wrap gap-2">
                       {product.variants.map((v) => (
                         <button
@@ -337,7 +322,7 @@ export function JavMarketProductModal({ product, onClose }: { product: JavMarket
                           type="button"
                           disabled={!v.in_stock}
                           onClick={() => { setVariantId(v.id); setImageOverride(v.image_url); }}
-                          title={v.in_stock ? euro(v.price_cents) : "Non disponibile"}
+                          title={v.in_stock ? euro(v.price_cents) : t("shopx.product.unavailable")}
                           className={`flex items-center gap-2 pl-1 pr-3 py-1 rounded-xl border text-xs font-semibold transition ${
                             !v.in_stock
                               ? "opacity-40 line-through cursor-not-allowed border-slate-300 text-slate-500"
@@ -357,7 +342,7 @@ export function JavMarketProductModal({ product, onClose }: { product: JavMarket
                 )}
 
                 <div>
-                  <p className=" font-semibold text-slate-500 uppercase tracking-wide mb-2">Quantità</p>
+                  <p className=" font-semibold text-slate-500 uppercase tracking-wide mb-2">{t("shopx.product.quantity")}</p>
                   <div className="inline-flex items-center rounded-xl border border-slate-300 overflow-hidden">
                     <button type="button" onClick={() => changeQuantity(quantity - 1)} disabled={quantity <= 1} className="px-3.5 py-2 text-lg text-slate-600 hover:bg-slate-100 disabled:opacity-40 cursor-pointer">−</button>
                     <span className="w-10 text-center font-bold text-slate-900 tabular-nums">{quantity}</span>
@@ -367,7 +352,7 @@ export function JavMarketProductModal({ product, onClose }: { product: JavMarket
 
                 {product.purchasable === false ? (
                   <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900 ring-1 ring-amber-200">
-                    🛍️ Gli acquisti dei prodotti JudoArteVida apriranno presto: per ora il prodotto è solo in vetrina.
+                    🛍️ {t("shopx.product.comingSoon")}
                   </p>
                 ) : (
                 <div className="space-y-2">
@@ -377,7 +362,7 @@ export function JavMarketProductModal({ product, onClose }: { product: JavMarket
                     onClick={() => setStep("checkout")}
                     className="w-full px-4 py-3 rounded-xl bg-gradient-to-r from-brand-600 to-brand-400 hover:from-brand-500 hover:to-brand-400 text-sm font-bold text-white shadow-lg shadow-brand-500/20 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {variant && variant.in_stock ? "Acquista subito" : "Non disponibile"}
+                    {variant && variant.in_stock ? t("shopx.product.buyNow") : t("shopx.product.unavailable")}
                   </button>
                   {/* Session 75: chi vuole comprare una cosa sola continua a
                       farlo in tre clic con «Acquista subito»; il carrello
@@ -391,15 +376,15 @@ export function JavMarketProductModal({ product, onClose }: { product: JavMarket
                       addToCart.mutate(
                         { shop: "jav_market", variantId: variant.id, quantity },
                         {
-                          onSuccess: () => setCartMessage({ ok: true, text: "Aggiunto al carrello." }),
+                          onSuccess: () => setCartMessage({ ok: true, text: t("shopx.product.addedToCart") }),
                           onError: (err: unknown) =>
-                            setCartMessage({ ok: false, text: (err as Error).message || "Non è stato possibile aggiungerlo." }),
+                            setCartMessage({ ok: false, text: (err as Error).message || t("shopx.product.addFailed") }),
                         },
                       );
                     }}
                     className="w-full px-4 py-2.5 rounded-xl border border-brand-500/40 text-sm font-semibold text-brand-600 hover:bg-brand-500/10 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    {addToCart.isPending ? "Aggiungo…" : "Aggiungi al carrello"}
+                    {addToCart.isPending ? t("shopx.product.adding") : t("shopx.product.addToCart")}
                   </button>
                   {cartMessage && (
                     <p className={`text-[11px] ${cartMessage.ok ? "text-emerald-400" : "text-rose-400"}`}>
@@ -412,7 +397,7 @@ export function JavMarketProductModal({ product, onClose }: { product: JavMarket
                 {product.producer && (
                   <div className="p-3 rounded-xl bg-slate-900/5 border border-slate-200">
                     <p className=" font-semibold text-slate-500 uppercase tracking-wide mb-1">
-                      Prodotto da
+                      {t("shopx.product.producedBy")}
                     </p>
                     <p className="text-sm font-semibold text-slate-900">{product.producer.name}</p>
                     {product.producer.description && (
@@ -427,7 +412,7 @@ export function JavMarketProductModal({ product, onClose }: { product: JavMarket
                         rel="noopener noreferrer"
                         className="inline-block mt-1.5 text-[11px] font-semibold text-brand-600 hover:text-brand-600"
                       >
-                        Sito dell&apos;azienda →
+                        {t("shopx.product.companySite")} →
                       </a>
                     )}
                   </div>
@@ -435,13 +420,13 @@ export function JavMarketProductModal({ product, onClose }: { product: JavMarket
 
                 {description && (
                   <div className="pt-3 border-t border-slate-200">
-                    <p className=" font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Descrizione</p>
+                    <p className=" font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{t("shopx.club.description")}</p>
                     <p className={`text-xs text-slate-600 whitespace-pre-line leading-relaxed ${!showFullDescription && longDescription ? "line-clamp-6" : ""}`}>
                       {description}
                     </p>
                     {longDescription && (
                       <button type="button" onClick={() => setShowFullDescription((v) => !v)} className="mt-1 text-[11px] font-semibold text-brand-600 hover:text-brand-600 cursor-pointer">
-                        {showFullDescription ? "Mostra meno" : "Leggi tutto"}
+                        {showFullDescription ? t("shopx.product.showLess") : t("shopx.product.readAll")}
                       </button>
                     )}
                   </div>
@@ -453,7 +438,7 @@ export function JavMarketProductModal({ product, onClose }: { product: JavMarket
           {step === "checkout" && (
             <div className="space-y-4">
               <button type="button" onClick={() => setStep("product")} className="text-xs font-semibold text-brand-600 hover:text-brand-600 cursor-pointer">
-                ← Torna al prodotto
+                ← {t("shopx.product.backToProduct")}
               </button>
               <AthletePicker value={athleteId} onChange={setAthleteId} />
 
@@ -463,7 +448,7 @@ export function JavMarketProductModal({ product, onClose }: { product: JavMarket
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-slate-900 truncate">{product.name}</p>
-                  <p className="text-xs text-slate-500">{variant?.label} · {quantity} {quantity === 1 ? "pezzo" : "pezzi"}</p>
+                  <p className="text-xs text-slate-500">{variant?.label} · {quantity === 1 ? t("shopx.pieces.one", { n: quantity }) : t("shopx.pieces.many", { n: quantity })}</p>
                 </div>
               </div>
 
@@ -471,49 +456,20 @@ export function JavMarketProductModal({ product, onClose }: { product: JavMarket
                 <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs">{(quoteError as Error).message}</div>
               )}
               {!quote && !quoteError && (
-                <div className="py-10 text-center text-sm text-slate-500">Calcolo della spedizione in corso...</div>
+                <div className="py-10 text-center text-sm text-slate-500">{t("shopx.product.calcShipping")}</div>
               )}
 
               {quote && (
                 <>
-                  <Section n={1} title="Dove lo spediamo?" done={addressComplete}>
-                    <div className="grid grid-cols-1 sm:grid-cols-6 gap-3">
-                      <Field label="Nome e cognome" className="sm:col-span-3">
-                        <input className={inputClass} value={address.recipient_name} maxLength={50} autoComplete="name"
-                          onChange={(e) => setAddress({ ...address, recipient_name: e.target.value })} />
-                      </Field>
-                      <Field label="Telefono (per il corriere)" className="sm:col-span-3">
-                        <input className={inputClass} value={address.recipient_phone} maxLength={20} inputMode="tel" autoComplete="tel"
-                          onChange={(e) => setAddress({ ...address, recipient_phone: e.target.value })} />
-                      </Field>
-                      <Field label="Indirizzo e numero civico" className="sm:col-span-4">
-                        <input className={inputClass} value={address.address_line1} maxLength={255} autoComplete="address-line1"
-                          onChange={(e) => setAddress({ ...address, address_line1: e.target.value })} />
-                      </Field>
-                      <Field label="Scala, interno (facoltativo)" className="sm:col-span-2">
-                        <input className={inputClass} value={address.address_line2} maxLength={255} autoComplete="address-line2"
-                          onChange={(e) => setAddress({ ...address, address_line2: e.target.value })} />
-                      </Field>
-                      <Field label="CAP" className="sm:col-span-2">
-                        <input className={inputClass} value={address.postal_code} maxLength={12} inputMode="numeric" autoComplete="postal-code"
-                          onChange={(e) => setAddress({ ...address, postal_code: e.target.value })} />
-                      </Field>
-                      <Field label="Città" className="sm:col-span-3">
-                        <input className={inputClass} value={address.city} maxLength={50} autoComplete="address-level2"
-                          onChange={(e) => setAddress({ ...address, city: e.target.value })} />
-                      </Field>
-                      <Field label="Provincia" className="sm:col-span-1">
-                        <input className={inputClass} value={address.province} maxLength={50} placeholder="MI"
-                          onChange={(e) => setAddress({ ...address, province: e.target.value.toUpperCase() })} />
-                      </Field>
-                    </div>
+                  <Section n={1} title={t("shopx.checkout.whereShip")} done={addressComplete}>
+                    <AddressFields address={address} onChange={setAddress} />
                     <p className="text-[11px] text-slate-500">
-                      Spedizione in Italia{quote.shipping_days ? ` · consegna stimata in ${quote.shipping_days} giorni lavorativi` : ""}.
+                      {quote.shipping_days ? t("shopx.checkout.shippingItalyDays", { days: quote.shipping_days }) : t("shopx.checkout.shippingItaly")}
                     </p>
                   </Section>
 
                   {quote.max_creditable_cents > 0 && maxUsableCents > 0 && (
-                    <Section n={2} title="Vuoi usare i tuoi JavCash?" done={creditCents > 0 && !!otpCode.trim()}>
+                    <Section n={2} title={t("shopx.checkout.useJavCashQ")} done={creditCents > 0 && !!otpCode.trim()}>
                       <div className="flex flex-wrap items-center gap-2">
                         <button
                           type="button"
@@ -522,16 +478,16 @@ export function JavMarketProductModal({ product, onClose }: { product: JavMarket
                             useCredit ? "bg-brand-600 border-brand-600 text-white" : " bg-slate-900/5 border-slate-300 text-slate-600"
                           }`}
                         >
-                          {useCredit ? "Sì, uso i JavCash" : "Usa i JavCash"}
+                          {useCredit ? t("shopx.checkout.usingJavCash") : t("shopx.checkout.useJavCash")}
                         </button>
                         {/* Stessa cura del carrello (Session 76): quando il
                             saldo e' piu' basso del tetto del prodotto vanno
                             mostrati entrambi i numeri, dicendo quale dei due
                             ferma il cliente. */}
                         <span className="block w-full text-[11px] text-slate-500">
-                          Questo prodotto concede fino a{" "}
+                          {t("shopx.product.allowUpTo")}{" "}
                           <strong className=" text-slate-600">{javCash(quote.max_creditable_cents)}</strong>
-                          {" "}({quote.credit_discount_percentage}% del suo prezzo): il resto lo paghi con bonifico.
+                          {" "}{t("shopx.product.allowPctRest", { pct: quote.credit_discount_percentage })}
                         </span>
                         {quote.customer_wallet_balance_cents < quote.max_creditable_cents ? (
                           <div className="w-full flex items-start gap-2.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30">
@@ -540,17 +496,16 @@ export function JavMarketProductModal({ product, onClose }: { product: JavMarket
                             </svg>
                             <div className="text-xs text-amber-700 leading-relaxed">
                               <p className="font-bold text-amber-800">
-                                Puoi usarne al massimo {javCash(maxUsableCents)}
+                                {t("shopx.checkout.maxUsable", { amount: javCash(maxUsableCents) })}
                               </p>
                               <p className="mt-0.5">
-                                Questo prodotto ne concederebbe {javCash(quote.max_creditable_cents)}, ma nel tuo wallet
-                                ce ne sono {javCash(quote.customer_wallet_balance_cents)}. Il resto lo paghi con bonifico.
+                                {t("shopx.product.walletShort", { allowed: javCash(quote.max_creditable_cents), balance: javCash(quote.customer_wallet_balance_cents) })}
                               </p>
                             </div>
                           </div>
                         ) : (
                           <span className="block w-full text-[11px] text-slate-500">
-                            Saldo {javCash(quote.customer_wallet_balance_cents)}: puoi usarli tutti fino a {javCash(maxUsableCents)}.
+                            {t("shopx.checkout.balanceAll", { balance: javCash(quote.customer_wallet_balance_cents), amount: javCash(maxUsableCents) })}
                           </span>
                         )}
                       </div>
@@ -561,7 +516,7 @@ export function JavMarketProductModal({ product, onClose }: { product: JavMarket
                               <button key={f} type="button"
                                 onClick={() => { setCreditAmount(((Math.round(maxUsableCents * f)) / 100).toFixed(2)); resetOtp(); }}
                                 className="px-2.5 py-1 rounded-lg font-semibold border border-slate-300 text-slate-600 hover:bg-slate-100 cursor-pointer">
-                                {f === 1 ? "Massimo" : `${f * 100}%`}
+                                {f === 1 ? t("shopx.checkout.max") : `${f * 100}%`}
                               </button>
                             ))}
                             <input inputMode="decimal" value={creditAmount}
@@ -578,15 +533,15 @@ export function JavMarketProductModal({ product, onClose }: { product: JavMarket
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
                               </svg>
                               <div className="text-xs text-rose-300 leading-relaxed">
-                                <p className="font-bold">Hai scritto {javCash(typedCents)}, ma non puoi usarne così tanti.</p>
+                                <p className="font-bold">{t("shopx.checkout.overCap", { amount: javCash(typedCents) })}</p>
                                 <p className="mt-0.5">
                                   {quote.customer_wallet_balance_cents < quote.max_creditable_cents
-                                    ? `Nel tuo wallet ci sono ${javCash(quote.customer_wallet_balance_cents)}.`
-                                    : `Su questo ordine il massimo è ${javCash(quote.max_creditable_cents)}.`}{" "}
+                                    ? t("shopx.checkout.walletHas", { amount: javCash(quote.customer_wallet_balance_cents) })
+                                    : t("shopx.checkout.orderMax", { amount: javCash(quote.max_creditable_cents) })}{" "}
                                   <button type="button"
                                     onClick={() => { setCreditAmount((maxUsableCents / 100).toFixed(2)); resetOtp(); }}
                                     className="font-bold underline underline-offset-2 hover:text-rose-200 cursor-pointer">
-                                    Usa il massimo ({javCash(maxUsableCents)})
+                                    {t("shopx.checkout.useMax", { amount: javCash(maxUsableCents) })}
                                   </button>
                                 </p>
                               </div>
@@ -608,9 +563,9 @@ export function JavMarketProductModal({ product, onClose }: { product: JavMarket
                   )}
 
                   {needsPaymentMethod && (
-                    <Section n={quote.max_creditable_cents > 0 && maxUsableCents > 0 ? 3 : 2} title="Come vuoi pagare?" done={!!paymentMethod}>
+                    <Section n={quote.max_creditable_cents > 0 && maxUsableCents > 0 ? 3 : 2} title={t("shopx.checkout.howPay")} done={!!paymentMethod}>
                       {noMethodAvailable ? (
-                        <p className="text-xs text-rose-400">Nessun metodo di pagamento disponibile. Contatta l&apos;assistenza.</p>
+                        <p className="text-xs text-rose-400">{t("shopx.product.noMethod")}</p>
                       ) : (
                         <div className="space-y-2">
                           <div className="flex gap-2.5">
@@ -618,17 +573,17 @@ export function JavMarketProductModal({ product, onClose }: { product: JavMarket
                               <div className="relative flex-1 px-3 py-3 rounded-xl text-sm font-semibold border-2 text-left bg-brand-600 border-brand-600 text-white">
                                 {bankDiscountCents > 0 && (
                                   <span className="absolute -top-2 right-2 px-1.5 py-0.5 rounded-md bg-emerald-500 text-white text-[9px] font-bold uppercase tracking-wide">
-                                    Sconto {discountPercentage}%
+                                    {t("shopx.product.discountPct", { pct: discountPercentage })}
                                   </span>
                                 )}
-                                <span className="block">Bonifico istantaneo</span>
+                                <span className="block">{t("shopx.checkout.instantTransfer")}</span>
                                 <span className="block text-base font-extrabold tabular-nums">{euro(residualCents - bankDiscountCents)}</span>
                               </div>
                             )}
                           </div>
                           {bankDiscountCents > 0 && quote.bank_transfer_available && (
                             <p className="text-[11px] text-emerald-400">
-                              Pagando con bonifico istantaneo hai uno sconto del {discountPercentage}% (-{euro(bankDiscountCents)}).
+                              {t("shopx.product.instantDiscount", { pct: discountPercentage, amount: euro(bankDiscountCents) })}
                             </p>
                           )}
                         </div>
@@ -641,21 +596,21 @@ export function JavMarketProductModal({ product, onClose }: { product: JavMarket
                       <span>{quote.quantity} × {euro(quote.unit_price_cents)}</span><span>{euro(quote.items_cents)}</span>
                     </div>
                     <div className="flex justify-between text-slate-500">
-                      <span>Spedizione</span><span>{quote.free_shipping ? "Gratis" : quote.shipping_included || quote.shipping_cents === 0 ? "Inclusa" : euro(quote.shipping_cents)}</span>
+                      <span>{t("shopx.checkout.shipping")}</span><span>{quote.free_shipping ? t("shopx.checkout.free") : quote.shipping_included || quote.shipping_cents === 0 ? t("shopx.checkout.included") : euro(quote.shipping_cents)}</span>
                     </div>
                     {(quote.free_shipping_missing_cents ?? 0) > 0 && (
                       <p className="text-[11px] text-sky-400">
-                        Aggiungi altri {euro(quote.free_shipping_missing_cents ?? 0)} di prodotti e la spedizione è gratis.
+                        {t("shopx.checkout.freeShippingMissing", { amount: euro(quote.free_shipping_missing_cents ?? 0) })}
                       </p>
                     )}
                     {creditCents > 0 && (
                       <div className="flex justify-between text-emerald-400">
-                        <span>JavCash usati</span><span>-{javCash(creditCents)}</span>
+                        <span>{t("shopx.checkout.javCashUsed")}</span><span>-{javCash(creditCents)}</span>
                       </div>
                     )}
                     {payingByBank && bankDiscountCents > 0 && (
                       <div className="flex justify-between text-emerald-400">
-                        <span>Sconto pagamento con bonifico (-{discountPercentage}%)</span><span>-{euro(bankDiscountCents)}</span>
+                        <span>{t("shopx.checkout.bankDiscount", { pct: discountPercentage })}</span><span>-{euro(bankDiscountCents)}</span>
                       </div>
                     )}
                     {/* L'IVA sta nell'elenco, sopra il totale, non appesa
@@ -669,7 +624,7 @@ export function JavMarketProductModal({ product, onClose }: { product: JavMarket
                       </div>
                     )}
                     <div className="flex items-center justify-between pt-1.5 border-t border-slate-300">
-                      <span className="text-sm font-bold text-slate-900">Totale da pagare</span>
+                      <span className="text-sm font-bold text-slate-900">{t("shopx.checkout.totalDue")}</span>
                       <span className={`text-xl font-extrabold tabular-nums ${residualCents > 0 ? "text-brand-600" : "text-emerald-400"}`}>
                         {quoteLoading ? "…" : euro(totalDueCents)}
                       </span>
@@ -678,9 +633,7 @@ export function JavMarketProductModal({ product, onClose }: { product: JavMarket
 
                   {belowMinimum && quote && (
                     <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-700 text-xs">
-                      L&apos;ordine minimo su questo shop è di {euro(quote.min_order_cents ?? 0)} (IVA inclusa):
-                      aggiungi altri {euro(quote.min_order_missing_cents ?? 0)} di prodotti. Puoi aumentare la quantità
-                      o mettere questo articolo nel carrello insieme ad altri.
+                      {t("shopx.product.belowMinimum", { min: euro(quote.min_order_cents ?? 0), missing: euro(quote.min_order_missing_cents ?? 0) })}
                     </div>
                   )}
 
@@ -698,10 +651,10 @@ export function JavMarketProductModal({ product, onClose }: { product: JavMarket
                     }
                     className="w-full px-4 py-3 rounded-xl bg-gradient-to-r from-brand-600 to-brand-400 hover:from-brand-500 hover:to-brand-400 text-sm font-bold text-white shadow-lg shadow-brand-500/20 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {submitLoading ? "Elaborazione..." : residualCents > 0 ? "Conferma e paga" : "Conferma ordine"}
+                    {submitLoading ? t("shopx.checkout.processing") : residualCents > 0 ? t("shopx.checkout.confirmPay") : t("shopx.checkout.confirmOrder")}
                   </button>
                   {!addressComplete && (
-                    <p className="text-[11px] text-slate-500 text-center">Completa l&apos;indirizzo di spedizione per continuare.</p>
+                    <p className="text-[11px] text-slate-500 text-center">{t("shopx.product.completeAddress")}</p>
                   )}
                 </>
               )}
@@ -712,30 +665,30 @@ export function JavMarketProductModal({ product, onClose }: { product: JavMarket
             <div className="text-center py-8 space-y-3">
               <p className="text-4xl">🎉</p>
               <p className="text-sm text-slate-600">
-                Ordine confermato, pagato con i tuoi JavCash. Ti avvisiamo appena parte: lo segui da &ldquo;I miei Ordini&rdquo;.
+                {t("shopx.checkout.paidWithJavCash")}
               </p>
-              <button onClick={onClose} className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer">Chiudi</button>
+              <button onClick={onClose} className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer">{t("common.close")}</button>
             </div>
           )}
 
           {step === "bank_instructions" && placedOrder && (
             <div className="space-y-3">
               <p className="text-sm text-slate-600">
-                Ordine creato. Paga <strong className="text-brand-600">{euro(placedOrder.amount_due_cents)}</strong> con bonifico: lo spediamo appena riceviamo il pagamento.
+                {t("shopx.checkout.createdPay")} <strong className="text-brand-600">{euro(placedOrder.amount_due_cents)}</strong> {t("shopx.checkout.createdPayTail")}
               </p>
               <div className="p-4 rounded-xl bg-slate-900/5 border border-slate-200 text-xs space-y-1.5">
                 {paymentInfo?.iban ? (
                   <>
                     <p><span className="text-slate-500">IBAN:</span> <span className="font-mono">{paymentInfo.iban}</span></p>
-                    <p><span className="text-slate-500">Intestatario:</span> {paymentInfo.holder}</p>
+                    <p><span className="text-slate-500">{t("shopx.bank.holder")}</span> {paymentInfo.holder}</p>
                     {paymentInfo.instructions && <p className=" text-slate-500 pt-1">{paymentInfo.instructions}</p>}
                   </>
                 ) : (
-                  <p className="text-slate-500">Contatta l&apos;amministrazione per le coordinate bancarie.</p>
+                  <p className="text-slate-500">{t("shopx.bank.contactAdmin")}</p>
                 )}
-                <p className="pt-1"><span className="text-slate-500">Causale:</span> <span className="font-mono text-brand-600">Ordine {placedOrder.id.slice(0, 8).toUpperCase()}</span></p>
+                <p className="pt-1"><span className="text-slate-500">{t("shopx.bank.reference")}</span> <span className="font-mono text-brand-600">{t("shopx.bank.referenceValue", { code: placedOrder.id.slice(0, 8).toUpperCase() })}</span></p>
               </div>
-              <button onClick={onClose} className="w-full px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer">Ho capito</button>
+              <button onClick={onClose} className="w-full px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer">{t("shopx.gotIt")}</button>
             </div>
           )}
         </div>

@@ -12,6 +12,7 @@ import { useToast } from "@/components/ui/toast";
 import { clubGet, clubSend, type AdminProof } from "@/lib/club";
 import { cn } from "@/lib/cn";
 import { useI18n } from "@/lib/i18n/provider";
+import { feeLabel } from "@/lib/fee-label";
 
 // Le prove di pagamento del club, per la segreteria (e il superadmin entrato
 // nel club). Le quote risultano pagate appena la famiglia carica la prova:
@@ -45,19 +46,6 @@ function range(period: Period): { from?: string; to?: string } {
   if (period === "3m") return { from: iso(new Date(now.getFullYear(), now.getMonth() - 2, 1)) };
   if (period === "season") return { from: iso(new Date(now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1, 8, 1)) };
   return {};
-}
-
-/** La quota nella lingua di chi guarda: il server scrive la descrizione in
- *  italiano («Quota di ottobre 2026»), qui si ricostruisce da tipo e periodo
- *  quando sono quelli normali; per il resto (rate, gare) resta la sua. */
-export function feeLabel(f: AdminProof["fees"][number], t: ReturnType<typeof useI18n>["t"], fmt: ReturnType<typeof useI18n>["fmt"]) {
-  const kind = t.dyn(`club.feeKind.${f.kind}`, "");
-  const month = /^(\d{4})-(\d{2})$/.exec(f.period);
-  if (kind && f.kind === "MONTHLY" && month) {
-    return `${kind} · ${fmt.date(new Date(Number(month[1]), Number(month[2]) - 1, 1), { month: "long", year: "numeric" })}`;
-  }
-  if (kind && (f.kind === "ENROLLMENT" || f.kind === "MEMBERSHIP") && /^\d{4}$/.test(f.period)) return `${kind} ${f.period}`;
-  return f.description;
 }
 
 function initials(name: string) {

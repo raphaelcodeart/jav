@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { friendlyApiError } from "@/lib/api-error";
+import { useI18n } from "@/lib/i18n/provider";
 
 type AccountStatus = {
   email_verified: boolean;
@@ -35,6 +36,7 @@ export function UnlockAccountModal({
   customerName: string;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const { data: status, error } = useQuery({
     queryKey: ["admin", "users", userId, "account-status"],
@@ -71,7 +73,7 @@ export function UnlockAccountModal({
       });
       if (!res.ok) throw new Error(await friendlyApiError(res));
       await queryClient.invalidateQueries({ queryKey: ["admin", "customers"] });
-      setMessage({ ok: true, text: "Account sbloccato: il cliente ora può entrare." });
+      setMessage({ ok: true, text: t("adm.unlock.done") });
     } catch (err) {
       setMessage({ ok: false, text: (err as Error).message });
     } finally {
@@ -95,49 +97,48 @@ export function UnlockAccountModal({
       <div className="w-full sm:max-w-lg max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-2xl border border-slate-200 bg-white shadow-2xl animate-scale-up p-5 space-y-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h3 className="text-sm font-bold text-slate-900">Sblocca l&apos;account</h3>
+            <h3 className="text-sm font-bold text-slate-900">{t("adm.unlock.title")}</h3>
             <p className="text-xs text-slate-500">{customerName}</p>
           </div>
-          <button onClick={onClose} aria-label="Chiudi" className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 cursor-pointer">
+          <button onClick={onClose} aria-label={t("common.close")} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 cursor-pointer">
             ✕
           </button>
         </div>
 
         {error && <p className="text-xs text-rose-400">{(error as Error).message}</p>}
-        {!status && !error && <p className="text-xs text-slate-500">Caricamento…</p>}
+        {!status && !error && <p className="text-xs text-slate-500">{t("adm.unlock.loading")}</p>}
         {status && (
           <>
             <ul className="space-y-1.5">
-              {riga(status.email_verified, "Email confermata", "la segno come confermata")}
-              {riga(status.privacy_accepted, "Privacy accettata", "la segno come accettata per conto del cliente")}
-              {riga(status.profile_complete, "Profilo completo (codice fiscale e residenza)", "da completare qui sotto")}
+              {riga(status.email_verified, t("adm.unlock.emailVerified"), t("adm.unlock.emailVerifiedFix"))}
+              {riga(status.privacy_accepted, t("adm.unlock.privacyAccepted"), t("adm.unlock.privacyAcceptedFix"))}
+              {riga(status.profile_complete, t("adm.unlock.profileComplete"), t("adm.unlock.profileCompleteFix"))}
             </ul>
 
             {!status.profile_complete && (
               <div className="space-y-3 p-3 rounded-xl border border-slate-200">
                 <p className=" text-slate-600">
-                  Codice fiscale e indirizzo non si possono inventare: controllali. Dove li conosciamo già (scheda del
-                  cliente, ultima pratica) sono proposti.
+                  {t("adm.unlock.profileHint")}
                 </p>
                 <div>
-                  <span className={label}>Codice fiscale</span>
+                  <span className={label}>{t("adm.unlock.fiscalCode")}</span>
                   <input className={input} value={field("fiscal_code")} onChange={(e) => setEdits({ ...edits, fiscal_code: e.target.value.toUpperCase() })} />
                 </div>
                 <div>
-                  <span className={label}>Indirizzo di residenza</span>
+                  <span className={label}>{t("adm.unlock.street")}</span>
                   <input className={input} value={field("residence_street")} onChange={(e) => setEdits({ ...edits, residence_street: e.target.value })} />
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                   <div>
-                    <span className={label}>Città</span>
+                    <span className={label}>{t("adm.unlock.city")}</span>
                     <input className={input} value={field("residence_city")} onChange={(e) => setEdits({ ...edits, residence_city: e.target.value })} />
                   </div>
                   <div>
-                    <span className={label}>Provincia</span>
+                    <span className={label}>{t("adm.unlock.province")}</span>
                     <input className={input} maxLength={2} value={field("residence_province")} onChange={(e) => setEdits({ ...edits, residence_province: e.target.value.toUpperCase() })} />
                   </div>
                   <div>
-                    <span className={label}>CAP</span>
+                    <span className={label}>{t("adm.unlock.postalCode")}</span>
                     <input className={input} value={field("residence_postal_code")} onChange={(e) => setEdits({ ...edits, residence_postal_code: e.target.value })} />
                   </div>
                 </div>
@@ -145,8 +146,7 @@ export function UnlockAccountModal({
             )}
 
             <p className=" text-amber-700">
-              La privacy risulterà accettata a tuo nome, per conto del cliente, e l&apos;operazione resta nel registro.
-              Fallo solo se il cliente ha dato il consenso in un altro modo (a voce, per iscritto).
+              {t("adm.unlock.privacyWarning")}
             </p>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -155,10 +155,10 @@ export function UnlockAccountModal({
                 disabled={busy || !!tutto || message?.ok}
                 className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-40"
               >
-                {busy ? "Sblocco…" : tutto ? "Già tutto a posto" : "Sblocca e rendi attivo"}
+                {busy ? t("adm.unlock.unlocking") : tutto ? t("adm.unlock.allGood") : t("adm.unlock.unlock")}
               </button>
               <button onClick={onClose} className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:bg-slate-100 cursor-pointer">
-                Chiudi
+                {t("common.close")}
               </button>
             </div>
             {message && <p className={`text-xs ${message.ok ? "text-emerald-400" : "text-rose-400"}`}>{message.text}</p>}

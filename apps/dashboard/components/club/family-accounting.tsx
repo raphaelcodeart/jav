@@ -14,6 +14,7 @@ import { cn } from "@/lib/cn";
 import { clubGet } from "@/lib/club";
 import { CHART, monthShort, type PersonalAccount } from "@/lib/club-accounting";
 import { useI18n } from "@/lib/i18n/provider";
+import { feeLabel } from "@/lib/fee-label";
 import { usePrefersReducedMotion } from "@/lib/motion";
 
 // I conti di chi usa il portale: un genitore, un atleta adulto, o un atleta
@@ -112,7 +113,7 @@ export function FamilyAccounting({ onNavigate }: { onNavigate: (key: string) => 
               {data.next_payments.map((f) => (
                 <li key={f.id} className="flex items-center justify-between gap-3 rounded-2xl bg-white ring-1 ring-ink-100 px-4 py-3">
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-ink-900 truncate">{f.description}</p>
+                    <p className="text-sm font-semibold text-ink-900 truncate">{feeLabel(f, t, fmt)}</p>
                     <p className="text-xs text-ink-500">{f.athlete_name ?? t("famAcc.membership")} · {t("club.dueOn", { date: fmt.shortDate(f.due_date) })}</p>
                   </div>
                   <div className="text-right shrink-0">
@@ -153,7 +154,7 @@ export function FamilyAccounting({ onNavigate }: { onNavigate: (key: string) => 
               {data.discounts.map((f) => (
                 <li key={f.id} className="flex items-center justify-between gap-3 py-2">
                   <div className="min-w-0">
-                    <p className="text-sm text-ink-900 truncate">{f.description}{f.athlete_name ? ` · ${f.athlete_name}` : ""}</p>
+                    <p className="text-sm text-ink-900 truncate">{feeLabel(f, t, fmt)}{f.athlete_name ? ` · ${f.athlete_name}` : ""}</p>
                     <p className="text-xs text-ink-500 truncate">{f.discount_note ?? f.waive_reason ?? (f.absence_adjustment ? t("famAcc.absence") : "")}</p>
                   </div>
                   <span className="text-sm font-semibold text-emerald-700 tabular-nums shrink-0">−{fmt.euro(f.saved_cents)}</span>

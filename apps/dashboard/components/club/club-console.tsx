@@ -29,6 +29,7 @@ import { MoveToClubModal, useClubFeatures } from "@/components/club/jav-courses"
 import { AthleteMoneyCard, SUPPORT_CATEGORIES, SUPPORT_ICONS } from "@/components/club/athlete-area-extras";
 import type { MessageKey } from "@/lib/i18n/messages/it";
 import { useI18n } from "@/lib/i18n/provider";
+import { feeLabel } from "@/lib/fee-label";
 
 const A = (path: string) => `/admin${path}`;
 const KIND_ORDER: PersonKind[] = ["ATHLETE", "PARENT", "COACH", "ASSISTANT_COACH", "MONITOR", "ASSISTANT_MONITOR", "REFEREE", "SECRETARY"];
@@ -267,14 +268,14 @@ function Stat({ label, value, tone }: { label: string; value: string; tone: stri
 }
 
 function FeeList({ fees, empty }: { fees: PersonCard["debts"]; empty: string }) {
-  const { fmt } = useI18n();
+  const { t, fmt } = useI18n();
   if (fees.length === 0) return <p className="text-sm text-ink-500">{empty}</p>;
   return (
     <ul className="divide-y divide-ink-100">
       {fees.map((f) => (
         <li key={f.id} className="flex items-center justify-between gap-3 py-2 text-sm">
           <span className="min-w-0">
-            <span className="block font-semibold text-ink-900">{f.description}</span>
+            <span className="block font-semibold text-ink-900">{feeLabel(f, t, fmt)}</span>
             <span className="block text-xs text-ink-500">{f.athlete_name ?? "—"} · {fmt.shortDate(f.due_date)}{f.discount_note ? ` · ${f.discount_note}` : ""}</span>
           </span>
           <span className="text-right shrink-0">

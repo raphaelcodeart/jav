@@ -3,27 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { BranchContractRead, BranchSummaryRead } from "@/lib/types";
-
-const STATUS_LABELS: Record<string, string> = {
-  DRAFT: "Bozza",
-  SUBMITTED: "Inviata",
-  DOCUMENTS_PENDING: "Documenti mancanti",
-  UNDER_REVIEW: "In revisione",
-  APPROVED: "Approvata",
-  PAYMENT_PENDING: "In attesa di pagamento",
-  PAID: "Pagata",
-  ACTIVATION_PENDING: "In attivazione",
-  ACTIVE: "Attiva",
-  SUSPENDED: "Sospesa",
-  CANCELLED: "Cessata",
-  EXPIRED: "Scaduta",
-  RENEWED: "Rinnovata",
-  REJECTED: "Respinta",
-};
-
-function euro(cents: number): string {
-  return (cents / 100).toLocaleString("it-IT", { style: "currency", currency: "EUR" });
-}
+import { useI18n } from "@/lib/i18n/provider";
 
 async function fetchBranchSummary(agentId: string): Promise<BranchSummaryRead> {
   const res = await fetch(`/api/proxy/network/agents/${agentId}/branch-summary`);
@@ -46,6 +26,8 @@ export function NetworkNodeDetailModal({
   displayName: string;
   onClose: () => void;
 }) {
+  const { t, fmt } = useI18n();
+  const euro = fmt.euro;
   const [onlyProblems, setOnlyProblems] = useState(false);
   const { data: summary, error: summaryError, isLoading: summaryLoading } = useQuery({
     queryKey: ["network", "node-detail", "summary", agentId],
@@ -88,7 +70,7 @@ export function NetworkNodeDetailModal({
                       ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                       : "bg-amber-500/10 text-amber-700 border-amber-500/20"
                   }`}>
-                    {self.status}
+                    {t.dyn(`net.agentStatus.${self.status}`, self.status)}
                   </span>
                 )}
               </div>
@@ -105,56 +87,56 @@ export function NetworkNodeDetailModal({
         </div>
 
         {(summaryError || contractsError) && (
-          <p className="text-sm text-rose-400 mb-4">Impossibile caricare i dettagli di questo nodo.</p>
+          <p className="text-sm text-rose-400 mb-4">{t("net.node.loadError")}</p>
         )}
 
         {/* Stats grid -- people below, contracts, commission generated within this subtree */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
           <div className="rounded-xl bg-slate-900/5 p-3 text-center">
-            <p className="text-[10px] text-slate-500 uppercase">Persone sotto</p>
+            <p className="text-[10px] text-slate-500 uppercase">{t("net.node.peopleBelow")}</p>
             <p className="text-lg font-bold text-slate-900">
               {summaryLoading ? "…" : totals?.people_total ?? 0}
             </p>
           </div>
           <div className="rounded-xl bg-slate-900/5 p-3 text-center">
-            <p className="text-[10px] text-slate-500 uppercase">Livelli sotto</p>
+            <p className="text-[10px] text-slate-500 uppercase">{t("net.node.levelsBelow")}</p>
             <p className="text-lg font-bold text-slate-900">
               {summaryLoading ? "…" : totals?.levels_below ?? 0}
             </p>
           </div>
           <div className="rounded-xl bg-slate-900/5 p-3 text-center">
-            <p className="text-[10px] text-slate-500 uppercase">Contratti totali</p>
+            <p className="text-[10px] text-slate-500 uppercase">{t("net.azienda.kpi.total")}</p>
             <p className="text-lg font-bold text-slate-900">
               {summaryLoading ? "…" : totals?.contracts ?? 0}
             </p>
           </div>
           <div className="rounded-xl bg-slate-900/5 p-3 text-center">
-            <p className="text-[10px] text-slate-500 uppercase">In lavorazione</p>
+            <p className="text-[10px] text-slate-500 uppercase">{t("net.azienda.inProgress")}</p>
             <p className="text-lg font-bold text-sky-400">
               {summaryLoading ? "…" : totals?.contracts_in_progress ?? 0}
             </p>
           </div>
           <div className="rounded-xl bg-slate-900/5 p-3 text-center">
-            <p className="text-[10px] text-slate-500 uppercase">Chiusi</p>
+            <p className="text-[10px] text-slate-500 uppercase">{t("net.azienda.closed")}</p>
             <p className="text-lg font-bold text-emerald-400">
               {summaryLoading ? "…" : totals?.contracts_closed ?? 0}
             </p>
           </div>
           <div className="rounded-xl bg-slate-900/5 p-3 text-center">
-            <p className="text-[10px] text-slate-500 uppercase">Rifiutati</p>
+            <p className="text-[10px] text-slate-500 uppercase">{t("net.azienda.kpi.rejected")}</p>
             <p className="text-lg font-bold text-rose-400">
               {summaryLoading ? "…" : totals?.contracts_rejected ?? 0}
             </p>
           </div>
           <div className="rounded-xl bg-slate-900/5 p-3 text-center">
-            <p className="text-[10px] text-slate-500 uppercase">Valore creato</p>
+            <p className="text-[10px] text-slate-500 uppercase">{t("net.node.valueCreated")}</p>
             <p className="text-lg font-bold text-slate-900">
               {contractsLoading ? "…" : euro(totalValue)}
             </p>
           </div>
           <div className="rounded-xl bg-brand-500/10 border border-brand-500/20 p-3 text-center">
             <p className="text-[10px] text-brand-600 uppercase">
-              {hasViewerCommission ? "La tua provvigione" : "Provvigioni branch"}
+              {hasViewerCommission ? t("net.node.yourCommission") : t("net.node.branchCommission")}
             </p>
             <p className="text-lg font-bold text-brand-600">
               {contractsLoading
@@ -168,21 +150,21 @@ export function NetworkNodeDetailModal({
 
         {/* Per-contract detail */}
         <div className="flex items-center justify-between mb-2">
-          <h4 className="text-sm font-semibold text-slate-900">Contratti in questo ramo</h4>
+          <h4 className="text-sm font-semibold text-slate-900">{t("net.node.contractsTitle")}</h4>
           <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer">
             <input type="checkbox" checked={onlyProblems} onChange={(e) => setOnlyProblems(e.target.checked)} className="cursor-pointer" />
-            Solo con problemi
+            {t("net.azienda.onlyProblems")}
           </label>
         </div>
         <div className="overflow-x-auto rounded-xl border border-slate-200">
           <table className="w-full border-collapse text-left text-xs">
             <thead>
               <tr className="border-b border-slate-200 text-slate-500 font-semibold bg-slate-900/[0.02]">
-                <th className="py-2 px-3">Cliente</th>
-                <th className="py-2 px-3">Prodotto</th>
-                <th className="py-2 px-3">Stato</th>
-                <th className="py-2 px-3 text-right">Valore</th>
-                <th className="py-2 px-3 text-right">{hasViewerCommission ? "Tua provvigione" : "Provvigione"}</th>
+                <th className="py-2 px-3">{t("net.adminComm.csv.customer")}</th>
+                <th className="py-2 px-3">{t("net.adminComm.csv.product")}</th>
+                <th className="py-2 px-3">{t("net.adminComm.col.status")}</th>
+                <th className="py-2 px-3 text-right">{t("net.node.value")}</th>
+                <th className="py-2 px-3 text-right">{hasViewerCommission ? t("net.node.yourCommissionShort") : t("net.azienda.col.commission")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
@@ -201,7 +183,7 @@ export function NetworkNodeDetailModal({
                           ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                           : "bg-amber-500/10 text-amber-700 border-amber-500/20"
                     }`}>
-                      {STATUS_LABELS[c.status] ?? c.status}
+                      {t.dyn(`net.sim.cstatus.${c.status}`, c.status)}
                     </span>
                   </td>
                   <td className="py-2 px-3 text-right text-slate-600">{euro(c.value_cents)}</td>
@@ -211,7 +193,7 @@ export function NetworkNodeDetailModal({
                 </tr>
               ))}
               {filteredContracts.length === 0 && !contractsLoading && (
-                <tr><td colSpan={5} className="text-center py-6 text-slate-500">Nessun contratto in questo ramo.</td></tr>
+                <tr><td colSpan={5} className="text-center py-6 text-slate-500">{t("net.node.noContracts")}</td></tr>
               )}
             </tbody>
           </table>

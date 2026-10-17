@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useI18n } from "@/lib/i18n/provider";
 import {
   Area,
   AreaChart,
@@ -23,29 +24,15 @@ import type {
 
 type PeriodKey = "today" | "7d" | "month" | "quarter" | "year";
 
-const PERIODS: { key: PeriodKey; label: string; days: number }[] = [
-  { key: "today", label: "Oggi", days: 1 },
-  { key: "7d", label: "7 giorni", days: 7 },
-  { key: "month", label: "Mese", days: 30 },
-  { key: "quarter", label: "Trimestre", days: 90 },
-  { key: "year", label: "Anno", days: 365 },
+const PERIODS: { key: PeriodKey; days: number }[] = [
+  { key: "today", days: 1 },
+  { key: "7d", days: 7 },
+  { key: "month", days: 30 },
+  { key: "quarter", days: 90 },
+  { key: "year", days: 365 },
 ];
 
-const STATUS_LABELS: Record<string, string> = {
-  SUBMITTED: "Inviata",
-  DOCUMENTS_PENDING: "Documenti mancanti",
-  UNDER_REVIEW: "In revisione",
-};
-
-const ACTION_LABELS: Record<string, string> = {
-  "login.success": "Accesso effettuato",
-  "contract.transition": "Cambio stato contratto",
-  "contract.create": "Contratto creato",
-};
-
-function euro(cents: number): string {
-  return (cents / 100).toLocaleString("it-IT", { style: "currency", currency: "EUR" });
-}
+type Fmt = ReturnType<typeof useI18n>["fmt"];
 
 function periodBounds(days: number): { period_from: string; period_to: string } {
   const to = new Date();
@@ -90,9 +77,9 @@ async function fetchNetworkLevels(): Promise<OrganizationNetworkLevelsRead> {
   return res.json();
 }
 
-function monthLabel(period: string): string {
+function monthLabel(period: string, fmt: Fmt): string {
   const [y, m] = period.split("-");
-  return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString("it-IT", { month: "short" });
+  return fmt.date(new Date(Number(y), Number(m) - 1, 1), { month: "short" });
 }
 
 function KpiCard({
@@ -127,14 +114,10 @@ function KpiCard({
 
 const QUICK_LINKS: {
   key: string;
-  label: string;
-  description: string;
   icon: React.ReactNode;
 }[] = [
   {
     key: "list",
-    label: "Contratti",
-    description: "Tutti i contratti",
     icon: (
       <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
@@ -143,8 +126,6 @@ const QUICK_LINKS: {
   },
   {
     key: "create",
-    label: "Nuovo Contratto",
-    description: "Nuova proposta",
     icon: (
       <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 4v16m8-8H4" />
@@ -153,8 +134,6 @@ const QUICK_LINKS: {
   },
   {
     key: "customers",
-    label: "Clienti",
-    description: "Anagrafiche",
     icon: (
       <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -163,8 +142,6 @@ const QUICK_LINKS: {
   },
   {
     key: "promoters",
-    label: "Promoter",
-    description: "Collaboratori",
     icon: (
       <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4zm6 0a4 4 0 10-4-4" />
@@ -173,8 +150,6 @@ const QUICK_LINKS: {
   },
   {
     key: "products",
-    label: "Prodotti",
-    description: "Catalogo",
     icon: (
       <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
@@ -183,8 +158,6 @@ const QUICK_LINKS: {
   },
   {
     key: "network",
-    label: "Rete Commerciale",
-    description: "Albero promoter",
     icon: (
       <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0H5a2 2 0 01-2-2v-4m6 6h10a2 2 0 002-2v-4m0-6h-6m6 0v6m0-6l-8 8" />
@@ -193,8 +166,6 @@ const QUICK_LINKS: {
   },
   {
     key: "orders",
-    label: "Ordini",
-    description: "Acquisti Shop",
     icon: (
       <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M16.5 7.5h-9v9h9v-9zM3 6a3 3 0 013-3h12a3 3 0 013 3v12a3 3 0 01-3 3H6a3 3 0 01-3-3V6z" />
@@ -203,8 +174,6 @@ const QUICK_LINKS: {
   },
   {
     key: "commissions",
-    label: "Provvigioni",
-    description: "Movimenti",
     icon: (
       <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V6m0 10v2M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -213,8 +182,6 @@ const QUICK_LINKS: {
   },
   {
     key: "tickets",
-    label: "Ticket di Supporto",
-    description: "Richieste aperte",
     icon: (
       <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
@@ -223,8 +190,6 @@ const QUICK_LINKS: {
   },
   {
     key: "accounting",
-    label: "Contabilità",
-    description: "Movimenti",
     icon: (
       <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 7h6m-6 4h6m-6 4h4M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z" />
@@ -234,6 +199,8 @@ const QUICK_LINKS: {
 ];
 
 export function AdminOverviewPanel({ onNavigate }: { onNavigate?: (key: string, filter?: string) => void }) {
+  const { t, fmt } = useI18n();
+  const euro = fmt.euro;
   const [period, setPeriod] = useState<PeriodKey>("month");
   const activeDays = PERIODS.find((p) => p.key === period)!.days;
 
@@ -265,12 +232,12 @@ export function AdminOverviewPanel({ onNavigate }: { onNavigate?: (key: string, 
   const networkLevelsChartData = Object.entries(networkLevels?.people_by_level ?? {})
     .map(([depth, count]) => ({ depth: Number(depth), Persone: count }))
     .sort((a, b) => a.depth - b.depth)
-    .map((row) => ({ name: row.depth === 0 ? "Livello 0 (root)" : `Livello ${row.depth}`, Persone: row.Persone }));
+    .map((row) => ({ name: row.depth === 0 ? t("adm.overview.levelRoot") : t("adm.overview.level", { n: row.depth }), Persone: row.Persone }));
 
-  const contractsChartData = (contractsSeries ?? []).map((p) => ({ ...p, label: monthLabel(p.period) }));
+  const contractsChartData = (contractsSeries ?? []).map((p) => ({ ...p, label: monthLabel(p.period, fmt) }));
   const commissionsChartData = (commissionsSeries ?? []).map((p) => ({
     ...p,
-    label: monthLabel(p.period),
+    label: monthLabel(p.period, fmt),
     euro: p.value / 100,
   }));
 
@@ -291,9 +258,9 @@ export function AdminOverviewPanel({ onNavigate }: { onNavigate?: (key: string, 
             </span>
             <span className="min-w-0">
               <span className="block text-sm font-semibold text-slate-900 truncate">
-                {link.label}
+                {t.dyn(`adm.overview.quick.${link.key}`, link.key)}
               </span>
-              <span className="block text-[11px] text-slate-500 truncate">{link.description}</span>
+              <span className="block text-[11px] text-slate-500 truncate">{t.dyn(`adm.overview.quickDesc.${link.key}`, "")}</span>
             </span>
           </button>
         ))}
@@ -311,19 +278,19 @@ export function AdminOverviewPanel({ onNavigate }: { onNavigate?: (key: string, 
                 : " bg-slate-900/5 text-slate-500 border-slate-200 hover:bg-slate-100"
             }`}
           >
-            {p.label}
+            {t.dyn(`adm.overview.period.${p.key}`, p.key)}
           </button>
         ))}
       </div>
 
       {summaryError && (
-        <p className="text-sm text-rose-400">Impossibile caricare il riepilogo. Riprova più tardi.</p>
+        <p className="text-sm text-rose-400">{t("adm.overview.summaryFailed")}</p>
       )}
 
       {/* KPI cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard
-          label="Contratti totali"
+          label={t("adm.overview.kpi.total")}
           value={summaryLoading ? "…" : String(summary?.contracts.total ?? 0)}
           accent="bg-brand-500/10 text-brand-600"
           onClick={() => onNavigate?.("list", "ALL")}
@@ -334,7 +301,7 @@ export function AdminOverviewPanel({ onNavigate }: { onNavigate?: (key: string, 
           }
         />
         <KpiCard
-          label="Contratti attivi"
+          label={t("adm.overview.kpi.active")}
           value={summaryLoading ? "…" : String(summary?.contracts.active ?? 0)}
           accent="bg-emerald-500/10 text-emerald-400"
           onClick={() => onNavigate?.("list", "ACTIVE")}
@@ -345,7 +312,7 @@ export function AdminOverviewPanel({ onNavigate }: { onNavigate?: (key: string, 
           }
         />
         <KpiCard
-          label="In attesa di approvazione"
+          label={t("adm.client.pendingApproval")}
           value={summaryLoading ? "…" : String(summary?.contracts.pending_approval ?? 0)}
           accent="bg-amber-500/10 text-amber-700"
           onClick={() => onNavigate?.("list", "PENDING_APPROVAL")}
@@ -356,7 +323,7 @@ export function AdminOverviewPanel({ onNavigate }: { onNavigate?: (key: string, 
           }
         />
         <KpiCard
-          label="Respinti / cessati"
+          label={t("adm.overview.kpi.rejected")}
           value={
             summaryLoading
               ? "…"
@@ -371,7 +338,7 @@ export function AdminOverviewPanel({ onNavigate }: { onNavigate?: (key: string, 
           }
         />
         <KpiCard
-          label="Provvigioni maturate"
+          label={t("adm.overview.kpi.accrued")}
           value={summaryLoading ? "…" : euro(summary?.commissions.accrued_cents ?? 0)}
           accent="bg-sky-500/10 text-sky-400"
           onClick={() => onNavigate?.("commissions", "ACCRUED")}
@@ -382,7 +349,7 @@ export function AdminOverviewPanel({ onNavigate }: { onNavigate?: (key: string, 
           }
         />
         <KpiCard
-          label="Provvigioni pagate"
+          label={t("adm.overview.kpi.paid")}
           value={summaryLoading ? "…" : euro(summary?.commissions.paid_cents ?? 0)}
           accent="bg-emerald-500/10 text-emerald-400"
           onClick={() => onNavigate?.("commissions", "PAID")}
@@ -393,7 +360,7 @@ export function AdminOverviewPanel({ onNavigate }: { onNavigate?: (key: string, 
           }
         />
         <KpiCard
-          label="Promoter attivi"
+          label={t("adm.overview.kpi.promoters")}
           value={summaryLoading ? "…" : String(summary?.active_promoters ?? 0)}
           accent="bg-brand-500/10 text-brand-600"
           onClick={() => onNavigate?.("promoters", "ACTIVE")}
@@ -404,7 +371,7 @@ export function AdminOverviewPanel({ onNavigate }: { onNavigate?: (key: string, 
           }
         />
         <KpiCard
-          label="Clienti attivi"
+          label={t("adm.overview.kpi.customers")}
           value={summaryLoading ? "…" : String(summary?.active_customers ?? 0)}
           accent="bg-sky-500/10 text-sky-400"
           onClick={() => onNavigate?.("customers", "ACTIVE")}
@@ -421,14 +388,14 @@ export function AdminOverviewPanel({ onNavigate }: { onNavigate?: (key: string, 
           has no root: it's every agent in the organization. */}
       <div className="glass-card rounded-2xl border-slate-200 bg-white/70 p-5">
         <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-          <h4 className="text-sm font-semibold text-slate-900">Rete commerciale: livelli e persone</h4>
+          <h4 className="text-sm font-semibold text-slate-900">{t("adm.overview.networkTitle")}</h4>
           <div className="flex gap-4">
             <div className="text-right">
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider">Persone totali</p>
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider">{t("adm.overview.peopleTotal")}</p>
               <p className="text-lg font-bold text-slate-900">{networkLevels?.people_total ?? 0}</p>
             </div>
             <div className="text-right">
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider">Livelli totali</p>
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider">{t("adm.overview.levelsTotal")}</p>
               <p className="text-lg font-bold text-slate-900">{networkLevels?.levels_total ?? 0}</p>
             </div>
           </div>
@@ -441,7 +408,7 @@ export function AdminOverviewPanel({ onNavigate }: { onNavigate?: (key: string, 
                 <XAxis dataKey="name" tick={{ fill: "#94a3b8", fontSize: 11 }} />
                 <YAxis allowDecimals={false} tick={{ fill: "#94a3b8", fontSize: 11 }} />
                 <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid rgba(148,163,184,0.2)", borderRadius: 8, fontSize: 12 }} />
-                <Bar dataKey="Persone" fill="#38bdf8" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Persone" name={t("adm.overview.people")} fill="#38bdf8" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -451,7 +418,7 @@ export function AdminOverviewPanel({ onNavigate }: { onNavigate?: (key: string, 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="glass-card rounded-2xl p-5 border-slate-200 bg-white/70">
-          <h4 className="text-sm font-semibold text-slate-900 mb-4">Andamento contratti (12 mesi)</h4>
+          <h4 className="text-sm font-semibold text-slate-900 mb-4">{t("adm.overview.contractsTrend")}</h4>
           <ResponsiveContainer width="100%" height={220}>
             <AreaChart data={contractsChartData}>
               <defs>
@@ -466,7 +433,7 @@ export function AdminOverviewPanel({ onNavigate }: { onNavigate?: (key: string, 
               <Tooltip
                 contentStyle={{ background: "#0f172a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, fontSize: 12 }}
                 labelStyle={{ color: "#e2e8f0" }}
-                formatter={(value) => [String(value), "Contratti"]}
+                formatter={(value) => [String(value), t("adm.client.contracts")]}
               />
               <Area type="monotone" dataKey="value" stroke="#f97316" strokeWidth={2} fill="url(#contractsGradient)" />
             </AreaChart>
@@ -474,7 +441,7 @@ export function AdminOverviewPanel({ onNavigate }: { onNavigate?: (key: string, 
         </div>
 
         <div className="glass-card rounded-2xl p-5 border-slate-200 bg-white/70">
-          <h4 className="text-sm font-semibold text-slate-900 mb-4">Andamento provvigioni (12 mesi)</h4>
+          <h4 className="text-sm font-semibold text-slate-900 mb-4">{t("adm.overview.commissionsTrend")}</h4>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={commissionsChartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#64748b" strokeOpacity={0.15} vertical={false} />
@@ -483,7 +450,7 @@ export function AdminOverviewPanel({ onNavigate }: { onNavigate?: (key: string, 
               <Tooltip
                 contentStyle={{ background: "#0f172a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, fontSize: 12 }}
                 labelStyle={{ color: "#e2e8f0" }}
-                formatter={(value) => [euro(Math.round(Number(value) * 100)), "Provvigioni"]}
+                formatter={(value) => [euro(Math.round(Number(value) * 100)), t("adm.nav.commissions")]}
               />
               <Bar dataKey="euro" fill="#0ea5e9" radius={[6, 6, 0, 0]} />
             </BarChart>
@@ -494,12 +461,12 @@ export function AdminOverviewPanel({ onNavigate }: { onNavigate?: (key: string, 
       {/* Attention items + recent activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="glass-card rounded-2xl p-5 border-slate-200 bg-white/70">
-          <h4 className="text-sm font-semibold text-slate-900 mb-4">Richiede attenzione</h4>
+          <h4 className="text-sm font-semibold text-slate-900 mb-4">{t("adm.overview.attention")}</h4>
           <div className="space-y-2">
             {attentionItems === undefined ? (
-              <p className="text-xs text-slate-500 py-4 text-center">Caricamento...</p>
+              <p className="text-xs text-slate-500 py-4 text-center">{t("adm.overview.loading")}</p>
             ) : attentionItems.length === 0 ? (
-              <p className="text-xs text-slate-500 py-4 text-center">Nessuna anomalia rilevata.</p>
+              <p className="text-xs text-slate-500 py-4 text-center">{t("adm.overview.noAnomalies")}</p>
             ) : (
               attentionItems.map((item) => (
                 <div
@@ -509,11 +476,11 @@ export function AdminOverviewPanel({ onNavigate }: { onNavigate?: (key: string, 
                   <div className="min-w-0">
                     <p className="text-xs font-mono text-slate-900 truncate">{item.contract_id}</p>
                     <p className="text-[11px] text-amber-700">
-                      {STATUS_LABELS[item.status] ?? item.status} · {item.days_in_status}g
+                      {t.dyn(`adm.contractStatus.${item.status}`, item.status)} · {t("adm.overview.daysShort", { n: item.days_in_status })}
                     </p>
                   </div>
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-amber-500/10 text-amber-700 border-amber-500/20 shrink-0">
-                    Verifica
+                    {t("adm.overview.check")}
                   </span>
                 </div>
               ))
@@ -522,20 +489,20 @@ export function AdminOverviewPanel({ onNavigate }: { onNavigate?: (key: string, 
         </div>
 
         <div className="glass-card rounded-2xl p-5 border-slate-200 bg-white/70">
-          <h4 className="text-sm font-semibold text-slate-900 mb-4">Attività recente</h4>
+          <h4 className="text-sm font-semibold text-slate-900 mb-4">{t("adm.overview.recent")}</h4>
           <div className="space-y-2">
             {recentActivity === undefined ? (
-              <p className="text-xs text-slate-500 py-4 text-center">Caricamento...</p>
+              <p className="text-xs text-slate-500 py-4 text-center">{t("adm.overview.loading")}</p>
             ) : recentActivity.length === 0 ? (
-              <p className="text-xs text-slate-500 py-4 text-center">Nessuna attività registrata.</p>
+              <p className="text-xs text-slate-500 py-4 text-center">{t("adm.overview.noActivity")}</p>
             ) : (
               recentActivity.map((item) => (
                 <div key={item.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-900/[0.02] border border-slate-200">
                   <div className="min-w-0">
                     <p className="text-xs text-slate-600 truncate">
-                      {ACTION_LABELS[item.action] ?? item.action}
+                      {t.dyn(`adm.overview.action.${item.action}`, item.action)}
                     </p>
-                    <p className="text-[10px] text-slate-500">{item.entity_type} · {new Date(item.created_at).toLocaleString("it-IT")}</p>
+                    <p className="text-[10px] text-slate-500">{item.entity_type} · {new Date(item.created_at).toLocaleString(fmt.tag)}</p>
                   </div>
                 </div>
               ))

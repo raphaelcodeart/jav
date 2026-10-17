@@ -3,12 +3,9 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pagination, usePagination } from "@/components/pagination";
-import {
-  PRODUCT_REQUEST_STATUS_LABELS,
-  formatDateTime,
-  productRequestStatusColor,
-} from "@/components/product-requests";
+import { PRODUCT_REQUEST_STATUS_LABELS, productRequestStatusColor } from "@/components/product-requests";
 import { friendlyApiError } from "@/lib/api-error";
+import { useI18n } from "@/lib/i18n/provider";
 import type { ProductRequestDetailRead, ProductRequestRead } from "@/lib/types";
 
 /** «Richieste prodotti»: il lato staff delle richieste fatte dallo Shop con
@@ -37,6 +34,11 @@ function TrashIcon({ className }: { className?: string }) {
 }
 
 export function AdminProductRequestsPanel() {
+  const { t, fmt } = useI18n();
+  const formatDateTime = (iso: string) =>
+    new Date(iso).toLocaleString(fmt.tag, { dateStyle: "short", timeStyle: "short" });
+  const statusLabel = (code: string) => t.dyn(`mkt.preq.status.${code}`, STAFF_STATUS_LABELS[code] ?? code);
+  const openerLabel = (role: string) => t.dyn(`mkt.preq.opener.${role}`, OPENER_LABELS[role] ?? role);
   const queryClient = useQueryClient();
   const { data: requests, error: listError } = useQuery({
     queryKey: ["admin", "product-requests"],
@@ -92,7 +94,7 @@ export function AdminProductRequestsPanel() {
       setReply("");
       await refresh();
     } catch (err: unknown) {
-      setReplyError((err as Error).message || "Impossibile inviare la risposta.");
+      setReplyError((err as Error).message || t("mkt.preq.replyFailed"));
     } finally {
       setReplyLoading(false);
     }
@@ -111,7 +113,7 @@ export function AdminProductRequestsPanel() {
       if (!res.ok) throw new Error(await friendlyApiError(res));
       await refresh();
     } catch (err: unknown) {
-      setReplyError((err as Error).message || "Impossibile cambiare lo stato.");
+      setReplyError((err as Error).message || t("mkt.preq.statusFailed"));
     } finally {
       setStatusLoading(false);
     }
@@ -123,12 +125,12 @@ export function AdminProductRequestsPanel() {
     setDeleteError(null);
     try {
       const res = await fetch(`/api/proxy/product-requests/${deleting.id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error(await friendlyApiError(res, "Impossibile eliminare la richiesta."));
+      if (!res.ok) throw new Error(await friendlyApiError(res, t("mkt.preq.deleteFailed")));
       if (selectedId === deleting.id) setSelectedId(null);
       setDeleting(null);
       await refresh();
     } catch (err: unknown) {
-      setDeleteError((err as Error).message || "Impossibile eliminare la richiesta.");
+      setDeleteError((err as Error).message || t("mkt.preq.deleteFailed"));
     } finally {
       setDeleteLoading(false);
     }
@@ -137,11 +139,11 @@ export function AdminProductRequestsPanel() {
   const deleteModal = deleting && (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
       <div className="w-full max-w-md glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up">
-        <h3 className="text-lg font-bold text-slate-900 mb-2">Elimina richiesta</h3>
+        <h3 className="text-lg font-bold text-slate-900 mb-2">{t("mkt.preq.delete")}</h3>
         <p className="text-xs text-slate-500 mb-4">
-          Stai per eliminare definitivamente la richiesta{" "}
-          <span className="font-semibold text-slate-700">«{deleting.product_name}»</span> e
-          tutti i suoi messaggi. L&apos;operazione non può essere annullata.
+          {t("mkt.preq.deleteConfirmBefore")}{" "}
+          <span className="font-semibold text-slate-700">«{deleting.product_name}»</span>{" "}
+          {t("mkt.preq.deleteConfirmAfter")}
         </p>
         {deleteError && <p className="text-xs text-rose-400 mb-3">{deleteError}</p>}
         <div className="flex justify-end gap-3">
@@ -149,14 +151,14 @@ export function AdminProductRequestsPanel() {
             onClick={() => { setDeleting(null); setDeleteError(null); }}
             className="px-4 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 text-xs font-semibold text-slate-600 border border-slate-200 transition cursor-pointer"
           >
-            Annulla
+            {t("common.cancel")}
           </button>
           <button
             onClick={handleDelete}
             disabled={deleteLoading}
             className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50"
           >
-            {deleteLoading ? "Eliminazione…" : "Elimina definitivamente"}
+            {deleteLoading ? t("mkt.preq.deleting") : t("mkt.preq.deleteForever")}
           </button>
         </div>
       </div>
@@ -171,17 +173,17 @@ export function AdminProductRequestsPanel() {
           onClick={() => setSelectedId(null)}
           className="text-xs text-slate-400 hover:text-slate-900 transition cursor-pointer flex items-center gap-1"
         >
-          ← Torna a tutte le richieste
+          ← {t("mkt.preq.back")}
         </button>
 
         <div className="glass-card rounded-2xl p-6 border-slate-200 bg-white/70">
           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-4">
             <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-brand-600">Prodotto cercato</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-brand-600">{t("mkt.preq.productSought")}</p>
               <h3 className="text-lg font-semibold text-slate-900 break-words">{detail.product_name}</h3>
               <p className="text-xs text-slate-500 mt-1">
-                {OPENER_LABELS[detail.opened_by_role] ?? detail.opened_by_role} · {detail.opened_by_name ?? "—"} ·
-                aperta il {formatDateTime(detail.created_at)}
+                {openerLabel(detail.opened_by_role)} · {detail.opened_by_name ?? "—"} ·{" "}
+                {t("mkt.preq.openedOn", { date: formatDateTime(detail.created_at) })}
               </p>
               {detail.reference_url && (
                 <a
@@ -201,15 +203,15 @@ export function AdminProductRequestsPanel() {
                 disabled={statusLoading}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold border bg-white cursor-pointer ${productRequestStatusColor(detail.status)}`}
               >
-                {Object.entries(STAFF_STATUS_LABELS).map(([code, label]) => (
-                  <option key={code} value={code}>{label}</option>
+                {Object.keys(STAFF_STATUS_LABELS).map((code) => (
+                  <option key={code} value={code}>{statusLabel(code)}</option>
                 ))}
               </select>
               <button
                 type="button"
                 onClick={() => { if (canDelete) setDeleting(detail); }}
                 disabled={!canDelete}
-                title={canDelete ? "Elimina richiesta" : "Si elimina solo una richiesta conclusa (trovato, non trovato o chiusa)"}
+                title={canDelete ? t("mkt.preq.delete") : t("mkt.preq.deleteOnlyDoneLong")}
                 className="p-2 rounded-xl border border-slate-300 text-slate-400 hover:text-rose-400 hover:border-rose-500/30 hover:bg-rose-500/10 transition cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-slate-400 disabled:hover:border-slate-300 disabled:hover:bg-transparent"
               >
                 <TrashIcon className="w-4 h-4" />
@@ -231,7 +233,7 @@ export function AdminProductRequestsPanel() {
                   >
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        {isStaff ? `Staff${m.author_name ? ` · ${m.author_name}` : ""}` : m.author_name ?? OPENER_LABELS[m.author_role] ?? m.author_role}
+                        {isStaff ? `${openerLabel("ADMIN")}${m.author_name ? ` · ${m.author_name}` : ""}` : m.author_name ?? openerLabel(m.author_role)}
                       </span>
                       <span className="text-[10px] text-slate-500">{formatDateTime(m.created_at)}</span>
                     </div>
@@ -248,7 +250,7 @@ export function AdminProductRequestsPanel() {
                 required
                 value={reply}
                 onChange={(e) => setReply(e.target.value)}
-                placeholder="Rispondi al cliente…"
+                placeholder={t("mkt.preq.replyPlaceholder")}
                 className="flex-1 min-w-0 rounded-xl glass-input px-3 py-2.5 text-sm focus:border-brand-500"
               />
               <button
@@ -256,11 +258,11 @@ export function AdminProductRequestsPanel() {
                 disabled={replyLoading}
                 className="px-4 py-2 rounded-xl text-xs font-semibold bg-brand-600 hover:bg-brand-500 text-white transition cursor-pointer disabled:opacity-50"
               >
-                {replyLoading ? "Invio…" : "Rispondi"}
+                {replyLoading ? t("mkt.preq.sending") : t("mkt.preq.reply")}
               </button>
             </form>
           ) : (
-            <p className="text-xs text-slate-500">Richiesta chiusa: per scrivere ancora, riportala a «In lavorazione».</p>
+            <p className="text-xs text-slate-500">{t("mkt.preq.closedHint")}</p>
           )}
           {replyError && <p className="text-xs text-rose-400 mt-2">{replyError}</p>}
         </div>
@@ -274,14 +276,14 @@ export function AdminProductRequestsPanel() {
       <div className="flex flex-col gap-3">
         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
           <p className="text-sm text-slate-500 flex-1">
-            Prodotti che i clienti ci chiedono di cercare dallo Shop («Non hai trovato ciò che cercavi?»).{" "}
-            <strong className=" text-slate-900">{waiting}</strong> in attesa di una nostra risposta.
+            {t("mkt.preq.intro")}{" "}
+            <strong className=" text-slate-900">{waiting}</strong> {t("mkt.preq.waiting")}
           </p>
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Cerca per prodotto o cliente…"
+            placeholder={t("mkt.preq.search")}
             className="rounded-xl glass-input px-3 py-2 text-xs bg-white focus:border-brand-500 w-full sm:w-64"
           />
         </div>
@@ -291,24 +293,24 @@ export function AdminProductRequestsPanel() {
             onChange={(e) => setStatusFilter(e.target.value)}
             className="rounded-xl glass-input px-3 py-2 text-xs bg-white focus:border-brand-500"
           >
-            <option value="ACTIVE">Da gestire (nuove e in lavorazione)</option>
-            <option value="ALL">Tutti gli stati</option>
-            {Object.entries(STAFF_STATUS_LABELS).map(([code, label]) => (
-              <option key={code} value={code}>{label}</option>
+            <option value="ACTIVE">{t("mkt.preq.filterActive")}</option>
+            <option value="ALL">{t("mkt.preq.filterAll")}</option>
+            {Object.keys(STAFF_STATUS_LABELS).map((code) => (
+              <option key={code} value={code}>{statusLabel(code)}</option>
             ))}
           </select>
         </div>
       </div>
 
-      {listError && <p className="text-sm text-rose-400">Impossibile caricare le richieste.</p>}
+      {listError && <p className="text-sm text-rose-400">{t("mkt.preq.loadFailed")}</p>}
 
       <div className="space-y-3">
         {requests === undefined ? (
-          <p className="text-sm text-slate-500 text-center py-8">Caricamento…</p>
+          <p className="text-sm text-slate-500 text-center py-8">{t("mkt.preq.loading")}</p>
         ) : filtered.length === 0 ? (
           <div className="glass-card rounded-2xl p-12 text-center border-slate-200">
             <p className="text-sm text-slate-500">
-              {(requests ?? []).length === 0 ? "Nessuna richiesta di prodotto ancora." : "Nessuna richiesta corrisponde ai filtri."}
+              {(requests ?? []).length === 0 ? t("mkt.preq.empty") : t("mkt.preq.noMatch")}
             </p>
           </div>
         ) : (
@@ -324,24 +326,24 @@ export function AdminProductRequestsPanel() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-sm font-semibold text-slate-900 truncate">{r.product_name}</p>
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border shrink-0 ${productRequestStatusColor(r.status)}`}>
-                      {STAFF_STATUS_LABELS[r.status] ?? r.status}
+                      {statusLabel(r.status)}
                     </span>
                     {needsReply && (
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-brand-600 text-white shrink-0">
-                        Da rispondere
+                        {t("mkt.preq.toAnswer")}
                       </span>
                     )}
                   </div>
                   <p className="text-[11px] text-slate-500 mt-1">
-                    {r.opened_by_name ?? "—"} · {r.message_count} messaggi
-                    {r.last_message_at ? ` · ultimo aggiornamento ${formatDateTime(r.last_message_at)}` : ""}
+                    {r.opened_by_name ?? "—"} · {t("mkt.preq.messages", { n: r.message_count })}
+                    {r.last_message_at ? ` · ${t("mkt.preq.lastUpdate", { date: formatDateTime(r.last_message_at) })}` : ""}
                   </p>
                 </button>
                 <button
                   type="button"
                   onClick={() => { if (canDelete) setDeleting(r); }}
                   disabled={!canDelete}
-                  title={canDelete ? "Elimina richiesta" : "Si elimina solo una richiesta conclusa"}
+                  title={canDelete ? t("mkt.preq.delete") : t("mkt.preq.deleteOnlyDone")}
                   className="shrink-0 p-2 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-slate-500 disabled:hover:bg-transparent"
                 >
                   <TrashIcon className="w-4 h-4" />
@@ -351,7 +353,7 @@ export function AdminProductRequestsPanel() {
           })
         )}
       </div>
-      <Pagination {...pagination} label="richieste" />
+      <Pagination {...pagination} label={t("mkt.preq.paginationLabel")} />
       {deleteModal}
     </div>
   );

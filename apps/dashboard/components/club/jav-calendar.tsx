@@ -143,7 +143,7 @@ export function JavCalendar({ mode }: { mode: "staff" | "member" }) {
           <div className="relative flex flex-wrap items-end justify-between gap-4">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.22em] text-accent-200">📅 {t("jcal.eyebrow")}</p>
-              <h2 className="font-display text-3xl">Calendário <span className="text-accent-300">JudoArteVida</span></h2>
+              <h2 className="font-display text-3xl">{t("clubNav.calendar")} <span className="text-accent-300">JudoArteVida</span></h2>
               <p className="mt-1 text-sm text-white/80">{t("jcal.count", { n: data?.length ?? 0 })}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">

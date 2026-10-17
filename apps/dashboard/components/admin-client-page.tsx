@@ -1,7 +1,8 @@
 "use client";
 
 import { ClubsPanel } from "@/components/club/clubs-panel";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useI18n } from "@/lib/i18n/provider";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell, type NavItem } from "@/components/app-shell";
 import { AdminOverviewPanel } from "@/components/admin-overview-panel";
@@ -32,7 +33,6 @@ import { ContractStatusHistoryModal } from "@/components/contract-status-history
 import { SectionBanner } from "@/components/section-banner";
 import { friendlyApiError } from "@/lib/api-error";
 import { downloadCsv } from "@/lib/csv-export";
-import { formatEuroCents as euro } from "@/lib/product-audience";
 import type { CommissionPreviewRead, ContractRead, CustomerRead } from "@/lib/types";
 
 async function fetchCustomersForLookup(): Promise<CustomerRead[]> {
@@ -50,22 +50,10 @@ interface AdminClientPageProps {
   isSuperAdmin?: boolean;
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  DRAFT: "Bozza",
-  SUBMITTED: "Inviata",
-  DOCUMENTS_PENDING: "Documenti mancanti",
-  UNDER_REVIEW: "In revisione",
-  APPROVED: "Approvata",
-  PAYMENT_PENDING: "In attesa di pagamento",
-  PAID: "Pagata",
-  ACTIVATION_PENDING: "In attivazione",
-  ACTIVE: "Attiva",
-  SUSPENDED: "Sospesa",
-  CANCELLED: "Cessata",
-  EXPIRED: "Scaduta",
-  RENEWED: "Rinnovata",
-  REJECTED: "Respinta",
-};
+const STATUS_CODES = [
+  "DRAFT", "SUBMITTED", "DOCUMENTS_PENDING", "UNDER_REVIEW", "APPROVED", "PAYMENT_PENDING", "PAID",
+  "ACTIVATION_PENDING", "ACTIVE", "SUSPENDED", "CANCELLED", "EXPIRED", "RENEWED", "REJECTED",
+];
 
 // Mirrors apps/api/app/domains/contracts/state_machine.py::ALLOWED_TRANSITIONS
 // exactly -- the dropdown below must only ever offer transitions the backend
@@ -307,6 +295,7 @@ const NAV_ITEMS: NavItem[] = [
     single-contract form is tucked away at the bottom, for the rare case that
     needs it (a contract recorded by hand for an existing customer). */
 function AdminNewContractTab({ onCreated }: { onCreated: (contract: ContractRead) => void }) {
+  const { t } = useI18n();
   const [advanced, setAdvanced] = useState(false);
   return (
     <div className="space-y-6">
@@ -316,7 +305,7 @@ function AdminNewContractTab({ onCreated }: { onCreated: (contract: ContractRead
           onClick={() => setAdvanced((v) => !v)}
           className="text-xs font-semibold text-slate-400 hover:text-brand-600 cursor-pointer"
         >
-          {advanced ? "▾" : "▸"} Casi particolari: modulo avanzato a contratto singolo
+          {advanced ? "▾" : "▸"} {t("adm.client.advancedForm")}
         </button>
         {advanced && (
           <div className="mt-4">
@@ -329,6 +318,12 @@ function AdminNewContractTab({ onCreated }: { onCreated: (contract: ContractRead
 }
 
 export function AdminClientPage({ initialContracts, email, isSuperAdmin }: AdminClientPageProps) {
+  const { t, fmt } = useI18n();
+  const statusLabel = (code: string) => t.dyn(`adm.contractStatus.${code}`, code);
+  const navItems = useMemo(
+    () => NAV_ITEMS.map((item) => ({ ...item, label: t.dyn(`adm.nav.${item.key.replace(/-/g, "_")}`, item.label) })),
+    [t],
+  );
   const [contracts, setContracts] = useState<ContractRead[]>(initialContracts);
   const { data: customersForLookup } = useQuery({
     queryKey: ["admin", "customers"],
@@ -460,7 +455,7 @@ export function AdminClientPage({ initialContracts, email, isSuperAdmin }: Admin
         await refetchCommissionPreview();
       }
       if (!res.ok) {
-        throw new Error(await friendlyApiError(res, "Errore durante il cambio di stato del contratto."));
+        throw new Error(await friendlyApiError(res, t("adm.client.transitionError")));
       }
 
       const updatedContract = await res.json() as ContractRead;
@@ -472,7 +467,7 @@ export function AdminClientPage({ initialContracts, email, isSuperAdmin }: Admin
       queryClient.invalidateQueries({ queryKey: ["contract-request"] });
       queryClient.invalidateQueries({ queryKey: ["admin", "contract-requests"] });
     } catch (err: any) {
-      setTransitionError(err.message || "Transizione fallita. Controlla le regole della macchina di stato.");
+      setTransitionError(err.message || t("adm.client.transitionFailed"));
     } finally {
       setTransitionLoading(false);
     }
@@ -490,10 +485,10 @@ export function AdminClientPage({ initialContracts, email, isSuperAdmin }: Admin
   const handleExportContractsCsv = () => {
     downloadCsv(
       `contratti_${new Date().toISOString().slice(0, 10)}`,
-      ["ID Contratto", "Cliente", "Prodotto", "Stato", "IBAN", "Creato il", "Attivato il", "Scadenza"],
+      [t("adm.client.csv.contractId"), t("adm.client.customer"), t("adm.client.product"), t("adm.client.status"), "IBAN", t("adm.client.csv.createdAt"), t("adm.client.csv.activatedAt"), t("adm.client.csv.expiry")],
       filteredContracts.map((c) => [
         c.id, customerNameById.get(c.customer_id) ?? c.customer_id, c.product_name ?? "",
-        STATUS_LABELS[c.status] ?? c.status, c.iban ?? "", c.created_at, c.activated_at ?? "", c.expires_at ?? "",
+        statusLabel(c.status), c.iban ?? "", c.created_at, c.activated_at ?? "", c.expires_at ?? "",
       ])
     );
   };
@@ -515,18 +510,18 @@ export function AdminClientPage({ initialContracts, email, isSuperAdmin }: Admin
   return (
     <>
       <AppShell
-        roleLabel="Area Amministratore"
+        roleLabel={t("adm.client.roleLabel")}
         email={email}
-        navItems={NAV_ITEMS}
+        navItems={navItems}
         activeKey={activeTab}
         onNavigate={(key) => setActiveTab(key as typeof activeTab)}
-        headerTitle="Pannello Amministrativo"
+        headerTitle={t("adm.client.headerTitle")}
       >
         {activeTab === "club" && <ClubsPanel />}
 
         {activeTab === "overview" && (
           <>
-            <SectionBanner image="contracts" alt="Panoramica" />
+            <SectionBanner image="contracts" alt={t("adm.nav.overview")} />
             <AdminOverviewPanel
               onNavigate={(key, filter) => {
                 setActiveTab(key as typeof activeTab);
@@ -541,7 +536,7 @@ export function AdminClientPage({ initialContracts, email, isSuperAdmin }: Admin
 
         {activeTab === "requests" && (
           <div className="space-y-6">
-            <SectionBanner image="contracts" alt="Pratiche" />
+            <SectionBanner image="contracts" alt={t("adm.nav.requests")} />
             <AdminContractRequestsPanel
               openRequestId={openRequestId}
               onOpenRequest={setOpenRequestId}
@@ -558,17 +553,17 @@ export function AdminClientPage({ initialContracts, email, isSuperAdmin }: Admin
 
         {activeTab === "list" && (
           <div className="space-y-6">
-            <SectionBanner image="contracts" alt="Contratti" />
+            <SectionBanner image="contracts" alt={t("adm.client.contracts")} />
             {/* Quick Metrics Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
               <div className="glass-card rounded-2xl p-4 border-slate-200 bg-slate-50 text-center">
-                <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">Totali</span>
+                <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">{t("adm.client.totals")}</span>
                 <span className="text-2xl font-bold text-slate-900">{contracts.length}</span>
               </div>
               {["DRAFT", "SUBMITTED", "UNDER_REVIEW", "ACTIVE"].map((status) => (
                 <div key={status} className="glass-card rounded-2xl p-4 border-slate-200 bg-slate-50 text-center">
                   <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">
-                    {STATUS_LABELS[status] || status}
+                    {statusLabel(status)}
                   </span>
                   <span className="text-2xl font-bold text-slate-900">{byStatus[status] ?? 0}</span>
                 </div>
@@ -580,7 +575,7 @@ export function AdminClientPage({ initialContracts, email, isSuperAdmin }: Admin
               <div className="w-full sm:max-w-xs relative">
                 <input
                   type="text"
-                  placeholder="Cerca per UUID contratto o cliente..."
+                  placeholder={t("adm.client.searchPlaceholder")}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full rounded-xl glass-input pl-10 pr-4 py-2 text-xs focus:border-brand-500"
@@ -591,17 +586,17 @@ export function AdminClientPage({ initialContracts, email, isSuperAdmin }: Admin
               </div>
 
               <div className="w-full sm:w-auto flex items-center gap-2">
-                <span className="text-xs text-slate-500 shrink-0 font-medium">Stato:</span>
+                <span className="text-xs text-slate-500 shrink-0 font-medium">{t("adm.client.statusFilter")}</span>
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
                   className="w-full sm:w-44 rounded-xl glass-input px-3 py-2 text-xs bg-white focus:border-brand-500"
                 >
-                  <option value="ALL">Tutti</option>
-                  <option value="PENDING_APPROVAL">In attesa di approvazione</option>
-                  <option value="REJECTED_CANCELLED">Respinti o cessati</option>
-                  {Object.entries(STATUS_LABELS).map(([code, label]) => (
-                    <option key={code} value={code}>{label}</option>
+                  <option value="ALL">{t("adm.client.all")}</option>
+                  <option value="PENDING_APPROVAL">{t("adm.client.pendingApproval")}</option>
+                  <option value="REJECTED_CANCELLED">{t("adm.client.rejectedCancelled")}</option>
+                  {STATUS_CODES.map((code) => (
+                    <option key={code} value={code}>{statusLabel(code)}</option>
                   ))}
                 </select>
               </div>
@@ -614,18 +609,18 @@ export function AdminClientPage({ initialContracts, email, isSuperAdmin }: Admin
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                   </svg>
-                  Esporta CSV
+                  {t("adm.client.exportCsv")}
                 </button>
               </div>
 
               <div className="w-full sm:w-auto flex items-center gap-2">
-                <span className="text-xs text-slate-500 shrink-0 font-medium">Anno:</span>
+                <span className="text-xs text-slate-500 shrink-0 font-medium">{t("adm.client.yearFilter")}</span>
                 <select
                   value={yearFilter}
                   onChange={(e) => setYearFilter(e.target.value)}
                   className="w-full sm:w-32 rounded-xl glass-input px-3 py-2 text-xs bg-white focus:border-brand-500"
                 >
-                  <option value="ALL">Storico completo</option>
+                  <option value="ALL">{t("adm.client.fullHistory")}</option>
                   {contractYears.map((year) => (
                     <option key={year} value={year.toString()}>{year}</option>
                   ))}
@@ -639,13 +634,13 @@ export function AdminClientPage({ initialContracts, email, isSuperAdmin }: Admin
                 <table className="w-full border-collapse text-left text-sm">
                   <thead>
                     <tr className="border-b border-slate-200 text-slate-500 font-semibold bg-slate-900/[0.02]">
-                      <th className="py-3 px-6">Cliente</th>
-                      <th className="py-3 px-6">Prodotto</th>
-                      <th className="py-3 px-6">Origine</th>
-                      <th className="py-3 px-6 text-right">Importo</th>
-                      <th className="py-3 px-6">Stato</th>
-                      <th className="py-3 px-6">Scadenza / Rinnovo</th>
-                      <th className="py-3 px-6 text-right">Azioni</th>
+                      <th className="py-3 px-6">{t("adm.client.customer")}</th>
+                      <th className="py-3 px-6">{t("adm.client.product")}</th>
+                      <th className="py-3 px-6">{t("adm.client.origin")}</th>
+                      <th className="py-3 px-6 text-right">{t("adm.client.amount")}</th>
+                      <th className="py-3 px-6">{t("adm.client.status")}</th>
+                      <th className="py-3 px-6">{t("adm.client.expiryRenewal")}</th>
+                      <th className="py-3 px-6 text-right">{t("adm.client.actions")}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
@@ -653,13 +648,13 @@ export function AdminClientPage({ initialContracts, email, isSuperAdmin }: Admin
                       <tr key={c.id} className=" text-slate-600 hover:bg-slate-100 transition-colors">
                         <td className="py-4 px-6">
                           <div className="text-sm font-semibold text-slate-900">
-                            {customerNameById.get(c.customer_id) ?? "Cliente sconosciuto"}
+                            {customerNameById.get(c.customer_id) ?? t("adm.client.unknownCustomer")}
                           </div>
                           <div className="font-mono text-[10px] text-slate-500">{c.customer_id}</div>
                         </td>
                         <td className="py-4 px-6">
                           <div className="text-xs font-semibold text-slate-900">
-                            {c.product_name ?? "Prodotto"}
+                            {c.product_name ?? t("adm.client.product")}
                           </div>
                           <div className="font-mono text-[10px] text-slate-500">{c.id}</div>
                           {c.contract_request_id && (
@@ -667,7 +662,7 @@ export function AdminClientPage({ initialContracts, email, isSuperAdmin }: Admin
                               onClick={() => { setOpenRequestId(c.contract_request_id!); setActiveTab("requests"); }}
                               className="mt-1 text-[10px] font-semibold text-brand-600 hover:text-brand-600 cursor-pointer"
                             >
-                              Pratica #{c.contract_request_id.slice(0, 8).toUpperCase()} →
+                              {t("adm.client.requestLink", { id: c.contract_request_id.slice(0, 8).toUpperCase() })}
                             </button>
                           )}
                         </td>
@@ -681,7 +676,7 @@ export function AdminClientPage({ initialContracts, email, isSuperAdmin }: Admin
                           {c.activated_by_promoter_id ? (
                             <>
                               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border bg-sky-500/10 text-sky-400 border-sky-500/20">
-                                Compilato dal promoter
+                                {t("adm.client.filledByPromoter")}
                               </span>
                               <div className=" text-slate-500 mt-1">
                                 {c.activated_by_promoter_name ?? "—"}
@@ -690,15 +685,15 @@ export function AdminClientPage({ initialContracts, email, isSuperAdmin }: Admin
                           ) : (
                             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border bg-slate-900/5 text-slate-400 border-slate-300">
                               {c.created_by_role === "ADMIN"
-                                ? "Creato da amministrazione"
+                                ? t("adm.client.createdByAdmin")
                                 : c.created_by_role === "CUSTOMER"
-                                  ? "Sottoscritto dal cliente"
+                                  ? t("adm.client.signedByCustomer")
                                   : "—"}
                             </span>
                           )}
                           {c.first_referrer_name && (
                             <div className="text-[10px] text-slate-500 mt-1">
-                              Invitato da {c.first_referrer_name}
+                              {t("adm.client.invitedBy", { name: c.first_referrer_name })}
                             </div>
                           )}
                         </td>
@@ -708,11 +703,11 @@ export function AdminClientPage({ initialContracts, email, isSuperAdmin }: Admin
                           {c.gross_amount_cents != null ? (
                             <>
                               <div className="text-sm font-semibold text-slate-900 tabular-nums">
-                                {euro(c.gross_amount_cents)}
+                                {fmt.euro(c.gross_amount_cents)}
                               </div>
                               <div className="text-[10px] text-slate-500 tabular-nums">
-                                {euro(c.net_amount_cents ?? 0)} netto
-                                {c.vat_amount_cents ? ` + ${euro(c.vat_amount_cents)} IVA ${c.vat_rate}%` : " · IVA n/a"}
+                                {t("adm.client.net", { amount: fmt.euro(c.net_amount_cents ?? 0) })}
+                                {c.vat_amount_cents ? ` + ${t("adm.client.vat", { amount: fmt.euro(c.vat_amount_cents), rate: String(c.vat_rate) })}` : ` · ${t("adm.client.vatNa")}`}
                               </div>
                             </>
                           ) : (
@@ -722,26 +717,26 @@ export function AdminClientPage({ initialContracts, email, isSuperAdmin }: Admin
                         <td className="py-4 px-6">
                           <button
                             onClick={() => setHistoryContractId(c.id)}
-                            title="Vedi storico stati"
+                            title={t("adm.client.statusHistory")}
                             className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border cursor-pointer hover:brightness-125 transition ${getStatusBadgeColor(c.status)}`}
                           >
-                            {STATUS_LABELS[c.status] ?? c.status}
+                            {statusLabel(c.status)}
                           </button>
                           {/* Paid before approval (Session 49): approving
                               the documents is all that is left, and it
                               activates the contract straight away. */}
                           {c.paid_at && ["SUBMITTED", "DOCUMENTS_PENDING", "UNDER_REVIEW", "APPROVED", "PAYMENT_PENDING"].includes(c.status) && (
                             <span
-                              title={`Pagato il ${new Date(c.paid_at).toLocaleDateString("it-IT")}: si attiva all'approvazione dei documenti`}
+                              title={t("adm.client.paidOnTitle", { date: fmt.shortDate(c.paid_at) })}
                               className="ml-1.5 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                             >
-                              Pagato
+                              {t("adm.client.paid")}
                             </span>
                           )}
                         </td>
                         <td className="py-4 px-6">
                           <span className={`text-xs ${expiryColor(c.expires_at)}`}>
-                            {c.expires_at ? new Date(c.expires_at).toLocaleDateString("it-IT") : "—"}
+                            {c.expires_at ? fmt.shortDate(c.expires_at) : "—"}
                           </span>
                         </td>
                         <td className="py-4 px-6 text-right">
@@ -750,13 +745,13 @@ export function AdminClientPage({ initialContracts, email, isSuperAdmin }: Admin
                               onClick={() => setCommissionsContractId(c.id)}
                               className="px-3 py-1 rounded-lg bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 text-xs font-semibold transition cursor-pointer"
                             >
-                              Provvigioni
+                              {t("adm.nav.commissions")}
                             </button>
                             <button
                               onClick={() => handleOpenTransition(c)}
                               className="px-3 py-1 rounded-lg bg-brand-600/10 hover:bg-brand-600/20 border border-brand-500/20 text-brand-600 text-xs font-semibold transition cursor-pointer"
                             >
-                              Recensisci
+                              {t("adm.client.review")}
                             </button>
                           </div>
                         </td>
@@ -765,7 +760,7 @@ export function AdminClientPage({ initialContracts, email, isSuperAdmin }: Admin
                     {filteredContracts.length === 0 && (
                       <tr>
                         <td colSpan={7} className="text-center py-8 text-slate-500">
-                          Nessun contratto corrisponde ai filtri impostati.
+                          {t("adm.client.noMatch")}
                         </td>
                       </tr>
                     )}
@@ -773,7 +768,7 @@ export function AdminClientPage({ initialContracts, email, isSuperAdmin }: Admin
                 </table>
               </div>
               <div className="px-6 pb-5">
-                <Pagination {...contractsPagination} label="contratti" />
+                <Pagination {...contractsPagination} label={t("adm.client.contractsLower")} />
               </div>
             </div>
           </div>
@@ -781,94 +776,94 @@ export function AdminClientPage({ initialContracts, email, isSuperAdmin }: Admin
 
         {activeTab === "create" && (
           <div className="space-y-6">
-            <SectionBanner image="contracts" alt="Nuovo contratto" />
+            <SectionBanner image="contracts" alt={t("adm.nav.create")} />
             <AdminNewContractTab onCreated={handleContractCreated} />
           </div>
         )}
 
         {activeTab === "customers" && (
           <div className="space-y-6">
-            <SectionBanner image="customers" alt="Clienti" />
+            <SectionBanner image="customers" alt={t("adm.client.customers")} />
             <AdminCustomersPanel initialActiveOnly={pendingCustomerActiveOnly} isSuperAdmin={isSuperAdmin} />
           </div>
         )}
         {activeTab === "promoters" && (
           <div className="space-y-6">
-            <SectionBanner image="network" alt="Promoter" />
+            <SectionBanner image="network" alt={t("adm.client.promoters")} />
             <AdminPromotersPanel initialStatusFilter={pendingPromoterStatusFilter ?? undefined} isSuperAdmin={isSuperAdmin} />
           </div>
         )}
         {activeTab === "products" && (
           <div className="space-y-6">
-            <SectionBanner image="products" alt="Prodotti" />
+            <SectionBanner image="products" alt={t("adm.client.products")} />
             <ShopSectionsCard />
             <AdminProductsPanel />
           </div>
         )}
         {activeTab === "network" && (
           <div className="space-y-6">
-            <SectionBanner image="network" alt="Rete Commerciale" />
+            <SectionBanner image="network" alt={t("adm.nav.network")} />
             <AdminNetworkPanel />
           </div>
         )}
         {activeTab === "tickets" && (
           <div className="space-y-6">
-            <SectionBanner image="support" alt="Ticket di Supporto" />
+            <SectionBanner image="support" alt={t("adm.nav.tickets")} />
             <AdminTicketsPanel />
           </div>
         )}
         {activeTab === "product-requests" && (
           <div className="space-y-6">
-            <SectionBanner image="products" alt="Richieste prodotti" />
+            <SectionBanner image="products" alt={t("adm.nav.product_requests")} />
             <AdminProductRequestsPanel />
           </div>
         )}
         {activeTab === "commissions" && (
           <div className="space-y-6">
-            <SectionBanner image="commissions" alt="Provvigioni" />
+            <SectionBanner image="commissions" alt={t("adm.nav.commissions")} />
             <AdminCommissionsPanel initialStatusFilter={pendingCommissionStatusFilter ?? undefined} />
           </div>
         )}
         {activeTab === "wallets" && (
           <div className="space-y-6">
-            <SectionBanner image="wallets" alt="Wallet" />
+            <SectionBanner image="wallets" alt={t("adm.nav.wallets")} />
             <AdminWalletsPanel isSuperAdmin={isSuperAdmin} />
           </div>
         )}
         {activeTab === "friend-referral-claims" && (
           <div className="space-y-6">
-            <SectionBanner image="customers" alt="Omaggi Inviti" />
+            <SectionBanner image="customers" alt={t("adm.nav.friend_referral_claims")} />
             <AdminFriendReferralClaimsPanel />
           </div>
         )}
         {activeTab === "orders" && (
           <div className="space-y-6">
-            <SectionBanner image="products" alt="Ordini" />
+            <SectionBanner image="products" alt={t("adm.nav.orders")} />
             <AdminOrdersPanel />
           </div>
         )}
         {activeTab === "jav-market" && (
           <div className="space-y-6">
-            <SectionBanner image="products" alt="Fai la Spesa con Jav" />
+            <SectionBanner image="products" alt={t("adm.nav.jav_market")} />
             <MarketplaceRulesCard highlight="jav_market" />
             <AdminJavMarketPanel />
           </div>
         )}
         {activeTab === "accounting" && (
           <div className="space-y-6">
-            <SectionBanner image="wallets" alt="Contabilità" />
+            <SectionBanner image="wallets" alt={t("adm.nav.accounting")} />
             <AdminAccountingPanel />
           </div>
         )}
         {activeTab === "documentation" && (
           <div className="space-y-6">
-            <SectionBanner image="documentation" alt="Documentazione" />
+            <SectionBanner image="documentation" alt={t("adm.nav.documentation")} />
             <AdminDocumentationPanel />
           </div>
         )}
         {activeTab === "settings" && (
           <div className="space-y-6">
-            <SectionBanner image="documentation" alt="Impostazioni" />
+            <SectionBanner image="documentation" alt={t("adm.nav.settings")} />
             <AdminOrganizationSettingsPanel />
           </div>
         )}
@@ -879,7 +874,7 @@ export function AdminClientPage({ initialContracts, email, isSuperAdmin }: Admin
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
           <div className={`w-full ${needsCommissionPreview ? "max-w-3xl" : "max-w-lg"} max-h-[85vh] overflow-y-auto glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up`}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-slate-900">Recensisci / Transiziona Stato</h3>
+              <h3 className="text-lg font-bold text-slate-900">{t("adm.client.transitionTitle")}</h3>
               <button
                 onClick={() => setSelectedContract(null)}
                 className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-900 transition cursor-pointer"
@@ -891,65 +886,65 @@ export function AdminClientPage({ initialContracts, email, isSuperAdmin }: Admin
             </div>
 
             <div className="p-3 mb-4 rounded-xl bg-slate-900/5 border border-slate-200 text-xs text-slate-500 space-y-1">
-              <p>Cliente: <span className="font-semibold text-slate-900">{customerNameById.get(selectedContract.customer_id) ?? "Cliente sconosciuto"}</span></p>
-              <p>ID Contratto: <span className="font-mono text-slate-900 ">{selectedContract.id}</span></p>
-              <p>Email contratto: <span className="font-semibold text-slate-900">{selectedContract.email ?? "Non specificata"}</span></p>
-              <p>Stato Attuale: <span className="font-bold text-brand-600">{STATUS_LABELS[selectedContract.status] || selectedContract.status}</span></p>
+              <p>{t("adm.client.customerLabel")} <span className="font-semibold text-slate-900">{customerNameById.get(selectedContract.customer_id) ?? t("adm.client.unknownCustomer")}</span></p>
+              <p>{t("adm.client.contractIdLabel")} <span className="font-mono text-slate-900 ">{selectedContract.id}</span></p>
+              <p>{t("adm.client.contractEmailLabel")} <span className="font-semibold text-slate-900">{selectedContract.email ?? t("adm.client.notSpecified")}</span></p>
+              <p>{t("adm.client.currentStatusLabel")} <span className="font-bold text-brand-600">{statusLabel(selectedContract.status)}</span></p>
             </div>
 
             <div className="mb-5">
-              <p className="text-xs font-semibold text-slate-600 uppercase mb-2">Documenti Contrattuali</p>
+              <p className="text-xs font-semibold text-slate-600 uppercase mb-2">{t("adm.client.contractDocuments")}</p>
               <ContractDocumentsPanel contractId={selectedContract.id} isStaff />
             </div>
 
             <div className="mb-5">
               <p className="text-xs font-semibold text-slate-600 uppercase mb-2">
-                Fascicolo Completo
+                {t("adm.client.fullDossier")}
               </p>
               <ContractDossierActions contractId={selectedContract.id} />
             </div>
 
             {availableTargets.length === 0 ? (
               <div className="p-4 rounded-xl bg-slate-900/5 border border-slate-200 text-sm text-slate-500 text-center">
-                Questo contratto ha raggiunto uno stato finale ({STATUS_LABELS[selectedContract.status] ?? selectedContract.status}) e non può essere transizionato ulteriormente.
+                {t("adm.client.finalState", { status: statusLabel(selectedContract.status) })}
                 <div className="flex justify-center mt-4">
                   <button
                     type="button"
                     onClick={() => setSelectedContract(null)}
                     className="px-4 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 text-xs font-semibold text-slate-600 border border-slate-200 transition cursor-pointer"
                   >
-                    Chiudi
+                    {t("common.close")}
                   </button>
                 </div>
               </div>
             ) : (
             <form onSubmit={handleExecuteTransition} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 block">Seleziona Stato di Destinazione</label>
+                <label className="text-xs font-semibold text-slate-600 block">{t("adm.client.targetStatus")}</label>
                 <select
                   value={targetStatus}
                   onChange={(e) => setTargetStatus(e.target.value)}
                   className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-white focus:border-brand-500"
                 >
                   {availableTargets.map((code) => (
-                    <option key={code} value={code} className=" bg-white">{STATUS_LABELS[code] ?? code} ({code})</option>
+                    <option key={code} value={code} className=" bg-white">{statusLabel(code)} ({code})</option>
                   ))}
                 </select>
                 <p className="text-[10px] text-slate-500 mt-1">
-                  Solo le transizioni valide da &quot;{STATUS_LABELS[selectedContract.status] ?? selectedContract.status}&quot; sono elencate qui.
+                  {t("adm.client.validTransitionsOnly", { status: statusLabel(selectedContract.status) })}
                 </p>
               </div>
 
               {needsCommissionPreview && (
                 <div className="space-y-3 p-4 rounded-2xl border border-brand-500/25 bg-brand-50/60">
-                  <p className="text-sm font-bold text-slate-900">Anteprima provvigioni</p>
+                  <p className="text-sm font-bold text-slate-900">{t("adm.client.commissionPreview")}</p>
                   {commissionPreviewError ? (
                     <p className="text-xs text-rose-400">{(commissionPreviewError as Error).message}</p>
                   ) : !commissionPreview ? (
                     <div className="h-24 rounded-xl bg-slate-900/5 animate-pulse" />
                   ) : commissionPreview.already_accepted ? (
                     <p className="text-xs text-emerald-400">
-                      Anteprima già accettata per questo contratto: la trovi nel registro, pulsante “Provvigioni”.
+                      {t("adm.client.previewAlreadyAccepted")}
                     </p>
                   ) : (
                     <>
@@ -962,8 +957,7 @@ export function AdminClientPage({ initialContracts, email, isSuperAdmin }: Admin
                           className="mt-0.5 accent-brand-500"
                         />
                         <span className="text-xs text-slate-700">
-                          Ho controllato l&apos;anteprima e accetto che le provvigioni partano come indicato.
-                          Resterà salvata nel registro del contratto.
+                          {t("adm.client.previewAccept")}
                         </span>
                       </label>
                     </>
@@ -972,11 +966,11 @@ export function AdminClientPage({ initialContracts, email, isSuperAdmin }: Admin
               )}
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 block">Motivazione</label>
+                <label className="text-xs font-semibold text-slate-600 block">{t("adm.client.reason")}</label>
                 <input
                   type="text"
                   required
-                  placeholder="Es: Documenti validati con successo"
+                  placeholder={t("adm.client.reasonPlaceholder")}
                   value={transitionReason}
                   onChange={(e) => setTransitionReason(e.target.value)}
                   className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500"
@@ -984,10 +978,10 @@ export function AdminClientPage({ initialContracts, email, isSuperAdmin }: Admin
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 block">Note aggiuntive (opzionale)</label>
+                <label className="text-xs font-semibold text-slate-600 block">{t("adm.client.notes")}</label>
                 <textarea
                   rows={3}
-                  placeholder="Dettagli interni o appunti..."
+                  placeholder={t("adm.client.notesPlaceholder")}
                   value={transitionNotes}
                   onChange={(e) => setTransitionNotes(e.target.value)}
                   className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500 resize-none"
@@ -1006,14 +1000,14 @@ export function AdminClientPage({ initialContracts, email, isSuperAdmin }: Admin
                   onClick={() => setSelectedContract(null)}
                   className="px-4 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 text-xs font-semibold text-slate-600 border border-slate-200 transition cursor-pointer"
                 >
-                  Annulla
+                  {t("common.cancel")}
                 </button>
                 <button
                   type="submit"
                   disabled={transitionLoading || (mustAcceptPreview && (!commissionPreview || !previewChecked))}
                   className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50"
                 >
-                  {transitionLoading ? "Salvataggio..." : mustAcceptPreview ? "Accetta anteprima e salva" : "Salva Stato"}
+                  {transitionLoading ? t("adm.client.saving") : mustAcceptPreview ? t("adm.client.acceptAndSave") : t("adm.client.saveStatus")}
                 </button>
               </div>
             </form>

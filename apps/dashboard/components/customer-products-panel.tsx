@@ -23,13 +23,7 @@ import { ProductThumbnail } from "@/components/product-thumbnail";
 import { computePrice, contractPrices, productAllowsCustomerKind, isRecurringProductType } from "@/lib/product-audience";
 import { ShareMenu } from "@/components/share-buttons";
 import { useShopCategories } from "@/components/shop-categories-card";
-
-const PRODUCT_TYPE_LABELS: Record<string, string> = {
-  SERVICE: "Servizio",
-  DIGITAL: "Digitale",
-  PHYSICAL: "Fisico",
-  SUBSCRIPTION: "Abbonamento",
-};
+import { javCash as javCashIn } from "@/components/marketplace-checkout-bits";
 
 type ProductCategory = "INTERNAL" | "DROPSHIPPING" | "PARTNER";
 // Not a real Product.category value -- the Shop («Fai la Spesa con Jav») is
@@ -122,16 +116,6 @@ function useShopPages<T>(
   };
 }
 
-function euro(cents: number): string {
-  return (cents / 100).toLocaleString("it-IT", { style: "currency", currency: "EUR" });
-}
-
-// Wallet credit is JavCash, never plain EUR -- see wallet-panel.tsx's
-// identical helper.
-function javCash(cents: number): string {
-  return `${(cents / 100).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} JavCash`;
-}
-
 async function fetchProducts(): Promise<ProductCatalogRead[]> {
   const res = await fetch("/api/proxy/products");
   if (!res.ok) throw new Error("Impossibile caricare il catalogo prodotti.");
@@ -181,7 +165,10 @@ export function CustomerProductsPanel({
   // Session 78: il prezzo esposto e' l'imponibile, l'IVA si aggiunge al
   // checkout. Il "+ IVA" accanto al prezzo e' cio' che evita al cliente la
   // sorpresa del 22% al momento di pagare.
-  const { t } = useI18n();
+  const { t, fmt } = useI18n();
+  const euro = fmt.euro;
+  // Wallet credit is JavCash, never plain EUR.
+  const javCash = (cents: number) => javCashIn(cents, fmt.tag);
   const marketplaceVatPercentage = marketplaceConfig?.vat_percentage ?? 0;
   // I nomi predefiniti si traducono; uno scelto dall'amministratore resta il suo.
   const marketplaceLabels = {
@@ -353,7 +340,7 @@ export function CustomerProductsPanel({
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
         </svg>
-        <span>Caricamento catalogo...</span>
+        <span>{t("shopx.panel.loading")}</span>
       </div>
     );
   }
@@ -361,7 +348,7 @@ export function CustomerProductsPanel({
   if (error) {
     return (
       <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm">
-        Impossibile caricare il catalogo prodotti.
+        {t("shopx.panel.loadFailed")}
       </div>
     );
   }
@@ -370,16 +357,16 @@ export function CustomerProductsPanel({
     <div className="space-y-6">
       <div>
         <h3 className="text-lg font-semibold text-slate-900">
-          {contractsOnly ? "I pacchetti Jav" : showShopTab && !referralCode ? t("shop.title") : "Prodotti & Servizi"}
+          {contractsOnly ? t("shopx.panel.javPackages") : showShopTab && !referralCode ? t("shop.title") : t("shopx.panel.productsServices")}
         </h3>
         <p className="text-xs text-slate-500">
           {referralCode
-            ? "Condividi un'offerta con un cliente: il link lo porta dritto alla registrazione, già associato a te."
+            ? t("shopx.panel.shareIntro")
             : contractsOnly
-              ? "Apri “Dettagli” per leggere ogni pacchetto. Per attivarli usa “Attiva nuovo contratto”: una pratica può contenere uno o più contratti."
+              ? t("shopx.panel.packagesIntro")
               : showShopTab
                 ? t("shop.subtitle")
-                : "Le iscrizioni, i corsi e gli abbonamenti disponibili per il tuo profilo."}
+                : t("shopx.panel.defaultIntro")}
         </p>
       </div>
 
@@ -447,15 +434,15 @@ export function CustomerProductsPanel({
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Cerca un prodotto per nome o descrizione..."
-              aria-label="Cerca un prodotto in questo negozio"
+              placeholder={t("shopx.panel.searchPlaceholder")}
+              aria-label={t("shopx.panel.searchAria")}
               className="w-full rounded-xl glass-input pl-10 pr-10 py-3 text-sm focus:border-brand-500"
             />
             {search && (
               <button
                 type="button"
                 onClick={() => setSearch("")}
-                aria-label="Cancella la ricerca"
+                aria-label={t("shopx.clearSearch")}
                 className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-lg text-slate-400 hover:text-slate-900 cursor-pointer"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -466,8 +453,8 @@ export function CustomerProductsPanel({
           </div>
 
           {showShopTab && activeTab === "JAV_MARKET" && (
-            <div className="flex flex-wrap gap-2" role="group" aria-label="Venditore">
-              {([[null, "Tutti gli shop"], ["CLUB", "🏯 Shop del mio club"], ["JAV", "🌍 Shop JudoArteVida"]] as const).map(([key, label]) => (
+            <div className="flex flex-wrap gap-2" role="group" aria-label={t("shopx.panel.seller")}>
+              {([[null, t("shopx.panel.allShops")], ["CLUB", `🏯 ${t("shopx.panel.myClubShop")}`], ["JAV", `🌍 ${t("shopx.panel.javShop")}`]] as const).map(([key, label]) => (
                 <button key={key ?? "all"} type="button" aria-pressed={seller === key} onClick={() => setSeller(key)}
                   className={`px-4 py-2 rounded-full text-sm font-bold border transition cursor-pointer ${seller === key ? "bg-ink-900 border-ink-900 text-white" : "bg-white border-slate-300 text-slate-700 hover:bg-slate-100"}`}>
                   {label}
@@ -488,7 +475,7 @@ export function CustomerProductsPanel({
                     : " bg-slate-900/5 border-slate-300 text-slate-600 hover:bg-slate-100"
                 }`}
               >
-                Tutte
+                {t("shopx.panel.allCategories")}
               </button>
               {categoryChips.map((c) => {
                 const empty = !categoryIdsInShop.has(c.id);
@@ -498,7 +485,7 @@ export function CustomerProductsPanel({
                     type="button"
                     aria-pressed={activeCategoryId === c.id}
                     onClick={() => setChosenCategoryId(c.id)}
-                    title={empty ? "Nessun prodotto in questa categoria, per ora" : undefined}
+                    title={empty ? t("shopx.panel.categoryEmpty") : undefined}
                     className={`shrink-0 whitespace-nowrap px-3.5 py-2 rounded-full text-xs font-semibold border transition cursor-pointer ${
                       activeCategoryId === c.id
                         ? "bg-brand-600 border-brand-600 text-white"
@@ -522,28 +509,28 @@ export function CustomerProductsPanel({
           // vuoto: la differenza va detta, e con una via d'uscita.
           <div className="text-center py-12 space-y-3">
             <p className="text-sm text-slate-500">
-              Nessun prodotto corrisponde alla ricerca in questo negozio.
+              {t("shopx.panel.noMatch")}
             </p>
             <button
               type="button"
               onClick={showEverything}
               className="px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-bold text-white shadow-lg shadow-brand-500/20 transition cursor-pointer"
             >
-              Mostra tutti
+              {t("shopx.panel.showAll")}
             </button>
           </div>
         ) : (
           <p className="text-sm text-slate-500 text-center py-12">
             {activeTab === "INTERNAL"
-              ? "Nessun prodotto disponibile al momento. Contatta il tuo promoter di riferimento per maggiori informazioni."
-              : "Nessun prodotto in questa categoria al momento."}
+              ? t("shopx.panel.noneInternal")
+              : t("shopx.panel.noneCategory")}
           </p>
         )
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {catalog.map((p, i) => {
             const v = p.current_version!;
-            const typeLabel = PRODUCT_TYPE_LABELS[p.product_type] ?? p.product_type;
+            const typeLabel = t.dyn(`shopx.productType.${p.product_type}`, p.product_type);
             const purchasable = !referralCode && p.category !== "INTERNAL";
             // A Jav package opens its details (Session 55): it is
             // read here, and activated through "Attiva nuovo contratto".
@@ -577,14 +564,14 @@ export function CustomerProductsPanel({
                   {p.category !== "INTERNAL" && v.credit_discount_percentage > 0 && (
                     <div className="absolute top-3 right-3">
                       <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-gradient-to-r from-emerald-500 to-emerald-400 text-white shadow-lg shadow-emerald-500/30">
-                        -{v.credit_discount_percentage}% in JavCash
+                        {t("shopx.panel.javCashBadge", { pct: v.credit_discount_percentage })}
                       </span>
                     </div>
                   )}
                   {purchasable && (
                     <div className="absolute inset-0 flex items-center justify-center bg-slate-950/0 group-hover:bg-slate-950/30 transition-colors duration-300">
                       <span className="opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 transition-all duration-300 px-3 py-1.5 rounded-lg bg-white/90 text-slate-900 text-[11px] font-bold shadow-lg">
-                        Vedi dettagli
+                        {t("shopx.panel.viewDetails")}
                       </span>
                     </div>
                   )}
@@ -602,15 +589,15 @@ export function CustomerProductsPanel({
 
                   <div className="flex items-end justify-between gap-3 pt-4 border-t border-slate-200">
                     <div>
-                      <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Prezzo</p>
+                      <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">{t("shopx.checkout.price")}</p>
                       <div className="flex items-baseline gap-1">
                         <span className="text-2xl font-extrabold text-slate-900 tabular-nums">{euro(v.base_price_cents)}</span>
-                        <span className="text-[11px] text-slate-500">{isRecurringProductType(p.product_type) ? "unica soluzione" : ""}</span>
+                        <span className="text-[11px] text-slate-500">{isRecurringProductType(p.product_type) ? t("shopx.panel.oneOff") : ""}</span>
                       </div>
                       {p.category === "INTERNAL" && isRecurringProductType(p.product_type) && (
                         // Session 84: the rate have their own price, not the one above / 12.
                         <p className=" text-slate-500 mt-0.5">
-                          oppure 12 rate da{" "}
+                          {t("shopx.panel.orInstalments")}{" "}
                           {euro(contractPrices(v, customerKind, { assumeBusinessWhenUnknown: false }).monthlyGrossCents)}
                         </p>
                       )}
@@ -627,24 +614,24 @@ export function CustomerProductsPanel({
                         );
                         if (price.vatCents <= 0) {
                           return p.category === "INTERNAL" && customerKind ? (
-                            <p className="text-[10px] text-slate-500 mt-0.5">IVA non applicata</p>
+                            <p className="text-[10px] text-slate-500 mt-0.5">{t("shopx.panel.noVat")}</p>
                           ) : null;
                         }
                         return (
                           <p className="text-[10px] text-slate-500 mt-0.5">
-                            + IVA {price.vatRate}% ({euro(price.grossCents)} tot.)
+                            {t("shopx.panel.plusVat", { rate: price.vatRate, total: euro(price.grossCents) })}
                           </p>
                         );
                       })()}
                       {v.initial_fee_cents > 0 && (
                         <p className="text-[10px] text-slate-500 mt-0.5">
-                          + {euro(v.initial_fee_cents)} attivazione
+                          {t("shopx.panel.activationFee", { amount: euro(v.initial_fee_cents) })}
                         </p>
                       )}
                     </div>
                     {p.category !== "INTERNAL" && maxCreditCents > 0 && (
                       <div className="text-right">
-                        <p className="text-[10px] font-semibold text-emerald-500 uppercase tracking-wide">JavCash usabili</p>
+                        <p className="text-[10px] font-semibold text-emerald-500 uppercase tracking-wide">{t("shopx.panel.javCashUsable")}</p>
                         <p className="text-lg font-extrabold text-emerald-400 tabular-nums">{javCash(maxCreditCents)}</p>
                       </div>
                     )}
@@ -655,9 +642,9 @@ export function CustomerProductsPanel({
                     // pills per card would crowd out the product itself.
                     <ShareMenu
                       url={productLink(p.id, v.name)}
-                      text={`Ti consiglio "${v.name}" di Jav:`}
+                      text={t("shopx.panel.shareText", { name: v.name })}
                       title={v.name}
-                      heading={`Condividi "${v.name}"`}
+                      heading={t("shopx.panel.shareHeading", { name: v.name })}
                       buttonClassName="mt-4 w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-brand-600/10 hover:bg-brand-600/20 border border-brand-500/20 text-brand-600 text-xs font-semibold transition cursor-pointer"
                     />
                   )}
@@ -669,7 +656,7 @@ export function CustomerProductsPanel({
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 11H4L5 9z" />
                       </svg>
-                      Vedi dettagli e acquista
+                      {t("shopx.panel.detailsAndBuy")}
                     </button>
                   )}
                   {readable && (
@@ -680,7 +667,7 @@ export function CustomerProductsPanel({
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                      Dettagli
+                      {t("shopx.orders.details")}
                     </button>
                   )}
                 </div>
@@ -716,22 +703,22 @@ export function CustomerProductsPanel({
                       </span>
                     )}
                     <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-950/70 backdrop-blur-sm text-slate-900 border border-slate-200 shadow-lg">
-                      {p.shipping_days ? `Consegna ${p.shipping_days} gg` : "Spedito a casa"}
+                      {p.shipping_days ? t("shopx.panel.deliveryDaysShort", { days: p.shipping_days }) : t("shopx.panel.shippedHome")}
                     </span>
                   </div>
                   {p.credit_discount_percentage > 0 && (
                     <div className="absolute top-3 right-3">
                       <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-gradient-to-r from-emerald-500 to-emerald-400 text-white shadow-lg shadow-emerald-500/30">
-                        -{p.credit_discount_percentage}% in JavCash
+                        {t("shopx.panel.javCashBadge", { pct: p.credit_discount_percentage })}
                       </span>
                     </div>
                   )}
                   {!p.in_stock && (
-                    <span className="absolute inset-x-0 bottom-0 py-1.5 text-center text-[11px] font-bold bg-slate-900/85 text-slate-900">Esaurito</span>
+                    <span className="absolute inset-x-0 bottom-0 py-1.5 text-center text-[11px] font-bold bg-slate-900/85 text-slate-900">{t("site.shop.outOfStock")}</span>
                   )}
                   <div className="absolute inset-0 flex items-center justify-center bg-slate-950/0 group-hover:bg-slate-950/30 transition-colors duration-300">
                     <span className="opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 transition-all duration-300 px-3 py-1.5 rounded-lg bg-white/90 text-slate-900 text-[11px] font-bold shadow-lg">
-                      Vedi dettagli
+                      {t("shopx.panel.viewDetails")}
                     </span>
                   </div>
                 </button>
@@ -748,17 +735,17 @@ export function CustomerProductsPanel({
                   <div className="flex items-end justify-between gap-3 pt-4 border-t border-slate-200">
                     <div>
                       <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">
-                        {p.min_price_cents !== p.max_price_cents ? "Prezzo da" : "Prezzo"}
+                        {p.min_price_cents !== p.max_price_cents ? t("shopx.panel.priceFrom") : t("shopx.checkout.price")}
                       </p>
                       <span className="text-2xl font-extrabold text-slate-900 tabular-nums">{euro(p.min_price_cents)}</span>
                       <p className="text-[10px] text-slate-500 mt-0.5">
-                        {marketplaceVatPercentage > 0 ? "+ IVA · " : ""}
-                        {p.shipping_included ? "Spedizione inclusa" : "+ spedizione"}
+                        {marketplaceVatPercentage > 0 ? `${t("shopx.panel.plusVatShort")} · ` : ""}
+                        {p.shipping_included ? t("shopx.product.shippingIncluded") : t("shopx.panel.plusShipping")}
                       </p>
                       {/* The price shown is the full one; bank transfer takes a discount off. */}
                       {p.bank_transfer_discount_percentage > 0 && (
                         <p className=" font-semibold text-slate-900 mt-0.5">
-                          Con bonifico istantaneo -{p.bank_transfer_discount_percentage}%:{" "}
+                          {t("shopx.product.withInstantTransfer", { pct: p.bank_transfer_discount_percentage })}{" "}
                           <span className="tabular-nums">
                             {euro(p.min_price_cents - Math.floor((p.min_price_cents * p.bank_transfer_discount_percentage + 50) / 100))}
                           </span>
@@ -767,7 +754,7 @@ export function CustomerProductsPanel({
                     </div>
                     {maxCreditCents > 0 && (
                       <div className="text-right">
-                        <p className="text-[10px] font-semibold text-emerald-500 uppercase tracking-wide">JavCash usabili</p>
+                        <p className="text-[10px] font-semibold text-emerald-500 uppercase tracking-wide">{t("shopx.panel.javCashUsable")}</p>
                         <p className="text-lg font-extrabold text-emerald-400 tabular-nums">{javCash(maxCreditCents)}</p>
                       </div>
                     )}
@@ -777,9 +764,9 @@ export function CustomerProductsPanel({
                     // il link porta alla registrazione col suo codice.
                     <ShareMenu
                       url={productLink(p.id, p.name)}
-                      text={`Ti consiglio "${p.name}" nello shop di Jav:`}
+                      text={t("shopx.panel.shareTextShop", { name: p.name })}
                       title={p.name}
-                      heading={`Condividi "${p.name}"`}
+                      heading={t("shopx.panel.shareHeading", { name: p.name })}
                       buttonClassName="mt-4 w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-brand-600/10 hover:bg-brand-600/20 border border-brand-500/20 text-brand-600 text-xs font-semibold transition cursor-pointer"
                     />
                   ) : (
@@ -790,7 +777,7 @@ export function CustomerProductsPanel({
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 11H4L5 9z" />
                       </svg>
-                      Vedi dettagli e acquista
+                      {t("shopx.panel.detailsAndBuy")}
                     </button>
                   )}
                 </div>
@@ -807,7 +794,7 @@ export function CustomerProductsPanel({
         return (
           <div className="flex flex-col items-center gap-2 pt-2">
             <p className="text-xs text-slate-500 tabular-nums">
-              {paged.total.toLocaleString("it-IT")} prodotti · pagina {paged.page} di {paged.pages}
+              {t("shopx.panel.pageInfo", { n: paged.total.toLocaleString(fmt.tag), page: paged.page, pages: paged.pages })}
             </p>
             <Pagination page={paged.page} pages={paged.pages} onChange={(p) => { paged.setPage(p); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
           </div>
@@ -820,10 +807,10 @@ export function CustomerProductsPanel({
           customerKind={detailTarget.category === "INTERNAL" ? customerKind : undefined}
           ctaLabel={
             detailTarget.category !== "INTERNAL"
-              ? "Acquista ora"
+              ? t("shopx.panel.buyNow")
               : referralCode
-                ? "Chiudi"
-                : "Attiva nuovo contratto"
+                ? t("common.close")
+                : t("shopx.panel.activateContract")
           }
           onClose={() => setDetailTarget(null)}
           onBuy={(versionId, name) => {

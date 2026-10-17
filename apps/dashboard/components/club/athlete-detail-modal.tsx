@@ -32,6 +32,7 @@ import {
   type Fee,
 } from "@/lib/club";
 import { useI18n } from "@/lib/i18n/provider";
+import { feeLabel } from "@/lib/fee-label";
 
 type Tab = "path" | "certificates" | "fees" | "competitions" | "access";
 
@@ -191,7 +192,7 @@ export function AthleteDetailModal({ athleteId, onClose, initialTab = "path" }: 
                     {a.fees.filter((f) => f.kind !== "MONTHLY").map((f) => (
                       <div key={f.id} className="flex items-center justify-between gap-3 rounded-2xl bg-white ring-1 ring-ink-100 px-4 py-3">
                         <div className="min-w-0">
-                          <p className="text-sm font-semibold text-ink-900">{f.description}</p>
+                          <p className="text-sm font-semibold text-ink-900">{feeLabel(f, t, fmt)}</p>
                           <p className="text-xs text-ink-500">
                             {f.status === "PAID" && f.paid_at ? t("club.paidOn", { date: shortDate(f.paid_at) }) : t("club.dueOnCap", { date: shortDate(f.due_date) })}
                           </p>

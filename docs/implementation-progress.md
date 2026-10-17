@@ -828,3 +828,14 @@ FPJ, nascita, età federativa, género, encarregado, contatto e «invitato
 da», ordinamento, filtri rapidi e CSV. Password del super admin
 reimpostata su richiesta. Test: `tests/test_club_admin_lists.py`. Nessuna
 migrazione.
+
+Poi: **piani e prezzi** con il colore del gruppo (migrazione 0031), **prova
+di pagamento** apribile dalle quote e dal quadro del mese, **staff da un
+account esistente** (Matias e Marco Piccolo ora treinador di Lagos) e menu
+utente con le aree, **rete inviti** con saldo JavCash, «Segna la tua
+presenza» e invito nella home dell'atleta, **Loja** con i nomi nuovi e
+tradotti, logo del login verso il sito. **Traduzione completa
+dell'interfaccia**: circa 2.500 testi spostati nelle chiavi (8 agenti, un
+prefisso ciascuno), controllata aprendo ogni sezione di ogni ruolo in
+portoghese. Test: `test_club_admin_lists.py` (staff da account esistente),
+`test_club_pricing.py` (rete inviti).

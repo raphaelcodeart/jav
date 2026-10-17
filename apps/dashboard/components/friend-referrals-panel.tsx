@@ -6,12 +6,7 @@ import { Pagination, usePagination } from "@/components/pagination";
 import { friendlyApiError } from "@/lib/api-error";
 import { ShareButtons } from "@/components/share-buttons";
 import type { FriendReferralSummaryRead } from "@/lib/types";
-
-const STATE_LABELS: Record<string, string> = {
-  INVITED: "Iscritto",
-  IN_PROGRESS: "Contratto in corso",
-  ACTIVE: "Attivo",
-};
+import { useI18n } from "@/lib/i18n/provider";
 
 const STATE_COLORS: Record<string, string> = {
   INVITED: " bg-slate-900/5 text-slate-400 border-slate-300",
@@ -19,20 +14,10 @@ const STATE_COLORS: Record<string, string> = {
   ACTIVE: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
 };
 
-const CLAIM_STATUS_LABELS: Record<string, string> = {
-  REQUESTED: "In attesa di risposta",
-  FULFILLED: "Consegnato",
-  REJECTED: "Non accolto",
-};
-
 async function fetchSummary(): Promise<FriendReferralSummaryRead> {
   const res = await fetch("/api/proxy/friend-referrals/me");
   if (!res.ok) throw new Error("Impossibile caricare i tuoi inviti.");
   return res.json();
-}
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" });
 }
 
 /** "Invita un amico": every account's own one-level invite list.
@@ -45,6 +30,8 @@ function formatDate(iso: string): string {
  * or implied anywhere on this screen.
  */
 export function FriendReferralsPanel({ organizationId }: { organizationId?: string }) {
+  const { t, fmt } = useI18n();
+  const formatDate = (iso: string) => fmt.date(new Date(iso), { day: "numeric", month: "long", year: "numeric" });
   const queryClient = useQueryClient();
   const { data, error } = useQuery({ queryKey: ["friend-referrals", "me"], queryFn: fetchSummary });
   const [claimLoading, setClaimLoading] = useState(false);
@@ -67,14 +54,14 @@ export function FriendReferralsPanel({ organizationId }: { organizationId?: stri
       if (!res.ok) throw new Error(await friendlyApiError(res));
       await queryClient.invalidateQueries({ queryKey: ["friend-referrals", "me"] });
     } catch (err: any) {
-      setClaimError(err.message || "Impossibile inviare la richiesta.");
+      setClaimError(err.message || t("net.friends.claimError"));
     } finally {
       setClaimLoading(false);
     }
   }
 
   if (error) {
-    return <p className="text-sm text-rose-400">Impossibile caricare i tuoi inviti.</p>;
+    return <p className="text-sm text-rose-400">{t("net.friends.loadError")}</p>;
   }
   if (!data) {
     return <div className="glass-card rounded-2xl p-6 border-slate-200 animate-pulse h-40" />;
@@ -87,12 +74,12 @@ export function FriendReferralsPanel({ organizationId }: { organizationId?: stri
     <div className="space-y-6">
       {/* Link personale */}
       <div className="glass-card rounded-2xl p-6 border-slate-200 bg-white/70">
-        <h3 className="text-lg font-semibold text-slate-900">Invita un amico</h3>
+        <h3 className="text-lg font-semibold text-slate-900">{t("net.promoter.nav.invita_amici")}</h3>
         <p className="text-xs text-slate-500 mt-1 mb-4">
-          Condividi il tuo link: chi si iscrive da qui compare nella tua lista. <strong>Ogni{" "}
-          {data.reward_every} amici</strong> che attivano un contratto Jav puoi richiedere{" "}
-          <strong>{data.reward_description}</strong> &mdash; non solo per i primi {data.reward_every}:
-          il premio si ripete a {data.reward_every * 2}, {data.reward_every * 3} e cosi via.
+          {t("net.friends.intro1")} <strong>{t("net.friends.every", { n: data.reward_every })}</strong>
+          {t("net.friends.intro2")}{" "}
+          <strong>{data.reward_description}</strong>
+          {t("net.friends.intro3", { n: data.reward_every, n2: data.reward_every * 2, n3: data.reward_every * 3 })}
         </p>
         <code className="block w-full truncate rounded-xl bg-slate-900/5 border border-slate-300 px-3 py-2.5 text-xs font-mono text-slate-600 mb-3">
           {personalLink() || `…/r/${data.code}`}
@@ -101,7 +88,7 @@ export function FriendReferralsPanel({ organizationId }: { organizationId?: stri
             still there for everything else. */}
         <ShareButtons
           url={personalLink()}
-          text="Ti invito in Jav, iscriviti con il mio link:"
+          text={t("net.friends.shareText")}
         />
       </div>
 
@@ -110,11 +97,11 @@ export function FriendReferralsPanel({ organizationId }: { organizationId?: stri
         <div className="flex flex-wrap items-end justify-between gap-4 mb-4">
           <div>
             <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
-              Amici invitati con contratto attivo
+              {t("net.friends.activeLabel")}
             </p>
             <p className="text-3xl font-bold text-slate-900 tabular-nums">
               {data.active_total}
-              <span className="text-base font-semibold text-slate-500"> / {data.invited_total} iscritti</span>
+              <span className="text-base font-semibold text-slate-500"> / {t("net.friends.signedUp", { n: data.invited_total })}</span>
             </p>
           </div>
           {data.claimable_milestone ? (
@@ -123,11 +110,11 @@ export function FriendReferralsPanel({ organizationId }: { organizationId?: stri
               disabled={claimLoading}
               className="px-5 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white shadow-lg shadow-emerald-500/20 transition cursor-pointer disabled:opacity-50"
             >
-              {claimLoading ? "Invio..." : `Richiedi ${data.reward_description}`}
+              {claimLoading ? t("net.friends.sending") : t("net.friends.claim", { reward: data.reward_description })}
             </button>
           ) : (
             <p className="text-xs text-slate-500">
-              Ne mancano <strong className="text-brand-600">{data.missing_for_next_reward}</strong> per{" "}
+              {t("net.friends.missing1")} <strong className="text-brand-600">{data.missing_for_next_reward}</strong> {t("net.friends.missing2")}{" "}
               {data.reward_description}
             </p>
           )}
@@ -148,11 +135,11 @@ export function FriendReferralsPanel({ organizationId }: { organizationId?: stri
 
         {data.claims.length > 0 && (
           <div className="mt-5 pt-4 border-t border-slate-200 space-y-2">
-            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Le tue richieste</p>
+            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{t("net.friends.yourClaims")}</p>
             {data.claims.map((c) => (
               <div key={c.id} className="flex flex-wrap items-center justify-between gap-2 text-xs">
                 <span className=" text-slate-600">
-                  Omaggio per {c.milestone} amici attivi
+                  {t("net.friends.claimFor", { n: c.milestone })}
                 </span>
                 <div className="flex items-center gap-2">
                   {c.note && <span className="text-slate-500">{c.note}</span>}
@@ -165,7 +152,7 @@ export function FriendReferralsPanel({ organizationId }: { organizationId?: stri
                           : "bg-amber-500/10 text-amber-700 border-amber-500/20"
                     }`}
                   >
-                    {CLAIM_STATUS_LABELS[c.status] ?? c.status}
+                    {t.dyn(`net.friends.claimStatus.${c.status}`, c.status)}
                   </span>
                 </div>
               </div>
@@ -177,11 +164,11 @@ export function FriendReferralsPanel({ organizationId }: { organizationId?: stri
       {/* La lista */}
       <div className="glass-card rounded-2xl border-slate-200 bg-white/70 overflow-hidden">
         <div className="px-5 pt-5 pb-3">
-          <h4 className="text-sm font-semibold text-slate-900">Gli amici che hai invitato</h4>
+          <h4 className="text-sm font-semibold text-slate-900">{t("net.friends.listTitle")}</h4>
         </div>
         {data.referrals.length === 0 ? (
           <p className="text-center py-10 text-slate-500 text-sm">
-            Non hai ancora invitato nessuno. Condividi il tuo link qui sopra.
+            {t("net.friends.empty")}
           </p>
         ) : (
           <>
@@ -190,18 +177,18 @@ export function FriendReferralsPanel({ organizationId }: { organizationId?: stri
                 <div key={r.id} className="px-5 py-3 flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-medium text-slate-900">{r.display_name}</p>
-                    <p className="text-[11px] text-slate-500">Iscritto il {formatDate(r.invited_at)}</p>
+                    <p className="text-[11px] text-slate-500">{t("net.friends.joinedOn", { date: formatDate(r.invited_at) })}</p>
                   </div>
                   <span
                     className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${STATE_COLORS[r.state]}`}
                   >
-                    {STATE_LABELS[r.state] ?? r.state}
+                    {t.dyn(`net.friends.state.${r.state}`, r.state)}
                   </span>
                 </div>
               ))}
             </div>
             <div className="px-5 pb-4">
-              <Pagination {...pagination} label="amici invitati" />
+              <Pagination {...pagination} label={t("net.friends.pagLabel")} />
             </div>
           </>
         )}

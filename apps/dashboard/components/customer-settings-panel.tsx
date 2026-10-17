@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { friendlyApiError } from "@/lib/api-error";
 import { useSpendPinStatus } from "@/components/javcash-confirm-code";
 import type { SpendPinStatusRead, TicketRead } from "@/lib/types";
+import { useI18n } from "@/lib/i18n/provider";
 
 const card = "glass-card rounded-2xl p-6 border-slate-200 bg-white/70";
 const input = "w-full rounded-xl glass-input px-3 py-2.5 text-sm focus:border-brand-500";
@@ -16,11 +17,12 @@ const label = "block font-semibold text-slate-500 mb-1";
  *  PIN obbliga a crearlo subito: un metodo di conferma non può restare
  *  acceso senza niente da confermare. */
 export function CustomerSettingsPanel() {
+  const { t } = useI18n();
   return (
     <div className="space-y-6 max-w-2xl">
       <div>
-        <h2 className="text-lg font-bold text-slate-900">Impostazioni</h2>
-        <p className="text-sm text-slate-500">Le preferenze del tuo account.</p>
+        <h2 className="text-lg font-bold text-slate-900">{t("acct.settings.title")}</h2>
+        <p className="text-sm text-slate-500">{t("acct.settings.subtitle")}</p>
       </div>
       <SpendPinCard />
       <AccountClosureCard />
@@ -31,6 +33,7 @@ export function CustomerSettingsPanel() {
 type Mode = "idle" | "set" | "disable";
 
 function SpendPinCard() {
+  const { t, fmt } = useI18n();
   const queryClient = useQueryClient();
   const { data: status, isLoading } = useSpendPinStatus();
   const [mode, setMode] = useState<Mode>("idle");
@@ -75,9 +78,9 @@ function SpendPinCard() {
         text:
           mode === "set"
             ? enabled
-              ? "PIN cambiato. Ti abbiamo mandato un'email di conferma."
-              : "PIN attivato: da ora ai checkout ti chiediamo il PIN invece di mandarti un codice."
-            : "Fatto: da ora ti mandiamo di nuovo il codice via email.",
+              ? t("acct.settings.pinChanged")
+              : t("acct.settings.pinEnabled")
+            : t("acct.settings.pinDisabled"),
       });
       setMode("idle");
       setPin("");
@@ -97,10 +100,9 @@ function SpendPinCard() {
   return (
     <div className={`${card} space-y-4`}>
       <div>
-        <h3 className="text-sm font-bold text-slate-900">Conferma dei pagamenti con JavCash</h3>
+        <h3 className="text-sm font-bold text-slate-900">{t("acct.settings.pinTitle")}</h3>
         <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-          Quando usi i tuoi JavCash in un acquisto ti chiediamo una conferma. Puoi riceverla ogni volta come
-          codice via email, oppure scegliere un PIN di 4 cifre da digitare al momento del pagamento.
+          {t("acct.settings.pinIntro")}
         </p>
       </div>
 
@@ -110,14 +112,14 @@ function SpendPinCard() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <MethodOption
             active={!enabled}
-            title="Codice via email"
-            text="Ogni volta ti mandiamo un codice nuovo, valido 10 minuti."
+            title={t("acct.settings.emailMethod")}
+            text={t("acct.settings.emailMethodText")}
             onClick={() => (enabled ? open("disable") : undefined)}
           />
           <MethodOption
             active={enabled}
-            title="PIN personale"
-            text="Un PIN di 4 cifre scelto da te. Niente email da aspettare."
+            title={t("acct.settings.pinMethod")}
+            text={t("acct.settings.pinMethodText")}
             onClick={() => (enabled ? undefined : open("set"))}
           />
         </div>
@@ -125,9 +127,7 @@ function SpendPinCard() {
 
       {status?.locked_until && (
         <p className="text-xs text-amber-700">
-          Il PIN è bloccato per troppi tentativi sbagliati fino alle{" "}
-          {new Date(status.locked_until).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}: nel
-          frattempo ti mandiamo il codice via email.
+          {t("acct.settings.pinLocked", { time: new Date(status.locked_until).toLocaleTimeString(fmt.tag, { hour: "2-digit", minute: "2-digit" }) })}
         </p>
       )}
 
@@ -137,13 +137,13 @@ function SpendPinCard() {
             onClick={() => open("set")}
             className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-900/5 cursor-pointer"
           >
-            Cambia PIN
+            {t("acct.settings.changePin")}
           </button>
           <button
             onClick={() => open("disable")}
             className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:bg-slate-900/5 cursor-pointer"
           >
-            Torna al codice via email
+            {t("acct.settings.backToEmail")}
           </button>
         </div>
       )}
@@ -151,12 +151,12 @@ function SpendPinCard() {
       {mode !== "idle" && (
         <div className="space-y-3 p-4 rounded-xl border border-slate-200">
           <p className="text-xs font-semibold text-slate-900">
-            {mode === "disable" ? "Torna al codice via email" : enabled ? "Cambia il PIN" : "Crea il tuo PIN"}
+            {mode === "disable" ? t("acct.settings.backToEmail") : enabled ? t("acct.settings.changeThePin") : t("acct.settings.createPin")}
           </p>
           {mode === "set" && (
             <div className="grid grid-cols-2 gap-3 max-w-xs">
               <div>
-                <span className={label}>Nuovo PIN</span>
+                <span className={label}>{t("acct.settings.newPin")}</span>
                 <input
                   type="password"
                   inputMode="numeric"
@@ -168,7 +168,7 @@ function SpendPinCard() {
                 />
               </div>
               <div>
-                <span className={label}>Ripeti il PIN</span>
+                <span className={label}>{t("acct.settings.repeatPin")}</span>
                 <input
                   type="password"
                   inputMode="numeric"
@@ -183,13 +183,12 @@ function SpendPinCard() {
           )}
           {mode === "set" && (
             <p className="text-[11px] text-slate-500">
-              Quattro cifre, non tutte uguali e non in fila (niente 0000 o 1234). Dopo 5 tentativi sbagliati il PIN
-              si blocca per 15 minuti.
+              {t("acct.settings.pinRules")}
             </p>
           )}
-          {pinMismatch && <p className="text-[11px] text-rose-400">I due PIN non coincidono.</p>}
+          {pinMismatch && <p className="text-[11px] text-rose-400">{t("acct.settings.pinMismatch")}</p>}
           <div className="max-w-xs">
-            <span className={label}>Password del tuo account</span>
+            <span className={label}>{t("acct.settings.password")}</span>
             <input
               type="password"
               autoComplete="current-password"
@@ -198,7 +197,7 @@ function SpendPinCard() {
               className={input}
             />
             <span className="block text-[11px] text-slate-500 mt-1">
-              Serve a confermare che sei tu: nessuno può cambiare il PIN solo perché ha il tuo telefono sbloccato.
+              {t("acct.settings.passwordHint")}
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -207,13 +206,13 @@ function SpendPinCard() {
               disabled={!canSubmit}
               className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-40"
             >
-              {busy ? "Salvo…" : mode === "disable" ? "Usa il codice via email" : enabled ? "Cambia PIN" : "Attiva PIN"}
+              {busy ? t("acct.settings.saving") : mode === "disable" ? t("acct.settings.useEmail") : enabled ? t("acct.settings.changePin") : t("acct.settings.enablePin")}
             </button>
             <button
               onClick={() => open("idle")}
               className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:bg-slate-900/5 cursor-pointer"
             >
-              Annulla
+              {t("common.cancel")}
             </button>
           </div>
         </div>
@@ -237,6 +236,7 @@ function MethodOption({
   text: string;
   onClick: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <button
       type="button"
@@ -257,7 +257,7 @@ function MethodOption({
           {active && <span className="w-2 h-2 rounded-full bg-brand-500" />}
         </span>
         <span className="text-sm font-semibold text-slate-900">{title}</span>
-        {active && <span className="ml-auto text-[10px] font-bold uppercase tracking-wide text-brand-600">In uso</span>}
+        {active && <span className="ml-auto text-[10px] font-bold uppercase tracking-wide text-brand-600">{t("acct.settings.inUse")}</span>}
       </div>
       <p className=" text-slate-500 mt-1.5 pl-6">{text}</p>
     </button>
@@ -269,6 +269,7 @@ function MethodOption({
  *  e il cliente la segue dall'Assistenza. La chiusura la fa lo staff, dopo
  *  aver sistemato contratti, ordini e JavCash ancora aperti. */
 function AccountClosureCard() {
+  const { t, fmt } = useI18n();
   const queryClient = useQueryClient();
   const { data: pending, isLoading } = useQuery({
     queryKey: ["support", "account-closure"],
@@ -298,7 +299,7 @@ function AccountClosureCard() {
       await queryClient.invalidateQueries({ queryKey: ["support", "account-closure"] });
       await queryClient.invalidateQueries({ queryKey: ["support"] });
     } catch (err: any) {
-      setError(err.message || "Impossibile inviare la richiesta.");
+      setError(err.message || t("acct.settings.closureError"));
     } finally {
       setBusy(false);
     }
@@ -306,18 +307,15 @@ function AccountClosureCard() {
 
   return (
     <div className={card}>
-      <h3 className="text-sm font-bold text-slate-900">Chiusura dell&apos;account</h3>
+      <h3 className="text-sm font-bold text-slate-900">{t("acct.settings.closureTitle")}</h3>
       {isLoading ? null : pending ? (
         <p className="text-sm text-slate-500 mt-2">
-          Hai chiesto la chiusura dell&apos;account il{" "}
-          {new Date(pending.created_at).toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" })}.
-          Il nostro staff la sta gestendo e ti contatterà; puoi seguirla dalla sezione Assistenza.
+          {t("acct.settings.closurePending", { date: fmt.date(new Date(pending.created_at), { day: "numeric", month: "long", year: "numeric" }) })}
         </p>
       ) : (
         <>
           <p className="text-sm text-slate-500 mt-2">
-            Vuoi chiudere il tuo account Jav? Invia la richiesta: lo staff la prende in carico e ti contatta
-            per sistemare eventuali contratti, ordini o JavCash ancora aperti.
+            {t("acct.settings.closureIntro")}
           </p>
           {!confirming ? (
             <button
@@ -325,12 +323,12 @@ function AccountClosureCard() {
               onClick={() => setConfirming(true)}
               className="mt-4 px-4 py-2 rounded-xl border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold transition cursor-pointer"
             >
-              Richiedi chiusura account
+              {t("acct.settings.closureRequest")}
             </button>
           ) : (
             <div className="mt-4 space-y-3">
               <div>
-                <label className={label}>Perché vuoi chiudere l&apos;account? (facoltativo)</label>
+                <label className={label}>{t("acct.settings.closureReason")}</label>
                 <textarea
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
@@ -346,14 +344,14 @@ function AccountClosureCard() {
                   disabled={busy}
                   className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition cursor-pointer disabled:opacity-50"
                 >
-                  {busy ? "Invio..." : "Conferma la richiesta"}
+                  {busy ? t("acct.wallet.sending") : t("acct.settings.closureConfirm")}
                 </button>
                 <button
                   type="button"
                   onClick={() => { setConfirming(false); setError(null); }}
                   className="px-4 py-2 rounded-xl border border-slate-300 text-slate-600 text-xs font-semibold transition cursor-pointer"
                 >
-                  Annulla
+                  {t("common.cancel")}
                 </button>
               </div>
             </div>

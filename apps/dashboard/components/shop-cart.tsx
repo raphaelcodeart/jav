@@ -5,6 +5,7 @@ import { friendlyApiError } from "@/lib/api-error";
 import { ProductThumbnail } from "@/components/product-thumbnail";
 import { useMarketplaceConfig } from "@/components/marketplace-rules-card";
 import type { CartRead, CartSectionRead, CartShop } from "@/lib/types";
+import { useI18n } from "@/lib/i18n/provider";
 
 /** Il carrello dello Shop (Session 75).
  *
@@ -19,10 +20,6 @@ import type { CartRead, CartSectionRead, CartShop } from "@/lib/types";
  *  la finestra disegna quello che riceve. */
 
 const CART_QUERY_KEY = ["carts", "mine"];
-
-function euro(cents: number): string {
-  return (cents / 100).toLocaleString("it-IT", { style: "currency", currency: "EUR" });
-}
 
 async function fetchCart(): Promise<CartRead> {
   const res = await fetch("/api/proxy/carts/mine");
@@ -82,12 +79,14 @@ export function useCartActions() {
  *  sola quando il carrello è vuoto: un carrello che sparisce è un carrello
  *  che il cliente non trova più quando gli serve. */
 export function ShopCartButton({ onOpen }: { onOpen: () => void }) {
+  const { t, fmt } = useI18n();
+  const euro = fmt.euro;
   const { data: cart } = useCart();
   const count = cart?.item_count ?? 0;
   return (
     <button
       onClick={onOpen}
-      aria-label={count > 0 ? `Carrello, ${count} articoli` : "Carrello, vuoto"}
+      aria-label={count > 0 ? t("shopx.cart.ariaCount", { n: count }) : t("shopx.cart.ariaEmpty")}
       className="relative flex items-center gap-2 px-2.5 py-2 rounded-xl border border-slate-200 bg-slate-900/5 hover:bg-slate-900/10 transition cursor-pointer"
     >
       <svg className="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -115,12 +114,13 @@ export function ShopCartButton({ onOpen }: { onOpen: () => void }) {
 function QuantityStepper({
   value, disabled, onChange,
 }: { value: number; disabled: boolean; onChange: (next: number) => void }) {
+  const { t } = useI18n();
   return (
     <div className="flex items-center rounded-lg border border-slate-200 overflow-hidden">
       <button
         onClick={() => onChange(value - 1)}
         disabled={disabled}
-        aria-label="Diminuisci"
+        aria-label={t("shopx.cart.decrease")}
         className="px-2 py-1 text-sm text-slate-600 hover:bg-slate-900/10 disabled:opacity-40 cursor-pointer"
       >
         −
@@ -129,7 +129,7 @@ function QuantityStepper({
       <button
         onClick={() => onChange(value + 1)}
         disabled={disabled}
-        aria-label="Aumenta"
+        aria-label={t("shopx.cart.increase")}
         className="px-2 py-1 text-sm text-slate-600 hover:bg-slate-900/10 disabled:opacity-40 cursor-pointer"
       >
         +
@@ -141,6 +141,8 @@ function QuantityStepper({
 function CartSection({
   section, label, onCheckout,
 }: { section: CartSectionRead; label: string; onCheckout: (shop: CartShop) => void }) {
+  const { t, fmt } = useI18n();
+  const euro = fmt.euro;
   const { setQuantity, remove, clear } = useCartActions();
   const busy = setQuantity.isPending || remove.isPending || clear.isPending;
 
@@ -153,7 +155,7 @@ function CartSection({
           disabled={busy}
           className="text-[11px] text-slate-500 hover:text-rose-400 disabled:opacity-40 cursor-pointer"
         >
-          Svuota
+          {t("shopx.cart.empty")}
         </button>
       </div>
 
@@ -167,7 +169,7 @@ function CartSection({
               </p>
               {line.variant_label && <p className="text-[11px] text-slate-500 truncate">{line.variant_label}</p>}
               {!line.available && (
-                <p className="text-[11px] text-rose-400">{line.unavailable_reason ?? "Non più disponibile."}</p>
+                <p className="text-[11px] text-rose-400">{line.unavailable_reason ?? t("shopx.cart.unavailable")}</p>
               )}
               <div className="flex items-center gap-2 pt-0.5">
                 <QuantityStepper
@@ -182,7 +184,7 @@ function CartSection({
                   disabled={busy}
                   className="text-[11px] text-slate-500 hover:text-rose-400 disabled:opacity-40 cursor-pointer"
                 >
-                  Rimuovi
+                  {t("shopx.cart.remove")}
                 </button>
               </div>
             </div>
@@ -195,22 +197,22 @@ function CartSection({
 
       <div className="p-3 space-y-1.5 bg-gradient-to-br from-brand-600/10 to-brand-400/5 border-t border-brand-500/20">
         <div className="flex justify-between text-slate-500">
-          <span>Articoli</span>
+          <span>{t("shopx.cart.items")}</span>
           <span className="tabular-nums">{euro(section.items_cents ?? 0)}</span>
         </div>
         <div className="flex justify-between text-slate-500">
-          <span>Spedizione</span>
+          <span>{t("shopx.checkout.shipping")}</span>
           <span className="tabular-nums">
-            {section.free_shipping ? "Gratis" : section.shipping_included || !section.shipping_cents ? "Inclusa" : euro(section.shipping_cents)}
+            {section.free_shipping ? t("shopx.checkout.free") : section.shipping_included || !section.shipping_cents ? t("shopx.checkout.included") : euro(section.shipping_cents)}
           </span>
         </div>
         {(section.free_shipping_missing_cents ?? 0) > 0 && (
           <p className="text-[11px] text-sky-400">
-            Ancora {euro(section.free_shipping_missing_cents ?? 0)} di prodotti e la spedizione è gratis.
+            {t("shopx.cart.freeShippingMissing", { amount: euro(section.free_shipping_missing_cents ?? 0) })}
           </p>
         )}
         <div className="flex justify-between items-center pt-1 border-t border-slate-300">
-          <span className="text-xs font-bold text-slate-900">Totale</span>
+          <span className="text-xs font-bold text-slate-900">{t("shopx.cart.total")}</span>
           <span className="text-base font-extrabold text-brand-600 tabular-nums">{euro(section.amount_cents ?? 0)}</span>
         </div>
         {section.purchasable ? (
@@ -218,13 +220,13 @@ function CartSection({
             onClick={() => onCheckout(section.shop)}
             className="w-full mt-1 px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer"
           >
-            Vai al checkout
+            {t("shopx.cart.goCheckout")}
           </button>
         ) : (
           <p className="mt-1 text-[11px] text-rose-400">
             {section.items.some((line) => !line.available)
-              ? "Togli gli articoli non più disponibili per poter procedere."
-              : section.problems[0] ?? "Questo carrello al momento non si può pagare."}
+              ? t("shopx.cart.removeUnavailable")
+              : section.problems[0] ?? t("shopx.cart.notPayable")}
           </p>
         )}
       </div>
@@ -237,11 +239,13 @@ function CartSection({
 export function ShopCartPanel({
   open, onClose, onCheckout,
 }: { open: boolean; onClose: () => void; onCheckout: (shop: CartShop) => void }) {
+  const { t, fmt } = useI18n();
+  const euro = fmt.euro;
   const { data: cart, isLoading, error } = useCart(open);
   const { data: config } = useMarketplaceConfig();
   const labels: Record<CartShop, string> = {
-    jav_market: config?.labels?.jav_market ?? "Fai la Spesa con Jav",
-    catalog: config?.sections?.partner?.label ?? "Prodotti Partner",
+    jav_market: config?.labels?.jav_market ?? t("shopx.cart.labelJavMarket"),
+    catalog: config?.sections?.partner?.label ?? t("shopx.cart.labelPartner"),
   };
   if (!open) return null;
 
@@ -250,19 +254,19 @@ export function ShopCartPanel({
       <div className="absolute inset-0 bg-black/50" onClick={onClose} aria-hidden />
       <div className="relative w-full max-w-md h-full overflow-y-auto bg-white border-l border-slate-200 p-4 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold text-slate-900">Il tuo carrello</h2>
-          <button onClick={onClose} aria-label="Chiudi" className="text-slate-500 hover:text-slate-900 cursor-pointer">
+          <h2 className="text-sm font-bold text-slate-900">{t("shopx.cart.title")}</h2>
+          <button onClick={onClose} aria-label={t("common.close")} className="text-slate-500 hover:text-slate-900 cursor-pointer">
             ✕
           </button>
         </div>
 
-        {isLoading && <p className="text-xs text-slate-500">Caricamento…</p>}
+        {isLoading && <p className="text-xs text-slate-500">{t("shopx.loading")}</p>}
         {error && <p className="text-xs text-rose-400">{(error as Error).message}</p>}
 
         {cart && cart.sections.length === 0 && (
           <div className="py-16 text-center space-y-2">
-            <p className="text-sm text-slate-500">Il carrello è vuoto.</p>
-            <p className="text-xs text-slate-500">Aggiungi un prodotto dallo Shop per iniziare.</p>
+            <p className="text-sm text-slate-500">{t("shopx.cart.isEmpty")}</p>
+            <p className="text-xs text-slate-500">{t("shopx.cart.isEmptyHint")}</p>
           </div>
         )}
 
@@ -272,8 +276,7 @@ export function ShopCartPanel({
                 dirlo qui che farlo scoprire al secondo pagamento. */}
             {cart.sections.length > 1 && (
               <p className="text-[11px] text-slate-500 leading-relaxed">
-                Gli articoli arrivano da negozi diversi: si pagano separatamente, un ordine per negozio,
-                ciascuno con la sua spedizione.
+                {t("shopx.cart.multiShop")}
               </p>
             )}
             <div className="space-y-3">
@@ -287,7 +290,7 @@ export function ShopCartPanel({
               ))}
             </div>
             <div className="flex justify-between items-center pt-2 border-t border-slate-200">
-              <span className="text-xs text-slate-500">Totale carrello</span>
+              <span className="text-xs text-slate-500">{t("shopx.cart.cartTotal")}</span>
               <span className="text-lg font-extrabold text-slate-900 tabular-nums">
                 {euro(cart.total_cents)}
               </span>

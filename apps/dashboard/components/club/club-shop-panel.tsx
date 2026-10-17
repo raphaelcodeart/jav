@@ -35,13 +35,14 @@ const ORDER_TONE: Record<string, "warning" | "success" | "danger" | "neutral"> =
 };
 
 export function ClubShopPanel({ familyOrders }: { familyOrders: React.ReactNode }) {
+  const { t } = useI18n();
   const [tab, setTab] = useState<"products" | "orders" | "jav">("products");
   return (
     <div className="space-y-5">
       <Tabs value={tab} onChange={(k) => setTab(k as typeof tab)} items={[
-        { key: "products", label: "🏯 Prodotti del club" },
-        { key: "orders", label: "📦 Ordini del club" },
-        { key: "jav", label: "🌍 Ordini Shop JudoArteVida" },
+        { key: "products", label: `🏯 ${t("shopx.club.tabProducts")}` },
+        { key: "orders", label: `📦 ${t("shopx.club.tabOrders")}` },
+        { key: "jav", label: `🌍 ${t("shopx.club.tabJav")}` },
       ]} />
       {tab === "products" && <Products />}
       {tab === "orders" && <Orders />}
@@ -51,7 +52,7 @@ export function ClubShopPanel({ familyOrders }: { familyOrders: React.ReactNode 
 }
 
 function Products() {
-  const { fmt } = useI18n();
+  const { t, fmt } = useI18n();
   const { data, isLoading } = useQuery({ queryKey: ["club", "admin", "shop", "products"], queryFn: () => clubGet<Product[]>(`${A}/products`) });
   const [editing, setEditing] = useState<Product | "new" | null>(null);
   const paged = usePaged(data ?? [], 12);
@@ -60,12 +61,12 @@ function Products() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="max-w-2xl text-sm text-ink-600">
-          I prodotti del tuo club compaiono nello Shop delle tue famiglie, con l&apos;etichetta del club, accanto allo shop di JudoArteVida. Si pagano con bonifico all&apos;IBAN del club (Impostazioni) e gli ordini li gestisci qui.
+          {t("shopx.club.intro")}
         </p>
-        <Button onClick={() => setEditing("new")}>＋ Nuovo prodotto</Button>
+        <Button onClick={() => setEditing("new")}>＋ {t("shopx.club.newProduct")}</Button>
       </div>
       {(data ?? []).length === 0 ? (
-        <EmptyState icon={<span className="text-3xl">🛍️</span>} title="Lo shop del club è vuoto" text="Aggiungi la t-shirt del club, il judogi con il logo, il materiale." action={<Button onClick={() => setEditing("new")}>Aggiungi il primo prodotto</Button>} />
+        <EmptyState icon={<span className="text-3xl">🛍️</span>} title={t("shopx.club.emptyTitle")} text={t("shopx.club.emptyText")} action={<Button onClick={() => setEditing("new")}>{t("shopx.club.addFirst")}</Button>} />
       ) : (
         <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {paged.items.map((p) => (
@@ -79,10 +80,10 @@ function Products() {
               <div className="space-y-2 p-4">
                 <div className="flex items-start justify-between gap-2">
                   <p className="font-semibold text-ink-900">{p.name}</p>
-                  <Badge tone={p.status === "ACTIVE" ? "success" : "neutral"} dot>{p.status === "ACTIVE" ? "In vendita" : "Nascosto"}</Badge>
+                  <Badge tone={p.status === "ACTIVE" ? "success" : "neutral"} dot>{p.status === "ACTIVE" ? t("shopx.club.onSale") : t("shopx.club.hidden")}</Badge>
                 </div>
                 <p className="text-sm text-ink-600">{p.variants.map((v) => `${v.label} ${fmt.euro(v.price_cents)}`).join(" · ")}</p>
-                <Button size="sm" variant="secondary" onClick={() => setEditing(p)}>✎ Modifica</Button>
+                <Button size="sm" variant="secondary" onClick={() => setEditing(p)}>✎ {t("shopx.club.edit")}</Button>
               </div>
             </li>
           ))}
@@ -95,6 +96,7 @@ function Products() {
 }
 
 function ProductModal({ product, onClose }: { product: Product | null; onClose: () => void }) {
+  const { t } = useI18n();
   const toast = useToast();
   const queryClient = useQueryClient();
   const [name, setName] = useState(product?.name ?? "");
@@ -102,7 +104,7 @@ function ProductModal({ product, onClose }: { product: Product | null; onClose: 
   const [image, setImage] = useState<string | null>(product?.image_url ?? null);
   const [status, setStatus] = useState(product?.status ?? "ACTIVE");
   const [variants, setVariants] = useState(() => (product?.variants ?? []).map((v) => ({ id: v.id, label: v.label, price: (v.price_cents / 100).toFixed(2), stock: v.inventory == null ? "" : String(v.inventory), active: v.active })));
-  const [fresh, setFresh] = useState<{ label: string; price: string; stock: string }[]>(product ? [] : [{ label: "Unica", price: "", stock: "" }]);
+  const [fresh, setFresh] = useState<{ label: string; price: string; stock: string }[]>(product ? [] : [{ label: t("shopx.club.singleVariant"), price: "", stock: "" }]);
   const [busy, setBusy] = useState(false);
   const cents = (v: string) => Math.round(Number(v.replace(",", ".")) * 100);
 
@@ -113,7 +115,7 @@ function ProductModal({ product, onClose }: { product: Product | null; onClose: 
       const { image_url } = await clubSend<{ image_url: string }>(`${A}/images`, "POST", form);
       setImage(image_url);
     } catch (e) {
-      toast({ tone: "error", title: "Foto non caricata", text: (e as Error).message });
+      toast({ tone: "error", title: t("shopx.club.photoFailed"), text: (e as Error).message });
     }
   }
 
@@ -132,30 +134,30 @@ function ProductModal({ product, onClose }: { product: Product | null; onClose: 
         await clubSend(`${A}/products`, "POST", { name, description, image_url: image, status, variants: newOnes });
       }
       await queryClient.invalidateQueries({ queryKey: ["club", "admin", "shop"] });
-      toast({ tone: "success", title: "Prodotto salvato" });
+      toast({ tone: "success", title: t("shopx.club.saved") });
       onClose();
     } catch (e) {
-      toast({ tone: "error", title: "Non salvato", text: (e as Error).message });
+      toast({ tone: "error", title: t("shopx.club.notSaved"), text: (e as Error).message });
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <Modal open onClose={onClose} size="lg" title={product ? "Modifica prodotto" : "Nuovo prodotto"}
-      footer={<><Button variant="ghost" onClick={onClose}>Chiudi</Button><Button onClick={save} loading={busy} disabled={!name.trim() || (!product && !fresh.some((v) => cents(v.price) > 0))}>Salva</Button></>}>
+    <Modal open onClose={onClose} size="lg" title={product ? t("shopx.club.editProduct") : t("shopx.club.newProduct")}
+      footer={<><Button variant="ghost" onClick={onClose}>{t("common.close")}</Button><Button onClick={save} loading={busy} disabled={!name.trim() || (!product && !fresh.some((v) => cents(v.price) > 0))}>{t("common.save")}</Button></>}>
       <div className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-[1fr_160px]">
-          <Field label="Nome"><Input value={name} maxLength={255} onChange={(e) => setName(e.target.value)} placeholder="T-shirt do clube" /></Field>
-          <Field label="Stato">
+          <Field label={t("shopx.club.name")}><Input value={name} maxLength={255} onChange={(e) => setName(e.target.value)} placeholder={t("shopx.club.namePlaceholder")} /></Field>
+          <Field label={t("shopx.club.status")}>
             <Select value={status} onChange={(e) => setStatus(e.target.value)}>
-              <option value="ACTIVE">In vendita</option>
-              <option value="INACTIVE">Nascosto</option>
+              <option value="ACTIVE">{t("shopx.club.onSale")}</option>
+              <option value="INACTIVE">{t("shopx.club.hidden")}</option>
             </Select>
           </Field>
         </div>
-        <Field label="Descrizione"><Textarea rows={3} value={description} maxLength={8000} onChange={(e) => setDescription(e.target.value)} /></Field>
-        <Field label="Foto" hint="JPG, PNG o WebP fino a 5 MB.">
+        <Field label={t("shopx.club.description")}><Textarea rows={3} value={description} maxLength={8000} onChange={(e) => setDescription(e.target.value)} /></Field>
+        <Field label={t("shopx.club.photo")} hint={t("shopx.club.photoHint")}>
           <div className="flex items-center gap-3">
             {image && (
               // eslint-disable-next-line @next/next/no-img-element -- anteprima
@@ -165,25 +167,25 @@ function ProductModal({ product, onClose }: { product: Product | null; onClose: 
           </div>
         </Field>
         <div>
-          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-500">Varianti (taglia, colore…) e prezzi</p>
+          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-500">{t("shopx.club.variantsTitle")}</p>
           <div className="space-y-2">
             {variants.map((v, i) => (
               <div key={v.id} className="grid grid-cols-[1fr_110px_90px_auto] items-center gap-2">
-                <Input value={v.label} onChange={(e) => setVariants((vs) => vs.map((x, j) => j === i ? { ...x, label: e.target.value } : x))} aria-label="Variante" />
-                <Input value={v.price} inputMode="decimal" onChange={(e) => setVariants((vs) => vs.map((x, j) => j === i ? { ...x, price: e.target.value } : x))} aria-label="Prezzo €" />
-                <Input value={v.stock} inputMode="numeric" placeholder="∞" onChange={(e) => setVariants((vs) => vs.map((x, j) => j === i ? { ...x, stock: e.target.value } : x))} aria-label="Pezzi" />
-                <label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={v.active} onChange={(e) => setVariants((vs) => vs.map((x, j) => j === i ? { ...x, active: e.target.checked } : x))} />attiva</label>
+                <Input value={v.label} onChange={(e) => setVariants((vs) => vs.map((x, j) => j === i ? { ...x, label: e.target.value } : x))} aria-label={t("shopx.club.variant")} />
+                <Input value={v.price} inputMode="decimal" onChange={(e) => setVariants((vs) => vs.map((x, j) => j === i ? { ...x, price: e.target.value } : x))} aria-label={t("shopx.club.priceEur")} />
+                <Input value={v.stock} inputMode="numeric" placeholder="∞" onChange={(e) => setVariants((vs) => vs.map((x, j) => j === i ? { ...x, stock: e.target.value } : x))} aria-label={t("shopx.club.piecesLabel")} />
+                <label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={v.active} onChange={(e) => setVariants((vs) => vs.map((x, j) => j === i ? { ...x, active: e.target.checked } : x))} />{t("shopx.club.variantActive")}</label>
               </div>
             ))}
             {fresh.map((v, i) => (
               <div key={`new-${i}`} className="grid grid-cols-[1fr_110px_90px_auto] items-center gap-2">
-                <Input value={v.label} placeholder="Es. M · Azul" onChange={(e) => setFresh((vs) => vs.map((x, j) => j === i ? { ...x, label: e.target.value } : x))} aria-label="Variante" />
-                <Input value={v.price} inputMode="decimal" placeholder="€" onChange={(e) => setFresh((vs) => vs.map((x, j) => j === i ? { ...x, price: e.target.value } : x))} aria-label="Prezzo €" />
-                <Input value={v.stock} inputMode="numeric" placeholder="∞ pezzi" onChange={(e) => setFresh((vs) => vs.map((x, j) => j === i ? { ...x, stock: e.target.value } : x))} aria-label="Pezzi" />
-                <span className="text-xs text-ink-400">nuova</span>
+                <Input value={v.label} placeholder={t("shopx.club.variantPlaceholder")} onChange={(e) => setFresh((vs) => vs.map((x, j) => j === i ? { ...x, label: e.target.value } : x))} aria-label={t("shopx.club.variant")} />
+                <Input value={v.price} inputMode="decimal" placeholder="€" onChange={(e) => setFresh((vs) => vs.map((x, j) => j === i ? { ...x, price: e.target.value } : x))} aria-label={t("shopx.club.priceEur")} />
+                <Input value={v.stock} inputMode="numeric" placeholder={`∞ ${t("shopx.club.pieces")}`} onChange={(e) => setFresh((vs) => vs.map((x, j) => j === i ? { ...x, stock: e.target.value } : x))} aria-label={t("shopx.club.piecesLabel")} />
+                <span className="text-xs text-ink-400">{t("shopx.club.variantNew")}</span>
               </div>
             ))}
-            <Button size="sm" variant="ghost" onClick={() => setFresh((vs) => [...vs, { label: "", price: "", stock: "" }])}>＋ Variante</Button>
+            <Button size="sm" variant="ghost" onClick={() => setFresh((vs) => [...vs, { label: "", price: "", stock: "" }])}>＋ {t("shopx.club.variant")}</Button>
           </div>
         </div>
       </div>
@@ -192,7 +194,7 @@ function ProductModal({ product, onClose }: { product: Product | null; onClose: 
 }
 
 function Orders() {
-  const { fmt } = useI18n();
+  const { t, fmt } = useI18n();
   const toast = useToast();
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: ["club", "admin", "shop", "orders"], queryFn: () => clubGet<Order[]>(`${A}/orders`) });
@@ -202,7 +204,7 @@ function Orders() {
   async function act(o: Order, action: "confirm-payment" | "ship" | "delivered" | "cancel") {
     let body: unknown;
     if (action === "cancel") {
-      const reason = window.prompt("Perché annulli l'ordine?");
+      const reason = window.prompt(t("shopx.club.cancelReason"));
       if (!reason) return;
       body = { reason };
     } else if (action === "ship") {
@@ -212,9 +214,9 @@ function Orders() {
     try {
       await clubSend(`${A}/orders/${o.id}/${action}`, "POST", body);
       await queryClient.invalidateQueries({ queryKey: ["club", "admin", "shop", "orders"] });
-      toast({ tone: "success", title: "Ordine aggiornato" });
+      toast({ tone: "success", title: t("shopx.club.orderUpdated") });
     } catch (e) {
-      toast({ tone: "error", title: "Operazione non riuscita", text: (e as Error).message });
+      toast({ tone: "error", title: t("common.failed"), text: (e as Error).message });
     } finally {
       setBusy(null);
     }
@@ -227,12 +229,12 @@ function Orders() {
       if (win) win.location.replace(url); else window.location.assign(url);
     } catch (e) {
       win?.close();
-      toast({ tone: "error", title: "Prova non disponibile", text: (e as Error).message });
+      toast({ tone: "error", title: t("shopx.club.proofUnavailable"), text: (e as Error).message });
     }
   }
 
   if (isLoading) return <Skeleton className="h-64" />;
-  if ((data ?? []).length === 0) return <EmptyState icon={<span className="text-3xl">📦</span>} title="Ancora nessun ordine nello shop del club" />;
+  if ((data ?? []).length === 0) return <EmptyState icon={<span className="text-3xl">📦</span>} title={t("shopx.club.noOrders")} />;
   return (
     <div className="space-y-4">
       <ul className="space-y-3">
@@ -241,18 +243,18 @@ function Orders() {
             <div className="min-w-0 flex-1">
               <p className="font-semibold text-ink-900">{o.product_name}</p>
               <p className="text-xs text-ink-500">
-                {o.order_code} · {fmt.shortDate(o.created_at)} · {o.customer_display_name}{o.athlete_name ? ` · per ${o.athlete_name}` : ""}
+                {o.order_code} · {fmt.shortDate(o.created_at)} · {o.customer_display_name}{o.athlete_name ? ` · ${t("shopx.forAthlete", { name: o.athlete_name })}` : ""}
               </p>
             </div>
             <span className="font-display text-lg text-ink-900">{fmt.euro(o.amount_due_cents ?? o.amount_cents)}</span>
-            <Badge tone={ORDER_TONE[o.status] ?? "neutral"} dot>{o.status === "AWAITING_PAYMENT" ? "Da pagare" : o.status === "PAID" ? "Pagato" : o.status === "CANCELLED" ? "Annullato" : o.status}</Badge>
-            {o.status === "PAID" && <Badge tone="neutral">{o.fulfillment_status === "DELIVERED" ? "Consegnato" : o.fulfillment_status === "SHIPPED" ? "Spedito" : "Da preparare"}</Badge>}
+            <Badge tone={ORDER_TONE[o.status] ?? "neutral"} dot>{t.dyn(`shopx.club.orderStatus.${o.status}`, o.status)}</Badge>
+            {o.status === "PAID" && <Badge tone="neutral">{o.fulfillment_status === "DELIVERED" ? t("shopx.club.delivered") : o.fulfillment_status === "SHIPPED" ? t("shopx.club.shipped") : t("shopx.club.toPrepare")}</Badge>}
             <div className="flex flex-wrap gap-2">
-              {o.payment_proof_uploaded_at && <Button size="sm" variant="ghost" onClick={() => proof(o)}>🧾 Prova</Button>}
-              {o.status === "AWAITING_PAYMENT" && <Button size="sm" loading={busy === o.id} onClick={() => act(o, "confirm-payment")}>✓ Pagamento ricevuto</Button>}
-              {o.status === "PAID" && o.fulfillment_status !== "SHIPPED" && o.fulfillment_status !== "DELIVERED" && <Button size="sm" variant="secondary" loading={busy === o.id} onClick={() => act(o, "ship")}>🚚 Spedito</Button>}
-              {o.status === "PAID" && o.fulfillment_status !== "DELIVERED" && <Button size="sm" variant="secondary" loading={busy === o.id} onClick={() => act(o, "delivered")}>📦 Consegnato</Button>}
-              {o.status === "AWAITING_PAYMENT" && <Button size="sm" variant="ghost" className="text-rose-600" loading={busy === o.id} onClick={() => act(o, "cancel")}>Annulla</Button>}
+              {o.payment_proof_uploaded_at && <Button size="sm" variant="ghost" onClick={() => proof(o)}>🧾 {t("shopx.club.proof")}</Button>}
+              {o.status === "AWAITING_PAYMENT" && <Button size="sm" loading={busy === o.id} onClick={() => act(o, "confirm-payment")}>✓ {t("shopx.club.paymentReceived")}</Button>}
+              {o.status === "PAID" && o.fulfillment_status !== "SHIPPED" && o.fulfillment_status !== "DELIVERED" && <Button size="sm" variant="secondary" loading={busy === o.id} onClick={() => act(o, "ship")}>🚚 {t("shopx.club.shipped")}</Button>}
+              {o.status === "PAID" && o.fulfillment_status !== "DELIVERED" && <Button size="sm" variant="secondary" loading={busy === o.id} onClick={() => act(o, "delivered")}>📦 {t("shopx.club.delivered")}</Button>}
+              {o.status === "AWAITING_PAYMENT" && <Button size="sm" variant="ghost" className="text-rose-600" loading={busy === o.id} onClick={() => act(o, "cancel")}>{t("common.cancel")}</Button>}
             </div>
           </li>
         ))}

@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useI18n } from "@/lib/i18n/provider";
 
 async function fetchMyRoles(): Promise<string[]> {
   const res = await fetch("/api/proxy/auth/me");
@@ -50,6 +51,7 @@ export function clubAreasFor(roles: string[]): { href: string; key: "family" | "
  * who holds only one of the two roles. */
 export function AreaSwitcher() {
   const { hasBothRoles, isCustomerArea } = useDualRoleAreas();
+  const { t } = useI18n();
 
   if (!hasBothRoles) return null;
 
@@ -63,7 +65,7 @@ export function AreaSwitcher() {
             : " text-slate-600 hover:bg-slate-900/10"
         }`}
       >
-        Area Cliente
+        {t("acct.area.customer")}
       </Link>
       <Link
         href="/promoter"
@@ -73,7 +75,7 @@ export function AreaSwitcher() {
             : " text-slate-600 hover:bg-slate-900/10"
         }`}
       >
-        Area Promoter
+        {t("acct.area.promoter")}
       </Link>
     </div>
   );

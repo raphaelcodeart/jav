@@ -41,6 +41,7 @@ import { BeltAwardPanel } from "@/components/club/staff-tools";
 import { CoursesManager } from "@/components/club/jav-courses";
 import { SeasonMonthsPanel } from "@/components/club/season-months";
 import { useI18n } from "@/lib/i18n/provider";
+import { feeLabel } from "@/lib/fee-label";
 import { shareOrCopyLink } from "@/lib/share-link";
 import {
   CERTIFICATE_LABELS,
@@ -49,10 +50,8 @@ import {
   PLACEMENT_LABELS,
   clubGet,
   clubSend,
-  euro,
   fullName,
   kindFeatures,
-  shortDate,
   type AdminAthlete,
   type AdminCertificate,
   type AdminProof,
@@ -121,6 +120,7 @@ export function sectionsFor(kind: string | null | undefined) {
 const A = (path: string) => `/admin${path}`;
 
 function useRun() {
+  const { t } = useI18n();
   const toast = useToast();
   const queryClient = useQueryClient();
   return async function run(fn: () => Promise<unknown>, ok: string) {
@@ -130,7 +130,7 @@ function useRun() {
       toast({ tone: "success", title: ok });
       return true;
     } catch (e) {
-      toast({ tone: "error", title: "Operazione non riuscita", text: (e as Error).message });
+      toast({ tone: "error", title: t("common.failed"), text: (e as Error).message });
       return false;
     }
   };
@@ -204,17 +204,17 @@ function Overview({ onGo }: { onGo: (s: Section) => void }) {
       <MonthBoardPanel compact onOpen={() => onGo("fees")} />
       <ClubMoneyHome onGo={onGo} athletesActive={data?.athletes_active} />
       <div className="glass-card rounded-3xl p-5 space-y-3">
-        <h3 className="text-base text-ink-900">Lavori automatici</h3>
+        <h3 className="text-base text-ink-900">{t("ca.jobs.title")}</h3>
         <p className="text-sm text-ink-500">
           {t("clubAdmin.jobsText")}
         </p>
         <div className="flex flex-wrap items-end gap-3">
-          <Field label="Mese" htmlFor="gen-period">
+          <Field label={t("ca.month")} htmlFor="gen-period">
             <Input id="gen-period" type="month" value={period} onChange={(e) => setPeriod(e.target.value)} className="w-44" />
           </Field>
-          <Button onClick={() => run(() => clubSend(A(`/jobs/generate-monthly-fees?period=${period}`), "POST"), "Quote del mese generate")}>Genera quote del mese</Button>
+          <Button onClick={() => run(() => clubSend(A(`/jobs/generate-monthly-fees?period=${period}`), "POST"), t("ca.jobs.generated"))}>{t("ca.jobs.generate")}</Button>
           <Button variant="secondary" onClick={() => window.confirm(t("clubAdmin.newSeasonConfirm")) && run(() => clubSend(A("/jobs/new-season"), "POST"), t("clubAdmin.newSeasonDone"))}>
-            Avvia nuova stagione
+            {t("ca.jobs.newSeason")}
           </Button>
           <Button variant="secondary" onClick={() => window.confirm(t("clubAdmin.newYearConfirm")) && run(() => clubSend(A("/jobs/new-year"), "POST"), t("clubAdmin.newYearDone"))}>
             {t("clubAdmin.newYear")}
@@ -247,7 +247,7 @@ function AthleteAdminModal({ athlete, plans, onClose }: { athlete: AdminAthlete;
   const [fedExpires, setFedExpires] = useState(athlete.federation_expires_on ?? "");
   const [tier, setTier] = useState(athlete.social_tier ?? "");
   const [adapted, setAdapted] = useState(athlete.adapted_judo);
-  const { t } = useI18n();
+  const { t, fmt } = useI18n();
   const [busy, setBusy] = useState(false);
   const run = useRun();
   async function save() {
@@ -258,40 +258,40 @@ function AthleteAdminModal({ athlete, plans, onClose }: { athlete: AdminAthlete;
         federation_number: fedNumber || null, federation_expires_on: fedExpires || null,
         social_tier: tier || null, adapted_judo: adapted,
       }),
-      "Atleta aggiornato",
+      t("ca.athlete.updated"),
     );
     setBusy(false);
     if (ok) onClose();
   }
   return (
-    <Modal open onClose={onClose} size="xl" title={fullName(athlete)} subtitle={`Genitore: ${athlete.guardian_email ?? "—"}`} footer={<><Button variant="ghost" onClick={onClose}>Annulla</Button><Button loading={busy} onClick={save}>Salva</Button></>}>
+    <Modal open onClose={onClose} size="xl" title={fullName(athlete)} subtitle={t("ca.athlete.guardian", { email: athlete.guardian_email ?? "—" })} footer={<><Button variant="ghost" onClick={onClose}>{t("common.cancel")}</Button><Button loading={busy} onClick={save}>{t("common.save")}</Button></>}>
       <div className="space-y-4">
-        <Field label="Piano" hint="Scegliendo un piano a mano lo blocchi: il cambio stagione non lo ricalcolerà più per età." htmlFor="adm-plan">
+        <Field label={t("ca.athlete.plan")} hint={t("ca.athlete.planHint")} htmlFor="adm-plan">
           <Select id="adm-plan" value={planId} onChange={(e) => { setPlanId(e.target.value); setLocked(true); }}>
-            <option value="">— nessuno —</option>
-            {plans.map((p) => <option key={p.id} value={p.id}>{p.name} · {euro(p.monthly_fee_cents)}/mese</option>)}
+            <option value="">{t("ca.athlete.noPlan")}</option>
+            {plans.map((p) => <option key={p.id} value={p.id}>{p.name} · {t("ca.athlete.perMonth", { price: fmt.euro(p.monthly_fee_cents) })}</option>)}
           </Select>
         </Field>
-        <label className="flex items-center gap-2 text-sm text-ink-700"><input type="checkbox" checked={locked} onChange={(e) => setLocked(e.target.checked)} className="accent-brand-500 h-4 w-4" /> Piano bloccato</label>
-        <Field label="Stato" htmlFor="adm-status">
+        <label className="flex items-center gap-2 text-sm text-ink-700"><input type="checkbox" checked={locked} onChange={(e) => setLocked(e.target.checked)} className="accent-brand-500 h-4 w-4" /> {t("ca.athlete.planLocked")}</label>
+        <Field label={t("ca.athlete.status")} htmlFor="adm-status">
           <Select id="adm-status" value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="ACTIVE">Attivo</option>
-            <option value="SUSPENDED">Sospeso (niente quote)</option>
-            <option value="LEFT">Uscito dal club</option>
+            <option value="ACTIVE">{t("ca.athlete.status.ACTIVE")}</option>
+            <option value="SUSPENDED">{t("ca.athlete.status.SUSPENDED")}</option>
+            <option value="LEFT">{t("ca.athlete.status.LEFT")}</option>
           </Select>
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="N. tesseramento" htmlFor="adm-fed"><Input id="adm-fed" value={fedNumber} onChange={(e) => setFedNumber(e.target.value)} /></Field>
-          <Field label="Scadenza tessera" htmlFor="adm-fed-exp"><Input id="adm-fed-exp" type="date" value={fedExpires} onChange={(e) => setFedExpires(e.target.value)} /></Field>
+          <Field label={t("ca.athlete.fedNumber")} htmlFor="adm-fed"><Input id="adm-fed" value={fedNumber} onChange={(e) => setFedNumber(e.target.value)} /></Field>
+          <Field label={t("ca.athlete.fedExpires")} htmlFor="adm-fed-exp"><Input id="adm-fed-exp" type="date" value={fedExpires} onChange={(e) => setFedExpires(e.target.value)} /></Field>
         </div>
         <div className="rounded-2xl ring-1 ring-ink-200 p-4 space-y-3">
           <p className="text-sm font-semibold text-ink-900">{t("clubAdmin.discountsTitle")}</p>
           <Field label={t("clubAdmin.socialTier")} hint={t("clubAdmin.socialTierHint")} htmlFor="adm-tier">
             <Select id="adm-tier" value={tier} onChange={(e) => setTier(e.target.value)}>
               <option value="">{t("clubAdmin.noTier")}</option>
-              <option value="A">Escalão A</option>
-              <option value="B">Escalão B</option>
-              <option value="C">Escalão C</option>
+              <option value="A">{t("ca.tier", { tier: "A" })}</option>
+              <option value="B">{t("ca.tier", { tier: "B" })}</option>
+              <option value="C">{t("ca.tier", { tier: "C" })}</option>
             </Select>
           </Field>
           <label className="flex items-center gap-2 text-sm text-ink-700">
@@ -316,18 +316,19 @@ function AthleteAdminModal({ athlete, plans, onClose }: { athlete: AdminAthlete;
 /** Le quote: prima il quadro del mese (chi manca questo mese), poi l'elenco
  *  completo con i filtri per chi cerca una quota precisa. */
 function Fees() {
+  const { t } = useI18n();
   const [view, setView] = useState<"month" | "list">("month");
   return (
     <div className="space-y-5">
       <Tabs value={view} onChange={(k) => setView(k as "month" | "list")}
-        items={[{ key: "month", label: "📅 Il mese" }, { key: "list", label: "📋 Tutte le quote" }]} />
+        items={[{ key: "month", label: t("ca.fees.tabMonth") }, { key: "list", label: t("ca.fees.tabList") }]} />
       {view === "month" ? <MonthBoardPanel /> : <FeesList />}
     </div>
   );
 }
 
 function FeesList() {
-  const { t } = useI18n();
+  const { t, fmt } = useI18n();
   const [status, setStatus] = useState("DUE");
   const [kind, setKind] = useState("");
   const [period, setPeriod] = useState("");
@@ -342,27 +343,27 @@ function FeesList() {
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row gap-3">
         <Select value={status} onChange={(e) => setStatus(e.target.value)} className="sm:w-44">
-          <option value="DUE">Da pagare</option><option value="PAID">Pagate</option><option value="WAIVED">Condonate</option><option value="">Tutte</option>
+          <option value="DUE">{t("ca.fees.status.DUE")}</option><option value="PAID">{t("ca.fees.status.PAID")}</option><option value="WAIVED">{t("ca.fees.status.WAIVED")}</option><option value="">{t("ca.fees.status.all")}</option>
         </Select>
         <Select value={kind} onChange={(e) => setKind(e.target.value)} className="sm:w-44">
-          <option value="">Ogni tipo</option>
-          {Object.entries(FEE_KIND_LABELS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+          <option value="">{t("ca.fees.anyKind")}</option>
+          {Object.entries(FEE_KIND_LABELS).map(([k, l]) => <option key={k} value={k}>{t.dyn(`club.feeKind.${k}`, l)}</option>)}
         </Select>
-        <Input type="month" value={period} onChange={(e) => setPeriod(e.target.value)} className="sm:w-48" aria-label="Mese" />
-        <div className="sm:ml-auto self-center text-sm text-ink-500">{data?.length ?? 0} quote · <strong className="text-ink-900">{euro(total)}</strong></div>
+        <Input type="month" value={period} onChange={(e) => setPeriod(e.target.value)} className="sm:w-48" aria-label={t("ca.month")} />
+        <div className="sm:ml-auto self-center text-sm text-ink-500">{t("ca.fees.count", { n: data?.length ?? 0 })} · <strong className="text-ink-900">{fmt.euro(total)}</strong></div>
       </div>
-      {isLoading ? <Skeleton className="h-64" /> : (data ?? []).length === 0 ? <EmptyState title="Nessuna quota" text="Nessuna quota corrisponde ai filtri." /> : (
+      {isLoading ? <Skeleton className="h-64" /> : (data ?? []).length === 0 ? <EmptyState title={t("ca.fees.empty")} text={t("ca.fees.emptyText")} /> : (
         <Table>
-          <THead><tr><TH>Atleta</TH><TH>Quota</TH><TH>Scadenza</TH><TH>Stato</TH><TH className="text-right">Importo</TH><TH className="text-right">Azioni</TH></tr></THead>
+          <THead><tr><TH>{t("ca.col.athlete")}</TH><TH>{t("ca.col.fee")}</TH><TH>{t("ca.col.due")}</TH><TH>{t("ca.col.status")}</TH><TH className="text-right">{t("ca.col.amount")}</TH><TH className="text-right">{t("ca.col.actions")}</TH></tr></THead>
           <TBody>
             {paged.items.map((f) => (
               <TR key={f.id}>
                 <TD className="font-semibold text-ink-900">{f.athlete_name ?? t("clubAdmin.parentMember")} <AthleteMarks id={f.athlete_id} /></TD>
                 <TD>
-                  {f.description}<p className="text-xs text-ink-500">{FEE_KIND_LABELS[f.kind] ?? f.kind}</p>
+                  {feeLabel(f, t, fmt)}<p className="text-xs text-ink-500">{t.dyn(`club.feeKind.${f.kind}`, FEE_KIND_LABELS[f.kind] ?? f.kind)}</p>
                   {f.discount_note && <p className="text-[11px] text-emerald-700">{f.discount_note}</p>}
                 </TD>
-                <TD>{shortDate(f.due_date)}</TD>
+                <TD>{fmt.shortDate(f.due_date)}</TD>
                 <TD>
                   <FeeStatusPill status={f.status} overdue={f.overdue} />
                   {f.waive_reason && <p className="text-[11px] text-ink-500 mt-1">{f.waive_reason}</p>}
@@ -374,15 +375,15 @@ function FeesList() {
                     </button>
                   )}
                 </TD>
-                <TD className="text-right font-semibold">{euro(f.amount_cents)}</TD>
+                <TD className="text-right font-semibold">{fmt.euro(f.amount_cents)}</TD>
                 <TD className="text-right whitespace-nowrap">
                   {f.status === "DUE" ? (
                     <>
-                      <Button size="sm" variant="secondary" onClick={() => setPaying(f)}>Pagata</Button>{" "}
-                      <Button size="sm" variant="ghost" onClick={() => { const reason = window.prompt("Motivo del condono"); if (reason && reason.length >= 3) void run(() => clubSend(A(`/fees/${f.id}/waive`), "POST", { reason }), "Quota condonata"); }}>Condona</Button>
+                      <Button size="sm" variant="secondary" onClick={() => setPaying(f)}>{t("ca.fees.paid")}</Button>{" "}
+                      <Button size="sm" variant="ghost" onClick={() => { const reason = window.prompt(t("ca.fees.waivePrompt")); if (reason && reason.length >= 3) void run(() => clubSend(A(`/fees/${f.id}/waive`), "POST", { reason }), t("ca.fees.waived")); }}>{t("ca.fees.waive")}</Button>
                     </>
                   ) : (
-                    <Button size="sm" variant="ghost" onClick={() => run(() => clubSend(A(`/fees/${f.id}/reopen`), "POST"), "Quota riaperta")}>Riapri</Button>
+                    <Button size="sm" variant="ghost" onClick={() => run(() => clubSend(A(`/fees/${f.id}/reopen`), "POST"), t("ca.fees.reopened"))}>{t("ca.reopen")}</Button>
                   )}
                 </TD>
               </TR>
@@ -397,17 +398,14 @@ function FeesList() {
   );
 }
 
-const METHOD_LABELS: Record<string, string> = {
-  BANK_TRANSFER: "Bonifico", CASH: "Contanti", CARD: "Carta", WALLET: "Credito del wallet",
-};
-
 /** Come è stata pagata una quota, in una riga sotto lo stato. */
 function PaidHow({ fee }: { fee: Fee }) {
+  const { t } = useI18n();
   if (fee.status !== "PAID" || !fee.payment_method) return null;
   return (
     <p className="text-[11px] text-ink-600 mt-1">
-      {PAYMENT_METHOD_ICONS[fee.payment_method]} {METHOD_LABELS[fee.payment_method] ?? fee.payment_method}
-      {fee.cash_received_by_name ? ` · a ${fee.cash_received_by_name}` : ""}
+      {PAYMENT_METHOD_ICONS[fee.payment_method]} {t.dyn(`ca.method.${fee.payment_method}`, fee.payment_method)}
+      {fee.cash_received_by_name ? ` · ${t("ca.paid.to", { name: fee.cash_received_by_name })}` : ""}
     </p>
   );
 }
@@ -421,6 +419,7 @@ function MarkPaidModal({ fee, onClose }: { fee: Fee; onClose: () => void }) {
   const [otherName, setOtherName] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const { t, fmt } = useI18n();
   const run = useRun();
   const { data: receivers } = useQuery({ queryKey: ["club", "admin", "cash-receivers"], queryFn: () => clubGet<CashReceiver[]>(A("/cash-receivers")) });
   const ready = method !== "CASH" || (receiver === "other" ? otherName.trim().length >= 2 : receiver !== "");
@@ -430,36 +429,36 @@ function MarkPaidModal({ fee, onClose }: { fee: Fee; onClose: () => void }) {
       method, note: note.trim() || null,
       cash_received_by_user_id: method === "CASH" && receiver !== "other" ? receiver : null,
       cash_received_by_name: method === "CASH" && receiver === "other" ? otherName.trim() : null,
-    }), "Quota segnata pagata");
+    }), t("ca.markPaid.done"));
     setBusy(false);
     if (ok) onClose();
   }
   return (
-    <Modal open onClose={onClose} title="Segna pagata" subtitle={`${fee.athlete_name ?? "Quota socio"} · ${fee.description} · ${euro(fee.amount_cents)}`}
-      footer={<><Button variant="ghost" onClick={onClose}>Annulla</Button><Button loading={busy} disabled={!ready} onClick={save}>Segna pagata</Button></>}>
+    <Modal open onClose={onClose} title={t("ca.markPaid.title")} subtitle={`${fee.athlete_name ?? t("club.feeKind.MEMBERSHIP")} · ${feeLabel(fee, t, fmt)} · ${fmt.euro(fee.amount_cents)}`}
+      footer={<><Button variant="ghost" onClick={onClose}>{t("common.cancel")}</Button><Button loading={busy} disabled={!ready} onClick={save}>{t("ca.markPaid.title")}</Button></>}>
       <div className="space-y-4">
-        <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Come è stata pagata">
+        <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label={t("ca.markPaid.how")}>
           {(["CASH", "CARD", "BANK_TRANSFER"] as const).map((m) => (
             <button key={m} type="button" role="radio" aria-checked={method === m} onClick={() => setMethod(m)}
               className={`rounded-2xl p-3 text-center ring-1 cursor-pointer ${method === m ? "bg-brand-50 ring-2 ring-brand-400" : "bg-white ring-ink-200 hover:ring-ink-300"}`}>
               <span className="block text-2xl" aria-hidden="true">{PAYMENT_METHOD_ICONS[m]}</span>
-              <span className="block text-sm font-semibold text-ink-900">{METHOD_LABELS[m]}</span>
+              <span className="block text-sm font-semibold text-ink-900">{t.dyn(`ca.method.${m}`, m)}</span>
             </button>
           ))}
         </div>
         {method === "CASH" && (
-          <Field label="A chi sono stati consegnati i contanti" htmlFor="mp-receiver">
+          <Field label={t("ca.markPaid.receiver")} htmlFor="mp-receiver">
             <Select id="mp-receiver" value={receiver} onChange={(e) => setReceiver(e.target.value)}>
-              <option value="">Scegli la persona</option>
+              <option value="">{t("ca.markPaid.choose")}</option>
               {(receivers ?? []).map((r) => <option key={r.user_id} value={r.user_id}>{r.name}</option>)}
-              <option value="other">{"Un'altra persona…"}</option>
+              <option value="other">{t("ca.markPaid.other")}</option>
             </Select>
           </Field>
         )}
         {method === "CASH" && receiver === "other" && (
-          <Field label="Nome di chi li ha ricevuti" htmlFor="mp-other"><Input id="mp-other" value={otherName} onChange={(e) => setOtherName(e.target.value)} maxLength={120} /></Field>
+          <Field label={t("ca.markPaid.otherName")} htmlFor="mp-other"><Input id="mp-other" value={otherName} onChange={(e) => setOtherName(e.target.value)} maxLength={120} /></Field>
         )}
-        <Field label="Nota (facoltativa)" htmlFor="mp-note"><Input id="mp-note" value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder="es. ricevuta n. 123" /></Field>
+        <Field label={t("ca.markPaid.note")} htmlFor="mp-note"><Input id="mp-note" value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder={t("ca.markPaid.notePh")} /></Field>
       </div>
     </Modal>
   );
@@ -468,24 +467,26 @@ function MarkPaidModal({ fee, onClose }: { fee: Fee; onClose: () => void }) {
 // --- Certificati ------------------------------------------------------------------------------
 
 function Certificates() {
+  const { t, fmt } = useI18n();
   const [status, setStatus] = useState("EXPIRING");
   const { data, isLoading } = useQuery({ queryKey: ["club", "admin", "certificates", status], queryFn: () => clubGet<AdminCertificate[]>(A(`/certificates${status ? `?status=${status}` : ""}`)) });
   const paged = usePaged(data ?? [], 25);
   return (
     <div className="space-y-4">
-      <Tabs value={status || "ALL"} onChange={(k) => setStatus(k === "ALL" ? "" : k)} items={[{ key: "EXPIRING", label: "In scadenza" }, { key: "EXPIRED", label: "Scaduti" }, { key: "MISSING", label: "Mancanti" }, { key: "VALID", label: "Validi" }, { key: "ALL", label: "Tutti" }]} />
-      {isLoading ? <Skeleton className="h-48" /> : (data ?? []).length === 0 ? <EmptyState icon={<span className="text-3xl">🩺</span>} title="Niente da segnalare" /> : (
+      <Tabs value={status || "ALL"} onChange={(k) => setStatus(k === "ALL" ? "" : k)} items={[{ key: "EXPIRING", label: t("ca.cert.tab.EXPIRING") }, { key: "EXPIRED", label: t("ca.cert.tab.EXPIRED") }, { key: "MISSING", label: t("ca.cert.tab.MISSING") }, { key: "VALID", label: t("ca.cert.tab.VALID") }, { key: "ALL", label: t("ca.cert.tab.ALL") }]} />
+      {isLoading ? <Skeleton className="h-48" /> : (data ?? []).length === 0 ? <EmptyState icon={<span className="text-3xl">🩺</span>} title={t("ca.cert.empty")} /> : (
         <Table>
-          <THead><tr><TH>Atleta</TH><TH>Genitore</TH><TH>Stato</TH><TH>Scadenza</TH></tr></THead>
+          <THead><tr><TH>{t("ca.col.athlete")}</TH><TH>{t("ca.col.guardian")}</TH><TH>{t("ca.col.status")}</TH><TH>{t("ca.col.due")}</TH></tr></THead>
           <TBody>
             {paged.items.map((c) => {
-              const s = CERTIFICATE_LABELS[c.certificate.status] ?? CERTIFICATE_LABELS.MISSING!;
+              const code = CERTIFICATE_LABELS[c.certificate.status] ? c.certificate.status : "MISSING";
+              const s = CERTIFICATE_LABELS[code]!;
               return (
                 <TR key={c.athlete_id}>
                   <TD className="font-semibold text-ink-900">{c.athlete_name} <AthleteMarks id={c.athlete_id} /></TD>
                   <TD className="text-xs">{c.guardian_email ?? "—"}</TD>
-                  <TD><Badge tone={s.tone} dot>{s.label}</Badge></TD>
-                  <TD>{shortDate(c.certificate.expires_on)}</TD>
+                  <TD><Badge tone={s.tone} dot>{t.dyn(`ca.cert.status.${code}`, s.label)}</Badge></TD>
+                  <TD>{fmt.shortDate(c.certificate.expires_on)}</TD>
                 </TR>
               );
             })}
@@ -500,7 +501,7 @@ function Certificates() {
 // --- Gare e risultati -------------------------------------------------------------------------
 
 function Competitions() {
-  const { t } = useI18n();
+  const { t, fmt } = useI18n();
   const [transportFor, setTransportFor] = useState<Competition | null>(null);
   const { data, isLoading } = useQuery({ queryKey: ["club", "admin", "competitions"], queryFn: () => clubGet<Competition[]>(A("/competitions")) });
   const [editing, setEditing] = useState<Competition | "new" | null>(null);
@@ -509,31 +510,31 @@ function Competitions() {
   const paged = usePaged(data ?? [], 12);
   return (
     <div className="space-y-4">
-      <div className="flex justify-end"><Button onClick={() => setEditing("new")} icon={<span>＋</span>}>Nuova gara</Button></div>
-      {isLoading ? <Skeleton className="h-48" /> : (data ?? []).length === 0 ? <EmptyState icon={<span className="text-3xl">🏟️</span>} title="Nessuna gara" action={<Button onClick={() => setEditing("new")}>Pubblica la prima gara</Button>} /> : (
+      <div className="flex justify-end"><Button onClick={() => setEditing("new")} icon={<span>＋</span>}>{t("ca.comp.new")}</Button></div>
+      {isLoading ? <Skeleton className="h-48" /> : (data ?? []).length === 0 ? <EmptyState icon={<span className="text-3xl">🏟️</span>} title={t("ca.comp.empty")} action={<Button onClick={() => setEditing("new")}>{t("ca.comp.publishFirst")}</Button>} /> : (
         <div className="space-y-3">
           {paged.items.map((c) => (
             <div key={c.id} className="glass-card rounded-3xl p-5 flex flex-col lg:flex-row lg:items-center gap-4">
               <EventIcon kind={c.kind} imageUrl={c.image_url} />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap gap-1.5 mb-1">
-                  {c.kind === "COMPETITION" ? <Badge tone="neutral">{LEVEL_LABELS[c.level] ?? c.level}</Badge> : <Badge tone="brand">{EVENT_KIND_STYLE[c.kind]?.icon} {t.dyn(`event.${({ STAGE: "stage", REFEREEING: "referee", EDUCATION: "education", MEETING: "meeting" } as Record<string, string>)[c.kind] ?? "other"}`, c.kind)}</Badge>}
+                  {c.kind === "COMPETITION" ? <Badge tone="neutral">{t.dyn(`club.level.${c.level}`, LEVEL_LABELS[c.level] ?? c.level)}</Badge> : <Badge tone="brand">{EVENT_KIND_STYLE[c.kind]?.icon} {t.dyn(`event.${({ STAGE: "stage", REFEREEING: "referee", EDUCATION: "education", MEETING: "meeting" } as Record<string, string>)[c.kind] ?? "other"}`, c.kind)}</Badge>}
                   {c.transport_needed && <Badge tone="info">🚌 {t("event.transport")}</Badge>}
-                  <Badge tone={c.status === "OPEN" ? "success" : c.status === "DONE" ? "info" : "warning"}>{c.status === "OPEN" ? "Iscrizioni aperte" : c.status === "DONE" ? "Conclusa" : "Iscrizioni chiuse"}</Badge>
+                  <Badge tone={c.status === "OPEN" ? "success" : c.status === "DONE" ? "info" : "warning"}>{c.status === "OPEN" ? t("ca.comp.status.OPEN") : c.status === "DONE" ? t("ca.comp.status.DONE") : t("ca.comp.status.CLOSED")}</Badge>
                 </div>
                 <h3 className="text-base text-ink-900">{c.name}</h3>
-                <p className="text-sm text-ink-500">{shortDate(c.starts_on)} · {c.location ?? "—"} · iscrizioni entro il {shortDate(c.registration_deadline)} · {c.fee_cents ? euro(c.fee_cents) : "gratuita"}</p>
+                <p className="text-sm text-ink-500">{fmt.shortDate(c.starts_on)} · {c.location ?? "—"} · {t("ca.comp.deadline", { date: fmt.shortDate(c.registration_deadline) })} · {c.fee_cents ? fmt.euro(c.fee_cents) : t("ca.comp.free")}</p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button size="sm" variant="secondary" onClick={() => setEditing(c)}>Modifica</Button>
-                <Button size="sm" variant="secondary" onClick={() => setResults(c)}>Iscritti e risultati</Button>
+                <Button size="sm" variant="secondary" onClick={() => setEditing(c)}>{t("ca.edit")}</Button>
+                <Button size="sm" variant="secondary" onClick={() => setResults(c)}>{t("ca.comp.entriesResults")}</Button>
                 {c.transport_needed && (
                   <Button size="sm" variant="secondary" onClick={() => setTransportFor(c)}>🚌 {t("event.transportRequest")}</Button>
                 )}
                 {c.status === "OPEN" ? (
-                  <Button size="sm" variant="ghost" onClick={() => run(() => clubSend(A(`/competitions/${c.id}/close`), "POST"), "Iscrizioni chiuse")}>Chiudi iscrizioni</Button>
+                  <Button size="sm" variant="ghost" onClick={() => run(() => clubSend(A(`/competitions/${c.id}/close`), "POST"), t("ca.comp.status.CLOSED"))}>{t("ca.comp.close")}</Button>
                 ) : (
-                  <Button size="sm" variant="ghost" onClick={() => run(() => clubSend(A(`/competitions/${c.id}/reopen`), "POST"), "Iscrizioni riaperte")}>Riapri</Button>
+                  <Button size="sm" variant="ghost" onClick={() => run(() => clubSend(A(`/competitions/${c.id}/reopen`), "POST"), t("ca.comp.reopened"))}>{t("ca.reopen")}</Button>
                 )}
               </div>
             </div>
@@ -551,6 +552,7 @@ function Competitions() {
 /** La foto o la locandina della gara: si carica e si toglie subito, senza
  *  aspettare «Salva». Senza, negli elenchi c'è l'icona del tipo. */
 function EventImageEditor({ competition: c, kind }: { competition: Competition; kind: string }) {
+  const { t } = useI18n();
   const [image, setImage] = useState(c.image_url ?? null);
   const [busy, setBusy] = useState(false);
   const toast = useToast();
@@ -569,7 +571,7 @@ function EventImageEditor({ competition: c, kind }: { competition: Competition; 
       setImage(updated.image_url ?? null);
       await queryClient.invalidateQueries({ queryKey: ["club"] });
     } catch (e) {
-      toast({ tone: "error", title: "Immagine non caricata", text: (e as Error).message });
+      toast({ tone: "error", title: t("ca.image.failed"), text: (e as Error).message });
     } finally {
       setBusy(false);
     }
@@ -578,11 +580,11 @@ function EventImageEditor({ competition: c, kind }: { competition: Competition; 
     <div className="flex items-center gap-4 rounded-2xl bg-ink-50 p-3 ring-1 ring-ink-100">
       <EventIcon kind={kind} imageUrl={image} />
       <div className="min-w-0 flex-1 space-y-2">
-        <p className="text-sm font-semibold text-ink-900">Foto o locandina</p>
-        <p className="text-xs text-ink-500">Compare accanto al nome negli elenchi delle prove. Senza, l&apos;icona del tipo. JPG, PNG o WebP fino a 5 MB.</p>
+        <p className="text-sm font-semibold text-ink-900">{t("ca.image.title")}</p>
+        <p className="text-xs text-ink-500">{t("ca.image.hint")}</p>
         <div className="flex flex-wrap gap-2">
           <Input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={(e) => { const file = e.target.files?.[0]; if (file) void upload(file); }} className="max-w-xs" />
-          {image && <Button size="sm" variant="ghost" loading={busy} onClick={() => upload(null)}>Togli</Button>}
+          {image && <Button size="sm" variant="ghost" loading={busy} onClick={() => upload(null)}>{t("ca.remove")}</Button>}
         </div>
       </div>
     </div>
@@ -623,15 +625,15 @@ function CompetitionModal({ competition: c, onClose }: { competition: Competitio
       transport_companions: Number(f.transport_companions) || 0, transport_notes: f.transport_notes || null,
       transport_auto_send: f.transport_auto_send,
     };
-    const ok = await run(() => (c ? clubSend(A(`/competitions/${c.id}`), "PATCH", body) : clubSend(A("/competitions"), "POST", body)), c ? "Gara aggiornata" : "Gara pubblicata");
+    const ok = await run(() => (c ? clubSend(A(`/competitions/${c.id}`), "PATCH", body) : clubSend(A("/competitions"), "POST", body)), c ? t("ca.comp.updated") : t("ca.comp.published"));
     setBusy(false);
     if (ok) onClose();
   }
   return (
-    <Modal open onClose={onClose} size="lg" title={c ? "Modifica gara" : "Nuova gara"} footer={<><Button variant="ghost" onClick={onClose}>Annulla</Button><Button loading={busy} onClick={save} disabled={!f.name || !f.starts_on || !f.registration_deadline}>Salva</Button></>}>
+    <Modal open onClose={onClose} size="lg" title={c ? t("ca.comp.editTitle") : t("ca.comp.new")} footer={<><Button variant="ghost" onClick={onClose}>{t("common.cancel")}</Button><Button loading={busy} onClick={save} disabled={!f.name || !f.starts_on || !f.registration_deadline}>{t("common.save")}</Button></>}>
       <div className="grid sm:grid-cols-2 gap-4">
         {c && <div className="sm:col-span-2"><EventImageEditor competition={c} kind={f.kind} /></div>}
-        <div className="sm:col-span-2"><Field label="Nome" htmlFor="cp-name"><Input id="cp-name" value={f.name} onChange={(e) => set({ name: e.target.value })} /></Field></div>
+        <div className="sm:col-span-2"><Field label={t("ca.name")} htmlFor="cp-name"><Input id="cp-name" value={f.name} onChange={(e) => set({ name: e.target.value })} /></Field></div>
         <Field label={t("event.kind")} hint={t("event.kindHint")} htmlFor="cp-kind">
           <Select id="cp-kind" value={f.kind} onChange={(e) => set({ kind: e.target.value })}>
             <option value="COMPETITION">{t("event.competition")}</option>
@@ -639,24 +641,24 @@ function CompetitionModal({ competition: c, onClose }: { competition: Competitio
           </Select>
         </Field>
         <div />
-        <Field label="Inizio" htmlFor="cp-start"><Input id="cp-start" type="date" value={f.starts_on} onChange={(e) => set({ starts_on: e.target.value })} /></Field>
-        <Field label="Fine (facoltativa)" htmlFor="cp-end"><Input id="cp-end" type="date" value={f.ends_on} onChange={(e) => set({ ends_on: e.target.value })} /></Field>
-        <Field label="Luogo" htmlFor="cp-loc"><Input id="cp-loc" value={f.location} onChange={(e) => set({ location: e.target.value })} /></Field>
-        <Field label="Organizzatore" htmlFor="cp-org"><Input id="cp-org" value={f.organizer} onChange={(e) => set({ organizer: e.target.value })} /></Field>
-        <Field label="Livello" hint="Moltiplica i punti del ranking" htmlFor="cp-level">
+        <Field label={t("ca.comp.start")} htmlFor="cp-start"><Input id="cp-start" type="date" value={f.starts_on} onChange={(e) => set({ starts_on: e.target.value })} /></Field>
+        <Field label={t("ca.comp.end")} htmlFor="cp-end"><Input id="cp-end" type="date" value={f.ends_on} onChange={(e) => set({ ends_on: e.target.value })} /></Field>
+        <Field label={t("ca.comp.location")} htmlFor="cp-loc"><Input id="cp-loc" value={f.location} onChange={(e) => set({ location: e.target.value })} /></Field>
+        <Field label={t("ca.comp.organizer")} htmlFor="cp-org"><Input id="cp-org" value={f.organizer} onChange={(e) => set({ organizer: e.target.value })} /></Field>
+        <Field label={t("ca.level")} hint={t("ca.comp.levelHint")} htmlFor="cp-level">
           <Select id="cp-level" value={f.level} onChange={(e) => set({ level: e.target.value })}>
-            {Object.entries(LEVEL_LABELS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            {Object.entries(LEVEL_LABELS).map(([k, l]) => <option key={k} value={k}>{t.dyn(`club.level.${k}`, l)}</option>)}
           </Select>
         </Field>
-        <Field label="Scadenza iscrizioni" htmlFor="cp-dead"><Input id="cp-dead" type="date" value={f.registration_deadline} onChange={(e) => set({ registration_deadline: e.target.value })} /></Field>
-        <Field label="Quota iscrizione (€)" htmlFor="cp-fee"><Input id="cp-fee" inputMode="decimal" value={f.fee} onChange={(e) => set({ fee: e.target.value })} /></Field>
+        <Field label={t("ca.comp.regDeadline")} htmlFor="cp-dead"><Input id="cp-dead" type="date" value={f.registration_deadline} onChange={(e) => set({ registration_deadline: e.target.value })} /></Field>
+        <Field label={t("ca.comp.fee")} htmlFor="cp-fee"><Input id="cp-fee" inputMode="decimal" value={f.fee} onChange={(e) => set({ fee: e.target.value })} /></Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Età min" htmlFor="cp-min"><Input id="cp-min" type="number" value={f.min_age} onChange={(e) => set({ min_age: e.target.value })} /></Field>
-          <Field label="Età max" htmlFor="cp-max"><Input id="cp-max" type="number" value={f.max_age} onChange={(e) => set({ max_age: e.target.value })} /></Field>
+          <Field label={t("ca.minAge")} htmlFor="cp-min"><Input id="cp-min" type="number" value={f.min_age} onChange={(e) => set({ min_age: e.target.value })} /></Field>
+          <Field label={t("ca.maxAge")} htmlFor="cp-max"><Input id="cp-max" type="number" value={f.max_age} onChange={(e) => set({ max_age: e.target.value })} /></Field>
         </div>
-        <div className="sm:col-span-2"><Field label="Categorie" htmlFor="cp-cat"><Input id="cp-cat" value={f.categories} onChange={(e) => set({ categories: e.target.value })} placeholder="es. Esordienti A/B, Cadetti" /></Field></div>
-        <div className="sm:col-span-2"><Field label="Descrizione" htmlFor="cp-desc"><Textarea id="cp-desc" value={f.description} onChange={(e) => set({ description: e.target.value })} /></Field></div>
-        <label className="sm:col-span-2 flex items-center gap-2 text-sm text-ink-700"><input type="checkbox" checked={f.requires} onChange={(e) => set({ requires: e.target.checked })} className="accent-brand-500 h-4 w-4" /> Serve il certificato agonistico valido alla data della gara</label>
+        <div className="sm:col-span-2"><Field label={t("ca.comp.categories")} htmlFor="cp-cat"><Input id="cp-cat" value={f.categories} onChange={(e) => set({ categories: e.target.value })} placeholder={t("ca.comp.categoriesPh")} /></Field></div>
+        <div className="sm:col-span-2"><Field label={t("ca.description")} htmlFor="cp-desc"><Textarea id="cp-desc" value={f.description} onChange={(e) => set({ description: e.target.value })} /></Field></div>
+        <label className="sm:col-span-2 flex items-center gap-2 text-sm text-ink-700"><input type="checkbox" checked={f.requires} onChange={(e) => set({ requires: e.target.checked })} className="accent-brand-500 h-4 w-4" /> {t("ca.comp.requiresCert")}</label>
         <div className="sm:col-span-2 rounded-2xl ring-1 ring-ink-200 p-4 space-y-4">
           <label className="flex items-center gap-2 text-sm font-semibold text-ink-900">
             <input type="checkbox" checked={f.transport_needed} onChange={(e) => set({ transport_needed: e.target.checked })} className="accent-brand-500 h-4 w-4" />
@@ -773,33 +775,34 @@ function ResultsModal({ competition: c, onClose }: { competition: Competition; o
   const [placements, setPlacements] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [letterFor, setLetterFor] = useState<Entry | null>(null);
+  const { t } = useI18n();
   const run = useRun();
   const value = (e: Entry) => placements[e.id] ?? (e.placement != null ? String(e.placement) : "");
   async function save() {
     setBusy(true);
     const results = (data ?? []).map((e) => ({ entry_id: e.id, placement: value(e) === "" ? null : Number(value(e)) }));
-    const ok = await run(() => clubSend(A(`/competitions/${c.id}/results`), "PUT", { results }), "Risultati salvati: ranking aggiornato");
+    const ok = await run(() => clubSend(A(`/competitions/${c.id}/results`), "PUT", { results }), t("ca.results.saved"));
     setBusy(false);
     if (ok) onClose();
   }
   return (
-    <Modal open onClose={onClose} size="lg" title={`Iscritti e risultati · ${c.name}`} footer={<><Button variant="ghost" onClick={onClose}>Chiudi</Button><Button loading={busy} onClick={save} disabled={!data?.length || c.kind === "STAGE"}>Salva risultati</Button></>}>
-      {isLoading ? <Skeleton className="h-40" /> : (data ?? []).length === 0 ? <p className="text-sm text-ink-500">Nessun iscritto.</p> : (
+    <Modal open onClose={onClose} size="lg" title={t("ca.results.title", { name: c.name })} footer={<><Button variant="ghost" onClick={onClose}>{t("common.close")}</Button><Button loading={busy} onClick={save} disabled={!data?.length || c.kind === "STAGE"}>{t("ca.results.save")}</Button></>}>
+      {isLoading ? <Skeleton className="h-40" /> : (data ?? []).length === 0 ? <p className="text-sm text-ink-500">{t("ca.results.none")}</p> : (
         <div className="space-y-2">
           {(data ?? []).map((e) => (
             <div key={e.id} className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-2xl bg-white ring-1 ring-ink-100 px-4 py-3">
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-ink-900">{e.athlete_name} <AthleteMarks id={e.athlete_id} /></p>
-                <p className="text-xs text-ink-500">{e.category ?? "Categoria da definire"}{e.weight_kg ? ` · ${e.weight_kg} kg` : ""}{e.fee_status ? ` · quota ${e.fee_status === "PAID" ? "pagata" : e.fee_status === "DUE" ? "da pagare" : e.fee_status.toLowerCase()}` : ""}{e.status === "WITHDRAWN" ? " · ritirato" : ""}</p>
+                <p className="text-xs text-ink-500">{e.category ?? t("ca.results.noCategory")}{e.weight_kg ? ` · ${e.weight_kg} kg` : ""}{e.fee_status ? ` · ${e.fee_status === "PAID" ? t("ca.results.feePaid") : e.fee_status === "DUE" ? t("ca.results.feeDue") : t("ca.results.feeOther", { status: e.fee_status.toLowerCase() })}` : ""}{e.status === "WITHDRAWN" ? ` · ${t("ca.results.withdrawn")}` : ""}</p>
               </div>
               {e.status === "REGISTERED" && (
-                <Button size="sm" variant="secondary" onClick={() => setLetterFor(e)} title="Giustificazione delle assenze per la scuola">
-                  🏫 {e.school_letter_at ? "Giustificazione ✓" : "Giustificazione"}
+                <Button size="sm" variant="secondary" onClick={() => setLetterFor(e)} title={t("ca.letter.btnTitle")}>
+                  🏫 {e.school_letter_at ? `${t("ca.letter.btn")} ✓` : t("ca.letter.btn")}
                 </Button>
               )}
-              <Select value={value(e)} onChange={(ev) => setPlacements((p) => ({ ...p, [e.id]: ev.target.value }))} className="sm:w-48" aria-label={`Risultato di ${e.athlete_name}`} disabled={e.status === "WITHDRAWN"}>
-                <option value="">— nessun risultato —</option>
-                {PLACEMENT_OPTIONS.map((pl) => <option key={pl} value={pl}>{PLACEMENT_LABELS[pl]}</option>)}
+              <Select value={value(e)} onChange={(ev) => setPlacements((p) => ({ ...p, [e.id]: ev.target.value }))} className="sm:w-48" aria-label={t("ca.results.aria", { name: e.athlete_name })} disabled={e.status === "WITHDRAWN"}>
+                <option value="">{t("ca.results.noResult")}</option>
+                {PLACEMENT_OPTIONS.map((pl) => <option key={pl} value={pl}>{t.dyn(`club.placement.${pl}`, PLACEMENT_LABELS[pl] ?? String(pl))}</option>)}
               </Select>
             </div>
           ))}
@@ -815,10 +818,11 @@ function ResultsModal({ competition: c, onClose }: { competition: Competition; o
  *  carta intestata. Il file resta nell'area privata: si apre con un link
  *  che scade dopo pochi minuti. */
 function SchoolLetterModal({ competition: c, entry, onClose }: { competition: Competition; entry: Entry; onClose: () => void }) {
+  const { t } = useI18n();
   const base = A(`/competitions/${c.id}/entries/${entry.id}/school-letter`);
   const { data, isLoading } = useQuery({ queryKey: ["club", "admin", "school-letter", entry.id], queryFn: () => clubGet<SchoolLetter>(base) });
   if (isLoading || !data) {
-    return <Modal open onClose={onClose} size="lg" title="Giustificazione per la scuola"><Skeleton className="h-64" /></Modal>;
+    return <Modal open onClose={onClose} size="lg" title={t("ca.letter.title")}><Skeleton className="h-64" /></Modal>;
   }
   // La chiave rimonta l'editor quando arriva un testo nuovo (proposta da
   // capo): il campo riparte da lì invece di sincronizzarsi con un effetto.
@@ -826,6 +830,7 @@ function SchoolLetterModal({ competition: c, entry, onClose }: { competition: Co
 }
 
 function SchoolLetterEditor({ base, competition: c, letter, onClose }: { base: string; competition: Competition; letter: SchoolLetter; onClose: () => void }) {
+  const { t, fmt } = useI18n();
   const [body, setBody] = useState(letter.body_text);
   const [busy, setBusy] = useState<"generate" | "open" | "fresh" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -853,7 +858,7 @@ function SchoolLetterEditor({ base, competition: c, letter, onClose }: { base: s
       if (kind === "generate") {
         await queryClient.invalidateQueries({ queryKey: ["club", "admin", "entries", c.id] });
         await queryClient.invalidateQueries({ queryKey: ["club", "admin", "school-letter", letter.entry_id] });
-        toast({ tone: "success", title: "Giustificazione pronta", text: "Il PDF è salvato nell'area privata del club." });
+        toast({ tone: "success", title: t("ca.letter.ready"), text: t("ca.letter.readyText") });
       }
     } catch (e) {
       tab?.close();
@@ -864,25 +869,25 @@ function SchoolLetterEditor({ base, competition: c, letter, onClose }: { base: s
   }
 
   return (
-    <Modal open onClose={onClose} size="xl" title={`Giustificazione per la scuola · ${letter.athlete_name}`}
-      subtitle={letter.generated_at ? `Ultimo PDF generato il ${shortDate(letter.generated_at)}` : `${c.name} · ${shortDate(c.starts_on)}`}
+    <Modal open onClose={onClose} size="xl" title={`${t("ca.letter.title")} · ${letter.athlete_name}`}
+      subtitle={letter.generated_at ? t("ca.letter.lastGenerated", { date: fmt.shortDate(letter.generated_at) }) : `${c.name} · ${fmt.shortDate(c.starts_on)}`}
       footer={<>
-        <Button variant="ghost" onClick={onClose}>Chiudi</Button>
-        {letter.generated_at && <Button variant="secondary" loading={busy === "open"} onClick={() => act("open")}>{"Scarica l'ultimo PDF ↗"}</Button>}
+        <Button variant="ghost" onClick={onClose}>{t("common.close")}</Button>
+        {letter.generated_at && <Button variant="secondary" loading={busy === "open"} onClick={() => act("open")}>{t("ca.letter.download")}</Button>}
         <Button loading={busy === "generate"} disabled={body.trim().length < 20} onClick={() => act("generate")}>
-          {letter.generated_at ? "Rigenera e scarica il PDF" : "Genera e scarica il PDF"}
+          {letter.generated_at ? t("ca.letter.regenerate") : t("ca.letter.generate")}
         </Button>
       </>}
     >
       <div className="space-y-3">
         <p className="text-sm text-ink-500">
-          {"Rileggi il testo e aggiungi quello che serve (la classe, la scuola, gli orari del viaggio). Il PDF esce su carta intestata del club e resta salvato nell'area privata: anche il genitore lo può scaricare dalla sua pagina delle gare."}
+          {t("ca.letter.intro")}
         </p>
-        <Field label="Testo" hint="Una riga vuota separa i paragrafi." htmlFor="sl-body">
+        <Field label={t("ca.letter.text")} hint={t("ca.letter.textHint")} htmlFor="sl-body">
           <Textarea id="sl-body" value={body} onChange={(e) => setBody(e.target.value)} rows={18} maxLength={6000} className="text-sm leading-relaxed" />
         </Field>
-        <Button size="sm" variant="ghost" loading={busy === "fresh"} onClick={() => window.confirm("Ripartire dal testo proposto? Le tue correzioni non salvate si perdono.") && act("fresh")}>
-          ↺ Riparti dal testo proposto
+        <Button size="sm" variant="ghost" loading={busy === "fresh"} onClick={() => window.confirm(t("ca.letter.freshConfirm")) && act("fresh")}>
+          {t("ca.letter.fresh")}
         </Button>
         {error && <Badge tone="danger">{error}</Badge>}
       </div>
@@ -898,11 +903,12 @@ function Courses() {
   const run = useRun();
   const [slot, setSlot] = useState<Record<string, { weekday: string; from: string; to: string; room: string }>>({});
   const [editingSlot, setEditingSlot] = useState<{ slot: Course["slots"][number]; course: string } | null>(null);
-  const days = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"];
+  const { t } = useI18n();
+  const days = [0, 1, 2, 3, 4, 5, 6].map((i) => t.dyn(`site.weekday.${i}`, String(i)));
   return (
     <div className="space-y-4">
-      <div className="flex justify-end"><Button onClick={() => setEditing("new")} icon={<span>＋</span>}>Nuovo corso</Button></div>
-      {isLoading ? <Skeleton className="h-48" /> : (data ?? []).length === 0 ? <EmptyState icon={<span className="text-3xl">📅</span>} title="Nessun corso" action={<Button onClick={() => setEditing("new")}>Crea il primo corso</Button>} /> : (
+      <div className="flex justify-end"><Button onClick={() => setEditing("new")} icon={<span>＋</span>}>{t("ca.course.new")}</Button></div>
+      {isLoading ? <Skeleton className="h-48" /> : (data ?? []).length === 0 ? <EmptyState icon={<span className="text-3xl">📅</span>} title={t("ca.course.empty")} action={<Button onClick={() => setEditing("new")}>{t("ca.course.createFirst")}</Button>} /> : (
         <div className="grid md:grid-cols-2 gap-4">
           {(data ?? []).map((c) => {
             const s = slot[c.id] ?? { weekday: "0", from: "17:00", to: "18:00", room: "" };
@@ -911,28 +917,28 @@ function Courses() {
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <h3 className="text-base text-ink-900">{c.name}</h3>
-                    <p className="text-sm text-ink-500">{[c.level, c.instructor_name, `${c.athletes_count} iscritti`].filter(Boolean).join(" · ")}</p>
+                    <p className="text-sm text-ink-500">{[c.level, c.instructor_name, t("ca.course.enrolled", { n: c.athletes_count })].filter(Boolean).join(" · ")}</p>
                   </div>
-                  <Button size="sm" variant="secondary" onClick={() => setEditing(c)}>Modifica</Button>
+                  <Button size="sm" variant="secondary" onClick={() => setEditing(c)}>{t("ca.edit")}</Button>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {c.slots.map((sl) => (
                     <span key={sl.id} className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 ring-1 ring-brand-200 px-2.5 py-1 text-xs font-semibold text-brand-800">
-                      <button type="button" title="Modifica orario" className="cursor-pointer hover:underline" onClick={() => setEditingSlot({ slot: sl, course: c.name })}>
-                        ✎ {days[sl.weekday]?.slice(0, 3)} {sl.starts_at.slice(0, 5)}–{sl.ends_at.slice(0, 5)}{sl.room ? ` · ${sl.room}` : ""}
+                      <button type="button" title={t("ca.slot.edit")} className="cursor-pointer hover:underline" onClick={() => setEditingSlot({ slot: sl, course: c.name })}>
+                        ✎ {t.dyn(`site.weekdayShort.${sl.weekday}`, days[sl.weekday]?.slice(0, 3) ?? "")} {sl.starts_at.slice(0, 5)}–{sl.ends_at.slice(0, 5)}{sl.room ? ` · ${sl.room}` : ""}
                       </button>
-                      <button aria-label="Togli orario" className="text-brand-500 hover:text-brand-800 cursor-pointer" onClick={() => run(() => clubSend(A(`/slots/${sl.id}`), "DELETE"), "Orario tolto")}>✕</button>
+                      <button aria-label={t("ca.slot.remove")} className="text-brand-500 hover:text-brand-800 cursor-pointer" onClick={() => run(() => clubSend(A(`/slots/${sl.id}`), "DELETE"), t("ca.slot.removed"))}>✕</button>
                     </span>
                   ))}
                 </div>
                 <div className="flex flex-wrap items-end gap-2 pt-2 border-t border-ink-100">
-                  <Select value={s.weekday} onChange={(e) => setSlot((x) => ({ ...x, [c.id]: { ...s, weekday: e.target.value } }))} className="w-32" aria-label="Giorno">
-                    {days.map((d, i) => <option key={d} value={i}>{d}</option>)}
+                  <Select value={s.weekday} onChange={(e) => setSlot((x) => ({ ...x, [c.id]: { ...s, weekday: e.target.value } }))} className="w-32" aria-label={t("ca.slot.day")}>
+                    {days.map((d, i) => <option key={i} value={i}>{d}</option>)}
                   </Select>
-                  <Input type="time" value={s.from} onChange={(e) => setSlot((x) => ({ ...x, [c.id]: { ...s, from: e.target.value } }))} className="w-28" aria-label="Dalle" />
-                  <Input type="time" value={s.to} onChange={(e) => setSlot((x) => ({ ...x, [c.id]: { ...s, to: e.target.value } }))} className="w-28" aria-label="Alle" />
-                  <Input placeholder="Sala" value={s.room} onChange={(e) => setSlot((x) => ({ ...x, [c.id]: { ...s, room: e.target.value } }))} className="w-28" />
-                  <Button size="md" variant="secondary" onClick={() => run(() => clubSend(A(`/courses/${c.id}/slots`), "POST", { weekday: Number(s.weekday), starts_at: s.from, ends_at: s.to, room: s.room || null }), "Orario aggiunto")}>＋ Orario</Button>
+                  <Input type="time" value={s.from} onChange={(e) => setSlot((x) => ({ ...x, [c.id]: { ...s, from: e.target.value } }))} className="w-28" aria-label={t("ca.slot.from")} />
+                  <Input type="time" value={s.to} onChange={(e) => setSlot((x) => ({ ...x, [c.id]: { ...s, to: e.target.value } }))} className="w-28" aria-label={t("ca.slot.to")} />
+                  <Input placeholder={t("ca.slot.room")} value={s.room} onChange={(e) => setSlot((x) => ({ ...x, [c.id]: { ...s, room: e.target.value } }))} className="w-28" />
+                  <Button size="md" variant="secondary" onClick={() => run(() => clubSend(A(`/courses/${c.id}/slots`), "POST", { weekday: Number(s.weekday), starts_at: s.from, ends_at: s.to, room: s.room || null }), t("ca.slot.added"))}>{t("ca.slot.add")}</Button>
                 </div>
               </div>
             );
@@ -952,26 +958,27 @@ function CourseModal({ course: c, onClose }: { course: Course | null; onClose: (
   const [minAge, setMinAge] = useState(c?.min_age != null ? String(c.min_age) : "");
   const [maxAge, setMaxAge] = useState(c?.max_age != null ? String(c.max_age) : "");
   const [active, setActive] = useState(c?.active ?? true);
+  const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   const run = useRun();
   async function save() {
     setBusy(true);
     const body = { name, description: description || null, level: level || null, min_age: minAge ? Number(minAge) : null, max_age: maxAge ? Number(maxAge) : null, active };
-    const ok = await run(() => (c ? clubSend(A(`/courses/${c.id}`), "PATCH", body) : clubSend(A("/courses"), "POST", body)), c ? "Corso aggiornato" : "Corso creato");
+    const ok = await run(() => (c ? clubSend(A(`/courses/${c.id}`), "PATCH", body) : clubSend(A("/courses"), "POST", body)), c ? t("ca.course.updated") : t("ca.course.created"));
     setBusy(false);
     if (ok) onClose();
   }
   return (
-    <Modal open onClose={onClose} title={c ? "Modifica corso" : "Nuovo corso"} footer={<><Button variant="ghost" onClick={onClose}>Annulla</Button><Button loading={busy} onClick={save} disabled={!name}>Salva</Button></>}>
+    <Modal open onClose={onClose} title={c ? t("ca.course.editTitle") : t("ca.course.new")} footer={<><Button variant="ghost" onClick={onClose}>{t("common.cancel")}</Button><Button loading={busy} onClick={save} disabled={!name}>{t("common.save")}</Button></>}>
       <div className="space-y-4">
-        <Field label="Nome" htmlFor="co-name"><Input id="co-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="es. Judo bambini" /></Field>
-        <Field label="Livello" htmlFor="co-level"><Input id="co-level" value={level} onChange={(e) => setLevel(e.target.value)} placeholder="es. Principianti" /></Field>
+        <Field label={t("ca.name")} htmlFor="co-name"><Input id="co-name" value={name} onChange={(e) => setName(e.target.value)} placeholder={t("ca.course.namePh")} /></Field>
+        <Field label={t("ca.level")} htmlFor="co-level"><Input id="co-level" value={level} onChange={(e) => setLevel(e.target.value)} placeholder={t("ca.course.levelPh")} /></Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Età min" htmlFor="co-min"><Input id="co-min" type="number" value={minAge} onChange={(e) => setMinAge(e.target.value)} /></Field>
-          <Field label="Età max" htmlFor="co-max"><Input id="co-max" type="number" value={maxAge} onChange={(e) => setMaxAge(e.target.value)} /></Field>
+          <Field label={t("ca.minAge")} htmlFor="co-min"><Input id="co-min" type="number" value={minAge} onChange={(e) => setMinAge(e.target.value)} /></Field>
+          <Field label={t("ca.maxAge")} htmlFor="co-max"><Input id="co-max" type="number" value={maxAge} onChange={(e) => setMaxAge(e.target.value)} /></Field>
         </div>
-        <Field label="Descrizione" htmlFor="co-desc"><Textarea id="co-desc" value={description} onChange={(e) => setDescription(e.target.value)} /></Field>
-        <label className="flex items-center gap-2 text-sm text-ink-700"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="accent-brand-500 h-4 w-4" /> Corso attivo</label>
+        <Field label={t("ca.description")} htmlFor="co-desc"><Textarea id="co-desc" value={description} onChange={(e) => setDescription(e.target.value)} /></Field>
+        <label className="flex items-center gap-2 text-sm text-ink-700"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="accent-brand-500 h-4 w-4" /> {t("ca.course.active")}</label>
       </div>
     </Modal>
   );
@@ -1212,7 +1219,7 @@ function PricingEditor({ initial }: { initial: Pricing }) {
       </div>
       <div className="grid grid-cols-3 gap-3">
         {(["A", "B", "C"] as const).map((tier) => (
-          <Field key={tier} label={`Escalão ${tier} (%)`} htmlFor={`pr-tier-${tier}`}>
+          <Field key={tier} label={t("ca.tierPct", { tier })} htmlFor={`pr-tier-${tier}`}>
             <Input id={`pr-tier-${tier}`} type="number" min={0} max={100} value={tiers[tier]} onChange={(e) => setTiers((x) => ({ ...x, [tier]: e.target.value }))} />
           </Field>
         ))}

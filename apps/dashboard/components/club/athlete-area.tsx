@@ -26,6 +26,7 @@ import { ACHIEVEMENT_ICONS, clubGet, clubSend, type AthleteDetail } from "@/lib/
 import { cn } from "@/lib/cn";
 import type { MessageKey } from "@/lib/i18n/messages/it";
 import { useI18n } from "@/lib/i18n/provider";
+import { feeLabel } from "@/lib/fee-label";
 import { useEventsReturn } from "@/lib/events-return";
 
 interface AreaRef { id: string; name: string; photo_url: string | null; is_own: boolean }
@@ -325,7 +326,7 @@ function Area({ id, section, onGo }: { id: string; section: AreaSection; onGo: (
               {dueFees.slice(0, 6).map((f) => (
                 <li key={f.id} className="flex items-center justify-between gap-3 rounded-2xl bg-ink-50 px-4 py-3">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-ink-900">{f.description}</p>
+                    <p className="truncate text-sm font-semibold text-ink-900">{feeLabel(f, t, fmt)}</p>
                     <p className="text-xs text-ink-500">{t("club.dueOnCap", { date: fmt.shortDate(f.due_date) })}</p>
                   </div>
                   <div className="text-right">

@@ -16,6 +16,7 @@ async function fetchSettings(): Promise<OrganizationSettingsRead> {
     payments to (orders, contracts, Shop), and how contracts earn cashback. Was previously only settable by editing .env on the
     server; this is the dashboard-editable version. */
 export function AdminOrganizationSettingsPanel() {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const { data: settings, error: loadError } = useQuery({
     queryKey: ["admin", "organization-settings"],
@@ -56,7 +57,7 @@ export function AdminOrganizationSettingsPanel() {
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err: any) {
-      setSaveError(err.message || "Impossibile salvare le impostazioni.");
+      setSaveError(err.message || t("adm.org.saveFailed"));
     } finally {
       setSaveLoading(false);
     }
@@ -65,13 +66,11 @@ export function AdminOrganizationSettingsPanel() {
   return (
     <div className="space-y-6">
       <div className="glass-card rounded-2xl p-6 border-slate-200 bg-white/70">
-        <h3 className="text-sm font-semibold text-slate-900 mb-1">Coordinate bancarie aziendali</h3>
+        <h3 className="text-sm font-semibold text-slate-900 mb-1">{t("adm.org.bankTitle")}</h3>
         <p className="text-xs text-slate-500 mb-4">
-          Mostrate al cliente quando deve pagare tramite bonifico (ordini, Shop, pratiche). Finché l&apos;IBAN non è
-          impostato, il bottone &ldquo;Paga con bonifico&rdquo; non compare -- il cliente non può scegliere un metodo non
-          configurato.
+          {t("adm.org.bankText")}
         </p>
-        {loadError && <p className="text-sm text-rose-400 mb-3">Impossibile caricare le impostazioni.</p>}
+        {loadError && <p className="text-sm text-rose-400 mb-3">{t("adm.org.loadFailed")}</p>}
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1">
@@ -84,7 +83,7 @@ export function AdminOrganizationSettingsPanel() {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-600 uppercase block">Intestatario</label>
+              <label className="text-xs font-semibold text-slate-600 uppercase block">{t("adm.org.holder")}</label>
               <input
                 value={holder}
                 onChange={(e) => setHolder(e.target.value)}
@@ -95,29 +94,29 @@ export function AdminOrganizationSettingsPanel() {
           </div>
           <div className="space-y-1">
             <label className="text-xs font-semibold text-slate-600 uppercase block">
-              Istruzioni aggiuntive per il bonifico
+              {t("adm.org.instructions")}
             </label>
             <textarea
               rows={3}
               value={instructions}
               onChange={(e) => setInstructions(e.target.value)}
-              placeholder="Es. Includi il codice ordine o pratica nella causale del bonifico."
+              placeholder={t("adm.org.instructionsPlaceholder")}
               className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500 resize-none"
             />
-            <p className="text-[10px] text-slate-500">Mostrato insieme a IBAN e intestatario ovunque un cliente veda le istruzioni di pagamento.</p>
+            <p className="text-[10px] text-slate-500">{t("adm.org.instructionsHint")}</p>
           </div>
           <button
             type="submit"
             disabled={saveLoading}
             className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50"
           >
-            {saveLoading ? "Salvataggio..." : "Salva"}
+            {saveLoading ? t("adm.client.saving") : t("common.save")}
           </button>
           {saveError && (
             <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs">{saveError}</div>
           )}
           {saveSuccess && (
-            <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs">Impostazioni salvate.</div>
+            <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs">{t("adm.org.saved")}</div>
           )}
         </form>
       </div>
@@ -196,23 +195,16 @@ function NetworkSocialsCard({ settings }: { settings: OrganizationSettingsRead }
   );
 }
 
-const CASHBACK_MODES: { key: "PER_INSTALMENT" | "UPFRONT"; title: string; body: string }[] = [
-  {
-    key: "PER_INSTALMENT",
-    title: "Una parte a ogni rata pagata",
-    body: "Il cliente riceve il cashback di ogni rata quando ne confermi il pagamento. Se smette di pagare, non ha ricevuto il cashback delle rate mancanti.",
-  },
-  {
-    key: "UPFRONT",
-    title: "Tutto subito, alla prima rata",
-    body: "Appena il cliente paga la prima rata riceve in un'unica ricarica JavCash il cashback dell'intero contratto. Più semplice da capire, ma se poi smette di pagare il cashback è già stato dato.",
-  },
+const CASHBACK_MODES: { key: "PER_INSTALMENT" | "UPFRONT" }[] = [
+  { key: "PER_INSTALMENT" },
+  { key: "UPFRONT" },
 ];
 
 /** How a contract paid in 3 or 12 instalments earns its JavCash cashback
     (Session 59). The choice applies to each contract at the moment its first
     instalment is paid: changing it later never credits a contract twice. */
 function ContractCashbackSettingsCard({ current }: { current: "PER_INSTALMENT" | "UPFRONT" | null }) {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -231,7 +223,7 @@ function ContractCashbackSettingsCard({ current }: { current: "PER_INSTALMENT" |
       if (!res.ok) throw new Error(await friendlyApiError(res));
       await queryClient.invalidateQueries({ queryKey: ["admin", "organization-settings"] });
     } catch (err: any) {
-      setError(err.message || "Impossibile salvare l'impostazione.");
+      setError(err.message || t("adm.org.saveSettingFailed"));
     } finally {
       setSaving(null);
     }
@@ -239,11 +231,9 @@ function ContractCashbackSettingsCard({ current }: { current: "PER_INSTALMENT" |
 
   return (
     <div className="glass-card rounded-2xl p-6 border-slate-200 bg-white/70">
-      <h3 className="text-sm font-semibold text-slate-900 mb-1">Cashback dei contratti pagati a rate</h3>
+      <h3 className="text-sm font-semibold text-slate-900 mb-1">{t("adm.org.cashbackTitle")}</h3>
       <p className="text-xs text-slate-500 mb-4">
-        Per i contratti pagati in 3 o 12 rate. La scelta vale per ogni contratto dal momento in cui il cliente paga la
-        prima rata: cambiarla dopo non accredita mai due volte lo stesso contratto. I pagamenti in unica soluzione
-        ricevono sempre tutto il cashback subito.
+        {t("adm.org.cashbackText")}
       </p>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {CASHBACK_MODES.map((mode) => {
@@ -263,11 +253,11 @@ function ContractCashbackSettingsCard({ current }: { current: "PER_INSTALMENT" |
               <span className="flex items-center gap-2">
                 <span className={`w-4 h-4 rounded-full border-2 shrink-0 ${selected ? "border-brand-500 bg-brand-500" : "border-slate-500"}`} />
                 <span className="text-sm font-semibold text-slate-900">
-                  {mode.title}
-                  {mode.key === "PER_INSTALMENT" && <span className="ml-1.5 text-[10px] font-normal text-slate-500">(predefinito)</span>}
+                  {t.dyn(`adm.org.cashback.${mode.key}.title`, mode.key)}
+                  {mode.key === "PER_INSTALMENT" && <span className="ml-1.5 text-[10px] font-normal text-slate-500">{t("adm.org.default")}</span>}
                 </span>
               </span>
-              <span className="block text-xs text-slate-500 mt-1.5">{saving === mode.key ? "Salvataggio..." : mode.body}</span>
+              <span className="block text-xs text-slate-500 mt-1.5">{saving === mode.key ? t("adm.client.saving") : t.dyn(`adm.org.cashback.${mode.key}.body`, "")}</span>
             </button>
           );
         })}

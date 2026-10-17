@@ -3,9 +3,11 @@
 import { useState } from "react";
 import { friendlyApiError } from "@/lib/api-error";
 import type { CustomerRead } from "@/lib/types";
+import { useI18n } from "@/lib/i18n/provider";
 
 type AgentOption = { id: string; status: string; display_name: string; promoter_code: string };
 
+// Kept for other screens; this form shows net.newCust.kind.<code>.
 export const CUSTOMER_KIND_LABELS: Record<string, string> = {
   PRIVATE: "Privato",
   SOLE_PROPRIETOR: "Partita IVA",
@@ -29,7 +31,7 @@ const labelClass = " font-semibold text-slate-600 uppercase block";
 export function NewCustomerForm({
   mode,
   agents,
-  submitLabel = "Registra e attiva i contratti",
+  submitLabel,
   onCreated,
   onCancel,
 }: {
@@ -40,6 +42,7 @@ export function NewCustomerForm({
   onCreated: (customer: CustomerRead, promoterAgentId: string | null) => void;
   onCancel?: () => void;
 }) {
+  const { t } = useI18n();
   const [kind, setKind] = useState("PRIVATE");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -80,7 +83,7 @@ export function NewCustomerForm({
       if (!res.ok) throw new Error(await friendlyApiError(res));
       onCreated((await res.json()) as CustomerRead, promoterAgentId || null);
     } catch (err: any) {
-      setError(err.message || "Impossibile registrare il cliente.");
+      setError(err.message || t("net.newCust.error"));
     } finally {
       setBusy(false);
     }
@@ -102,7 +105,7 @@ export function NewCustomerForm({
                 : " bg-slate-900/5 border-slate-300 text-slate-600 hover:bg-slate-100"
             }`}
           >
-            {label}
+            {t.dyn(`net.newCust.kind.${code}`, label)}
           </button>
         ))}
       </div>
@@ -110,49 +113,49 @@ export function NewCustomerForm({
       {privateLike ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1">
-            <label className={labelClass}>Nome</label>
+            <label className={labelClass}>{t("net.recruit.firstName")}</label>
             <input required value={firstName} onChange={(e) => setFirstName(e.target.value)} className={inputClass} />
           </div>
           <div className="space-y-1">
-            <label className={labelClass}>Cognome</label>
+            <label className={labelClass}>{t("net.recruit.lastName")}</label>
             <input required value={lastName} onChange={(e) => setLastName(e.target.value)} className={inputClass} />
           </div>
         </div>
       ) : (
         <div className="space-y-1">
-          <label className={labelClass}>Ragione sociale</label>
+          <label className={labelClass}>{t("net.newCust.companyName")}</label>
           <input required value={companyName} onChange={(e) => setCompanyName(e.target.value)} className={inputClass} />
         </div>
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="space-y-1">
-          <label className={labelClass}>Email</label>
+          <label className={labelClass}>{t("net.newCust.email")}</label>
           <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
-          <p className="text-[10px] text-slate-500">Qui il cliente riceve l&apos;invito a impostare la password e l&apos;avviso per pagare.</p>
+          <p className="text-[10px] text-slate-500">{t("net.newCust.emailHint")}</p>
         </div>
         <div className="space-y-1">
-          <label className={labelClass}>Telefono</label>
+          <label className={labelClass}>{t("net.newCust.phone")}</label>
           <input value={phone} onChange={(e) => setPhone(e.target.value)} className={inputClass} />
         </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="space-y-1">
-          <label className={labelClass}>Codice fiscale</label>
+          <label className={labelClass}>{t("net.newCust.fiscalCode")}</label>
           <input value={fiscalCode} onChange={(e) => setFiscalCode(e.target.value.toUpperCase())} className={`${inputClass} font-mono`} />
         </div>
         <div className="space-y-1">
-          <label className={labelClass}>Partita IVA</label>
+          <label className={labelClass}>{t("net.newCust.vat")}</label>
           <input value={vatNumber} onChange={(e) => setVatNumber(e.target.value)} className={`${inputClass} font-mono`} />
         </div>
         <div className="space-y-1">
           <label className={labelClass}>
             PEC{" "}
             {kind === "PRIVATE" ? (
-              <span className="normal-case font-normal text-slate-500">(facoltativa)</span>
+              <span className="normal-case font-normal text-slate-500">{t("net.newCust.optional")}</span>
             ) : (
-              <span className="normal-case font-semibold text-brand-600">(obbligatoria)</span>
+              <span className="normal-case font-semibold text-brand-600">{t("net.newCust.required")}</span>
             )}
           </label>
           <input type="email" required={kind !== "PRIVATE"} value={pec} onChange={(e) => setPec(e.target.value)} className={inputClass} />
@@ -161,13 +164,13 @@ export function NewCustomerForm({
 
       {mode === "admin" && (
         <div className="space-y-1">
-          <label className={labelClass}>Promoter del cliente</label>
+          <label className={labelClass}>{t("net.newCust.promoter")}</label>
           <select
             value={promoterAgentId}
             onChange={(e) => setPromoterAgentId(e.target.value)}
             className="w-full rounded-xl glass-input px-3 py-2 text-sm bg-white focus:border-brand-500"
           >
-            <option value="">Nessuno: cliente diretto di Jav</option>
+            <option value="">{t("net.newCust.noPromoter")}</option>
             {(agents ?? [])
               .filter((a) => a.status === "ACTIVE")
               .map((a) => (
@@ -177,7 +180,7 @@ export function NewCustomerForm({
               ))}
           </select>
           <p className="text-[10px] text-slate-500">
-            Il cliente entra nella rete di questo promoter, come se si fosse iscritto dal suo link: guadagna lui le provvigioni.
+            {t("net.newCust.promoterHint")}
           </p>
         </div>
       )}
@@ -190,7 +193,7 @@ export function NewCustomerForm({
           disabled={busy}
           className="flex-1 rounded-xl bg-gradient-to-r from-brand-600 to-brand-400 hover:from-brand-500 hover:to-brand-400 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-brand-500/20 transition cursor-pointer disabled:opacity-50"
         >
-          {busy ? "Registrazione..." : submitLabel}
+          {busy ? t("net.recruit.submitting") : submitLabel ?? t("net.newCust.submit")}
         </button>
         {onCancel && (
           <button
@@ -198,7 +201,7 @@ export function NewCustomerForm({
             onClick={onCancel}
             className="rounded-xl bg-slate-900/5 hover:bg-white/20 px-4 py-2.5 text-xs font-semibold text-slate-700 transition cursor-pointer"
           >
-            Annulla
+            {t("common.cancel")}
           </button>
         )}
       </div>

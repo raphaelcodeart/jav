@@ -14,6 +14,7 @@ import { celebrate } from "@/lib/motion";
 import { clubGet, clubSend, FEE_KIND_LABELS, type CashReceiver, type Fee } from "@/lib/club";
 import { ProofPicker } from "@/components/ui/proof-picker";
 import { useI18n } from "@/lib/i18n/provider";
+import { feeLabel } from "@/lib/fee-label";
 import { useClubPaymentInfo, usePaymentInfo, type PaymentInfo } from "@/components/club/payment-info";
 import { JavCashConfirmCode } from "@/components/javcash-confirm-code";
 
@@ -293,7 +294,7 @@ function FeesStep({ open, onClose, onBack, fees, preselect }: { open: boolean; o
                         <AnimatePresence>{on && <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}>✓</motion.span>}</AnimatePresence>
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-semibold text-ink-900">{fee.description}</span>
+                        <span className="block text-sm font-semibold text-ink-900">{feeLabel(fee, t, fmt)}</span>
                         <span className="block text-xs text-ink-500">
                           {t.dyn(`club.feeKind.${fee.kind}`, FEE_KIND_LABELS[fee.kind] ?? fee.kind)} · {t("club.dueOn", { date: shortDate(fee.due_date) })}
                         </span>

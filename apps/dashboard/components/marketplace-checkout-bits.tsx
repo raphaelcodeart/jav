@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n/provider";
+
 /** I pezzi che ogni checkout dello Shop ripete: il campo etichettato, il
  *  passo numerato, la formattazione del denaro e lo sconto bonifico.
  *
@@ -21,12 +23,9 @@ export type DeliveryAddress = {
 
 export const inputClass = "w-full rounded-lg glass-input px-3 py-2 text-sm focus:border-brand-500";
 
-export function euro(cents: number): string {
-  return (cents / 100).toLocaleString("it-IT", { style: "currency", currency: "EUR" });
-}
-
-export function javCash(cents: number): string {
-  return `${(cents / 100).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} JavCash`;
+/** `tag` is the reader's Intl tag (`fmt.tag` from useI18n). */
+export function javCash(cents: number, tag: string): string {
+  return `${(cents / 100).toLocaleString(tag, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} JavCash`;
 }
 
 /** Rispecchia rules.bank_transfer_discount_cents: la percentuale del residuo,
@@ -89,33 +88,34 @@ export function Section({
 export function AddressFields({
   address, onChange,
 }: { address: DeliveryAddress; onChange: (next: DeliveryAddress) => void }) {
+  const { t } = useI18n();
   return (
     <div className="grid grid-cols-1 sm:grid-cols-6 gap-3">
-      <Field label="Nome e cognome" className="sm:col-span-3">
+      <Field label={t("shopx.address.name")} className="sm:col-span-3">
         <input className={inputClass} value={address.recipient_name} maxLength={50} autoComplete="name"
           onChange={(e) => onChange({ ...address, recipient_name: e.target.value })} />
       </Field>
-      <Field label="Telefono (per il corriere)" className="sm:col-span-3">
+      <Field label={t("shopx.address.phone")} className="sm:col-span-3">
         <input className={inputClass} value={address.recipient_phone} maxLength={20} inputMode="tel" autoComplete="tel"
           onChange={(e) => onChange({ ...address, recipient_phone: e.target.value })} />
       </Field>
-      <Field label="Indirizzo e numero civico" className="sm:col-span-4">
+      <Field label={t("shopx.address.line1")} className="sm:col-span-4">
         <input className={inputClass} value={address.address_line1} maxLength={255} autoComplete="address-line1"
           onChange={(e) => onChange({ ...address, address_line1: e.target.value })} />
       </Field>
-      <Field label="Scala, interno (facoltativo)" className="sm:col-span-2">
+      <Field label={t("shopx.address.line2")} className="sm:col-span-2">
         <input className={inputClass} value={address.address_line2} maxLength={255} autoComplete="address-line2"
           onChange={(e) => onChange({ ...address, address_line2: e.target.value })} />
       </Field>
-      <Field label="CAP" className="sm:col-span-2">
+      <Field label={t("shopx.address.postalCode")} className="sm:col-span-2">
         <input className={inputClass} value={address.postal_code} maxLength={12} inputMode="numeric" autoComplete="postal-code"
           onChange={(e) => onChange({ ...address, postal_code: e.target.value })} />
       </Field>
-      <Field label="Città" className="sm:col-span-3">
+      <Field label={t("shopx.address.city")} className="sm:col-span-3">
         <input className={inputClass} value={address.city} maxLength={50} autoComplete="address-level2"
           onChange={(e) => onChange({ ...address, city: e.target.value })} />
       </Field>
-      <Field label="Provincia" className="sm:col-span-1">
+      <Field label={t("shopx.address.province")} className="sm:col-span-1">
         <input className={inputClass} value={address.province} maxLength={50} placeholder="MI"
           onChange={(e) => onChange({ ...address, province: e.target.value.toUpperCase() })} />
       </Field>

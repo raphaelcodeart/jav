@@ -6,31 +6,15 @@ import { Pagination, usePagination } from "@/components/pagination";
 import { JavCashAmount } from "@/components/jav-cash-amount";
 import { friendlyApiError } from "@/lib/api-error";
 import type { WalletRead, WalletTransactionRead } from "@/lib/types";
+import { useI18n } from "@/lib/i18n/provider";
 
-const TYPE_LABELS: Record<string, string> = {
-  ADMIN_CREDIT: "Ricarica/Cashback",
-  TRANSFER: "Trasferimento",
-  PURCHASE_DEBIT: "Pagamento ordine (crediti)",
-  REVERSAL: "Storno",
-};
-
-// Finer-grained label than TYPE_LABELS alone -- distinguishes a plain admin
-// top-up from the lines a product-order cashback request always writes
-// together (see orders/service.py::_credit_order_cashback), without needing
-// to read the free-text note.
-const SOURCE_LABELS: Record<string, string> = {
-  MANUAL_ADMIN: "Ricarica manuale",
-  WELCOME_BONUS: "Omaggio di benvenuto",
-  ORDER_CASHBACK_BASE: "Cashback ordine",
-  ORDER_CASHBACK_BONUS: "Bonus 5% cashback ordine",
-  // Automatic, surcharge-free credit on a paid Jav contract --
-  // deliberately a different rule from the 5% order one above.
-  CONTRACT_CASHBACK: "Cashback contratto Jav",
-};
-
-function transactionLabel(t: { type: string; source: string | null }): string {
-  const sourceLabel = t.source ? SOURCE_LABELS[t.source] : undefined;
-  return sourceLabel ?? TYPE_LABELS[t.type] ?? t.type;
+// Labels per transaction type, and a finer-grained one per source --
+// distinguishes a plain admin top-up from the lines a product-order cashback
+// request always writes together (see orders/service.py::_credit_order_cashback),
+// without needing to read the free-text note.
+function transactionLabel(tx: { type: string; source: string | null }, t: ReturnType<typeof useI18n>["t"]): string {
+  const sourceLabel = tx.source ? t.dyn(`acct.wallet.source.${tx.source}`, "") : "";
+  return sourceLabel || t.dyn(`acct.wallet.type.${tx.type}`, tx.type);
 }
 
 function shortCode(id: string): string {
@@ -43,10 +27,10 @@ function shortCode(id: string): string {
     where it came from. Deep-links into "I miei Ordini" on whichever
     dashboard this panel is mounted in (customer or promoter both use this
     component). */
-function referenceLink(t: WalletTransactionRead): { label: string; href: string } | null {
+function referenceLink(tx: WalletTransactionRead, t: ReturnType<typeof useI18n>["t"]): { label: string; href: string } | null {
   const basePath = typeof window !== "undefined" && window.location.pathname.startsWith("/promoter") ? "/promoter" : "/customer";
-  if (t.reference_order_id) {
-    return { label: `Ordine #${shortCode(t.reference_order_id)}`, href: `${basePath}?tab=orders` };
+  if (tx.reference_order_id) {
+    return { label: t("acct.wallet.orderRef", { code: shortCode(tx.reference_order_id) }), href: `${basePath}?tab=orders` };
   }
   return null;
 }
@@ -56,23 +40,24 @@ function referenceLink(t: WalletTransactionRead): { label: string; href: string 
 // balance/transaction amount as plain EUR; real-money payments (bonifico)
 // are formatted separately, with euro(), wherever they appear
 // (e.g. customer-orders-panel.tsx, admin-orders-panel.tsx).
-function javCash(cents: number): string {
-  return `${(cents / 100).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} JavCash`;
+function javCash(cents: number, tag: string): string {
+  return `${(cents / 100).toLocaleString(tag, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} JavCash`;
 }
 
-async function fetchMyWallet(): Promise<WalletRead> {
+async function fetchMyWallet(t: ReturnType<typeof useI18n>["t"]): Promise<WalletRead> {
   const res = await fetch("/api/proxy/wallets/me");
-  if (!res.ok) throw new Error("Impossibile caricare il wallet.");
+  if (!res.ok) throw new Error(t("acct.stats.walletError"));
   return res.json();
 }
 
-async function fetchMyTransactions(): Promise<WalletTransactionRead[]> {
+async function fetchMyTransactions(t: ReturnType<typeof useI18n>["t"]): Promise<WalletTransactionRead[]> {
   const res = await fetch("/api/proxy/wallets/me/transactions");
-  if (!res.ok) throw new Error("Impossibile caricare le transazioni.");
+  if (!res.ok) throw new Error(t("acct.stats.txError"));
   return res.json();
 }
 
 export function WalletPanel() {
+  const { t, fmt } = useI18n();
   const queryClient = useQueryClient();
   const [toAddress, setToAddress] = useState("");
   const [amount, setAmount] = useState("");
@@ -84,11 +69,11 @@ export function WalletPanel() {
 
   const { data: wallet, error: walletError } = useQuery({
     queryKey: ["wallet", "me"],
-    queryFn: fetchMyWallet,
+    queryFn: () => fetchMyWallet(t),
   });
   const { data: transactions, error: transactionsError } = useQuery({
     queryKey: ["wallet", "me", "transactions"],
-    queryFn: fetchMyTransactions,
+    queryFn: () => fetchMyTransactions(t),
   });
 
   const pagination = usePagination(transactions ?? []);
@@ -110,7 +95,7 @@ export function WalletPanel() {
     e.preventDefault();
     const amountCents = Math.round(parseFloat(amount.replace(",", ".")) * 100);
     if (!Number.isFinite(amountCents) || amountCents <= 0) {
-      setSendError("Inserisci un importo valido.");
+      setSendError(t("acct.wallet.invalidAmount"));
       return;
     }
     setSendLoading(true);
@@ -137,14 +122,14 @@ export function WalletPanel() {
       ]);
       setTimeout(() => setSendSuccess(false), 3000);
     } catch (err: any) {
-      setSendError(err.message || "Impossibile inviare il pagamento.");
+      setSendError(err.message || t("acct.wallet.sendError"));
     } finally {
       setSendLoading(false);
     }
   }
 
   if (walletError) {
-    return <p className="text-sm text-rose-400">Impossibile caricare il wallet.</p>;
+    return <p className="text-sm text-rose-400">{t("acct.stats.walletError")}</p>;
   }
 
   return (
@@ -152,18 +137,18 @@ export function WalletPanel() {
       {/* Balance + address */}
       <div className="glass-card rounded-2xl p-6 border-slate-200 bg-white/70">
         {wallet === undefined ? (
-          <p className="text-sm text-slate-500">Caricamento...</p>
+          <p className="text-sm text-slate-500">{t("acct.common.loading")}</p>
         ) : (
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Saldo disponibile</p>
-              <p className="text-3xl font-bold text-slate-900">{javCash(wallet.balance_cents)}</p>
+              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">{t("acct.wallet.available")}</p>
+              <p className="text-3xl font-bold text-slate-900">{javCash(wallet.balance_cents, fmt.tag)}</p>
             </div>
             <div className="min-w-0">
-              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Il tuo indirizzo wallet</p>
+              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">{t("acct.wallet.yourAddress")}</p>
               <button
                 onClick={handleCopyAddress}
-                title="Copia indirizzo"
+                title={t("acct.wallet.copyAddress")}
                 className="flex max-w-full items-center gap-2 font-mono text-xs text-slate-600 bg-slate-900/5 border border-slate-200 rounded-lg px-3 py-2 hover:bg-slate-100 transition cursor-pointer"
               >
                 <span className="min-w-0 truncate">{wallet.address}</span>
@@ -184,15 +169,15 @@ export function WalletPanel() {
           default, turned on per promoter by an admin) */}
       {wallet && !wallet.can_transfer ? (
         <div className="glass-card rounded-2xl p-6 border-slate-200 bg-white/70">
-          <h3 className="text-sm font-semibold text-slate-900 mb-2">Invia denaro</h3>
-          <p className="text-xs text-slate-500">L&apos;invio di bonifici wallet non è abilitato per il tuo account.</p>
+          <h3 className="text-sm font-semibold text-slate-900 mb-2">{t("acct.wallet.sendTitle")}</h3>
+          <p className="text-xs text-slate-500">{t("acct.wallet.sendDisabled")}</p>
         </div>
       ) : wallet ? (
       <div className="glass-card rounded-2xl p-6 border-slate-200 bg-white/70">
-        <h3 className="text-sm font-semibold text-slate-900 mb-4">Invia denaro</h3>
+        <h3 className="text-sm font-semibold text-slate-900 mb-4">{t("acct.wallet.sendTitle")}</h3>
         <form onSubmit={handleSend} className="grid grid-cols-1 sm:grid-cols-[2fr_1fr_2fr_auto] gap-3 items-end">
           <div className="space-y-1">
-            <label className=" font-semibold text-slate-600 uppercase block">Indirizzo destinatario</label>
+            <label className=" font-semibold text-slate-600 uppercase block">{t("acct.wallet.toAddress")}</label>
             <input
               required
               value={toAddress}
@@ -202,7 +187,7 @@ export function WalletPanel() {
             />
           </div>
           <div className="space-y-1">
-            <label className=" font-semibold text-slate-600 uppercase block">Importo (JavCash)</label>
+            <label className=" font-semibold text-slate-600 uppercase block">{t("acct.wallet.amountLabel")}</label>
             <input
               required
               inputMode="decimal"
@@ -213,7 +198,7 @@ export function WalletPanel() {
             />
           </div>
           <div className="space-y-1">
-            <label className=" font-semibold text-slate-600 uppercase block">Nota (opzionale)</label>
+            <label className=" font-semibold text-slate-600 uppercase block">{t("acct.wallet.noteLabel")}</label>
             <input
               value={note}
               onChange={(e) => setNote(e.target.value)}
@@ -225,14 +210,14 @@ export function WalletPanel() {
             disabled={sendLoading}
             className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50 whitespace-nowrap"
           >
-            {sendLoading ? "Invio..." : "Invia"}
+            {sendLoading ? t("acct.wallet.sending") : t("acct.wallet.send")}
           </button>
         </form>
         {sendError && (
           <div className="mt-3 p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs">{sendError}</div>
         )}
         {sendSuccess && (
-          <div className="mt-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs">Pagamento inviato con successo.</div>
+          <div className="mt-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs">{t("acct.wallet.sent")}</div>
         )}
       </div>
       ) : null}
@@ -240,35 +225,35 @@ export function WalletPanel() {
       {/* Transaction history */}
       <div className="glass-card rounded-2xl border-slate-200 bg-white/70 overflow-hidden">
         <div className="p-5 pb-3">
-          <h3 className="text-sm font-semibold text-slate-900">Storico transazioni</h3>
+          <h3 className="text-sm font-semibold text-slate-900">{t("acct.wallet.history")}</h3>
         </div>
-        {transactionsError && <p className="px-5 pb-3 text-sm text-rose-400">Impossibile caricare le transazioni.</p>}
+        {transactionsError && <p className="px-5 pb-3 text-sm text-rose-400">{t("acct.stats.txError")}</p>}
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-left text-xs">
             <thead>
               <tr className="border-b border-slate-200 text-slate-500 font-semibold">
-                <th className="py-2 px-5">Tipo</th>
-                <th className="py-2 px-5">Controparte</th>
-                <th className="py-2 px-5">Riferimento</th>
-                <th className="py-2 px-5">Nota</th>
-                <th className="py-2 px-5 text-right">Importo</th>
-                <th className="py-2 px-5">Data</th>
+                <th className="py-2 px-5">{t("acct.col.type")}</th>
+                <th className="py-2 px-5">{t("acct.col.counterparty")}</th>
+                <th className="py-2 px-5">{t("acct.col.reference")}</th>
+                <th className="py-2 px-5">{t("acct.col.note")}</th>
+                <th className="py-2 px-5 text-right">{t("acct.col.amount")}</th>
+                <th className="py-2 px-5">{t("acct.col.date")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
               {transactions === undefined ? (
-                <tr><td colSpan={6} className="text-center py-6 text-slate-500">Caricamento...</td></tr>
+                <tr><td colSpan={6} className="text-center py-6 text-slate-500">{t("acct.common.loading")}</td></tr>
               ) : transactions.length === 0 ? (
-                <tr><td colSpan={6} className="text-center py-6 text-slate-500">Nessuna transazione.</td></tr>
+                <tr><td colSpan={6} className="text-center py-6 text-slate-500">{t("acct.wallet.noTx")}</td></tr>
               ) : (
-                pagination.pageItems.map((t) => {
-                  const isOutgoing = t.from_wallet_id === wallet?.id;
-                  const ref = referenceLink(t);
+                pagination.pageItems.map((tx) => {
+                  const isOutgoing = tx.from_wallet_id === wallet?.id;
+                  const ref = referenceLink(tx, t);
                   return (
-                    <tr key={t.id} className=" text-slate-600">
-                      <td className="py-2 px-5">{transactionLabel(t)}</td>
+                    <tr key={tx.id} className=" text-slate-600">
+                      <td className="py-2 px-5">{transactionLabel(tx, t)}</td>
                       <td className="py-2 px-5">
-                        {isOutgoing ? (t.to_display_name ?? "Sistema") : (t.from_display_name ?? "Sistema")}
+                        {isOutgoing ? (tx.to_display_name ?? t("acct.wallet.system")) : (tx.from_display_name ?? t("acct.wallet.system"))}
                       </td>
                       <td className="py-2 px-5">
                         {ref ? (
@@ -285,11 +270,11 @@ export function WalletPanel() {
                           <span className="text-slate-600">—</span>
                         )}
                       </td>
-                      <td className="py-2 px-5 text-slate-500">{t.note ?? "—"}</td>
+                      <td className="py-2 px-5 text-slate-500">{tx.note ?? "—"}</td>
                       <td className={`py-2 px-5 text-right font-semibold ${isOutgoing ? "text-rose-400" : "text-emerald-400"}`}>
-                        <JavCashAmount cents={t.amount_cents} sign={isOutgoing ? "-" : "+"} />
+                        <JavCashAmount cents={tx.amount_cents} sign={isOutgoing ? "-" : "+"} />
                       </td>
-                      <td className="py-2 px-5">{new Date(t.created_at).toLocaleString("it-IT")}</td>
+                      <td className="py-2 px-5">{new Date(tx.created_at).toLocaleString(fmt.tag)}</td>
                     </tr>
                   );
                 })
@@ -298,7 +283,7 @@ export function WalletPanel() {
           </table>
         </div>
         <div className="px-5 pb-4">
-          <Pagination {...pagination} label="transazioni" />
+          <Pagination {...pagination} label={t("acct.wallet.txPlural")} />
         </div>
       </div>
     </div>

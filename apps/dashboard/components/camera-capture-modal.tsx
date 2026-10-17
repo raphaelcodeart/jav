@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useI18n } from "@/lib/i18n/provider";
 
 /** Live, in-page camera capture (getUserMedia + a viewfinder), not just the
     OS-native camera picker a plain `<input capture>` opens -- that one only
@@ -17,9 +18,10 @@ export function CameraCaptureModal({
   onCapture: (file: File) => void;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<"unsupported" | "denied" | null>(null);
   const [ready, setReady] = useState(false);
   const [capturing, setCapturing] = useState(false);
 
@@ -28,7 +30,7 @@ export function CameraCaptureModal({
 
     async function start() {
       if (!navigator.mediaDevices?.getUserMedia) {
-        setError("Il tuo browser non supporta l'accesso alla fotocamera.");
+        setError("unsupported");
         return;
       }
       try {
@@ -47,7 +49,7 @@ export function CameraCaptureModal({
         setReady(true);
       } catch {
         if (!cancelled) {
-          setError("Impossibile accedere alla fotocamera. Controlla i permessi del browser oppure carica un file.");
+          setError("denied");
         }
       }
     }
@@ -90,7 +92,7 @@ export function CameraCaptureModal({
     <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fade-in">
       <div className="w-full max-w-md rounded-2xl overflow-hidden bg-slate-950 border border-white/10 animate-scale-up">
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-          <p className="text-sm font-semibold text-white">Scatta una foto della fattura</p>
+          <p className="text-sm font-semibold text-white">{t("acct.camera.title")}</p>
           <button onClick={handleClose} className="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition cursor-pointer">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -104,12 +106,12 @@ export function CameraCaptureModal({
               <svg className="w-10 h-10 text-rose-400 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 3l18 18M9.88 9.88a3 3 0 104.24 4.24M15 4h.01M5 8V6a2 2 0 012-2h1.586a1 1 0 00.707-.293l.828-.828A2 2 0 0111.536 2h.928a2 2 0 011.414.586l.828.828A1 1 0 0015.414 4H17a2 2 0 012 2v8a2 2 0 01-.586 1.414" />
               </svg>
-              <p className="text-sm text-slate-300">{error}</p>
+              <p className="text-sm text-slate-300">{error === "unsupported" ? t("acct.camera.unsupported") : t("acct.camera.denied")}</p>
               <button
                 onClick={handleClose}
                 className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition cursor-pointer"
               >
-                Chiudi e carica un file
+                {t("acct.camera.closeAndUpload")}
               </button>
             </div>
           ) : (
@@ -136,7 +138,7 @@ export function CameraCaptureModal({
               onClick={handleCapture}
               disabled={!ready || capturing}
               className="w-16 h-16 rounded-full bg-white flex items-center justify-center shadow-lg transition disabled:opacity-40 cursor-pointer active:scale-95"
-              aria-label="Scatta foto"
+              aria-label={t("acct.camera.shoot")}
             >
               <span className="w-12 h-12 rounded-full border-2 border-slate-900" />
             </button>

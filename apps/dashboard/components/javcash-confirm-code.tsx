@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { friendlyApiError } from "@/lib/api-error";
 import type { SpendPinStatusRead } from "@/lib/types";
+import { useI18n } from "@/lib/i18n/provider";
 
 /** Session 87: come il cliente conferma l'uso dei JavCash. Lo leggono le
  *  Impostazioni e ogni checkout; il server resta l'unico a decidere (anche
@@ -48,6 +49,7 @@ export function JavCashConfirmCode({
   /** «Codice inviato -- controlla la tua email» sopra il campo. */
   showSentNotice?: boolean;
 }) {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const { data: status } = useSpendPinStatus();
   const [viaEmail, setViaEmail] = useState(false);
@@ -77,7 +79,7 @@ export function JavCashConfirmCode({
       }
       onRequestedChange(true);
     } catch (err) {
-      setError((err as Error).message || "Impossibile inviare il codice.");
+      setError((err as Error).message || t("acct.jcCode.sendError"));
     } finally {
       setRequesting(false);
     }
@@ -94,12 +96,12 @@ export function JavCashConfirmCode({
             maxLength={4}
             value={code}
             onChange={(e) => onCodeChange(e.target.value.replace(/\D/g, "").slice(0, 4))}
-            placeholder="Il tuo PIN"
-            aria-label="PIN dei JavCash"
+            placeholder={t("acct.jcCode.pinPlaceholder")}
+            aria-label={t("acct.jcCode.pinAria")}
             className="w-full max-w-[140px] rounded-lg glass-input px-3 py-2 text-sm font-mono tracking-[0.4em] focus:border-brand-500"
           />
           <button type="button" onClick={() => request(true)} disabled={requesting} className={linkButton}>
-            {requesting ? "Invio in corso…" : "Non ricordi il PIN? Ricevi un codice via email"}
+            {requesting ? t("acct.jcCode.sending") : t("acct.jcCode.forgotPin")}
           </button>
         </div>
         {error && <p className="text-[11px] text-rose-400">{error}</p>}
@@ -111,7 +113,7 @@ export function JavCashConfirmCode({
     <div className="space-y-1.5">
       {status?.locked_until && (
         <p className="text-[11px] text-amber-700">
-          Il tuo PIN è bloccato per troppi tentativi sbagliati: per questo acquisto usa il codice via email.
+          {t("acct.jcCode.locked")}
         </p>
       )}
       {!requested ? (
@@ -121,7 +123,7 @@ export function JavCashConfirmCode({
           disabled={requesting}
           className="px-4 py-2 rounded-lg bg-brand-600/15 hover:bg-brand-600/25 border border-brand-500/30 text-xs font-semibold text-brand-600 transition cursor-pointer disabled:opacity-50"
         >
-          {requesting ? "Invio in corso…" : "Conferma con il codice via email"}
+          {requesting ? t("acct.jcCode.sending") : t("acct.jcCode.confirmEmail")}
         </button>
       ) : (
         <>
@@ -130,7 +132,7 @@ export function JavCashConfirmCode({
               <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
               </svg>
-              Codice inviato -- controlla la tua email
+              {t("acct.jcCode.sent")}
             </p>
           )}
           <div className="flex flex-wrap items-center gap-2">
@@ -139,11 +141,11 @@ export function JavCashConfirmCode({
               autoFocus
               value={code}
               onChange={(e) => onCodeChange(e.target.value)}
-              placeholder="Codice ricevuto via email"
+              placeholder={t("acct.jcCode.codePlaceholder")}
               className="w-full max-w-[200px] rounded-lg glass-input px-3 py-2 text-sm font-mono tracking-wider focus:border-brand-500"
             />
             <button type="button" onClick={() => request(true)} disabled={requesting} className={linkButton}>
-              Rinvia
+              {t("acct.jcCode.resend")}
             </button>
           </div>
         </>

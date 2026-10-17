@@ -6,6 +6,7 @@ import Link from "next/link";
 import { CollaborationDocumentViewer } from "@/components/collaboration-document-viewer";
 import { friendlyApiError } from "@/lib/api-error";
 import type { AgentProfileRead, CollaborationDocumentRead } from "@/lib/types";
+import { useI18n } from "@/lib/i18n/provider";
 
 async function fetchMyApplication(): Promise<AgentProfileRead | null> {
   const res = await fetch("/api/proxy/network/agents/me");
@@ -37,6 +38,7 @@ async function fetchCollaborationDocuments(): Promise<CollaborationDocumentRead[
 }
 
 export function CustomerPromoterApplicationCard({ hideWhenActive = false }: CustomerPromoterApplicationCardProps = {}) {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const { data: application, isLoading } = useQuery({
     queryKey: ["customer", "promoter-application"],
@@ -70,10 +72,10 @@ export function CustomerPromoterApplicationCard({ hideWhenActive = false }: Cust
     setError(null);
     try {
       const res = await fetch("/api/proxy/network/agents/apply/request-otp", { method: "POST" });
-      if (!res.ok) throw new Error(await friendlyApiError(res, "Impossibile inviare il codice. Riprova più tardi."));
+      if (!res.ok) throw new Error(await friendlyApiError(res, t("net.apply.err.otp")));
       setOtpRequested(true);
     } catch (err: any) {
-      setError(err.message || "Impossibile inviare il codice. Riprova più tardi.");
+      setError(err.message || t("net.apply.err.otp"));
     } finally {
       setSubmitting(false);
     }
@@ -96,7 +98,7 @@ export function CustomerPromoterApplicationCard({ hideWhenActive = false }: Cust
           otp_code: otpCode,
         }),
       });
-      if (!res.ok) throw new Error(await friendlyApiError(res, "Impossibile inviare la richiesta. Riprova più tardi."));
+      if (!res.ok) throw new Error(await friendlyApiError(res, t("net.apply.err.apply")));
       await queryClient.invalidateQueries({ queryKey: ["customer", "promoter-application"] });
       // The access token's own baked-in roles won't show PROMOTER until the
       // next silent refresh -- nudge the area switcher (app-shell.tsx) to
@@ -104,7 +106,7 @@ export function CustomerPromoterApplicationCard({ hideWhenActive = false }: Cust
       await queryClient.invalidateQueries({ queryKey: ["auth", "me", "roles"] });
       setModalOpen(false);
     } catch (err: any) {
-      setError(err.message || "Impossibile inviare la richiesta. Riprova più tardi.");
+      setError(err.message || t("net.apply.err.apply"));
     } finally {
       setSubmitting(false);
     }
@@ -123,16 +125,15 @@ export function CustomerPromoterApplicationCard({ hideWhenActive = false }: Cust
     if (hideWhenActive) return null;
     return (
       <div className="glass-card rounded-2xl p-6 border-slate-200 bg-white/70">
-        <h3 className="text-lg font-semibold text-slate-900">Sei un Promoter!</h3>
+        <h3 className="text-lg font-semibold text-slate-900">{t("net.apply.active.title")}</h3>
         <p className="text-sm text-slate-500 mt-2">
-          Vai alla dashboard promoter per gestire la tua rete e le tue commissioni, oppure usa il selettore
-          &ldquo;Area Cliente / Area Promoter&rdquo; in alto per passare da un&apos;area all&apos;altra in qualsiasi momento.
+          {t("net.apply.active.body")}
         </p>
         <Link
           href="/promoter"
           className="inline-block mt-4 px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold cursor-pointer"
         >
-          Vai alla dashboard Promoter
+          {t("net.apply.active.cta")}
         </Link>
       </div>
     );
@@ -141,12 +142,12 @@ export function CustomerPromoterApplicationCard({ hideWhenActive = false }: Cust
   if (application?.status === "PENDING_APPROVAL") {
     return (
       <div className="glass-card rounded-2xl p-6 border-slate-200 bg-white/70">
-        <h3 className="text-lg font-semibold text-slate-900">Lavora con noi</h3>
+        <h3 className="text-lg font-semibold text-slate-900">{t("net.apply.title")}</h3>
         <span className="inline-block mt-3 px-3 py-1 rounded-full text-xs font-bold border bg-amber-500/10 text-amber-700 border-amber-500/20">
-          In attesa di approvazione
+          {t("net.apply.pending.badge")}
         </span>
         <p className="text-sm text-slate-500 mt-3">
-          Il nostro team sta valutando la tua richiesta. Riceverai una notifica non appena verrà esaminata.
+          {t("net.apply.pending.body")}
         </p>
       </div>
     );
@@ -161,25 +162,24 @@ export function CustomerPromoterApplicationCard({ hideWhenActive = false }: Cust
   if (application?.is_blacklisted) {
     return (
       <div className="glass-card rounded-2xl p-6 border-slate-200 bg-white/70">
-        <h3 className="text-lg font-semibold text-slate-900">Lavora con noi</h3>
+        <h3 className="text-lg font-semibold text-slate-900">{t("net.apply.title")}</h3>
         <div className="flex gap-3 p-4 mt-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-sm">
           <svg className="w-5 h-5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <div>
-            <span className="font-semibold block">Il tuo profilo promoter è bloccato</span>
+            <span className="font-semibold block">{t("net.apply.blocked.title")}</span>
             <span className="text-xs text-rose-300/90 block mt-1">
-              Non puoi attivarti come promoter in autonomia. Se pensi sia un errore, contatta subito l&apos;assistenza
-              nella sezione Supporto.
+              {t("net.apply.blocked.body")}
             </span>
           </div>
         </div>
         <button
           disabled
-          title="Bloccato dall'amministrazione -- contatta il supporto"
+          title={t("net.apply.blocked.tooltip")}
           className="mt-4 px-4 py-2 rounded-lg bg-slate-600/30 text-slate-400 text-sm font-semibold cursor-not-allowed opacity-60"
         >
-          Lavora con noi
+          {t("net.apply.title")}
         </button>
       </div>
     );
@@ -190,30 +190,30 @@ export function CustomerPromoterApplicationCard({ hideWhenActive = false }: Cust
   // auto-activates immediately (network/service.py apply_as_promoter).
   return (
     <div className="glass-card rounded-2xl p-6 border-slate-200 bg-white/70">
-      <h3 className="text-lg font-semibold text-slate-900">Lavora con noi</h3>
+      <h3 className="text-lg font-semibold text-slate-900">{t("net.apply.title")}</h3>
       <p className="text-sm text-slate-500 mt-2">
-        Diventa promoter Jav: invita nuovi clienti e guadagna commissioni sulla tua rete.
+        {t("net.apply.intro")}
       </p>
       {application?.status === "TERMINATED" && application.rejection_reason && (
-        <p className="text-xs text-slate-500 mt-2">Nota dall&apos;ultima volta: {application.rejection_reason}</p>
+        <p className="text-xs text-slate-500 mt-2">{t("net.apply.lastNote", { reason: application.rejection_reason })}</p>
       )}
       <button
         onClick={openModal}
         className="mt-4 px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold cursor-pointer"
       >
-        Lavora con noi
+        {t("net.apply.title")}
       </button>
 
       {modalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm px-4 py-8 overflow-y-auto">
           <div className="w-full max-w-2xl glass-card rounded-2xl p-6 my-auto animate-scale-up">
-            <h3 className="text-base font-semibold text-slate-900">Diventa Promoter Jav</h3>
+            <h3 className="text-base font-semibold text-slate-900">{t("net.apply.modal.title")}</h3>
             <p className="text-xs text-slate-500 mt-1 mb-4">
-              Leggi e accetta i documenti qui sotto, poi firma con il codice che ricevi via email.
+              {t("net.apply.modal.hint")}
             </p>
 
             {documentsError && (
-              <p className="text-xs text-rose-400 mb-3">Impossibile caricare il contratto. Riprova più tardi.</p>
+              <p className="text-xs text-rose-400 mb-3">{t("net.apply.modal.docsError")}</p>
             )}
             {!documents && !documentsError && (
               <div className="h-40 rounded-xl bg-slate-900/5 animate-pulse mb-4" />
@@ -242,17 +242,17 @@ export function CustomerPromoterApplicationCard({ hideWhenActive = false }: Cust
                 disabled={!allAccepted || submitting}
                 className="w-full rounded-xl bg-gradient-to-r from-brand-600 to-brand-400 hover:from-brand-500 hover:to-brand-400 py-2.5 text-sm font-semibold text-white shadow-lg transition duration-300 disabled:opacity-50 cursor-pointer"
               >
-                {submitting ? "Invio codice..." : "Invia codice di conferma via email"}
+                {submitting ? t("net.apply.otp.sending") : t("net.apply.otp.send")}
               </button>
             ) : (
               <div className="space-y-3">
                 <p className="text-xs text-slate-500">
-                  Ti abbiamo inviato un codice via email. Inseriscilo qui sotto per confermare la tua richiesta.
+                  {t("net.apply.otp.sent")}
                 </p>
                 <input
                   value={otpCode}
                   onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                  placeholder="Codice a 6 cifre"
+                  placeholder={t("net.apply.otp.placeholder")}
                   inputMode="numeric"
                   className="w-full rounded-xl glass-input px-3 py-2.5 text-sm text-center tracking-[0.3em] font-mono focus:border-brand-500"
                 />
@@ -261,14 +261,14 @@ export function CustomerPromoterApplicationCard({ hideWhenActive = false }: Cust
                   disabled={otpCode.length !== 6 || submitting}
                   className="w-full rounded-xl bg-gradient-to-r from-brand-600 to-brand-400 hover:from-brand-500 hover:to-brand-400 py-2.5 text-sm font-semibold text-white shadow-lg transition duration-300 disabled:opacity-50 cursor-pointer"
                 >
-                  {submitting ? "Conferma in corso..." : "Conferma e attiva"}
+                  {submitting ? t("net.apply.confirming") : t("net.apply.confirm")}
                 </button>
                 <button
                   onClick={handleRequestOtp}
                   disabled={submitting}
                   className="w-full text-xs text-brand-600 hover:text-brand-600 transition cursor-pointer disabled:opacity-50"
                 >
-                  Non hai ricevuto il codice? Invia di nuovo
+                  {t("net.apply.otp.resend")}
                 </button>
               </div>
             )}
@@ -279,7 +279,7 @@ export function CustomerPromoterApplicationCard({ hideWhenActive = false }: Cust
               onClick={() => setModalOpen(false)}
               className="w-full mt-3 text-xs text-slate-500 hover:text-slate-300 transition cursor-pointer"
             >
-              Annulla
+              {t("common.cancel")}
             </button>
           </div>
         </div>

@@ -6,30 +6,12 @@ import { Pagination, usePagination } from "@/components/pagination";
 import type { CommissionLevelTotalsRead, CommissionMovementDetailRead } from "@/lib/types";
 import { friendlyApiError } from "@/lib/api-error";
 import { downloadCsv } from "@/lib/csv-export";
+import { useI18n } from "@/lib/i18n/provider";
 
-const MOVEMENT_TYPE_LABELS: Record<string, string> = {
-  PERSONAL_TOKEN: "Gettone personale",
-  ENTREPRENEURIAL_DIFFERENCE: "Differenza imprenditoriale",
-  // Paid once per contract to the promoter who ORIGINALLY brought the
-  // customer in -- never to the upline, never to whoever filled the
-  // contract in. Additive to the movements above, not a replacement.
-  FIRST_REFERRER_BONUS: "Bonus primo invito",
-  PERSONAL_BONUS: "Bonus personale",
-  REVERSAL: "Storno",
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  ACCRUED: "Maturata",
-  PAYABLE: "Liquidabile",
-  SCHEDULED: "Programmata",
-  PAID: "Pagata",
-  REVERSED: "Stornata",
-  CANCELLED: "Annullata",
-};
-
-function euro(cents: number): string {
-  return (cents / 100).toLocaleString("it-IT", { style: "currency", currency: "EUR" });
-}
+// Movement types (net.adminComm.type.*): FIRST_REFERRER_BONUS is paid once
+// per contract to the promoter who ORIGINALLY brought the customer in --
+// never to the upline, never to whoever filled the contract in. Additive to
+// the other movements, not a replacement.
 
 async function fetchMovements(params: { agentId?: string; status?: string }): Promise<CommissionMovementDetailRead[]> {
   const search = new URLSearchParams();
@@ -48,6 +30,10 @@ async function fetchLevelTotals(): Promise<CommissionLevelTotalsRead[]> {
 }
 
 export function AdminCommissionsPanel({ initialStatusFilter }: { initialStatusFilter?: string }) {
+  const { t, fmt } = useI18n();
+  const euro = fmt.euro;
+  const typeLabel = (code: string) => t.dyn(`net.adminComm.type.${code}`, code);
+  const statusLabel = (code: string) => t.dyn(`net.adminComm.status.${code}`, code);
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState(initialStatusFilter ?? "ALL");
   const [agentFilter, setAgentFilter] = useState("ALL");
@@ -93,7 +79,7 @@ export function AdminCommissionsPanel({ initialStatusFilter }: { initialStatusFi
       if (!res.ok) throw new Error(await friendlyApiError(res));
       await queryClient.invalidateQueries({ queryKey: ["admin", "commissions"] });
     } catch (err: any) {
-      setPayError(err.message || "Impossibile registrare il pagamento.");
+      setPayError(err.message || t("net.adminComm.payError"));
     } finally {
       setPayingId(null);
     }
@@ -101,12 +87,12 @@ export function AdminCommissionsPanel({ initialStatusFilter }: { initialStatusFi
 
   function handleExportCsv() {
     downloadCsv(
-      `provvigioni_${new Date().toISOString().slice(0, 10)}`,
-      ["ID Movimento", "Contratto", "Cliente", "Prodotto", "Promoter", "Codice Promoter", "Livello da produttore", "Qualifica al calcolo", "Tipo", "Importo (EUR)", "Stato", "Data Maturazione", "Data Pagamento"],
+      `${t("net.adminComm.csv.filename")}_${new Date().toISOString().slice(0, 10)}`,
+      [t("net.adminComm.csv.movementId"), t("net.adminComm.csv.contract"), t("net.adminComm.csv.customer"), t("net.adminComm.csv.product"), t("net.adminComm.csv.promoter"), t("net.adminComm.csv.promoterCode"), t("net.adminComm.csv.depth"), t("net.adminComm.csv.rankAtCalc"), t("net.adminComm.csv.type"), t("net.adminComm.csv.amount"), t("net.adminComm.csv.status"), t("net.adminComm.csv.accrualDate"), t("net.adminComm.csv.paymentDate")],
       filtered.map((m) => [
         m.id, m.contract_id, m.customer_name, m.product_name, m.agent_name, m.agent_promoter_code,
-        m.depth_from_producer ?? "", m.rank_at_calculation ?? "", MOVEMENT_TYPE_LABELS[m.movement_type] ?? m.movement_type,
-        (m.amount_cents / 100).toFixed(2), STATUS_LABELS[m.status] ?? m.status, m.effective_date, m.paid_date ?? "",
+        m.depth_from_producer ?? "", m.rank_at_calculation ?? "", typeLabel(m.movement_type),
+        (m.amount_cents / 100).toFixed(2), statusLabel(m.status), m.effective_date, m.paid_date ?? "",
       ])
     );
   }
@@ -116,26 +102,26 @@ export function AdminCommissionsPanel({ initialStatusFilter }: { initialStatusFi
       {/* Per-level rollup -- "per ogni livello: contratti attivi, fatturato, provvigioni" */}
       <div className="glass-card rounded-2xl border-slate-200 bg-white/70 overflow-hidden">
         <div className="p-5 pb-3">
-          <h3 className="text-sm font-semibold text-slate-900">Distribuzione per livello di rete</h3>
+          <h3 className="text-sm font-semibold text-slate-900">{t("net.adminComm.byLevel.title")}</h3>
           <p className="text-[11px] text-slate-500 mt-1">
-            Livello 0 = il promoter che ha prodotto direttamente il contratto; livello N = quanti passaggi di sponsorizzazione sopra di lui.
+            {t("net.adminComm.byLevel.hint")}
           </p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-left text-xs">
             <thead>
               <tr className="border-b border-slate-200 text-slate-500 font-semibold">
-                <th className="py-2 px-5">Livello</th>
-                <th className="py-2 px-5 text-right">Contratti</th>
-                <th className="py-2 px-5 text-right">Fatturato</th>
-                <th className="py-2 px-5 text-right">Provvigioni generate</th>
+                <th className="py-2 px-5">{t("net.adminComm.col.level")}</th>
+                <th className="py-2 px-5 text-right">{t("net.adminComm.col.contracts")}</th>
+                <th className="py-2 px-5 text-right">{t("net.adminComm.col.revenue")}</th>
+                <th className="py-2 px-5 text-right">{t("net.adminComm.col.generated")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
               {(levelTotals ?? []).map((row) => (
                 <tr key={row.depth} className=" text-slate-600">
                   <td className="py-2 px-5 font-semibold text-slate-900">
-                    {row.depth === 0 ? "0 (produttore)" : row.depth}
+                    {row.depth === 0 ? t("net.adminComm.depthZero") : row.depth}
                   </td>
                   <td className="py-2 px-5 text-right">{row.contracts}</td>
                   <td className="py-2 px-5 text-right">{euro(row.value_cents)}</td>
@@ -143,7 +129,7 @@ export function AdminCommissionsPanel({ initialStatusFilter }: { initialStatusFi
                 </tr>
               ))}
               {(levelTotals ?? []).length === 0 && (
-                <tr><td colSpan={4} className="text-center py-6 text-slate-500">Nessun dato disponibile.</td></tr>
+                <tr><td colSpan={4} className="text-center py-6 text-slate-500">{t("net.adminComm.noData")}</td></tr>
               )}
             </tbody>
           </table>
@@ -154,11 +140,11 @@ export function AdminCommissionsPanel({ initialStatusFilter }: { initialStatusFi
       <div className="flex flex-col lg:flex-row gap-4">
         <div className="flex-1 grid grid-cols-2 gap-4">
           <div className="glass-card rounded-2xl p-4 border-slate-200 bg-white/70">
-            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Maturate (nel filtro)</p>
+            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">{t("net.adminComm.kpi.accrued")}</p>
             <p className="text-xl font-bold text-sky-400">{euro(totalAccrued)}</p>
           </div>
           <div className="glass-card rounded-2xl p-4 border-slate-200 bg-white/70">
-            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Pagate (nel filtro)</p>
+            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">{t("net.adminComm.kpi.paid")}</p>
             <p className="text-xl font-bold text-emerald-400">{euro(totalPaid)}</p>
           </div>
         </div>
@@ -168,16 +154,16 @@ export function AdminCommissionsPanel({ initialStatusFilter }: { initialStatusFi
             onChange={(e) => setStatusFilter(e.target.value)}
             className="rounded-xl glass-input px-3 py-2 text-xs bg-white focus:border-brand-500"
           >
-            <option value="ALL">Tutti gli stati</option>
-            <option value="ACCRUED">Solo maturate</option>
-            <option value="PAID">Solo pagate</option>
+            <option value="ALL">{t("net.adminComm.filter.allStatuses")}</option>
+            <option value="ACCRUED">{t("net.adminComm.filter.accrued")}</option>
+            <option value="PAID">{t("net.adminComm.filter.paid")}</option>
           </select>
           <select
             value={agentFilter}
             onChange={(e) => setAgentFilter(e.target.value)}
             className="rounded-xl glass-input px-3 py-2 text-xs bg-white focus:border-brand-500 max-w-[220px]"
           >
-            <option value="ALL">Tutti i promoter</option>
+            <option value="ALL">{t("net.adminComm.filter.allPromoters")}</option>
             {agents.map(([id, label]) => (
               <option key={id} value={id}>{label}</option>
             ))}
@@ -189,7 +175,7 @@ export function AdminCommissionsPanel({ initialStatusFilter }: { initialStatusFi
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
-            Esporta CSV
+            {t("net.adminComm.exportCsv")}
           </button>
         </div>
       </div>
@@ -198,7 +184,7 @@ export function AdminCommissionsPanel({ initialStatusFilter }: { initialStatusFi
         <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs">{payError}</div>
       )}
       {movementsError && (
-        <p className="text-sm text-rose-400">Impossibile caricare il registro provvigioni.</p>
+        <p className="text-sm text-rose-400">{t("net.adminComm.loadError")}</p>
       )}
 
       {/* Movement ledger with full traceability */}
@@ -207,21 +193,21 @@ export function AdminCommissionsPanel({ initialStatusFilter }: { initialStatusFi
           <table className="w-full border-collapse text-left text-xs">
             <thead>
               <tr className="border-b border-slate-200 text-slate-500 font-semibold">
-                <th className="py-3 px-5">Cliente / Contratto</th>
-                <th className="py-3 px-5">Promoter beneficiario</th>
-                <th className="py-3 px-5">Livello</th>
-                <th className="py-3 px-5">Tipo</th>
-                <th className="py-3 px-5 text-right">Importo</th>
-                <th className="py-3 px-5">Stato</th>
-                <th className="py-3 px-5 text-right">Azioni</th>
+                <th className="py-3 px-5">{t("net.adminComm.col.customerContract")}</th>
+                <th className="py-3 px-5">{t("net.adminComm.col.beneficiary")}</th>
+                <th className="py-3 px-5">{t("net.adminComm.col.level")}</th>
+                <th className="py-3 px-5">{t("net.adminComm.col.type")}</th>
+                <th className="py-3 px-5 text-right">{t("net.adminComm.col.amount")}</th>
+                <th className="py-3 px-5">{t("net.adminComm.col.status")}</th>
+                <th className="py-3 px-5 text-right">{t("net.adminComm.col.actions")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
               {isLoading && (
-                <tr><td colSpan={7} className="text-center py-8 text-slate-500">Caricamento...</td></tr>
+                <tr><td colSpan={7} className="text-center py-8 text-slate-500">{t("net.adminComm.loading")}</td></tr>
               )}
               {!isLoading && filtered.length === 0 && (
-                <tr><td colSpan={7} className="text-center py-8 text-slate-500">Nessun movimento corrisponde ai filtri.</td></tr>
+                <tr><td colSpan={7} className="text-center py-8 text-slate-500">{t("net.adminComm.noMatch")}</td></tr>
               )}
               {pagination.pageItems.map((m) => (
                 <Fragment key={m.id}>
@@ -238,9 +224,9 @@ export function AdminCommissionsPanel({ initialStatusFilter }: { initialStatusFi
                       <div className="text-[10px] text-slate-500 font-mono">{m.agent_promoter_code}</div>
                     </td>
                     <td className="py-3 px-5">
-                      {m.depth_from_producer === 0 ? "Produttore" : `${m.depth_from_producer}° livello`}
+                      {m.depth_from_producer === 0 ? t("net.adminComm.producer") : t("net.adminComm.levelN", { n: m.depth_from_producer ?? "—" })}
                     </td>
-                    <td className="py-3 px-5">{MOVEMENT_TYPE_LABELS[m.movement_type] ?? m.movement_type}</td>
+                    <td className="py-3 px-5">{typeLabel(m.movement_type)}</td>
                     <td className="py-3 px-5 text-right font-semibold text-brand-600">{euro(m.amount_cents)}</td>
                     <td className="py-3 px-5">
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
@@ -248,7 +234,7 @@ export function AdminCommissionsPanel({ initialStatusFilter }: { initialStatusFi
                           ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                           : "bg-sky-500/10 text-sky-400 border-sky-500/20"
                       }`}>
-                        {STATUS_LABELS[m.status] ?? m.status}
+                        {statusLabel(m.status)}
                       </span>
                     </td>
                     <td className="py-3 px-5 text-right">
@@ -258,7 +244,7 @@ export function AdminCommissionsPanel({ initialStatusFilter }: { initialStatusFi
                           disabled={payingId === m.id}
                           className="px-2.5 py-1 rounded-lg bg-emerald-600/10 hover:bg-emerald-600/20 border border-emerald-500/20 text-emerald-400 text-[11px] font-semibold transition cursor-pointer disabled:opacity-50"
                         >
-                          {payingId === m.id ? "..." : "Segna come pagata"}
+                          {payingId === m.id ? "..." : t("net.adminComm.markPaid")}
                         </button>
                       )}
                     </td>
@@ -268,31 +254,31 @@ export function AdminCommissionsPanel({ initialStatusFilter }: { initialStatusFi
                       <td colSpan={7} className="px-5 py-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
                           <div className="space-y-1.5">
-                            <p><span className="text-slate-500">Prodotto:</span> <span className=" text-slate-600">{m.product_name}</span></p>
-                            <p><span className="text-slate-500">Valore del contratto:</span> <span className=" text-slate-600">{euro(m.value_cents)}</span></p>
-                            <p><span className="text-slate-500">Produttore del contratto:</span> <span className=" text-slate-600">{m.producer_name}</span></p>
-                            <p><span className="text-slate-500">Qualifica del promoter al momento del calcolo:</span> <span className="font-semibold text-brand-600">{m.rank_at_calculation ?? "—"}</span></p>
-                            <p><span className="text-slate-500">Qualifica attuale del promoter:</span> <span className=" text-slate-600">{m.agent_current_rank_code ?? "—"}</span></p>
+                            <p><span className="text-slate-500">{t("net.adminComm.d.product")}</span> <span className=" text-slate-600">{m.product_name}</span></p>
+                            <p><span className="text-slate-500">{t("net.adminComm.d.value")}</span> <span className=" text-slate-600">{euro(m.value_cents)}</span></p>
+                            <p><span className="text-slate-500">{t("net.adminComm.d.producer")}</span> <span className=" text-slate-600">{m.producer_name}</span></p>
+                            <p><span className="text-slate-500">{t("net.adminComm.d.rankAtCalc")}</span> <span className="font-semibold text-brand-600">{m.rank_at_calculation ?? "—"}</span></p>
+                            <p><span className="text-slate-500">{t("net.adminComm.d.currentRank")}</span> <span className=" text-slate-600">{m.agent_current_rank_code ?? "—"}</span></p>
                           </div>
                           <div className="space-y-1.5">
                             {m.base_amount_cents !== null && (
-                              <p><span className="text-slate-500">Gettone base per la qualifica:</span> <span className=" text-slate-600">{euro(m.base_amount_cents)}</span></p>
+                              <p><span className="text-slate-500">{t("net.adminComm.d.baseToken")}</span> <span className=" text-slate-600">{euro(m.base_amount_cents)}</span></p>
                             )}
                             {m.already_distributed_cents !== null && m.already_distributed_cents > 0 && (
-                              <p><span className="text-slate-500">Già riconosciuto ai livelli inferiori:</span> <span className=" text-slate-600">{euro(m.already_distributed_cents)}</span></p>
+                              <p><span className="text-slate-500">{t("net.adminComm.d.alreadyDistributed")}</span> <span className=" text-slate-600">{euro(m.already_distributed_cents)}</span></p>
                             )}
                             {m.entrepreneurial_difference_cents !== null && m.entrepreneurial_difference_cents > 0 && (
-                              <p><span className="text-slate-500">Differenza imprenditoriale riconosciuta:</span> <span className=" text-slate-600">{euro(m.entrepreneurial_difference_cents)}</span></p>
+                              <p><span className="text-slate-500">{t("net.adminComm.d.entrepreneurial")}</span> <span className=" text-slate-600">{euro(m.entrepreneurial_difference_cents)}</span></p>
                             )}
-                            <p><span className="text-slate-500">Data maturazione:</span> <span className=" text-slate-600">{new Date(m.effective_date).toLocaleDateString("it-IT")}</span></p>
+                            <p><span className="text-slate-500">{t("net.adminComm.d.accrualDate")}</span> <span className=" text-slate-600">{fmt.shortDate(m.effective_date)}</span></p>
                             {m.paid_date && (
-                              <p><span className="text-slate-500">Data pagamento:</span> <span className="text-emerald-400">{new Date(m.paid_date).toLocaleDateString("it-IT")}</span></p>
+                              <p><span className="text-slate-500">{t("net.adminComm.d.paymentDate")}</span> <span className="text-emerald-400">{fmt.shortDate(m.paid_date)}</span></p>
                             )}
                           </div>
                         </div>
                         {m.explanation && (
                           <div className="mt-3 p-3 rounded-xl bg-brand-500/5 border border-brand-500/15 text-brand-700">
-                            <span className="font-bold uppercase tracking-wider text-[10px] block mb-1">Perché questo importo</span>
+                            <span className="font-bold uppercase tracking-wider text-[10px] block mb-1">{t("net.adminComm.d.why")}</span>
                             {m.explanation}
                           </div>
                         )}
@@ -305,7 +291,7 @@ export function AdminCommissionsPanel({ initialStatusFilter }: { initialStatusFi
           </table>
         </div>
         <div className="px-5 pb-4">
-          <Pagination {...pagination} label="movimenti" />
+          <Pagination {...pagination} label={t("net.adminComm.pagLabel")} />
         </div>
       </div>
     </div>

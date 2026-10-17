@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { type ShareResult, shareOrCopyLink } from "@/lib/share-link";
+import { useI18n } from "@/lib/i18n/provider";
 
 /** Explicit per-app share buttons, plus the copy-link button.
  *
@@ -101,6 +102,7 @@ export function ShareButtons({
       down on a phone. Everywhere with room keeps the words. */
   hideLabelsOnMobile?: boolean;
 }) {
+  const { t } = useI18n();
   const [result, setResult] = useState<ShareResult | null>(null);
 
   async function handleCopy() {
@@ -124,20 +126,23 @@ export function ShareButtons({
 
   return (
     <div className={`flex flex-wrap items-center gap-2 ${className}`}>
-      {TARGETS.map((target) => (
+      {TARGETS.map((target) => {
+        const targetLabel = t.dyn(`acct.share.target.${target.key}`, target.label);
+        return (
         <a
           key={target.key}
           href={target.href(url, text, title)}
           target="_blank"
           rel="noopener noreferrer"
-          title={target.label}
-          aria-label={target.label}
+          title={targetLabel}
+          aria-label={targetLabel}
           className={`${pill} ${target.className} ${target.touchOnly ? "hidden [@media(pointer:coarse)]:inline-flex" : ""}`}
         >
           {target.icon}
-          <span className={labelClass}>{target.label}</span>
+          <span className={labelClass}>{targetLabel}</span>
         </a>
-      ))}
+        );
+      })}
 
       {/* The phone's own share sheet -- everything not listed above (Messenger,
           Signal, AirDrop, a notes app...). On desktop it falls back to a copy,
@@ -149,7 +154,7 @@ export function ShareButtons({
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342a4 4 0 010-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a4 4 0 105.367-5.925 4 4 0 00-5.367 5.925zm0 8.658a4 4 0 105.367 5.925 4 4 0 00-5.367-5.925z" />
         </svg>
-        <span className={labelClass}>Altro</span>
+        <span className={labelClass}>{t("acct.share.other")}</span>
       </button>
 
       <button
@@ -161,14 +166,14 @@ export function ShareButtons({
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
             </svg>
-            <span className={labelClass}>Link copiato!</span>
+            <span className={labelClass}>{t("acct.share.copied")}</span>
           </>
         ) : (
           <>
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
             </svg>
-            <span className={labelClass}>Copia link</span>
+            <span className={labelClass}>{t("acct.share.copy")}</span>
           </>
         )}
       </button>
@@ -182,7 +187,7 @@ export function ShareMenu({
   url,
   text,
   title = "Jav",
-  label = "Condividi",
+  label,
   buttonClassName = "",
   heading,
 }: {
@@ -193,6 +198,7 @@ export function ShareMenu({
   buttonClassName?: string;
   heading?: string;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
 
   return (
@@ -201,7 +207,7 @@ export function ShareMenu({
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342a4 4 0 010-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a4 4 0 105.367-5.925 4 4 0 00-5.367 5.925zm0 8.658a4 4 0 105.367 5.925 4 4 0 00-5.367-5.925z" />
         </svg>
-        {label}
+        {label ?? t("acct.share.share")}
       </button>
 
       {open && (
@@ -214,7 +220,7 @@ export function ShareMenu({
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-sm font-semibold text-slate-900 mb-1">
-              {heading ?? "Condividi il link"}
+              {heading ?? t("acct.share.heading")}
             </h3>
             <p className="text-[11px] text-slate-500 mb-4 break-all font-mono">{url}</p>
             <ShareButtons url={url} text={text} title={title} />
@@ -222,7 +228,7 @@ export function ShareMenu({
               onClick={() => setOpen(false)}
               className="w-full mt-4 text-xs text-slate-500 hover:text-slate-300 transition cursor-pointer"
             >
-              Chiudi
+              {t("common.close")}
             </button>
           </div>
         </div>

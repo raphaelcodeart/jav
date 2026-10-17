@@ -1,20 +1,24 @@
 "use client";
 
 import { animate, useInView } from "motion/react";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { useI18n } from "@/lib/i18n/provider";
 import { prefersReducedMotion } from "@/lib/motion";
 
 /** A number that rolls up to its value the first time it scrolls into view
  *  (and rolls again, from where it was, whenever the value changes). The DOM
  *  text is written directly, so a 60fps count costs no React re-renders. */
 export function CountUp({
-  value, format = (n) => Math.round(n).toLocaleString("it-IT"), duration = 1.1, className,
+  value, format: formatProp, duration = 1.1, className,
 }: {
   value: number;
   format?: (n: number) => string;
   duration?: number;
   className?: string;
 }) {
+  const { fmt } = useI18n();
+  const tag = fmt.tag;
+  const format = useMemo(() => formatProp ?? ((n: number) => Math.round(n).toLocaleString(tag)), [formatProp, tag]);
   const ref = useRef<HTMLSpanElement>(null);
   const from = useRef(0);
   const inView = useInView(ref, { once: true });
@@ -42,4 +46,4 @@ export function CountUp({
 }
 
 export const formatEuroCents = (cents: number) =>
-  (cents / 100).toLocaleString("it-IT", { style: "currency", currency: "EUR" });
+  (cents / 100).toLocaleString(undefined, { style: "currency", currency: "EUR" });

@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { PhotoUpload } from "@/components/photo-upload";
 import { ProductThumbnail } from "@/components/product-thumbnail";
 import { friendlyApiError } from "@/lib/api-error";
+import { useI18n } from "@/lib/i18n/provider";
 import { useMarketplaceConfig } from "@/components/marketplace-rules-card";
 import { ProductCategoriesField, saveProductCategories, sameCategorySelection, ManageCategoriesButton } from "@/components/shop-categories-card";
 import type { ProductCatalogRead, ProductRead, RankRead, ShopKey } from "@/lib/types";
@@ -34,8 +35,9 @@ const LEGACY_CUSTOMER_TYPE_LABELS: Record<string, string> = {
   CONDOMINIUM: "Solo aziende / P.IVA",
 };
 
-function customerTypeLabel(value: string): string {
-  return CUSTOMER_TYPE_LABELS[value] ?? LEGACY_CUSTOMER_TYPE_LABELS[value] ?? value;
+/** Legacy audience values collapse onto BUSINESS for display. */
+function customerTypeCode(value: string): string {
+  return CUSTOMER_TYPE_LABELS[value] ? value : LEGACY_CUSTOMER_TYPE_LABELS[value] ? "BUSINESS" : value;
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -52,10 +54,6 @@ const SHOP_KEY_BY_CATEGORY: Record<string, ShopKey> = {
   PARTNER: "partner",
   DROPSHIPPING: "dropshipping",
 };
-
-function euro(cents: number): string {
-  return (cents / 100).toLocaleString("it-IT", { style: "currency", currency: "EUR" });
-}
 
 function euroToCents(value: string): number {
   const parsed = parseFloat(value.replace(",", "."));
@@ -171,24 +169,25 @@ function ProductFormFields({
   /** SERVICE / SUBSCRIPTION are contracts: one-go price + monthly price. */
   productType: string;
 }) {
+  const { t } = useI18n();
   const isContract = isRecurringProductType(productType);
   return (
     <>
       <div className="space-y-1">
-        <label className="text-xs font-semibold text-slate-600 uppercase block">Nome</label>
+        <label className="text-xs font-semibold text-slate-600 uppercase block">{t("mkt.prod.name")}</label>
         <input required value={form.name} onChange={(e) => onChange({ name: e.target.value })}
           className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
       </div>
 
       <div className="space-y-1">
-        <label className="text-xs font-semibold text-slate-600 uppercase block">Descrizione</label>
+        <label className="text-xs font-semibold text-slate-600 uppercase block">{t("mkt.prod.description")}</label>
         <textarea rows={2} value={form.description} onChange={(e) => onChange({ description: e.target.value })}
-          placeholder="Descrizione visibile ai clienti nel marketplace..."
+          placeholder={t("mkt.prod.descriptionPlaceholder")}
           className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500 resize-none" />
       </div>
 
       <div className="space-y-1">
-        <label className="text-xs font-semibold text-slate-600 uppercase block">Foto prodotto (URL immagine)</label>
+        <label className="text-xs font-semibold text-slate-600 uppercase block">{t("mkt.prod.photoUrl")}</label>
         <div className="flex items-center gap-3">
           {form.imageUrl && (
             // eslint-disable-next-line @next/next/no-img-element -- externally-hosted, variable-source image (URL or uploaded)
@@ -209,30 +208,28 @@ function ProductFormFields({
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1">
           <label className="text-xs font-semibold text-slate-600 uppercase block">
-            {isContract ? "Prezzo unica soluzione (EUR)" : "Prezzo base (EUR)"}
+            {isContract ? t("mkt.prod.priceOneGo") : t("mkt.prod.basePrice")}
           </label>
           <input required inputMode="decimal" value={form.basePriceEuro} onChange={(e) => onChange({ basePriceEuro: e.target.value })}
             placeholder={isContract ? "149.00" : "18.00"}
             className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
           {isContract && (
-            <p className="text-[10px] text-slate-500">L&apos;intero contratto pagato in una volta, IVA esclusa.</p>
+            <p className="text-[10px] text-slate-500">{t("mkt.prod.priceOneGoHint")}</p>
           )}
         </div>
         {isContract && (
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-600 uppercase block">Prezzo mensile (EUR)</label>
+            <label className="text-xs font-semibold text-slate-600 uppercase block">{t("mkt.prod.monthlyPrice")}</label>
             <input inputMode="decimal" value={form.monthlyPriceEuro} onChange={(e) => onChange({ monthlyPriceEuro: e.target.value })}
               placeholder="18.30"
               className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
             <p className="text-[10px] text-slate-500">
-              La rata di chi paga a rate, IVA esclusa: il totale a rate è questo × i mesi del contratto (anche in 3 rate).
-              Compilato, lo sconto per il pagamento unico di Impostazioni non si applica più a questo pacchetto.
-              Vuoto = le rate dividono il prezzo in unica soluzione, e lo sconto resta.
+              {t("mkt.prod.monthlyPriceHint")}
             </p>
           </div>
         )}
         <div className="space-y-1">
-          <label className="text-xs font-semibold text-slate-600 uppercase block">Aliquota IVA (%)</label>
+          <label className="text-xs font-semibold text-slate-600 uppercase block">{t("mkt.prod.vatRate")}</label>
           <input inputMode="decimal" value={form.vatPercentage} onChange={(e) => onChange({ vatPercentage: e.target.value })}
             placeholder="10"
             className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
@@ -241,12 +238,12 @@ function ProductFormFields({
 
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1">
-          <label className="text-xs font-semibold text-slate-600 uppercase block">Fee iniziale (EUR)</label>
+          <label className="text-xs font-semibold text-slate-600 uppercase block">{t("mkt.prod.initialFee")}</label>
           <input inputMode="decimal" value={form.initialFeeEuro} onChange={(e) => onChange({ initialFeeEuro: e.target.value })}
             className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
         </div>
         <div className="space-y-1">
-          <label className="text-xs font-semibold text-slate-600 uppercase block">Fee ricorrente (EUR)</label>
+          <label className="text-xs font-semibold text-slate-600 uppercase block">{t("mkt.prod.recurringFee")}</label>
           <input inputMode="decimal" value={form.recurringFeeEuro} onChange={(e) => onChange({ recurringFeeEuro: e.target.value })}
             className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
         </div>
@@ -254,31 +251,31 @@ function ProductFormFields({
 
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1">
-          <label className="text-xs font-semibold text-slate-600 uppercase block">Periodicità fatturazione</label>
+          <label className="text-xs font-semibold text-slate-600 uppercase block">{t("mkt.prod.billingPeriod")}</label>
           <select value={form.billingPeriod} onChange={(e) => onChange({ billingPeriod: e.target.value })}
             className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-white focus:border-brand-500">
-            <option value="MONTHLY">Mensile</option>
-            <option value="QUARTERLY">Trimestrale</option>
-            <option value="ANNUAL">Annuale</option>
+            <option value="MONTHLY">{t("mkt.prod.billing.MONTHLY")}</option>
+            <option value="QUARTERLY">{t("mkt.prod.billing.QUARTERLY")}</option>
+            <option value="ANNUAL">{t("mkt.prod.billing.ANNUAL")}</option>
           </select>
         </div>
         <div className="space-y-1">
-          <label className="text-xs font-semibold text-slate-600 uppercase block">Durata contratto (mesi)</label>
+          <label className="text-xs font-semibold text-slate-600 uppercase block">{t("mkt.prod.duration")}</label>
           <input inputMode="numeric" value={form.contractDurationMonths}
             onChange={(e) => onChange({ contractDurationMonths: e.target.value })}
-            placeholder="Vuoto = nessun rinnovo"
+            placeholder={t("mkt.prod.durationPlaceholder")}
             className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
-          <p className="text-[10px] text-slate-500">Lascia vuoto per prodotti senza rinnovo (digitali, fisici, acquisti una tantum).</p>
+          <p className="text-[10px] text-slate-500">{t("mkt.prod.durationHint")}</p>
         </div>
       </div>
 
       <div className="space-y-1">
         <label className="text-xs font-semibold text-slate-600 uppercase block">
-          Sconto pagabile in crediti (%)
+          {t("mkt.prod.creditDiscount")}
         </label>
         {category === "INTERNAL" ? (
           <p className="text-[10px] text-slate-500">
-            Non disponibile per i prodotti Interno Jav -- pagabili solo in bonifico.
+            {t("mkt.prod.creditDiscountInternal")}
           </p>
         ) : (
           <>
@@ -290,7 +287,7 @@ function ProductFormFields({
               className="w-full max-w-[140px] rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500"
             />
             <p className="text-[10px] text-slate-500">
-              Quanta parte del prezzo un cliente può pagare con i crediti wallet nel checkout -- il resto resta bonifico.
+              {t("mkt.prod.creditDiscountHint")}
             </p>
           </>
         )}
@@ -298,11 +295,11 @@ function ProductFormFields({
 
       <div className="space-y-1">
         <label className="text-xs font-semibold text-slate-600 uppercase block">
-          Cashback al checkout
+          {t("mkt.prod.cashback")}
         </label>
         {category === "INTERNAL" ? (
           <p className="text-[10px] text-slate-500">
-            Non disponibile per i prodotti Interno Jav.
+            {t("mkt.prod.cashbackInternal")}
           </p>
         ) : (
           <>
@@ -313,12 +310,10 @@ function ProductFormFields({
                 onChange={(e) => onChange({ cashbackEnabled: e.target.checked })}
                 className="w-4 h-4 rounded border-slate-200 accent-brand-500"
               />
-              Abilita &ldquo;riscuoti subito cashback&rdquo; per questo prodotto
+              {t("mkt.prod.cashbackEnable")}
             </label>
             <p className="text-[10px] text-slate-500">
-              Se attivo, il cliente può scegliere in fase di acquisto di pagare il {" "}
-              <span className="font-mono">5%</span> in più per ricevere l&apos;intero importo pagato (100% + 5%)
-              accreditato subito come JavCash sul suo wallet, una volta confermato il pagamento.
+              {t("mkt.prod.cashbackHint")}
             </p>
           </>
         )}
@@ -328,7 +323,7 @@ function ProductFormFields({
         <>
           <div className="space-y-1">
             <label className="text-xs font-semibold text-slate-600 uppercase block">
-              Cashback automatico sul contratto (%)
+              {t("mkt.prod.contractCashback")}
             </label>
             <input
               inputMode="numeric"
@@ -338,17 +333,14 @@ function ProductFormFields({
               className="w-full max-w-[140px] rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500"
             />
             <p className="text-[10px] text-slate-500">
-              Percentuale dell&apos;importo totale pagato (IVA inclusa) che torna al cliente come JavCash
-              quando il contratto risulta pagato. <strong>Automatico e senza il 5% aggiuntivo</strong>: sui
-              servizi Jav e sulla formazione il cliente non paga nulla in più per ottenere il credito.
-              <span className="font-mono"> 0</span> = nessun
-              cashback.
+              {t("mkt.prod.contractCashbackHint1")} <strong>{t("mkt.prod.contractCashbackStrong")}</strong>
+              {t("mkt.prod.contractCashbackHint2")}
             </p>
           </div>
 
           <div className="space-y-1">
             <label className="text-xs font-semibold text-slate-600 uppercase block">
-              Bonus a chi porta il cliente
+              {t("mkt.prod.referrerBonus")}
             </label>
             <label className="flex items-center gap-2.5 text-xs text-slate-600 cursor-pointer">
               <input
@@ -357,7 +349,7 @@ function ProductFormFields({
                 onChange={(e) => onChange({ firstReferrerBonusEnabled: e.target.checked })}
                 className="w-4 h-4 rounded border-slate-200 accent-brand-500"
               />
-              Riconosci un bonus extra al primo promoter che ha portato il cliente
+              {t("mkt.prod.referrerBonusEnable")}
             </label>
             {form.firstReferrerBonusEnabled && (
               <div className="flex items-center gap-2 pt-1">
@@ -372,10 +364,8 @@ function ProductFormFields({
               </div>
             )}
             <p className="text-[10px] text-slate-500">
-              Si aggiunge alla provvigione normale, non la sostituisce, e viene pagato{" "}
-              <strong>una sola volta per contratto</strong> al promoter che ha portato il cliente in Jav
-              &mdash; mai a tutta la rete e mai al promoter che si limita a compilare il contratto,
-              se è una persona diversa.
+              {t("mkt.prod.referrerBonusHint1")}{" "}
+              <strong>{t("mkt.prod.referrerBonusStrong")}</strong> {t("mkt.prod.referrerBonusHint2")}
             </p>
           </div>
         </>
@@ -383,11 +373,10 @@ function ProductFormFields({
 
       <div className="space-y-1 pt-2 border-t border-slate-200">
         <label className="text-xs font-semibold text-slate-600 uppercase block">
-          Gettone provvigionale per grado (EUR)
+          {t("mkt.prod.tokens")}
         </label>
         <p className="text-[10px] text-slate-500 mb-2">
-          Quanto guadagna il promoter per un contratto di QUESTO prodotto, in base al proprio grado.
-          Determina anche la differenza imprenditoriale riconosciuta agli sponsor superiori.
+          {t("mkt.prod.tokensHint")}
         </p>
         <div className="grid grid-cols-3 gap-2">
           {[...ranks].sort((a, b) => a.level - b.level).map((r) => (
@@ -411,6 +400,14 @@ function ProductFormFields({
 }
 
 export function AdminProductsPanel() {
+  const { t, fmt } = useI18n();
+  const euro = (cents: number) => fmt.euro(cents);
+  const productTypeLabel = (code: string) => t.dyn(`mkt.prod.type.${code}`, PRODUCT_TYPE_LABELS[code] ?? code);
+  const customerTypeLabel = (value: string) => {
+    const code = customerTypeCode(value);
+    return t.dyn(`mkt.prod.audience.${code}`, CUSTOMER_TYPE_LABELS[code] ?? code);
+  };
+  const categoryLabel = (code: string) => t.dyn(`mkt.prod.category.${code}`, CATEGORY_LABELS[code] ?? code);
   const queryClient = useQueryClient();
   const { data: products, error: loadError } = useQuery({
     queryKey: ["admin", "products"],
@@ -453,9 +450,9 @@ export function AdminProductsPanel() {
   // categorie deve chiamarle come le chiama il cliente, non con i nomi fissi.
   const { data: marketplaceConfig } = useMarketplaceConfig();
   const shopsForCategories: { key: ShopKey; label: string }[] = [
-    { key: "internal", label: marketplaceConfig?.sections.internal.label ?? "Interno Jav" },
-    { key: "partner", label: marketplaceConfig?.sections.partner.label ?? "Partner / collaboratore" },
-    { key: "dropshipping", label: marketplaceConfig?.sections.dropshipping.label ?? "Fai la spesa con Jav" },
+    { key: "internal", label: marketplaceConfig?.sections.internal.label ?? categoryLabel("INTERNAL") },
+    { key: "partner", label: marketplaceConfig?.sections.partner.label ?? categoryLabel("PARTNER") },
+    { key: "dropshipping", label: marketplaceConfig?.sections.dropshipping.label ?? categoryLabel("DROPSHIPPING") },
   ];
 
   const [deletingProduct, setDeletingProduct] = useState<ProductCatalogRead | null>(null);
@@ -469,7 +466,7 @@ export function AdminProductsPanel() {
     setCustomerType(product.customer_type);
     setCategory(product.category);
     setCreateForm({
-      name: v ? `${v.name} (copia)` : "",
+      name: v ? `${v.name} (${t("mkt.prod.copySuffix")})` : "",
       description: v?.description ?? "",
       imageUrl: v?.image_url ?? "",
       basePriceEuro: v ? centsToEuroInput(v.base_price_cents) : "",
@@ -537,7 +534,7 @@ export function AdminProductsPanel() {
       const created: ProductRead = await res.json();
       if (createForm.categoryIds.length > 0 && created?.id) {
         const shop = SHOP_KEY_BY_CATEGORY[category] ?? "internal";
-        await saveProductCategories(shop, created.id, createForm.categoryIds);
+        await saveProductCategories(shop, created.id, createForm.categoryIds, t("mkt.cat.saveProductFailed"));
         await queryClient.invalidateQueries({ queryKey: ["shop-categories", shop] });
       }
 
@@ -547,7 +544,7 @@ export function AdminProductsPanel() {
       setCreateForm(EMPTY_FORM);
       await queryClient.invalidateQueries({ queryKey: ["admin", "products"] });
     } catch (err: any) {
-      setCreateError(err.message || "Impossibile creare il prodotto.");
+      setCreateError(err.message || t("mkt.prod.createFailed"));
     } finally {
       setCreateLoading(false);
     }
@@ -635,14 +632,14 @@ export function AdminProductsPanel() {
       // solo se le spunte sono cambiate davvero.
       if (!sameCategorySelection(editForm.categoryIds, editingProduct.category_ids ?? [])) {
         const shop = SHOP_KEY_BY_CATEGORY[editingProduct.category] ?? "internal";
-        await saveProductCategories(shop, editingProduct.id, editForm.categoryIds);
+        await saveProductCategories(shop, editingProduct.id, editForm.categoryIds, t("mkt.cat.saveProductFailed"));
         await queryClient.invalidateQueries({ queryKey: ["shop-categories", shop] });
       }
 
       setEditingProduct(null);
       await queryClient.invalidateQueries({ queryKey: ["admin", "products"] });
     } catch (err: any) {
-      setEditError(err.message || "Impossibile salvare le modifiche.");
+      setEditError(err.message || t("mkt.prod.saveFailed"));
     } finally {
       setEditLoading(false);
     }
@@ -654,11 +651,11 @@ export function AdminProductsPanel() {
     setDeleteError(null);
     try {
       const res = await fetch(`/api/proxy/products/${deletingProduct.id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error(await friendlyApiError(res, "Impossibile eliminare il prodotto."));
+      if (!res.ok) throw new Error(await friendlyApiError(res, t("mkt.prod.deleteFailed")));
       setDeletingProduct(null);
       await queryClient.invalidateQueries({ queryKey: ["admin", "products"] });
     } catch (err: any) {
-      setDeleteError(err.message || "Impossibile eliminare il prodotto.");
+      setDeleteError(err.message || t("mkt.prod.deleteFailed"));
     } finally {
       setDeleteLoading(false);
     }
@@ -667,14 +664,13 @@ export function AdminProductsPanel() {
   const deleteConfirmModal = deletingProduct && (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
       <div className="w-full max-w-md glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up">
-        <h3 className="text-lg font-bold text-slate-900 mb-2">Elimina prodotto</h3>
+        <h3 className="text-lg font-bold text-slate-900 mb-2">{t("mkt.prod.delete")}</h3>
         <p className="text-xs text-slate-500 mb-4">
-          Stai per eliminare definitivamente il prodotto{" "}
+          {t("mkt.prod.deleteBefore")}{" "}
           <span className="font-semibold text-slate-700">
             &quot;{deletingProduct.current_version?.name ?? deletingProduct.code}&quot;
           </span>{" "}
-          e tutte le sue versioni. L&apos;operazione non può essere annullata. Se il prodotto ha contratti
-          associati, l&apos;eliminazione verrà rifiutata: in quel caso puoi solo disattivarlo.
+          {t("mkt.prod.deleteAfter")}
         </p>
         {deleteError && <p className="text-xs text-rose-400 mb-3">{deleteError}</p>}
         <div className="flex justify-end gap-3">
@@ -682,14 +678,14 @@ export function AdminProductsPanel() {
             onClick={() => { setDeletingProduct(null); setDeleteError(null); }}
             className="px-4 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 text-xs font-semibold text-slate-600 border border-slate-200 transition cursor-pointer"
           >
-            Annulla
+            {t("common.cancel")}
           </button>
           <button
             onClick={handleDeleteProduct}
             disabled={deleteLoading}
             className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50"
           >
-            {deleteLoading ? "Eliminazione..." : "Elimina definitivamente"}
+            {deleteLoading ? t("mkt.prod.deleting") : t("mkt.prod.deleteForever")}
           </button>
         </div>
       </div>
@@ -700,7 +696,7 @@ export function AdminProductsPanel() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <p className="text-sm text-slate-500">
-          Iscrizioni, abbonamenti, corsi e servizi del club in vendita.
+          {t("mkt.prod.intro")}
         </p>
         <button
           onClick={() => {
@@ -715,11 +711,11 @@ export function AdminProductsPanel() {
           }}
           className="px-4 py-2 rounded-xl text-xs font-semibold bg-brand-600 hover:bg-brand-500 text-white shadow-lg shadow-brand-500/20 transition cursor-pointer shrink-0"
         >
-          + Nuovo Prodotto
+          {t("mkt.prod.newButton")}
         </button>
       </div>
 
-      {loadError && <p className="text-sm text-rose-400">Impossibile caricare i prodotti.</p>}
+      {loadError && <p className="text-sm text-rose-400">{t("mkt.prod.loadFailed")}</p>}
 
       {/* Un bottone solo per le tre sezioni: sono tre shop distinti, ma una
           pagina sola, e un selettore dentro la finestra costa meno di tre
@@ -734,16 +730,16 @@ export function AdminProductsPanel() {
               onChange={(e) => setShowRetired(e.target.checked)}
               className="w-4 h-4 rounded border-slate-200 accent-brand-500"
             />
-            Mostra ritirati ({retiredCount})
+            {t("mkt.prod.showRetired", { n: retiredCount })}
           </label>
         )}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {listedProducts === undefined ? (
-          <p className="text-sm text-slate-500 col-span-full text-center py-8">Caricamento...</p>
+          <p className="text-sm text-slate-500 col-span-full text-center py-8">{t("mkt.prod.loading")}</p>
         ) : listedProducts.length === 0 ? (
-          <p className="text-sm text-slate-500 col-span-full text-center py-8">Nessun prodotto nel catalogo.</p>
+          <p className="text-sm text-slate-500 col-span-full text-center py-8">{t("mkt.prod.empty")}</p>
         ) : (
           listedProducts.map((p) => (
             <div key={p.id} className="glass-card rounded-2xl overflow-hidden border-slate-200 bg-white/70">
@@ -757,7 +753,7 @@ export function AdminProductsPanel() {
                   <button
                     onClick={() => openDuplicate(p)}
                     className="p-1.5 rounded-lg bg-slate-950/70 hover:bg-slate-950/90 text-slate-900 transition cursor-pointer"
-                    title="Duplica prodotto"
+                    title={t("mkt.prod.duplicate")}
                     disabled={!p.current_version}
                   >
                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -767,7 +763,7 @@ export function AdminProductsPanel() {
                   <button
                     onClick={() => openEdit(p)}
                     className="p-1.5 rounded-lg bg-slate-950/70 hover:bg-slate-950/90 text-slate-900 transition cursor-pointer"
-                    title="Modifica prodotto"
+                    title={t("mkt.prod.edit")}
                     disabled={!p.current_version}
                   >
                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -777,7 +773,7 @@ export function AdminProductsPanel() {
                   <button
                     onClick={() => { setDeletingProduct(p); setDeleteError(null); }}
                     className="p-1.5 rounded-lg bg-slate-950/70 hover:bg-rose-600 text-white transition cursor-pointer"
-                    title="Elimina prodotto"
+                    title={t("mkt.prod.delete")}
                   >
                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -788,14 +784,14 @@ export function AdminProductsPanel() {
               <div className="p-5">
                 <div className="flex items-center justify-between mb-3">
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-amber-500/10 text-amber-700 border-amber-500/20">
-                    {PRODUCT_TYPE_LABELS[p.product_type] ?? p.product_type}
+                    {productTypeLabel(p.product_type)}
                   </span>
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                     p.status === "ACTIVE"
                       ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                       : " bg-slate-200/50 text-slate-500 border-slate-300"
                   }`}>
-                    {p.status === "RETIRED" ? "Ritirato" : p.status}
+                    {t.dyn(`mkt.prod.status.${p.status}`, p.status)}
                   </span>
                 </div>
                 <h4 className="text-sm font-semibold text-slate-900 mb-0.5">
@@ -809,22 +805,22 @@ export function AdminProductsPanel() {
                 )}
                 <div className="flex items-center gap-1.5 mb-2 flex-wrap">
                   <span className="px-2 py-0.5 rounded-full font-bold border bg-slate-900/5 border-slate-300 text-slate-600">
-                    {CATEGORY_LABELS[p.category] ?? p.category}
+                    {categoryLabel(p.category)}
                   </span>
                   {p.category !== "INTERNAL" && p.current_version && p.current_version.credit_discount_percentage > 0 && (
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
-                      {p.current_version.credit_discount_percentage}% in JavCash
+                      {t("mkt.prod.inJavCash", { n: p.current_version.credit_discount_percentage })}
                     </span>
                   )}
                   {p.category !== "INTERNAL" && p.current_version?.cashback_enabled && (
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-brand-500/10 text-brand-600 border-brand-500/20">
-                      Cashback attivo
+                      {t("mkt.prod.cashbackOn")}
                     </span>
                   )}
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-slate-500">
-                    Target: {customerTypeLabel(p.customer_type)}
+                    {t("mkt.prod.target")}: {customerTypeLabel(p.customer_type)}
                   </span>
                   {p.current_version && (
                     <span className="text-right">
@@ -832,10 +828,10 @@ export function AdminProductsPanel() {
                         {euro(p.current_version.base_price_cents)}
                       </span>
                       {p.current_version.monthly_price_cents != null && (
-                        <span className="block text-[10px] text-slate-400">a rate {euro(p.current_version.monthly_price_cents)}/mese</span>
+                        <span className="block text-[10px] text-slate-400">{t("mkt.prod.inInstalments", { amount: euro(p.current_version.monthly_price_cents) })}</span>
                       )}
                       {p.current_version.vat_percentage != null && (
-                        <span className="block text-[10px] text-slate-500">+ IVA {p.current_version.vat_percentage}%</span>
+                        <span className="block text-[10px] text-slate-500">{t("mkt.prod.plusVat", { n: p.current_version.vat_percentage })}</span>
                       )}
                     </span>
                   )}
@@ -851,7 +847,7 @@ export function AdminProductsPanel() {
           <div className="w-full max-w-lg glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold text-slate-900">
-                {isDuplicating ? "Duplica Prodotto" : "Nuovo Prodotto"}
+                {isDuplicating ? t("mkt.prod.duplicateTitle") : t("mkt.prod.newTitle")}
               </h3>
               <button onClick={() => { setShowCreate(false); setIsDuplicating(false); }}
                 className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-900 transition cursor-pointer">
@@ -863,24 +859,24 @@ export function AdminProductsPanel() {
 
             {isDuplicating && (
               <p className="text-xs text-slate-500 -mt-2 mb-4">
-                Tutti i campi sono precompilati dal prodotto originale, incluso il gettone per grado. Cambia almeno il codice prima di salvare.
+                {t("mkt.prod.duplicateHint")}
               </p>
             )}
 
             <form onSubmit={handleCreate} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 uppercase block">Codice</label>
-                <input required value={code} onChange={(e) => setCode(e.target.value)} placeholder="Es: JUDO-BAMBINI-01"
+                <label className="text-xs font-semibold text-slate-600 uppercase block">{t("mkt.prod.code")}</label>
+                <input required value={code} onChange={(e) => setCode(e.target.value)} placeholder={t("mkt.prod.codePlaceholderNew")}
                   className="w-full rounded-xl glass-input px-3 py-2 text-sm font-mono focus:border-brand-500" />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-600 uppercase block">Tipo Prodotto</label>
+                  <label className="text-xs font-semibold text-slate-600 uppercase block">{t("mkt.prod.productType")}</label>
                   <select value={productType} onChange={(e) => setProductType(e.target.value)}
                     className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-white focus:border-brand-500">
-                    {Object.entries(PRODUCT_TYPE_LABELS).map(([code2, label]) => (
-                      <option key={code2} value={code2}>{label}</option>
+                    {Object.keys(PRODUCT_TYPE_LABELS).map((code2) => (
+                      <option key={code2} value={code2}>{productTypeLabel(code2)}</option>
                     ))}
                   </select>
                 </div>
@@ -888,20 +884,20 @@ export function AdminProductsPanel() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-600 uppercase block">Cliente Target</label>
+                  <label className="text-xs font-semibold text-slate-600 uppercase block">{t("mkt.prod.targetCustomer")}</label>
                   <select value={customerType} onChange={(e) => setCustomerType(e.target.value)}
                     className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-white focus:border-brand-500">
-                    {Object.entries(CUSTOMER_TYPE_LABELS).map(([code2, label]) => (
-                      <option key={code2} value={code2}>{label}</option>
+                    {Object.keys(CUSTOMER_TYPE_LABELS).map((code2) => (
+                      <option key={code2} value={code2}>{customerTypeLabel(code2)}</option>
                     ))}
                   </select>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-600 uppercase block">Categoria</label>
+                  <label className="text-xs font-semibold text-slate-600 uppercase block">{t("mkt.prod.category")}</label>
                   <select value={category} onChange={(e) => setCategory(e.target.value)}
                     className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-white focus:border-brand-500">
-                    {Object.entries(CATEGORY_LABELS).map(([code2, label]) => (
-                      <option key={code2} value={code2}>{label}</option>
+                    {Object.keys(CATEGORY_LABELS).map((code2) => (
+                      <option key={code2} value={code2}>{categoryLabel(code2)}</option>
                     ))}
                   </select>
                 </div>
@@ -916,11 +912,11 @@ export function AdminProductsPanel() {
               <div className="flex justify-end gap-3 mt-4">
                 <button type="button" onClick={() => { setShowCreate(false); setIsDuplicating(false); }}
                   className="px-4 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 text-xs font-semibold text-slate-600 border border-slate-200 transition cursor-pointer">
-                  Annulla
+                  {t("common.cancel")}
                 </button>
                 <button type="submit" disabled={createLoading}
                   className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50">
-                  {createLoading ? "Creazione..." : isDuplicating ? "Crea Copia" : "Crea Prodotto"}
+                  {createLoading ? t("mkt.prod.creating") : isDuplicating ? t("mkt.prod.createCopy") : t("mkt.prod.create")}
                 </button>
               </div>
             </form>
@@ -932,7 +928,7 @@ export function AdminProductsPanel() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
           <div className="w-full max-w-lg glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-slate-900">Modifica Prodotto</h3>
+              <h3 className="text-lg font-bold text-slate-900">{t("mkt.prod.editTitle")}</h3>
               <button onClick={() => setEditingProduct(null)}
                 className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-900 transition cursor-pointer">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -944,7 +940,7 @@ export function AdminProductsPanel() {
 
             {editingProduct.current_version && (
               <div className="mb-5 pb-5 border-b border-slate-200">
-                <label className="text-xs font-semibold text-slate-600 uppercase block mb-2">Carica foto</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block mb-2">{t("mkt.prod.uploadPhoto")}</label>
                 <PhotoUpload
                   currentUrl={editForm.imageUrl || null}
                   uploadPath={`products/versions/${editingProduct.current_version.id}/photo`}
@@ -960,35 +956,34 @@ export function AdminProductsPanel() {
 
             <form onSubmit={handleEditSave} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 uppercase block">Codice</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">{t("mkt.prod.code")}</label>
                 <input
                   required
                   maxLength={64}
                   value={editCode}
                   onChange={(e) => setEditCode(e.target.value)}
-                  placeholder="Es: JUDO-ADULTI-12"
+                  placeholder={t("mkt.prod.codePlaceholderEdit")}
                   className="w-full rounded-xl glass-input px-3 py-2 text-sm font-mono focus:border-brand-500"
                 />
                 <p className="text-[10px] text-slate-500">
-                  Codice interno del prodotto: il cliente non lo vede. Deve essere diverso da quello degli altri prodotti.
+                  {t("mkt.prod.codeHint")}
                 </p>
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-slate-600 uppercase block">
-                  Cliente Target
+                  {t("mkt.prod.targetCustomer")}
                 </label>
                 <select
                   value={editCustomerType}
                   onChange={(e) => setEditCustomerType(e.target.value)}
                   className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-white focus:border-brand-500"
                 >
-                  {Object.entries(CUSTOMER_TYPE_LABELS).map(([code2, label]) => (
-                    <option key={code2} value={code2}>{label}</option>
+                  {Object.keys(CUSTOMER_TYPE_LABELS).map((code2) => (
+                    <option key={code2} value={code2}>{customerTypeLabel(code2)}</option>
                   ))}
                 </select>
                 <p className="text-[10px] text-slate-500">
-                  Chi può attivare questo contratto. Un cliente vede in catalogo solo i contratti compatibili
-                  con la propria tipologia &mdash; e il controllo è anche lato server, non solo grafico.
+                  {t("mkt.prod.targetHint")}
                 </p>
               </div>
 
@@ -1001,11 +996,11 @@ export function AdminProductsPanel() {
               <div className="flex justify-end gap-3 mt-4">
                 <button type="button" onClick={() => setEditingProduct(null)}
                   className="px-4 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 text-xs font-semibold text-slate-600 border border-slate-200 transition cursor-pointer">
-                  Annulla
+                  {t("common.cancel")}
                 </button>
                 <button type="submit" disabled={editLoading}
                   className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50">
-                  {editLoading ? "Salvataggio..." : "Salva Modifiche"}
+                  {editLoading ? t("mkt.prod.saving") : t("mkt.prod.saveChanges")}
                 </button>
               </div>
             </form>

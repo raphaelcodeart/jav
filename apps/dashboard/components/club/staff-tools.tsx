@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
-import { BeltBadge } from "@/components/ui/belt";
+import { BeltBadge, beltLabel } from "@/components/ui/belt";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Field, Input, Select } from "@/components/ui/field";
@@ -14,6 +14,7 @@ import { AthleteMarks } from "@/components/club/person-marks";
 import { BELTS, beltFor } from "@/lib/belts";
 import { clubGet, clubSend, fullName, shortDate, type AthleteCard, type BeltHistory, type Course, type Roster } from "@/lib/club";
 import { celebrate } from "@/lib/motion";
+import { useI18n } from "@/lib/i18n/provider";
 
 const S = (path: string) => `/staff${path}`;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -21,6 +22,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 /** Attendance on the mat: pick the course and the day, then one tap per
  *  athlete. Big targets, made for a tablet held in one hand. */
 export function AttendanceBoard() {
+  const { t } = useI18n();
   const { data: courses, isLoading } = useQuery({ queryKey: ["club", "staff", "courses"], queryFn: () => clubGet<Course[]>(S("/courses")) });
   const [courseId, setCourseId] = useState<string>("");
   const [date, setDate] = useState(today);
@@ -39,29 +41,29 @@ export function AttendanceBoard() {
     try {
       await clubSend(S(`/courses/${selected}/attendance`), "POST", { date, athlete_id: athleteId, present });
     } catch (e) {
-      toast({ tone: "error", title: "Presenza non salvata", text: (e as Error).message });
+      toast({ tone: "error", title: t("attendance.notSaved"), text: (e as Error).message });
       void queryClient.invalidateQueries({ queryKey: key });
     }
   }
 
   if (isLoading) return <Skeleton className="h-64" />;
-  if (!courses?.length) return <EmptyState icon={<span className="text-3xl">📅</span>} title="Nessun corso" text="Quando la segreteria ti assegna un corso lo trovi qui." />;
+  if (!courses?.length) return <EmptyState icon={<span className="text-3xl">📅</span>} title={t("clubx.staff.noCourses")} text={t("clubx.staff.noCoursesText")} />;
   const rows = roster?.rows ?? [];
   const present = rows.filter((r) => r.present).length;
 
   return (
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row gap-3">
-        <Select value={selected} onChange={(e) => setCourseId(e.target.value)} aria-label="Corso">
+        <Select value={selected} onChange={(e) => setCourseId(e.target.value)} aria-label={t("clubx.staff.course")}>
           {courses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </Select>
-        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="sm:w-52" aria-label="Giorno" />
+        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="sm:w-52" aria-label={t("attendance.day")} />
         <div className="sm:ml-auto rounded-2xl bg-ink-900 text-white px-5 flex items-center gap-2 h-11">
           <span className="font-display text-xl">{present}</span>
-          <span className="text-xs text-ink-300">/ {rows.length} presenti</span>
+          <span className="text-xs text-ink-300">{t("clubx.staff.presentOf", { n: rows.length })}</span>
         </div>
       </div>
-      {loadingRoster ? <Skeleton className="h-64" /> : rows.length === 0 ? <EmptyState title="Nessun iscritto al corso" /> : (
+      {loadingRoster ? <Skeleton className="h-64" /> : rows.length === 0 ? <EmptyState title={t("clubx.staff.noEnrolled")} /> : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {rows.map((r) => (
             <motion.button
@@ -97,6 +99,7 @@ export function AttendanceBoard() {
 /** Passaggi di grado: find the athlete, pick the new belt (only higher ones
  *  are offered -- the API refuses the others anyway), and celebrate it. */
 export function BeltAwardPanel() {
+  const { t } = useI18n();
   const [q, setQ] = useState("");
   const { data: athletes, isLoading } = useQuery({
     queryKey: ["club", "staff", "athletes", q],
@@ -106,28 +109,29 @@ export function BeltAwardPanel() {
   return (
     <div className="grid lg:grid-cols-[1fr_1.2fr] gap-6">
       <div className="space-y-3">
-        <Input placeholder="Cerca un atleta…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <Input placeholder={t("clubx.belt.search")} value={q} onChange={(e) => setQ(e.target.value)} />
         {isLoading ? <Skeleton className="h-64" /> : (
           <div className="glass-card rounded-3xl divide-y divide-ink-100 overflow-hidden max-h-[520px] overflow-y-auto">
             {(athletes ?? []).map((a) => (
               <button key={a.id} onClick={() => setSelected(a)} className={`w-full flex items-center justify-between gap-3 px-4 py-3 text-left cursor-pointer hover:bg-ink-50 ${selected?.id === a.id ? "bg-brand-50" : ""}`}>
                 <span className="min-w-0">
                   <span className="block text-sm font-semibold text-ink-900 truncate">{fullName(a)} <AthleteMarks id={a.id} /></span>
-                  <span className="block text-xs text-ink-500">{a.federal_age ?? a.season_age} anni (età federale)</span>
+                  <span className="block text-xs text-ink-500">{t("clubx.belt.federalAge", { n: a.federal_age ?? a.season_age })}</span>
                 </span>
                 <BeltBadge belt={a.belt} size="sm" showLabel={false} />
               </button>
             ))}
-            {(athletes ?? []).length === 0 && <p className="text-sm text-ink-500 p-6 text-center">Nessun atleta trovato.</p>}
+            {(athletes ?? []).length === 0 && <p className="text-sm text-ink-500 p-6 text-center">{t("clubx.belt.noAthletes")}</p>}
           </div>
         )}
       </div>
-      {selected ? <BeltAward athlete={selected} key={selected.id} /> : <EmptyState icon={<span className="text-3xl">🎖️</span>} title="Scegli un atleta" text="Per vedere le sue cinture e registrare un passaggio di grado." />}
+      {selected ? <BeltAward athlete={selected} key={selected.id} /> : <EmptyState icon={<span className="text-3xl">🎖️</span>} title={t("clubx.belt.pick")} text={t("clubx.belt.pickText")} />}
     </div>
   );
 }
 
 function BeltAward({ athlete }: { athlete: AthleteCard }) {
+  const { t } = useI18n();
   const { data: history } = useQuery({ queryKey: ["club", "staff", "belts", athlete.id], queryFn: () => clubGet<BeltHistory[]>(S(`/athletes/${athlete.id}/belts`)) });
   const currentRank = BELTS.findIndex((b) => b.code === (history?.[history.length - 1]?.code ?? athlete.belt?.code ?? "WHITE"));
   const higher = BELTS.slice(currentRank + 1);
@@ -150,7 +154,7 @@ function BeltAward({ athlete }: { athlete: AthleteCard }) {
       void celebrate({ x: 0.6, y: 0.45 });
       setNote("");
     } catch (e) {
-      toast({ tone: "error", title: "Passaggio non registrato", text: (e as Error).message });
+      toast({ tone: "error", title: t("clubx.belt.notSaved"), text: (e as Error).message });
     } finally {
       setBusy(false);
     }
@@ -171,10 +175,10 @@ function BeltAward({ athlete }: { athlete: AthleteCard }) {
         ))}
       </ol>
       {higher.length === 0 ? (
-        <Badge tone="accent">Grado massimo raggiunto</Badge>
+        <Badge tone="accent">{t("clubx.belt.maxReached")}</Badge>
       ) : (
         <div className="space-y-3 pt-4 border-t border-ink-100">
-          <p className="font-display text-sm text-ink-900">Nuovo grado</p>
+          <p className="font-display text-sm text-ink-900">{t("clubx.belt.newGrade")}</p>
           <div className="flex flex-wrap gap-2">
             {higher.slice(0, 6).map((b) => (
               <motion.button
@@ -189,10 +193,10 @@ function BeltAward({ athlete }: { athlete: AthleteCard }) {
             ))}
           </div>
           <div className="grid sm:grid-cols-2 gap-3">
-            <Field label="Data" htmlFor="belt-date"><Input id="belt-date" type="date" value={awardedOn} onChange={(e) => setAwardedOn(e.target.value)} /></Field>
-            <Field label="Nota" htmlFor="belt-note"><Input id="belt-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="es. Esame di dicembre" /></Field>
+            <Field label={t("clubx.belt.date")} htmlFor="belt-date"><Input id="belt-date" type="date" value={awardedOn} onChange={(e) => setAwardedOn(e.target.value)} /></Field>
+            <Field label={t("clubx.belt.note")} htmlFor="belt-note"><Input id="belt-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("clubx.belt.notePlaceholder")} /></Field>
           </div>
-          <Button size="lg" className="w-full" loading={busy} onClick={award}>🎖️ Assegna la cintura</Button>
+          <Button size="lg" className="w-full" loading={busy} onClick={award}>🎖️ {t("clubx.belt.award")}</Button>
         </div>
       )}
 
@@ -205,14 +209,14 @@ function BeltAward({ athlete }: { athlete: AthleteCard }) {
             onClick={() => setCeremony(null)}
             className="absolute inset-0 z-10 bg-white/95 backdrop-blur flex flex-col items-center justify-center text-center p-6 cursor-pointer"
           >
-            <motion.p initial={{ y: -10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.1 }} className="text-xs font-bold uppercase tracking-[0.25em] text-brand-600">Passaggio di grado</motion.p>
+            <motion.p initial={{ y: -10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.1 }} className="text-xs font-bold uppercase tracking-[0.25em] text-brand-600">{t("clubx.belt.ceremony")}</motion.p>
             <motion.div initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ delay: 0.25, type: "spring", stiffness: 120, damping: 14 }} className="my-6 origin-left">
               <BeltBadge code={ceremony} size="lg" showLabel={false} />
             </motion.div>
             <motion.h3 initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.5, type: "spring" }} className="text-2xl text-ink-900">
-              {athlete.first_name} è cintura {beltFor(ceremony).label.toLowerCase()}!
+              {t("clubx.belt.ceremonyTitle", { name: athlete.first_name, belt: beltLabel(t, ceremony, beltFor(ceremony).label).toLowerCase() })}
             </motion.h3>
-            <p className="text-sm text-ink-500 mt-2">Tocca per continuare</p>
+            <p className="text-sm text-ink-500 mt-2">{t("clubx.belt.tapContinue")}</p>
           </motion.div>
         )}
       </AnimatePresence>

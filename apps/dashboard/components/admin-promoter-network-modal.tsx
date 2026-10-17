@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { BranchMemberRead } from "@/lib/types";
 import { BranchVisualizer } from "@/components/branch-visualizer";
 import { PromoterAziendaPanel } from "@/components/promoter-azienda-panel";
+import { useI18n } from "@/lib/i18n/provider";
 
 async function fetchBranch(agentId: string): Promise<BranchMemberRead[]> {
   const res = await fetch(`/api/proxy/network/agents/${agentId}/branch`);
@@ -27,6 +28,7 @@ export function AdminPromoterNetworkModal({
   displayName: string;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const { data: branch, error: branchError, isLoading: branchLoading } = useQuery({
     queryKey: ["admin", "promoter-network", "branch", agentId],
     queryFn: () => fetchBranch(agentId),
@@ -43,7 +45,7 @@ export function AdminPromoterNetworkModal({
               {displayName.trim().charAt(0).toUpperCase() || "?"}
             </div>
             <div>
-              <h3 className="text-lg font-bold text-slate-900">Rete di {displayName}</h3>
+              <h3 className="text-lg font-bold text-slate-900">{t("net.adminPromNet.title", { name: displayName })}</h3>
               <div className="flex items-center gap-2 mt-0.5">
                 {self?.promoter_code && (
                   <span className="font-mono text-[10px] text-slate-500">{self.promoter_code}</span>
@@ -54,7 +56,7 @@ export function AdminPromoterNetworkModal({
                   </span>
                 )}
                 <span className="text-[11px] text-slate-500">
-                  Vista amministratore -- gli stessi dati che vede questo promoter, senza il resto della sua dashboard
+                  {t("net.adminPromNet.adminView")}
                 </span>
               </div>
             </div>
@@ -73,15 +75,15 @@ export function AdminPromoterNetworkModal({
           <PromoterAziendaPanel agentId={agentId} />
 
           <div>
-            <h4 className="text-sm font-semibold text-slate-900 mb-3">Albero della rete</h4>
+            <h4 className="text-sm font-semibold text-slate-900 mb-3">{t("net.adminPromNet.tree")}</h4>
             {branchLoading ? (
-              <p className="text-sm text-slate-500">Caricamento albero...</p>
+              <p className="text-sm text-slate-500">{t("net.adminPromNet.loading")}</p>
             ) : branchError ? (
-              <p className="text-sm text-rose-400">Impossibile caricare l&apos;albero della rete.</p>
+              <p className="text-sm text-rose-400">{t("net.adminPromNet.error")}</p>
             ) : branch && branch.length > 0 ? (
               <BranchVisualizer members={branch} />
             ) : (
-              <p className="text-sm text-slate-500">Nessun membro della rete da visualizzare.</p>
+              <p className="text-sm text-slate-500">{t("net.adminPromNet.empty")}</p>
             )}
           </div>
         </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useI18n } from "@/lib/i18n/provider";
 
 /** A document opened on top of the page instead of in a new tab (Session 57)
     -- the identity card, the bill, a photo of the meter -- so whoever is
@@ -25,8 +26,9 @@ export function DocumentPreviewModal({
   loadUrl: () => Promise<string>;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(false);
   const [zoomed, setZoomed] = useState(false);
   const isImage = contentType.startsWith("image/");
 
@@ -42,7 +44,7 @@ export function DocumentPreviewModal({
         created = URL.createObjectURL(new Blob([blob], { type: contentType }));
         if (!revoked) setObjectUrl(created);
       } catch {
-        if (!revoked) setError("Impossibile aprire il documento. Riprova tra un momento.");
+        if (!revoked) setError(true);
       }
     })();
     return () => {
@@ -77,7 +79,7 @@ export function DocumentPreviewModal({
               onClick={() => setZoomed((z) => !z)}
               className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-semibold text-white cursor-pointer"
             >
-              {zoomed ? "Adatta allo schermo" : "Dimensione reale"}
+              {zoomed ? t("acct.docPreview.fit") : t("acct.docPreview.realSize")}
             </button>
           )}
           {objectUrl && (
@@ -86,12 +88,12 @@ export function DocumentPreviewModal({
               download={filename}
               className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-semibold text-white"
             >
-              Scarica
+              {t("acct.docPreview.download")}
             </a>
           )}
           <button
             onClick={onClose}
-            aria-label="Chiudi"
+            aria-label={t("common.close")}
             className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white cursor-pointer"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -106,14 +108,14 @@ export function DocumentPreviewModal({
         onClick={(e) => e.stopPropagation()}
       >
         {error ? (
-          <p className="text-sm text-rose-300 text-center">{error}</p>
+          <p className="text-sm text-rose-300 text-center">{t("acct.docPreview.error")}</p>
         ) : !objectUrl ? (
           <div className="flex items-center gap-2 text-slate-300 text-sm">
             <svg className="animate-spin h-5 w-5 text-brand-600" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
-            Apertura del documento...
+            {t("acct.docPreview.opening")}
           </div>
         ) : isImage ? (
           // eslint-disable-next-line @next/next/no-img-element -- a private blob, not an optimizable asset

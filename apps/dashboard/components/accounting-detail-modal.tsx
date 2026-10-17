@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { JavCashAmount } from "@/components/jav-cash-amount";
 import { friendlyApiError } from "@/lib/api-error";
 import {
-  euro, formatDateTimeFull, movementDetailRef, movementDirection, movementLabel, movementsOfEntity,
+  movementCategory, movementDetailRef, movementDirection, movementEntity, movementReferenceLink,
+  movementsOfEntity, shortCode,
 } from "@/lib/accounting-format";
+import { useI18n } from "@/lib/i18n/provider";
 import type { AccountingDetailRead, FinancialMovementRead } from "@/lib/types";
 
 const TONE_BADGE: Record<string, string> = {
@@ -16,22 +18,77 @@ const TONE_BADGE: Record<string, string> = {
   neutral: "bg-slate-500/10 text-slate-400 border-slate-500/25",
 };
 
-const KIND_LABELS: Record<string, string> = {
-  WALLET: "Movimento JavCash",
-  ORDER: "Ordine",
-  CONTRACT: "Contratto Jav",
+const INSTALMENT_CLASS: Record<string, string> = {
+  PAID: "text-emerald-400",
+  SCHEDULED: "text-slate-400",
 };
 
-const TAB_LABELS: Record<string, string> = {
-  orders: "Apri in I miei Ordini",
-  contracts: "Apri in I miei Contratti",
-  wallet: "Apri il Wallet",
-};
+type Translate = ReturnType<typeof useI18n>["t"];
 
-const INSTALMENT_STATUS: Record<string, { label: string; className: string }> = {
-  PAID: { label: "Pagata", className: "text-emerald-400" },
-  SCHEDULED: { label: "Prevista", className: "text-slate-400" },
-};
+/** lib/accounting-format.ts in the reader's language: the same dates, amounts
+    and movement labels, with the locale and the words taken from i18n instead
+    of fixed Italian. Shared by every "Contabilità" screen (this modal,
+    accounting-panel.tsx, admin-accounting-panel.tsx). */
+export function makeAccountingFormat(t: Translate, tag: string) {
+  const ref = (kind: "order" | "contract", id: string) =>
+    kind === "order"
+      ? t("acct.wallet.orderRef", { code: shortCode(id) })
+      : t("acct.mv.contractRef", { code: shortCode(id) });
+  return {
+    euro: (cents: number) => (cents / 100).toLocaleString(tag, { style: "currency", currency: "EUR" }),
+    javCash: (cents: number) =>
+      `${(cents / 100).toLocaleString(tag, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} JavCash`,
+    plainAmount: (cents: number) =>
+      (cents / 100).toLocaleString(tag, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+    formatDate: (iso: string) => new Date(iso).toLocaleString(tag, { dateStyle: "medium", timeStyle: "short" }),
+    formatDateOnly: (iso: string) => new Date(iso).toLocaleDateString(tag),
+    formatDateTimeFull: (iso: string) =>
+      new Date(iso).toLocaleString(tag, {
+        day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit",
+      }),
+    formatDayShort: (iso: string) => new Date(iso).toLocaleDateString(tag, { day: "2-digit", month: "short" }),
+    formatTime: (iso: string) => new Date(iso).toLocaleTimeString(tag, { hour: "2-digit", minute: "2-digit" }),
+    monthLabel: (key: string) => {
+      const [year, month] = key.split("-").map(Number);
+      const label = new Date(year!, month! - 1, 1).toLocaleDateString(tag, { month: "long", year: "numeric" });
+      return label.charAt(0).toUpperCase() + label.slice(1);
+    },
+    /** movementCategory() stays the code the screens match on; this is its label. */
+    categoryLabel: (m: FinancialMovementRead) => {
+      const category = movementCategory(m);
+      return t.dyn(`acct.category.${category}`, category);
+    },
+    paymentMethodLabel: (method: string) => t.dyn(`acct.paymentMethod.${method}`, method),
+    movementLabel: (m: FinancialMovementRead) => {
+      if (m.kind === "ORDER_PAYMENT") {
+        const method = m.payment_method ? t.dyn(`acct.paymentMethod.${m.payment_method}`, m.payment_method) : null;
+        return method ? t("acct.mv.orderPaymentWith", { method }) : t("acct.mv.orderPayment");
+      }
+      if (m.kind === "CONTRACT_PAYMENT") {
+        return m.note ? t("acct.mv.contractPaymentNote", { note: m.note }) : t("acct.mv.contractPayment");
+      }
+      const sourceLabel = m.source ? t.dyn(`acct.wallet.source.${m.source}`, "") : "";
+      return sourceLabel || (m.type ? t.dyn(`acct.mv.type.${m.type}`, m.type) : t("acct.mv.walletMovement"));
+    },
+    movementEntity: (m: FinancialMovementRead) => {
+      const entity = movementEntity(m);
+      if (!entity) return null;
+      return { ...entity, label: m.order_id ? ref("order", m.order_id) : ref("contract", m.contract_id!) };
+    },
+    movementReferenceLink: (m: FinancialMovementRead, basePath: "/customer" | "/promoter") => {
+      const link = movementReferenceLink(m, basePath);
+      if (!link) return null;
+      return { ...link, label: m.order_id ? ref("order", m.order_id) : ref("contract", m.contract_id!) };
+    },
+    relatedRefLabel: (related: string) =>
+      ref(related.startsWith("order:") ? "order" : "contract", related.split(":")[1]!),
+  };
+}
+
+export function useAccountingFormat() {
+  const { t, fmt } = useI18n();
+  return useMemo(() => makeAccountingFormat(t, fmt.tag), [t, fmt.tag]);
+}
 
 /** The detail of one movement -- or of the order or contract it belongs to
     (Session 54).
@@ -56,6 +113,8 @@ export function AccountingDetailModal({
   onClose: () => void;
   onOpenTab?: (tab: string) => void;
 }) {
+  const { t } = useI18n();
+  const { euro, formatDateOnly, formatDateTimeFull, movementLabel, relatedRefLabel } = useAccountingFormat();
   const [stack, setStack] = useState<string[]>([initialRef]);
   const ref = stack[stack.length - 1]!;
   const { data, error, isLoading } = useQuery<AccountingDetailRead>({
@@ -91,14 +150,14 @@ export function AccountingDetailModal({
                 onClick={() => setStack((s) => s.slice(0, -1))}
                 className="px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-900/5 cursor-pointer"
               >
-                ← Indietro
+                ← {t("acct.detail.back")}
               </button>
             )}
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 truncate">
-              {data ? KIND_LABELS[data.kind] : "Dettaglio"}
+              {data ? t.dyn(`acct.detail.kind.${data.kind}`, data.kind) : t("acct.detail.detail")}
             </span>
           </div>
-          <button onClick={onClose} aria-label="Chiudi" className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100 cursor-pointer">
+          <button onClick={onClose} aria-label={t("common.close")} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100 cursor-pointer">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -135,7 +194,7 @@ export function AccountingDetailModal({
 
             {data.facts.length > 0 && (
               <section>
-                <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">Dettagli</h4>
+                <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">{t("acct.detail.details")}</h4>
                 <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 rounded-2xl border border-slate-200 px-4">
                   {data.facts.map((fact) => (
                     <div key={fact.label} className="py-2.5 border-b border-slate-100 min-w-0">
@@ -151,7 +210,7 @@ export function AccountingDetailModal({
 
             {data.timeline.length > 0 && (
               <section>
-                <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-3">Cronologia</h4>
+                <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-3">{t("acct.detail.timeline")}</h4>
                 <ol className="relative ml-2 border-l border-slate-200 space-y-4">
                   {data.timeline.map((event, i) => (
                     <li key={`${event.label}-${i}`} className="ml-4">
@@ -168,7 +227,7 @@ export function AccountingDetailModal({
                         {event.label}
                       </p>
                       <p className="text-[11px] text-slate-500">
-                        {event.at ? <span className="font-bold tabular-nums">{formatDateTimeFull(event.at)}</span> : "In attesa"}
+                        {event.at ? <span className="font-bold tabular-nums">{formatDateTimeFull(event.at)}</span> : t("acct.detail.pending")}
                         {event.by && <> · {event.by}</>}
                       </p>
                     </li>
@@ -180,27 +239,27 @@ export function AccountingDetailModal({
             {data.instalments.length > 0 && (
               <section>
                 <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">
-                  {data.instalments.length === 1 ? "Pagamento" : `Rate (${data.instalments.filter((r) => r.status === "PAID").length}/${data.instalments.length} pagate)`}
+                  {data.instalments.length === 1 ? t("acct.detail.payment") : t("acct.detail.instalmentsPaid", { paid: data.instalments.filter((r) => r.status === "PAID").length, total: data.instalments.length })}
                 </h4>
                 <div className="overflow-x-auto rounded-2xl border border-slate-200">
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="text-left text-slate-500 border-b border-slate-200">
                         <th className="py-2 px-3">#</th>
-                        <th className="py-2 px-3">Prevista</th>
-                        <th className="py-2 px-3 text-right">Importo</th>
-                        <th className="py-2 px-3">Stato</th>
-                        <th className="py-2 px-3">Incassata</th>
+                        <th className="py-2 px-3">{t("acct.detail.due")}</th>
+                        <th className="py-2 px-3 text-right">{t("acct.col.amount")}</th>
+                        <th className="py-2 px-3">{t("acct.col.status")}</th>
+                        <th className="py-2 px-3">{t("acct.detail.collected")}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {data.instalments.map((row) => (
                         <tr key={row.number}>
                           <td className="py-2 px-3 font-bold text-slate-600">{row.number}</td>
-                          <td className="py-2 px-3 text-slate-400">{new Date(row.due_date).toLocaleDateString("it-IT")}</td>
+                          <td className="py-2 px-3 text-slate-400">{formatDateOnly(row.due_date)}</td>
                           <td className="py-2 px-3 text-right font-semibold text-slate-900 tabular-nums">{euro(row.amount_cents)}</td>
-                          <td className={`py-2 px-3 font-semibold ${INSTALMENT_STATUS[row.status]?.className ?? ""}`}>
-                            {INSTALMENT_STATUS[row.status]?.label ?? row.status}
+                          <td className={`py-2 px-3 font-semibold ${INSTALMENT_CLASS[row.status] ?? ""}`}>
+                            {t.dyn(`acct.detail.instalment.${row.status}`, row.status)}
                           </td>
                           <td className="py-2 px-3 text-slate-400">
                             {row.paid_at ? (
@@ -220,7 +279,7 @@ export function AccountingDetailModal({
 
             {(linked.length > 0 || data.related_refs.length > 0) && (
               <section>
-                <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">Collegati</h4>
+                <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">{t("acct.detail.linked")}</h4>
                 <div className="space-y-1.5">
                   {data.related_refs.map((related) => (
                     <button
@@ -229,8 +288,7 @@ export function AccountingDetailModal({
                       className="w-full flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl border border-brand-500/25 bg-brand-500/5 hover:bg-brand-500/10 text-left cursor-pointer"
                     >
                       <span className="text-sm font-semibold text-brand-700">
-                        {related.startsWith("order:") ? "Ordine" : "Contratto"} #
-                        {related.split(":")[1]!.slice(0, 8).toUpperCase()}
+                        {relatedRefLabel(related)}
                       </span>
                       <span className="text-brand-600">→</span>
                     </button>
@@ -268,7 +326,7 @@ export function AccountingDetailModal({
                 onClick={() => onOpenTab(data.tab!)}
                 className="w-full rounded-xl bg-slate-900/5 hover:bg-slate-900/10 py-2.5 text-xs font-semibold text-slate-700 cursor-pointer"
               >
-                {TAB_LABELS[data.tab]}
+                {t.dyn(`acct.detail.tab.${data.tab}`, data.tab)}
               </button>
             )}
           </div>

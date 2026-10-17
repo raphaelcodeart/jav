@@ -47,10 +47,6 @@ const input =
   "w-full rounded-lg glass-input px-3 py-2 text-sm focus:border-brand-500";
 const label = "block font-semibold text-slate-500 uppercase tracking-wide mb-1";
 
-function euro(cents: number): string {
-  return (cents / 100).toLocaleString("it-IT", { style: "currency", currency: "EUR" });
-}
-
 function centsFrom(value: string): number {
   return Math.round((parseFloat(value.replace(",", ".")) || 0) * 100);
 }
@@ -108,33 +104,33 @@ function Impostazioni() {
       send<JavMarketSettingsRead>("/jav-market/settings", "PATCH", payload),
     onSuccess: (row) => {
       setForm(row);
-      setMessage({ ok: true, text: "Impostazioni salvate." });
+      setMessage({ ok: true, text: t("mkt.jm.settingsSaved") });
       queryClient.invalidateQueries({ queryKey: ["admin", "jav-market"] });
     },
     onError: (err: unknown) => setMessage({ ok: false, text: (err as Error).message }),
   });
 
-  if (!corrente) return <Card title="Impostazioni">Caricamento…</Card>;
+  if (!corrente) return <Card title={t("mkt.jm.settings")}>{t("mkt.jm.loading")}</Card>;
 
   return (
     <Card
-      title="Impostazioni del negozio"
-      subtitle="Finché è spento, il cliente non vede la scheda nello Shop: sparisce da sola."
+      title={t("mkt.jm.settingsTitle")}
+      subtitle={t("mkt.jm.settingsSubtitle")}
     >
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <div>
-          <span className={label}>Stato</span>
+          <span className={label}>{t("mkt.jm.state")}</span>
           <select
             className={input}
             value={corrente.enabled ? "on" : "off"}
             onChange={(e) => setForm({ ...corrente, enabled: e.target.value === "on" })}
           >
-            <option value="off">Spento</option>
-            <option value="on">Acceso</option>
+            <option value="off">{t("mkt.jm.off")}</option>
+            <option value="on">{t("mkt.jm.on")}</option>
           </select>
         </div>
         <div>
-          <span className={label}>Spedizione</span>
+          <span className={label}>{t("mkt.jm.shipping")}</span>
           <select
             className={input}
             value={corrente.shipping_mode}
@@ -142,12 +138,12 @@ function Impostazioni() {
               setForm({ ...corrente, shipping_mode: e.target.value as JavMarketSettingsRead["shipping_mode"] })
             }
           >
-            <option value="CUSTOMER_PAYS">la paga il cliente</option>
-            <option value="INCLUDED">inclusa nel prezzo</option>
+            <option value="CUSTOMER_PAYS">{t("mkt.jm.shippingCustomerPays")}</option>
+            <option value="INCLUDED">{t("mkt.jm.shippingIncluded")}</option>
           </select>
         </div>
         <div>
-          <span className={label}>Spese di spedizione (€)</span>
+          <span className={label}>{t("mkt.jm.shippingCost")}</span>
           <input
             className={input}
             inputMode="decimal"
@@ -156,12 +152,12 @@ function Impostazioni() {
           />
           <span className="block text-[10px] text-slate-500 mt-1">
             {corrente.shipping_mode === "INCLUDED"
-              ? "Inclusa nel prezzo: al checkout non si addebita nulla."
-              : "Addebitate una volta per ordine, non per articolo."}
+              ? t("mkt.jm.shippingIncludedHint")
+              : t("mkt.jm.shippingPerOrderHint")}
           </span>
         </div>
         <div>
-          <span className={label}>Ordine minimo (€, IVA inclusa)</span>
+          <span className={label}>{t("mkt.jm.minOrder")}</span>
           <input
             className={input}
             inputMode="decimal"
@@ -169,11 +165,11 @@ function Impostazioni() {
             onChange={(e) => setForm({ ...corrente, min_order_cents: centsFrom(e.target.value) })}
           />
           <span className="block text-[10px] text-slate-500 mt-1">
-            Sotto questa cifra di merce il cliente non può ordinare. 0 = nessun minimo.
+            {t("mkt.jm.minOrderHint")}
           </span>
         </div>
         <div>
-          <span className={label}>Spedizione gratis da (€, IVA inclusa)</span>
+          <span className={label}>{t("mkt.jm.freeShipping")}</span>
           <input
             className={input}
             inputMode="decimal"
@@ -181,31 +177,31 @@ function Impostazioni() {
             onChange={(e) => setForm({ ...corrente, free_shipping_threshold_cents: centsFrom(e.target.value) })}
           />
           <span className="block text-[10px] text-slate-500 mt-1">
-            Da questa cifra di merce la spedizione è gratuita. 0 = mai gratis.
+            {t("mkt.jm.freeShippingHint")}
           </span>
         </div>
         <div>
-          <span className={label}>Invio alle aziende</span>
+          <span className={label}>{t("mkt.jm.forwarding")}</span>
           <select
             className={input}
             value={corrente.auto_forward ? "auto" : "manuale"}
             onChange={(e) => setForm({ ...corrente, auto_forward: e.target.value === "auto" })}
           >
-            <option value="manuale">a mano, con il pulsante</option>
-            <option value="auto">automatico al pagamento</option>
+            <option value="manuale">{t("mkt.jm.forwardManual")}</option>
+            <option value="auto">{t("mkt.jm.forwardAuto")}</option>
           </select>
           <span className="block text-[10px] text-slate-500 mt-1">
             {corrente.auto_forward
-              ? "Appena il cliente paga, l'ordine parte da solo verso le aziende."
-              : "L'ordine pagato aspetta che tu prema «Invia alle aziende»: una verifica umana prima di mandare una email a un'azienda vera."}
+              ? t("mkt.jm.forwardAutoHint")
+              : t("mkt.jm.forwardManualHint")}
           </span>
         </div>
         <div>
-          <span className={label}>Tempi di consegna</span>
+          <span className={label}>{t("mkt.jm.deliveryTime")}</span>
           <input
             className={input}
             value={corrente.shipping_days ?? ""}
-            placeholder="es. 3-5"
+            placeholder={t("mkt.jm.deliveryTimePlaceholder")}
             onChange={(e) => setForm({ ...corrente, shipping_days: e.target.value })}
           />
         </div>
@@ -237,7 +233,7 @@ function Impostazioni() {
           disabled={salva.isPending}
           className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-40"
         >
-          {salva.isPending ? "Salvo…" : "Salva impostazioni"}
+          {salva.isPending ? t("mkt.jm.saving") : t("mkt.jm.saveSettings")}
         </button>
         <Esito message={message} />
       </div>
@@ -279,7 +275,7 @@ function Produttori() {
       }),
     onSuccess: (p) => {
       setForm({ ...PRODUTTORE_VUOTO });
-      setMessage({ ok: true, text: `«${p.name}» aggiunta.` });
+      setMessage({ ok: true, text: t("mkt.jm.supplierAdded", { name: p.name }) });
       queryClient.invalidateQueries({ queryKey: ["admin", "jav-market", "producers"] });
     },
     onError: (err: unknown) => setMessage({ ok: false, text: (err as Error).message }),
@@ -316,43 +312,43 @@ function Produttori() {
         onClick={() => setAperto(false)}
         className=" font-semibold text-slate-500 hover:text-slate-900 cursor-pointer"
       >
-        ← Chiudi
+        ← {t("common.close")}
       </button>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         <div className="sm:col-span-2">
-          <span className={label}>Nome dell&apos;azienda *</span>
+          <span className={label}>{t("mkt.jm.companyName")}</span>
           <input className={input} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </div>
         <div>
-          <span className={label}>Partita IVA</span>
+          <span className={label}>{t("mkt.jm.vatNumber")}</span>
           <input className={input} value={form.vat_number} onChange={(e) => setForm({ ...form, vat_number: e.target.value })} />
         </div>
         <div className="sm:col-span-3">
-          <span className={label}>Descrizione (la legge il cliente)</span>
+          <span className={label}>{t("mkt.jm.supplierDescription")}</span>
           <textarea
             className={`${input} min-h-[70px]`}
             value={form.description}
-            placeholder="Chi sono, cosa producono, dove."
+            placeholder={t("mkt.jm.supplierDescriptionPlaceholder")}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
           />
         </div>
         <div>
-          <span className={label}>Sito</span>
+          <span className={label}>{t("mkt.jm.website")}</span>
           <input className={input} value={form.website_url} placeholder="https://" onChange={(e) => setForm({ ...form, website_url: e.target.value })} />
         </div>
         <div>
-          <span className={label}>Email per gli ordini</span>
+          <span className={label}>{t("mkt.jm.orderEmail")}</span>
           <input className={input} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
           <span className="block text-[10px] text-slate-500 mt-1">
-            È qui che arriva l&apos;ordine quando il cliente paga. Senza, l&apos;ordine non si può inviare.
+            {t("mkt.jm.orderEmailHint")}
           </span>
         </div>
         <div>
-          <span className={label}>Telefono</span>
+          <span className={label}>{t("mkt.jm.phone")}</span>
           <input className={input} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
         </div>
         <div className="sm:col-span-3">
-          <span className={label}>Sede</span>
+          <span className={label}>{t("mkt.jm.address")}</span>
           <input className={input} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
         </div>
       </div>
@@ -362,7 +358,7 @@ function Produttori() {
           disabled={crea.isPending || form.name.trim().length === 0}
           className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-40"
         >
-          {crea.isPending ? "Aggiungo…" : t("shopSuppliers.registryAdd")}
+          {crea.isPending ? t("mkt.jm.adding") : t("shopSuppliers.registryAdd")}
         </button>
         <Esito message={message} />
       </div>
@@ -405,7 +401,7 @@ function FornitoreRiga({ producer: p }: { producer: JavMarketProducerRead }) {
             {!p.active && <span className="ml-2 text-[10px] font-bold text-slate-400">{t("shopSuppliers.inactive")}</span>}
           </p>
           <p className="text-[11px] text-slate-500 truncate">
-            {p.email ? p.email : <span className="text-amber-700">manca l&apos;email: gli ordini non partiranno</span>}
+            {p.email ? p.email : <span className="text-amber-700">{t("mkt.jm.missingEmail")}</span>}
             {p.phone ? ` · ${p.phone}` : ""}
             {p.description ? ` · ${p.description}` : ""}
           </p>
@@ -436,14 +432,14 @@ function FornitoreRiga({ producer: p }: { producer: JavMarketProducerRead }) {
   return (
     <div className="px-3 py-3 space-y-3 bg-slate-900/[0.02]">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {campo("name", "Nome dell'azienda *", "sm:col-span-2")}
-        {campo("vat_number", "Partita IVA")}
-        {campo("email", "Email per gli ordini")}
-        {campo("phone", "Telefono")}
-        {campo("website_url", "Sito")}
-        {campo("address", "Sede", "sm:col-span-3")}
+        {campo("name", t("mkt.jm.companyName"), "sm:col-span-2")}
+        {campo("vat_number", t("mkt.jm.vatNumber"))}
+        {campo("email", t("mkt.jm.orderEmail"))}
+        {campo("phone", t("mkt.jm.phone"))}
+        {campo("website_url", t("mkt.jm.website"))}
+        {campo("address", t("mkt.jm.address"), "sm:col-span-3")}
         <div className="sm:col-span-3">
-          <span className={label}>Descrizione (la legge il cliente)</span>
+          <span className={label}>{t("mkt.jm.supplierDescription")}</span>
           <textarea
             className={`${input} min-h-[60px]`}
             value={bozza.description}
@@ -461,10 +457,10 @@ function FornitoreRiga({ producer: p }: { producer: JavMarketProducerRead }) {
           disabled={salva.isPending || !bozza.name.trim()}
           className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-40"
         >
-          {salva.isPending ? "Salvo…" : "Salva modifiche"}
+          {salva.isPending ? t("mkt.jm.saving") : t("mkt.jm.saveChanges")}
         </button>
         <button onClick={() => setBozza(null)} className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:bg-slate-900/5 cursor-pointer">
-          Annulla
+          {t("common.cancel")}
         </button>
         <Esito message={message} />
       </div>
@@ -516,7 +512,7 @@ function CategorieEFornitori() {
         onClick={() => setAperto(false)}
         className=" font-semibold text-slate-500 hover:text-slate-900 cursor-pointer"
       >
-        ← Chiudi
+        ← {t("common.close")}
       </button>
       {error && <p className="text-xs text-rose-400">{(error as Error).message}</p>}
       <CategoryList
@@ -535,6 +531,7 @@ function CategorieEFornitori() {
  *  POST /jav-market/images) oppure si incolla un URL come prima. In tutti e
  *  due i casi al form arriva solo un URL. */
 function ImmagineProdotto({ value, onChange }: { value: string; onChange: (url: string) => void }) {
+  const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -552,7 +549,7 @@ function ImmagineProdotto({ value, onChange }: { value: string; onChange: (url: 
       const { image_url } = await res.json();
       onChange(image_url);
     } catch (err: unknown) {
-      setError((err as Error).message || "Caricamento fallito. Riprova.");
+      setError((err as Error).message || t("mkt.jm.uploadFailed"));
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = "";
@@ -562,7 +559,7 @@ function ImmagineProdotto({ value, onChange }: { value: string; onChange: (url: 
   return (
     <div className="flex items-start gap-3">
       <div className="w-16 h-16 rounded-lg overflow-hidden border border-slate-200 shrink-0">
-        <ProductThumbnail imageUrl={value || null} alt="Foto prodotto" iconClassName="w-7 h-7 text-brand-600/40" />
+        <ProductThumbnail imageUrl={value || null} alt={t("mkt.jm.productPhoto")} iconClassName="w-7 h-7 text-brand-600/40" />
       </div>
       <div className="flex-1 min-w-0 space-y-1.5">
         <div className="flex flex-wrap items-center gap-2">
@@ -573,7 +570,7 @@ function ImmagineProdotto({ value, onChange }: { value: string; onChange: (url: 
             disabled={uploading}
             className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 cursor-pointer transition disabled:opacity-40"
           >
-            {uploading ? "Caricamento…" : value ? "Cambia foto" : "Allega foto"}
+            {uploading ? t("mkt.jm.loading") : value ? t("mkt.jm.changePhoto") : t("mkt.jm.attachPhoto")}
           </button>
           {value && !uploading && (
             <button
@@ -581,14 +578,14 @@ function ImmagineProdotto({ value, onChange }: { value: string; onChange: (url: 
               onClick={() => onChange("")}
               className="px-2 py-1.5 rounded-lg text-[11px] font-semibold text-rose-400 hover:bg-rose-500/10 cursor-pointer"
             >
-              Togli
+              {t("mkt.jm.remove")}
             </button>
           )}
-          <span className="text-[10px] text-slate-500">JPG, PNG, WebP o GIF, max 5 MB.</span>
+          <span className="text-[10px] text-slate-500">{t("mkt.jm.imageFormats")}</span>
         </div>
         <input
           className={input}
-          placeholder="…oppure incolla l'URL di un'immagine"
+          placeholder={t("mkt.jm.imageUrlPlaceholder")}
           value={value}
           onChange={(e) => onChange(e.target.value)}
         />
@@ -613,7 +610,8 @@ const PRODOTTO_VUOTO = {
 type Editor = { mode: "create" } | { mode: "edit"; id: string };
 
 function Catalogo() {
-  const { t } = useI18n();
+  const { t, fmt } = useI18n();
+  const euro = (cents: number) => fmt.euro(cents);
   const queryClient = useQueryClient();
   const { data: products } = useQuery({
     queryKey: ["admin", "jav-market", "products"],
@@ -659,20 +657,20 @@ function Catalogo() {
   const inModifica = editor?.mode === "edit" ? tutti.find((p) => p.id === editor.id) ?? null : null;
 
   return (
-    <Card title="Prodotti in catalogo" subtitle={`${tutti.length} prodotti.`}>
+    <Card title={t("mkt.jm.catalogTitle")} subtitle={t("mkt.jm.catalogCount", { n: tutti.length })}>
       <div className="flex flex-col lg:flex-row gap-2 lg:items-center">
         <input
           className={`${input} lg:max-w-xs`}
-          placeholder="Cerca per nome, codice o EAN…"
+          placeholder={t("mkt.jm.catalogSearch")}
           value={cerca}
           onChange={(e) => setCerca(e.target.value)}
         />
         <div className="flex flex-wrap gap-1.5">
           {(
             [
-              ["TUTTI", "Tutti"],
-              ["ACTIVE", "In vendita"],
-              ["INACTIVE", "Spenti"],
+              ["TUTTI", t("mkt.jm.filterAll")],
+              ["ACTIVE", t("mkt.jm.onSale")],
+              ["INACTIVE", t("mkt.jm.filterOff")],
             ] as const
           ).map(([key, testoBottone]) => (
             <button
@@ -690,7 +688,7 @@ function Catalogo() {
         </div>
         {(producers ?? []).length > 1 && (
           <select className={`${input} lg:max-w-[12rem]`} value={produttore} onChange={(e) => setProduttore(e.target.value)}>
-            <option value="">Tutte le aziende</option>
+            <option value="">{t("mkt.jm.allSuppliers")}</option>
             {(producers ?? []).map((pr) => (
               <option key={pr.id} value={pr.id}>{pr.name}</option>
             ))}
@@ -700,19 +698,19 @@ function Catalogo() {
           onClick={() => setEditor({ mode: "create" })}
           className="lg:ml-auto px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer whitespace-nowrap"
         >
-          + Nuovo prodotto
+          {t("mkt.jm.newProductButton")}
         </button>
       </div>
       <Esito message={message} />
 
       {tutti.length === 0 ? (
-        <p className="text-xs text-slate-500">Nessun prodotto ancora. Premi «+ Nuovo prodotto» per caricarne uno.</p>
+        <p className="text-xs text-slate-500">{t("mkt.jm.catalogEmpty")}</p>
       ) : visibili.length === 0 ? (
-        <p className="text-xs text-slate-500">Nessun prodotto corrisponde alla ricerca.</p>
+        <p className="text-xs text-slate-500">{t("mkt.jm.catalogNoMatch")}</p>
       ) : (
         <>
           {visibili.length !== tutti.length && (
-            <p className="text-[11px] text-slate-500">Ne mostro {visibili.length} su {tutti.length}.</p>
+            <p className="text-[11px] text-slate-500">{t("mkt.jm.showingOf", { n: visibili.length, total: tutti.length })}</p>
           )}
           <div className="rounded-xl border border-slate-200 divide-y divide-slate-200">
             {visibili.map((p) => (
@@ -737,7 +735,7 @@ function Catalogo() {
                       ) : (
                         <span className="text-amber-700">{t("shopSuppliers.noSupplierShort")} · </span>
                       )}
-                      {p.variants.length} {p.variants.length === 1 ? "variante" : "varianti"} ·{" "}
+                      {p.variants.length === 1 ? t("mkt.jm.variantOne") : t("mkt.jm.variantMany", { n: p.variants.length })} ·{" "}
                       {euro(Math.min(...p.variants.map((v) => v.price_cents)))}
                       {p.variants.length > 1 &&
                         Math.max(...p.variants.map((v) => v.price_cents)) !== Math.min(...p.variants.map((v) => v.price_cents)) &&
@@ -750,7 +748,7 @@ function Catalogo() {
                   onClick={() => setEditor({ mode: "edit", id: p.id })}
                   className="px-2.5 py-1 rounded-lg font-semibold border border-slate-300 text-slate-600 hover:bg-slate-100 cursor-pointer"
                 >
-                  Modifica
+                  {t("mkt.jm.edit")}
                 </button>
                 <button
                   onClick={() => spegni.mutate({ id: p.id, status: p.status === "ACTIVE" ? "INACTIVE" : "ACTIVE" })}
@@ -760,7 +758,7 @@ function Catalogo() {
                       : " border-slate-300 text-slate-500 hover:bg-slate-100"
                   }`}
                 >
-                  {p.status === "ACTIVE" ? "In vendita" : "Spento"}
+                  {p.status === "ACTIVE" ? t("mkt.jm.onSale") : t("mkt.jm.offProduct")}
                 </button>
               </div>
             ))}
@@ -774,7 +772,7 @@ function Catalogo() {
           onClose={() => setEditor(null)}
           onCreated={(p) => {
             setEditor(null);
-            setMessage({ ok: true, text: `«${p.name}» caricato.` });
+            setMessage({ ok: true, text: t("mkt.jm.productUploaded", { name: p.name }) });
           }}
         />
       )}
@@ -794,6 +792,7 @@ function Catalogo() {
  *  barra fissa in alto, così il pulsante per chiudere resta a portata anche
  *  su un prodotto con cento varianti. */
 function Finestra({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  const { t } = useI18n();
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
       <div className="w-full sm:max-w-3xl max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-2xl border border-slate-200 bg-white shadow-2xl animate-scale-up">
@@ -801,7 +800,7 @@ function Finestra({ title, onClose, children }: { title: string; onClose: () => 
           <h3 className="text-sm font-bold text-slate-900 truncate">{title}</h3>
           <button
             onClick={onClose}
-            aria-label="Chiudi"
+            aria-label={t("common.close")}
             className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-900/5 cursor-pointer"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -846,7 +845,7 @@ function NuovoProdotto({ producers, onClose, onCreated }: {
       });
       // Le categorie stanno in un altro dominio: si salvano dopo, e solo
       // se ne è stata scelta qualcuna.
-      if (categorie.length > 0) await saveProductCategories("jav_market", creato.id, categorie);
+      if (categorie.length > 0) await saveProductCategories("jav_market", creato.id, categorie, t("mkt.cat.saveProductFailed"));
       return creato;
     },
     onSuccess: (p) => {
@@ -858,13 +857,13 @@ function NuovoProdotto({ producers, onClose, onCreated }: {
   });
 
   return (
-    <Finestra title="Nuovo prodotto" onClose={onClose}>
+    <Finestra title={t("mkt.jm.newProduct")} onClose={onClose}>
       <p className="text-[11px] text-slate-500">
-        Serve almeno una variante con il suo prezzo: un prodotto senza varianti non sarebbe comprabile.
+        {t("mkt.jm.newProductHint")}
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="sm:col-span-2">
-          <span className={label}>Nome *</span>
+          <span className={label}>{t("mkt.jm.nameRequired")}</span>
           <input className={input} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </div>
         <div>
@@ -880,17 +879,17 @@ function NuovoProdotto({ producers, onClose, onCreated }: {
           </span>
         </div>
         <div>
-          <span className={label}>JavCash max (%)</span>
+          <span className={label}>{t("mkt.jm.javcashMax")}</span>
           <input
             className={input}
             inputMode="numeric"
             value={form.credit_discount_percentage}
             onChange={(e) => setForm({ ...form, credit_discount_percentage: e.target.value })}
           />
-          <span className="block text-[10px] text-slate-500 mt-1">Mai 100: è la regola dei Marketplace.</span>
+          <span className="block text-[10px] text-slate-500 mt-1">{t("mkt.jm.javcashMaxHint")}</span>
         </div>
         <div className="sm:col-span-3">
-          <span className={label}>Descrizione</span>
+          <span className={label}>{t("mkt.jm.description")}</span>
           <textarea
             className={`${input} min-h-[70px]`}
             value={form.description}
@@ -898,17 +897,17 @@ function NuovoProdotto({ producers, onClose, onCreated }: {
           />
         </div>
         <div>
-          <span className={label}>Costo per noi (€)</span>
+          <span className={label}>{t("mkt.jm.unitCost")}</span>
           <input
             className={input}
             inputMode="decimal"
             value={form.unit_cost}
             onChange={(e) => setForm({ ...form, unit_cost: e.target.value })}
           />
-          <span className="block text-[10px] text-slate-500 mt-1">Serve solo al margine, mai mostrato.</span>
+          <span className="block text-[10px] text-slate-500 mt-1">{t("mkt.jm.unitCostHint")}</span>
         </div>
         <div className="sm:col-span-4">
-          <span className={label}>Immagine</span>
+          <span className={label}>{t("mkt.jm.image")}</span>
           <ImmagineProdotto value={form.image_url} onChange={(url) => setForm({ ...form, image_url: url })} />
         </div>
         <div className="sm:col-span-4">
@@ -917,26 +916,26 @@ function NuovoProdotto({ producers, onClose, onCreated }: {
       </div>
 
       <div className="space-y-2">
-        <p className={label}>Varianti</p>
+        <p className={label}>{t("mkt.jm.variants")}</p>
         {variants.map((v, i) => (
           <div key={i} className="grid grid-cols-1 sm:grid-cols-4 gap-2">
             <input
               className={input}
-              placeholder="Etichetta (es. 500 g)"
+              placeholder={t("mkt.jm.variantLabelPlaceholder")}
               value={v.label}
               onChange={(e) => setVariants(variants.map((x, j) => (i === j ? { ...x, label: e.target.value } : x)))}
             />
             <input
               className={input}
               inputMode="decimal"
-              placeholder="Prezzo €"
+              placeholder={t("mkt.jm.pricePlaceholder")}
               value={v.price}
               onChange={(e) => setVariants(variants.map((x, j) => (i === j ? { ...x, price: e.target.value } : x)))}
             />
             <input
               className={input}
               inputMode="numeric"
-              placeholder="Scorta (vuoto = illimitata)"
+              placeholder={t("mkt.jm.stockPlaceholder")}
               value={v.inventory}
               onChange={(e) => setVariants(variants.map((x, j) => (i === j ? { ...x, inventory: e.target.value } : x)))}
             />
@@ -945,7 +944,7 @@ function NuovoProdotto({ producers, onClose, onCreated }: {
                 onClick={() => setVariants(variants.filter((_, j) => j !== i))}
                 className="px-3 py-2 rounded-lg text-xs font-semibold text-rose-400 hover:bg-rose-500/10 cursor-pointer"
               >
-                Togli
+                {t("mkt.jm.remove")}
               </button>
             )}
           </div>
@@ -954,7 +953,7 @@ function NuovoProdotto({ producers, onClose, onCreated }: {
           onClick={() => setVariants([...variants, { label: "", price: "", inventory: "" }])}
           className="text-[11px] font-semibold text-brand-600 hover:text-brand-600 cursor-pointer"
         >
-          + Aggiungi variante
+          {t("mkt.jm.addVariant")}
         </button>
       </div>
 
@@ -964,10 +963,10 @@ function NuovoProdotto({ producers, onClose, onCreated }: {
           disabled={crea.isPending || !form.name.trim() || variants.every((v) => !v.price)}
           className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-40"
         >
-          {crea.isPending ? "Carico…" : "Carica prodotto"}
+          {crea.isPending ? t("mkt.jm.uploading") : t("mkt.jm.uploadProduct")}
         </button>
         <button onClick={onClose} className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:bg-slate-900/5 cursor-pointer">
-          Annulla
+          {t("common.cancel")}
         </button>
         <Esito message={message} />
       </div>
@@ -1006,7 +1005,7 @@ function ModificaProdotto({ product, producers, onClose }: {
         image_url: bozza.image_url || null,
       });
       if (!sameCategorySelection(categorie, product.category_ids ?? [])) {
-        await saveProductCategories("jav_market", product.id, categorie);
+        await saveProductCategories("jav_market", product.id, categorie, t("mkt.cat.saveProductFailed"));
       }
     },
     onSuccess: () => {
@@ -1039,7 +1038,7 @@ function ModificaProdotto({ product, producers, onClose }: {
     },
     onSuccess: (n) => {
       setPrezzoTutte("");
-      setMessage({ ok: true, text: `Prezzo applicato a ${n} varianti.` });
+      setMessage({ ok: true, text: t("mkt.jm.priceApplied", { n }) });
     },
     onError: (err: unknown) => setMessage({ ok: false, text: (err as Error).message }),
     onSettled: invalida,
@@ -1060,27 +1059,27 @@ function ModificaProdotto({ product, producers, onClose }: {
   const prezzoValido = centsFrom(prezzoTutte) > 0;
 
   return (
-    <Finestra title={`Modifica «${product.name}»`} onClose={onClose}>
+    <Finestra title={t("mkt.jm.editTitle", { name: product.name })} onClose={onClose}>
       <div className="flex flex-wrap items-center gap-2">
         <span
           className={`px-2 py-0.5 rounded-md text-[11px] font-bold ${
             product.status === "ACTIVE" ? "bg-emerald-500/15 text-emerald-400" : " bg-slate-900/5 text-slate-500"
           }`}
         >
-          {product.status === "ACTIVE" ? "In vendita" : "Spento: il cliente non lo vede"}
+          {product.status === "ACTIVE" ? t("mkt.jm.onSale") : t("mkt.jm.offHidden")}
         </span>
         <button
           onClick={() => cambiaStato.mutate()}
           disabled={cambiaStato.isPending}
           className="px-2.5 py-1 rounded-lg font-semibold border border-slate-300 text-slate-600 hover:bg-slate-100 cursor-pointer disabled:opacity-40"
         >
-          {product.status === "ACTIVE" ? "Spegni" : "Metti in vendita"}
+          {product.status === "ACTIVE" ? t("mkt.jm.turnOff") : t("mkt.jm.putOnSale")}
         </button>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="sm:col-span-2">
-          <span className={label}>Nome</span>
+          <span className={label}>{t("mkt.jm.name")}</span>
           <input className={input} value={bozza.name} onChange={(e) => setBozza({ ...bozza, name: e.target.value })} />
         </div>
         <div>
@@ -1107,7 +1106,7 @@ function ModificaProdotto({ product, producers, onClose }: {
           </span>
         </div>
         <div className="sm:col-span-2">
-          <span className={label}>Descrizione</span>
+          <span className={label}>{t("mkt.jm.description")}</span>
           <textarea
             className={`${input} min-h-[70px]`}
             value={bozza.description}
@@ -1115,7 +1114,7 @@ function ModificaProdotto({ product, producers, onClose }: {
           />
         </div>
         <div>
-          <span className={label}>JavCash max (%)</span>
+          <span className={label}>{t("mkt.jm.javcashMax")}</span>
           <input
             className={input}
             inputMode="numeric"
@@ -1125,7 +1124,7 @@ function ModificaProdotto({ product, producers, onClose }: {
         </div>
       </div>
       <div>
-        <span className={label}>Immagine principale</span>
+        <span className={label}>{t("mkt.jm.mainImage")}</span>
         <ImmagineProdotto value={bozza.image_url ?? ""} onChange={(url) => setBozza({ ...bozza, image_url: url || null })} />
       </div>
       <ProductCategoriesField shop="jav_market" value={categorie} onChange={setCategorie} />
@@ -1135,25 +1134,25 @@ function ModificaProdotto({ product, producers, onClose }: {
           disabled={salva.isPending || !bozza.name.trim()}
           className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-40"
         >
-          {salva.isPending ? "Salvo…" : "Salva modifiche"}
+          {salva.isPending ? t("mkt.jm.saving") : t("mkt.jm.saveChanges")}
         </button>
         <button onClick={onClose} className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:bg-slate-900/5 cursor-pointer">
-          Annulla
+          {t("common.cancel")}
         </button>
       </div>
 
       <div className="space-y-2 pt-4 border-t border-slate-200">
         <p className={label}>
-          Prezzi e scorte · {product.variants.length} {product.variants.length === 1 ? "variante" : "varianti"} · si
-          salvano uscendo dal campo
+          {t("mkt.jm.pricesStock")} · {product.variants.length === 1 ? t("mkt.jm.variantOne") : t("mkt.jm.variantMany", { n: product.variants.length })} ·{" "}
+          {t("mkt.jm.savedOnBlur")}
         </p>
         {product.variants.length > 1 && (
           <div className="flex flex-wrap items-center gap-2 p-3 rounded-xl bg-slate-900/5">
-            <span className=" text-slate-600">Stesso prezzo per tutte le varianti:</span>
+            <span className=" text-slate-600">{t("mkt.jm.samePriceAll")}</span>
             <input
               className={`${input} max-w-[8rem]`}
               inputMode="decimal"
-              placeholder="Prezzo €"
+              placeholder={t("mkt.jm.pricePlaceholder")}
               value={prezzoTutte}
               onChange={(e) => setPrezzoTutte(e.target.value)}
             />
@@ -1162,14 +1161,14 @@ function ModificaProdotto({ product, producers, onClose }: {
               disabled={!prezzoValido || applicaATutte.isPending}
               className="px-3 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-[11px] font-semibold text-white cursor-pointer disabled:opacity-40"
             >
-              {applicaATutte.isPending ? "Applico…" : `Applica a ${product.variants.length}`}
+              {applicaATutte.isPending ? t("mkt.jm.applying") : t("mkt.jm.applyTo", { n: product.variants.length })}
             </button>
           </div>
         )}
         {product.variants.length > 8 && (
           <input
             className={input}
-            placeholder="Cerca una variante (taglia, colore, EAN)…"
+            placeholder={t("mkt.jm.variantSearch")}
             value={filtroVarianti}
             onChange={(e) => setFiltroVarianti(e.target.value)}
           />
@@ -1191,7 +1190,7 @@ function ModificaProdotto({ product, producers, onClose }: {
               <input
                 className={input}
                 inputMode="decimal"
-                aria-label={`Prezzo ${v.label}`}
+                aria-label={t("mkt.jm.priceOf", { label: v.label })}
                 defaultValue={(v.price_cents / 100).toString()}
                 onBlur={(e) => {
                   const cents = centsFrom(e.target.value);
@@ -1203,8 +1202,8 @@ function ModificaProdotto({ product, producers, onClose }: {
               <input
                 className={input}
                 inputMode="numeric"
-                placeholder="Scorta"
-                aria-label={`Scorta ${v.label}`}
+                placeholder={t("mkt.jm.stock")}
+                aria-label={t("mkt.jm.stockOf", { label: v.label })}
                 defaultValue={v.inventory === null ? "" : String(v.inventory)}
                 onBlur={(e) => {
                   const inventory = e.target.value === "" ? null : Number(e.target.value);
@@ -1215,7 +1214,7 @@ function ModificaProdotto({ product, producers, onClose }: {
               />
             </div>
           ))}
-          {varianti.length === 0 && <p className="text-xs text-slate-500">Nessuna variante corrisponde.</p>}
+          {varianti.length === 0 && <p className="text-xs text-slate-500">{t("mkt.jm.variantNoMatch")}</p>}
         </div>
       </div>
       <Esito message={message} />
@@ -1527,6 +1526,7 @@ function faseOrdine(o: JavMarketOrderRead): FiltroOrdini {
 }
 
 function Ordini() {
+  const { t } = useI18n();
   const { data: orders } = useQuery({
     queryKey: ["admin", "jav-market", "orders"],
     queryFn: () => get<JavMarketOrderRead[]>("/jav-market/orders"),
@@ -1537,15 +1537,15 @@ function Ordini() {
   const visibili = filtro === "TUTTI" ? tutti : tutti.filter((o) => faseOrdine(o) === filtro);
 
   return (
-    <Card title="Ordini" subtitle="Un ordine pagato si manda alle aziende per email e si segna spedito con il tracking: il cliente riceve un'email a ogni passaggio.">
+    <Card title={t("mkt.jm.ordersTitle")} subtitle={t("mkt.jm.ordersSubtitle")}>
       <div className="flex flex-wrap gap-1.5">
         {(
           [
-            ["DA_SPEDIRE", "Da spedire"],
-            ["DA_PAGARE", "In attesa di pagamento"],
-            ["SPEDITI", "Spediti"],
-            ["ANNULLATI", "Annullati"],
-            ["TUTTI", "Tutti"],
+            ["DA_SPEDIRE", t("mkt.jm.filterToShip")],
+            ["DA_PAGARE", t("mkt.jm.awaitingPayment")],
+            ["SPEDITI", t("mkt.jm.filterShipped")],
+            ["ANNULLATI", t("mkt.jm.filterCancelled")],
+            ["TUTTI", t("mkt.jm.filterAll")],
           ] as const
         ).map(([key, testo]) => (
           <button
@@ -1562,7 +1562,7 @@ function Ordini() {
         ))}
       </div>
       {visibili.length === 0 ? (
-        <p className="text-xs text-slate-500">Nessun ordine in questo stato.</p>
+        <p className="text-xs text-slate-500">{t("mkt.jm.ordersEmpty")}</p>
       ) : (
         <div className="space-y-3">
           {visibili.map((o) => (
@@ -1575,7 +1575,8 @@ function Ordini() {
 }
 
 function OrdineCard({ order: o }: { order: JavMarketOrderRead }) {
-  const { t } = useI18n();
+  const { t, fmt } = useI18n();
+  const euro = (cents: number) => fmt.euro(cents);
   const queryClient = useQueryClient();
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [spedizione, setSpedizione] = useState<{ tracking_company: string; tracking_number: string; tracking_url: string } | null>(null);
@@ -1605,10 +1606,10 @@ function OrdineCard({ order: o }: { order: JavMarketOrderRead }) {
             #{o.order_code} · {o.customer_display_name}
           </p>
           <p className="text-[11px] text-slate-500">
-            {new Date(o.created_at).toLocaleString("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-            {" · "}totale {euro(o.amount_cents)}
-            {o.credit_applied_cents > 0 && ` (di cui ${euro(o.credit_applied_cents)} in JavCash)`}
-            {" · "}bonifico
+            {fmt.date(new Date(o.created_at), { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+            {" · "}{t("mkt.jm.totalLower")} {euro(o.amount_cents)}
+            {o.credit_applied_cents > 0 && ` (${t("mkt.jm.ofWhichJavCash", { amount: euro(o.credit_applied_cents) })})`}
+            {" · "}{t("mkt.jm.bankTransferLower")}
           </p>
         </div>
         <span
@@ -1623,18 +1624,18 @@ function OrdineCard({ order: o }: { order: JavMarketOrderRead }) {
           }`}
         >
           {fase === "DA_SPEDIRE"
-            ? "Pagato · da spedire"
+            ? t("mkt.jm.paidToShip")
             : fase === "SPEDITI"
-              ? o.delivered_at ? "Consegnato" : "Spedito"
+              ? o.delivered_at ? t("mkt.jm.delivered") : t("mkt.jm.shipped")
               : fase === "DA_PAGARE"
-                ? "In attesa di pagamento"
-                : "Annullato"}
+                ? t("mkt.jm.awaitingPayment")
+                : t("mkt.jm.cancelled")}
         </span>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div className="rounded-lg bg-slate-900/5 p-3 space-y-1">
-          <p className={label}>Cosa ha comprato</p>
+          <p className={label}>{t("mkt.jm.whatBought")}</p>
           {(o.items ?? []).map((i) => (
             <div key={i.id} className="text-xs text-slate-700">
               <span className="font-semibold">{i.quantity} ×</span> {i.product_name}
@@ -1646,12 +1647,12 @@ function OrdineCard({ order: o }: { order: JavMarketOrderRead }) {
             </div>
           ))}
           <p className="text-[11px] text-slate-500 pt-1">
-            Merce {euro(o.items_cents)} · spedizione {euro(o.shipping_cents)}
-            {(o.vat_amount_cents ?? 0) > 0 && ` · IVA ${euro(o.vat_amount_cents ?? 0)}`}
+            {t("mkt.jm.goods")} {euro(o.items_cents)} · {t("mkt.jm.shippingLower")} {euro(o.shipping_cents)}
+            {(o.vat_amount_cents ?? 0) > 0 && ` · ${t("mkt.jm.vat")} ${euro(o.vat_amount_cents ?? 0)}`}
           </p>
         </div>
         <div className="rounded-lg bg-slate-900/5 p-3 space-y-1">
-          <p className={label}>Dove spedire</p>
+          <p className={label}>{t("mkt.jm.whereShip")}</p>
           <p className="text-xs text-slate-800 select-all leading-relaxed">
             {o.recipient_name}
             <br />
@@ -1660,14 +1661,14 @@ function OrdineCard({ order: o }: { order: JavMarketOrderRead }) {
             <br />
             {o.postal_code} {o.city} ({o.province})
           </p>
-          {o.recipient_phone && <p className="text-[11px] text-slate-400">Tel. {o.recipient_phone}</p>}
-          {o.note && <p className=" text-amber-700">Nota del cliente: {o.note}</p>}
+          {o.recipient_phone && <p className="text-[11px] text-slate-400">{t("mkt.jm.tel")} {o.recipient_phone}</p>}
+          {o.note && <p className=" text-amber-700">{t("mkt.jm.customerNote")}: {o.note}</p>}
           {(o.tracking_number || extra.tracking_company) && (
             <p className="text-[11px] text-sky-400">
               {extra.tracking_company ? `${extra.tracking_company} · ` : ""}
               {o.tracking_url ? (
                 <a href={o.tracking_url} target="_blank" rel="noopener noreferrer" className="underline">
-                  {o.tracking_number ?? "tracking"}
+                  {o.tracking_number ?? t("mkt.jm.tracking")}
                 </a>
               ) : (
                 o.tracking_number
@@ -1678,29 +1679,29 @@ function OrdineCard({ order: o }: { order: JavMarketOrderRead }) {
       </div>
       {o.status === "PAID" && (o.forwarded_at || o.forward_error) && (
         <p className={`text-[11px] ${o.forward_error ? "text-amber-700" : "text-slate-400"}`}>
-          {o.forwarded_at && `Inviato alle aziende il ${new Date(o.forwarded_at).toLocaleString("it-IT")}. `}
-          {o.forward_error && `Da sistemare: ${o.forward_error}`}
+          {o.forwarded_at && `${t("mkt.jm.forwardedOn", { date: new Date(o.forwarded_at).toLocaleString(fmt.tag) })} `}
+          {o.forward_error && t("mkt.jm.toFix", { error: o.forward_error })}
         </p>
       )}
       <div className="flex flex-wrap items-center gap-2">
         {o.status === "AWAITING_PAYMENT" && o.payment_method === "BANK_TRANSFER" && (
           <button
-            onClick={() => azione.mutate({ path: "confirm-payment", ok: "Bonifico confermato: ordine pagato." })}
+            onClick={() => azione.mutate({ path: "confirm-payment", ok: t("mkt.jm.okPaid") })}
             disabled={azione.isPending}
             className="px-3 py-1.5 rounded-lg text-[11px] font-semibold border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 cursor-pointer disabled:opacity-40"
           >
-            Conferma bonifico ricevuto
+            {t("mkt.jm.confirmTransfer")}
           </button>
         )}
         {/* Solo se resta qualcosa da mandare: le righe già partite (da qui o
             da «Fornitori da avvisare») non ripartono. */}
         {o.status === "PAID" && !o.shipped_at && (o.supplier_pending_count ?? 1) > 0 && (
           <button
-            onClick={() => azione.mutate({ path: "forward", ok: "Ordine inviato per email alle aziende." })}
+            onClick={() => azione.mutate({ path: "forward", ok: t("mkt.jm.okForwarded") })}
             disabled={azione.isPending}
             className="px-3 py-1.5 rounded-lg font-semibold border border-slate-300 text-slate-700 hover:bg-slate-100 cursor-pointer disabled:opacity-40"
           >
-            {o.forwarded_at ? t("shopSuppliers.forwardRemaining") : "Invia alle aziende per email"}
+            {o.forwarded_at ? t("shopSuppliers.forwardRemaining") : t("mkt.jm.forwardByEmail")}
           </button>
         )}
         {fase === "DA_SPEDIRE" && (
@@ -1708,16 +1709,16 @@ function OrdineCard({ order: o }: { order: JavMarketOrderRead }) {
             onClick={() => setSpedizione(spedizione ? null : { tracking_company: "", tracking_number: "", tracking_url: "" })}
             className="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-brand-600 hover:bg-brand-500 text-white cursor-pointer"
           >
-            Segna come spedito
+            {t("mkt.jm.markShipped")}
           </button>
         )}
         {o.shipped_at && !o.delivered_at && o.status === "PAID" && (
           <button
-            onClick={() => azione.mutate({ path: "delivered", ok: "Segnato come consegnato: il cliente ha ricevuto l'email." })}
+            onClick={() => azione.mutate({ path: "delivered", ok: t("mkt.jm.okDelivered") })}
             disabled={azione.isPending}
             className="px-3 py-1.5 rounded-lg text-[11px] font-semibold border border-sky-500/30 text-sky-400 hover:bg-sky-500/10 cursor-pointer disabled:opacity-40"
           >
-            Segna come consegnato
+            {t("mkt.jm.markDelivered")}
           </button>
         )}
         {o.status === "AWAITING_PAYMENT" && (
@@ -1725,7 +1726,7 @@ function OrdineCard({ order: o }: { order: JavMarketOrderRead }) {
             onClick={() => setAnnulla(annulla === null ? "" : null)}
             className="px-3 py-1.5 rounded-lg text-[11px] font-semibold border border-rose-500/30 text-rose-400 hover:bg-rose-500/10 cursor-pointer"
           >
-            Annulla ordine
+            {t("mkt.jm.cancelOrder")}
           </button>
         )}
       </div>
@@ -1733,41 +1734,41 @@ function OrdineCard({ order: o }: { order: JavMarketOrderRead }) {
       {spedizione && (
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 items-end">
           <div>
-            <span className={label}>Corriere</span>
-            <input className={input} placeholder="es. BRT" value={spedizione.tracking_company}
+            <span className={label}>{t("mkt.jm.carrier")}</span>
+            <input className={input} placeholder={t("mkt.jm.carrierPlaceholder")} value={spedizione.tracking_company}
               onChange={(e) => setSpedizione({ ...spedizione, tracking_company: e.target.value })} />
           </div>
           <div>
-            <span className={label}>Numero di tracking</span>
+            <span className={label}>{t("mkt.jm.trackingNumber")}</span>
             <input className={input} value={spedizione.tracking_number}
               onChange={(e) => setSpedizione({ ...spedizione, tracking_number: e.target.value })} />
           </div>
           <div>
-            <span className={label}>Link di tracciamento</span>
+            <span className={label}>{t("mkt.jm.trackingLink")}</span>
             <input className={input} placeholder="https://…" value={spedizione.tracking_url}
               onChange={(e) => setSpedizione({ ...spedizione, tracking_url: e.target.value })} />
           </div>
           <button
-            onClick={() => azione.mutate({ path: "ship", body: spedizione, ok: "Segnato come spedito: il cliente ha ricevuto l'email con il tracking." })}
+            onClick={() => azione.mutate({ path: "ship", body: spedizione, ok: t("mkt.jm.okShipped") })}
             disabled={azione.isPending}
             className="px-3 py-2 rounded-lg text-xs font-semibold bg-brand-600 hover:bg-brand-500 text-white cursor-pointer disabled:opacity-40"
           >
-            {azione.isPending ? "Salvo…" : "Conferma spedizione"}
+            {azione.isPending ? t("mkt.jm.saving") : t("mkt.jm.confirmShipping")}
           </button>
         </div>
       )}
       {annulla !== null && (
         <div className="flex flex-wrap items-end gap-2">
           <div className="flex-1 min-w-[200px]">
-            <span className={label}>Motivo dell&apos;annullamento</span>
+            <span className={label}>{t("mkt.jm.cancelReason")}</span>
             <input className={input} value={annulla} onChange={(e) => setAnnulla(e.target.value)} autoFocus />
           </div>
           <button
-            onClick={() => azione.mutate({ path: "cancel", body: { reason: annulla }, ok: "Ordine annullato: i JavCash usati tornano al cliente." })}
+            onClick={() => azione.mutate({ path: "cancel", body: { reason: annulla }, ok: t("mkt.jm.okCancelled") })}
             disabled={azione.isPending || !annulla.trim()}
             className="px-3 py-2 rounded-lg text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white cursor-pointer disabled:opacity-40"
           >
-            Conferma annullamento
+            {t("mkt.jm.confirmCancel")}
           </button>
         </div>
       )}

@@ -11,6 +11,7 @@ import { clubGet, clubSend, type CashReceiver, type Fee } from "@/lib/club";
 import { cn } from "@/lib/cn";
 import { celebrate } from "@/lib/motion";
 import { useI18n } from "@/lib/i18n/provider";
+import { feeLabel } from "@/lib/fee-label";
 
 // Pagare dall'area dell'atleta (POST /club/athlete-area/{id}/payment-proofs):
 // il titolare, o l'atleta stesso dai 18 anni di età federale, per le quote di
@@ -85,7 +86,7 @@ export function AthletePayModal({ athleteId, fees, onClose }: { athleteId: strin
                 <input type="checkbox" className="h-5 w-5 accent-brand-600" checked={selected.has(f.id)}
                   onChange={(e) => setSelected((s) => { const n = new Set(s); if (e.target.checked) n.add(f.id); else n.delete(f.id); return n; })} />
                 <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-semibold text-ink-900">{f.description}</span>
+                  <span className="block text-sm font-semibold text-ink-900">{feeLabel(f, t, fmt)}</span>
                   <span className="block text-xs text-ink-500">{t("club.dueOn", { date: fmt.shortDate(f.due_date) })}</span>
                 </span>
                 <span className="font-display text-ink-900">{fmt.euro(f.amount_cents)}</span>

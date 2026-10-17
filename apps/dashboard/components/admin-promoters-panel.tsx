@@ -8,6 +8,7 @@ import { PhotoUpload } from "@/components/photo-upload";
 import { AdminPromoterNetworkModal } from "@/components/admin-promoter-network-modal";
 import { friendlyApiError } from "@/lib/api-error";
 import { downloadCsv } from "@/lib/csv-export";
+import { useI18n } from "@/lib/i18n/provider";
 import type { AgentListItemRead, PromoterCodeRead, RankEvaluationChangeRead, RankRead, RootPromoterCreateResponse, WalletAdminListItemRead } from "@/lib/types";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -15,12 +16,6 @@ const STATUS_COLORS: Record<string, string> = {
   SUSPENDED: "bg-amber-500/10 text-amber-700 border-amber-500/20",
   TERMINATED: "bg-rose-500/10 text-rose-400 border-rose-500/20",
   PENDING_APPROVAL: "bg-sky-500/10 text-sky-400 border-sky-500/20",
-};
-const STATUS_LABELS: Record<string, string> = {
-  ACTIVE: "Attivo",
-  SUSPENDED: "Sospeso",
-  TERMINATED: "Cessato",
-  PENDING_APPROVAL: "Da approvare",
 };
 
 async function fetchAgents(): Promise<AgentListItemRead[]> {
@@ -63,6 +58,8 @@ export function AdminPromotersPanel({
   initialStatusFilter,
   isSuperAdmin = false,
 }: { initialStatusFilter?: string; isSuperAdmin?: boolean } = {}) {
+  const { t, fmt } = useI18n();
+  const statusLabel = (code: string) => t.dyn(`adm.prom.status.${code}`, code);
   const queryClient = useQueryClient();
   const { data: agents, error: loadError } = useQuery({
     queryKey: ["admin", "agents"],
@@ -91,7 +88,7 @@ export function AdminPromotersPanel({
       if (!res.ok) throw new Error(await friendlyApiError(res));
       await queryClient.invalidateQueries({ queryKey: ["admin", "agents"] });
     } catch (err: any) {
-      setFreezeError(err.message || "Impossibile aggiornare lo stato dell'account.");
+      setFreezeError(err.message || t("adm.cust.freezeFailed"));
     } finally {
       setFreezeLoadingId(null);
     }
@@ -157,7 +154,7 @@ export function AdminPromotersPanel({
       if (!res.ok) throw new Error(await friendlyApiError(res));
       await queryClient.invalidateQueries({ queryKey: ["admin", "agents"] });
     } catch (err: any) {
-      setAgentActionError(err.message || "Operazione non riuscita.");
+      setAgentActionError(err.message || t("common.failed"));
     } finally {
       setAgentActionId(null);
     }
@@ -176,13 +173,13 @@ export function AdminPromotersPanel({
     const newTab = window.open("", "_blank");
     try {
       const res = await fetch(`/api/proxy/network/agents/${agentId}/referral-link`);
-      if (!res.ok) throw new Error(await friendlyApiError(res, "Impossibile recuperare il link del promoter."));
+      if (!res.ok) throw new Error(await friendlyApiError(res, t("adm.prom.linkFailed")));
       const data: PromoterCodeRead = await res.json();
       const url = new URL(`/r/${data.code}`, window.location.origin);
       if (newTab) newTab.location.href = url.toString();
     } catch (err: any) {
       newTab?.close();
-      setAgentActionError(err.message || "Impossibile recuperare il link del promoter.");
+      setAgentActionError(err.message || t("adm.prom.linkFailed"));
     } finally {
       setReferralLinkLoadingId(null);
     }
@@ -206,7 +203,7 @@ export function AdminPromotersPanel({
       setEvaluationResult(changes);
       await queryClient.invalidateQueries({ queryKey: ["admin", "agents"] });
     } catch (err: any) {
-      setEvaluationError(err.message || "Impossibile eseguire la valutazione -- solo l'amministratore principale può farlo.");
+      setEvaluationError(err.message || t("adm.prom.evaluateFailed"));
     } finally {
       setEvaluatingRanks(false);
     }
@@ -220,7 +217,7 @@ export function AdminPromotersPanel({
       if (!res.ok) throw new Error(await friendlyApiError(res));
       await queryClient.invalidateQueries({ queryKey: ["admin", "agents"] });
     } catch (err: any) {
-      setApprovalError(err.message || "Impossibile approvare -- solo l'amministratore principale può farlo.");
+      setApprovalError(err.message || t("adm.prom.approveFailed"));
     } finally {
       setApprovalActionId(null);
     }
@@ -241,7 +238,7 @@ export function AdminPromotersPanel({
       setRejectingAgent(null);
       setRejectReason("");
     } catch (err: any) {
-      setApprovalError(err.message || "Impossibile rifiutare -- solo l'amministratore principale può farlo.");
+      setApprovalError(err.message || t("adm.prom.rejectFailed"));
     } finally {
       setApprovalActionId(null);
     }
@@ -288,7 +285,7 @@ export function AdminPromotersPanel({
       setEditingAgent(null);
       await queryClient.invalidateQueries({ queryKey: ["admin", "agents"] });
     } catch (err: any) {
-      setEditError(err.message || "Impossibile salvare le modifiche.");
+      setEditError(err.message || t("adm.cust.editFailed"));
     } finally {
       setEditLoading(false);
     }
@@ -321,7 +318,7 @@ export function AdminPromotersPanel({
       setCustomerEmail("");
       await queryClient.invalidateQueries({ queryKey: ["admin", "agents"] });
     } catch (err: any) {
-      setCreateError(err.message || "Impossibile creare l'agente.");
+      setCreateError(err.message || t("adm.prom.createFailed"));
     } finally {
       setCreateLoading(false);
     }
@@ -370,7 +367,7 @@ export function AdminPromotersPanel({
       setRootCreateResult(result);
       await queryClient.invalidateQueries({ queryKey: ["admin", "agents"] });
     } catch (err: any) {
-      setRootCreateError(err.message || "Impossibile creare il promoter radice -- solo l'amministratore principale può farlo.");
+      setRootCreateError(err.message || t("adm.prom.createRootFailed"));
     } finally {
       setRootCreateLoading(false);
     }
@@ -390,10 +387,10 @@ export function AdminPromotersPanel({
   const handleExportCsv = () => {
     downloadCsv(
       `promoter_${new Date().toISOString().slice(0, 10)}`,
-      ["ID", "Nome", "Codice Promoter", "Qualifica", "Sponsor", "Stato", "Iscritto il"],
+      ["ID", t("adm.cust.name"), t("adm.prom.promoterCode"), t("adm.prom.rank"), "Sponsor", t("adm.client.status"), t("adm.prom.joinedOn")],
       filtered.map((a) => [
         a.id, a.display_name, a.promoter_code, a.rank_code ?? "",
-        a.direct_parent_agent_id ? nameById.get(a.direct_parent_agent_id) ?? a.direct_parent_agent_id : "Radice",
+        a.direct_parent_agent_id ? nameById.get(a.direct_parent_agent_id) ?? a.direct_parent_agent_id : t("adm.prom.root"),
         a.status, a.joined_at,
       ])
     );
@@ -405,7 +402,7 @@ export function AdminPromotersPanel({
         <div className="w-full sm:max-w-xs relative">
           <input
             type="text"
-            placeholder="Cerca promoter o codice..."
+            placeholder={t("adm.prom.search")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full rounded-xl glass-input pl-10 pr-4 py-2 text-xs focus:border-brand-500"
@@ -420,21 +417,21 @@ export function AdminPromotersPanel({
             onChange={(e) => setStatusFilter(e.target.value)}
             className="rounded-xl glass-input px-3 py-2 text-xs bg-white focus:border-brand-500"
           >
-            <option value="ALL">Tutti gli stati</option>
-            <option value="ACTIVE">Solo attivi</option>
-            <option value="SUSPENDED">Solo sospesi</option>
-            <option value="TERMINATED">Solo cessati</option>
+            <option value="ALL">{t("adm.prom.filter.all")}</option>
+            <option value="ACTIVE">{t("adm.prom.filter.active")}</option>
+            <option value="SUSPENDED">{t("adm.prom.filter.suspended")}</option>
+            <option value="TERMINATED">{t("adm.prom.filter.terminated")}</option>
           </select>
           <button
             onClick={handleEvaluateRanks}
             disabled={evaluatingRanks}
-            title="Rivaluta il grado di ogni promoter attivo in base al fatturato del mese scorso, come farebbe il job automatico di fine mese"
+            title={t("adm.prom.evaluateTitle")}
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 text-xs font-semibold transition cursor-pointer disabled:opacity-50"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
             </svg>
-            {evaluatingRanks ? "Valutazione..." : "Valuta gradi ora"}
+            {evaluatingRanks ? t("adm.prom.evaluating") : t("adm.prom.evaluate")}
           </button>
           <button
             onClick={handleExportCsv}
@@ -447,24 +444,24 @@ export function AdminPromotersPanel({
           </button>
           <button
             onClick={() => setShowCreateRoot(true)}
-            title="Crea un promoter senza sponsor, con accesso già attivo -- l'unico modo di avviare un nuovo ramo indipendente, dato che ogni altra iscrizione richiede il link di un promoter già esistente"
+            title={t("adm.prom.createRootTitle")}
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 text-xs font-semibold transition cursor-pointer"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0H5a2 2 0 01-2-2v-4m6 6h10a2 2 0 002-2v-4" />
             </svg>
-            + Promoter Radice
+            + {t("adm.prom.rootPromoter")}
           </button>
           <button
             onClick={() => setShowCreate(true)}
             className="px-4 py-2 rounded-xl text-xs font-semibold bg-brand-600 hover:bg-brand-500 text-white shadow-lg shadow-brand-500/20 transition cursor-pointer"
           >
-            + Nuovo Promoter
+            + {t("adm.prom.newPromoter")}
           </button>
         </div>
       </div>
 
-      {loadError && <p className="text-sm text-rose-400">Impossibile caricare la rete commerciale.</p>}
+      {loadError && <p className="text-sm text-rose-400">{t("adm.prom.loadFailed")}</p>}
       {freezeError && <p className="text-sm text-rose-400">{freezeError}</p>}
       {approvalError && (
         <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs">{approvalError}</div>
@@ -480,8 +477,10 @@ export function AdminPromotersPanel({
           <div className="flex items-center justify-between mb-2">
             <span className="font-semibold text-emerald-400">
               {evaluationResult.length === 0
-                ? "Valutazione completata: nessun grado da aggiornare."
-                : `Valutazione completata: ${evaluationResult.length} grad${evaluationResult.length === 1 ? "o" : "i"} aggiornat${evaluationResult.length === 1 ? "o" : "i"}.`}
+                ? t("adm.prom.evaluationNone")
+                : evaluationResult.length === 1
+                  ? t("adm.prom.evaluationOne")
+                  : t("adm.prom.evaluationMany", { n: evaluationResult.length })}
             </span>
             <button
               onClick={() => setEvaluationResult(null)}
@@ -513,19 +512,19 @@ export function AdminPromotersPanel({
             <thead>
               <tr className="border-b border-slate-200 text-slate-500 font-semibold">
                 <th className="py-3 px-6"></th>
-                <th className="py-3 px-6">Nome</th>
-                <th className="py-3 px-6">Codice</th>
-                <th className="py-3 px-6">Qualifica</th>
+                <th className="py-3 px-6">{t("adm.cust.name")}</th>
+                <th className="py-3 px-6">{t("adm.prom.code")}</th>
+                <th className="py-3 px-6">{t("adm.prom.rank")}</th>
                 <th className="py-3 px-6">Sponsor</th>
-                <th className="py-3 px-6">Stato</th>
-                <th className="py-3 px-6 text-right">Azioni</th>
+                <th className="py-3 px-6">{t("adm.client.status")}</th>
+                <th className="py-3 px-6 text-right">{t("adm.client.actions")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
               {agents === undefined ? (
-                <tr><td colSpan={7} className="text-center py-8 text-slate-500">Caricamento...</td></tr>
+                <tr><td colSpan={7} className="text-center py-8 text-slate-500">{t("adm.overview.loading")}</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={7} className="text-center py-8 text-slate-500">Nessun promoter trovato.</td></tr>
+                <tr><td colSpan={7} className="text-center py-8 text-slate-500">{t("adm.prom.noneFound")}</td></tr>
               ) : (
                 pagination.pageItems.map((a) => (
                   <tr key={a.id} className=" text-slate-600 hover:bg-slate-100 transition-colors">
@@ -536,7 +535,7 @@ export function AdminPromotersPanel({
                         <button
                           onClick={() => handleOpenReferralLink(a.id)}
                           disabled={referralLinkLoadingId === a.id}
-                          title="Apri il link personale di invito di questo promoter"
+                          title={t("adm.prom.openLinkTitle")}
                           className="p-1 rounded-md hover:bg-slate-900/10 text-slate-400 hover:text-brand-600 transition cursor-pointer disabled:opacity-40"
                         >
                           {referralLinkLoadingId === a.id ? (
@@ -551,12 +550,12 @@ export function AdminPromotersPanel({
                           )}
                         </button>
                       </div>
-                      <p className="text-[10px] text-slate-500">{a.email ?? "Nessun account collegato"}</p>
-                      <p className="text-[10px] text-slate-500">Iscritto: {new Date(a.joined_at).toLocaleDateString("it-IT")}</p>
+                      <p className="text-[10px] text-slate-500">{a.email ?? t("adm.prom.noAccount")}</p>
+                      <p className="text-[10px] text-slate-500">{t("adm.cust.joined", { date: fmt.shortDate(a.joined_at) })}</p>
                       {a.user_id && (
                         <div className="flex items-center gap-1 mt-1.5 flex-wrap">
                           <span
-                            title={a.email_verified ? "Email verificata" : "Email non verificata"}
+                            title={a.email_verified ? t("adm.cust.emailVerified") : t("adm.cust.emailNotVerified")}
                             className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${
                               a.email_verified
                                 ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
@@ -566,27 +565,27 @@ export function AdminPromotersPanel({
                             Email {a.email_verified ? "✓" : "✗"}
                           </span>
                           <span
-                            title={a.privacy_accepted ? "Privacy accettata" : "Privacy non accettata"}
+                            title={a.privacy_accepted ? t("adm.unlock.privacyAccepted") : t("adm.cust.privacyNotAccepted")}
                             className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${
                               a.privacy_accepted
                                 ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                                 : "bg-rose-500/10 text-rose-400 border-rose-500/20"
                             }`}
                           >
-                            Privacy {a.privacy_accepted ? "✓" : "✗"}
+                            {t("adm.cust.privacyBadge")} {a.privacy_accepted ? "✓" : "✗"}
                           </span>
                           <span
                             title={
                               a.collaboration_accepted_at
                                 ? [
-                                    `Accettato il ${new Date(a.collaboration_accepted_at).toLocaleString("it-IT")}`,
+                                    t("adm.prom.acceptedOn", { date: new Date(a.collaboration_accepted_at).toLocaleString(fmt.tag) }),
                                     // Which documents, and at which wording -- an
                                     // acceptance is only meaningful with its version.
                                     ...Object.entries(a.collaboration_accepted_documents ?? {}).map(
                                       ([key, v]) => `${key} v${v.version}`
                                     ),
                                   ].join(" · ")
-                                : "Contratto di collaborazione non accettato"
+                                : t("adm.prom.collabNotAccepted")
                             }
                             className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${
                               a.collaboration_accepted_at
@@ -594,16 +593,16 @@ export function AdminPromotersPanel({
                                 : "bg-rose-500/10 text-rose-400 border-rose-500/20"
                             }`}
                           >
-                            Contratto {a.collaboration_accepted_at ? "✓" : "✗"}
+                            {t("adm.prom.contractBadge")} {a.collaboration_accepted_at ? "✓" : "✗"}
                             {Object.keys(a.collaboration_accepted_documents ?? {}).length > 1 && (
                               <span className="ml-1 opacity-75">
-                                ({Object.keys(a.collaboration_accepted_documents ?? {}).length} doc.)
+                                {t("adm.prom.docsCount", { n: Object.keys(a.collaboration_accepted_documents ?? {}).length })}
                               </span>
                             )}
                           </span>
                           {a.user_status === "FROZEN" && (
                             <span className="px-1.5 py-0.5 rounded text-[9px] font-bold border bg-sky-500/10 text-sky-400 border-sky-500/20">
-                              Congelato
+                              {t("adm.cust.frozen")}
                             </span>
                           )}
                         </div>
@@ -616,15 +615,15 @@ export function AdminPromotersPanel({
                       </span>
                     </td>
                     <td className="py-4 px-6 text-xs">
-                      {a.direct_parent_agent_id ? nameById.get(a.direct_parent_agent_id) ?? "—" : "Radice"}
+                      {a.direct_parent_agent_id ? nameById.get(a.direct_parent_agent_id) ?? "—" : t("adm.prom.root")}
                     </td>
                     <td className="py-4 px-6">
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${STATUS_COLORS[a.status] ?? STATUS_COLORS.ACTIVE}`}>
-                        {STATUS_LABELS[a.status] ?? a.status}
+                        {statusLabel(a.status)}
                       </span>
                       {a.is_blacklisted && (
                         <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] font-bold border bg-rose-500/10 text-rose-400 border-rose-500/20">
-                          In blacklist
+                          {t("adm.prom.inBlacklist")}
                         </span>
                       )}
                       {a.status === "TERMINATED" && a.rejection_reason && (
@@ -639,31 +638,31 @@ export function AdminPromotersPanel({
                             disabled={approvalActionId === a.id}
                             className="px-2.5 py-1.5 rounded-lg bg-emerald-600/10 hover:bg-emerald-600/20 border border-emerald-500/20 text-emerald-400 text-xs font-semibold transition cursor-pointer disabled:opacity-50"
                           >
-                            Approva
+                            {t("adm.prom.approve")}
                           </button>
                           <button
                             onClick={() => setRejectingAgent(a)}
                             disabled={approvalActionId === a.id}
                             className="px-2.5 py-1.5 rounded-lg bg-rose-600/10 hover:bg-rose-600/20 border border-rose-500/20 text-rose-400 text-xs font-semibold transition cursor-pointer disabled:opacity-50"
                           >
-                            Rifiuta
+                            {t("adm.prom.reject")}
                           </button>
                         </div>
                       ) : (
                         <div className="flex items-center justify-end gap-2 flex-wrap">
                           <button
                             onClick={() => setNetworkAgent(a)}
-                            title="Apri la rete di questo promoter"
+                            title={t("adm.prom.openNetworkTitle")}
                             className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 text-xs font-semibold transition cursor-pointer"
                           >
                             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0H5a2 2 0 01-2-2v-4m6 6h10a2 2 0 002-2v-4m0-6h-6m6 0v6m0-6l-8 8" />
                             </svg>
-                            Apri Rete
+                            {t("adm.prom.openNetwork")}
                           </button>
                           <button
                             onClick={() => openEdit(a)}
-                            title="Modifica promoter"
+                            title={t("adm.prom.editPromoter")}
                             className="p-1.5 rounded-lg bg-brand-600/10 hover:bg-brand-600/20 border border-brand-500/20 text-brand-600 transition cursor-pointer"
                           >
                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -674,7 +673,7 @@ export function AdminPromotersPanel({
                             <button
                               onClick={() => handleToggleFreeze(a.user_id!, a.user_status === "FROZEN")}
                               disabled={freezeLoadingId === a.user_id}
-                              title={a.user_status === "FROZEN" ? "Riattiva account" : "Congela account (blocca l'accesso)"}
+                              title={a.user_status === "FROZEN" ? t("adm.cust.reactivate") : t("adm.cust.freeze")}
                               className={`p-1.5 rounded-lg border transition cursor-pointer disabled:opacity-50 ${
                                 a.user_status === "FROZEN"
                                   ? "bg-emerald-600/10 hover:bg-emerald-600/20 border-emerald-500/20 text-emerald-400"
@@ -698,14 +697,14 @@ export function AdminPromotersPanel({
                               <button
                                 onClick={() => handleToggleTransfer(a.user_id!, !enabled)}
                                 disabled={transferToggleId === a.user_id}
-                                title={enabled ? "Disabilita l'invio di bonifici wallet per questo promoter" : "Abilita l'invio di bonifici wallet per questo promoter"}
+                                title={enabled ? t("adm.prom.transferDisableTitle") : t("adm.prom.transferEnableTitle")}
                                 className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition cursor-pointer disabled:opacity-50 ${
                                   enabled
                                     ? "bg-emerald-600/10 hover:bg-emerald-600/20 border-emerald-500/20 text-emerald-400"
                                     : " bg-slate-900/5 hover:bg-slate-100 border-slate-300 text-slate-600"
                                 }`}
                               >
-                                {transferToggleId === a.user_id ? "..." : enabled ? "Bonifico: ON" : "Bonifico: OFF"}
+                                {transferToggleId === a.user_id ? "..." : enabled ? t("adm.prom.transferOn") : t("adm.prom.transferOff")}
                               </button>
                             );
                           })()}
@@ -714,15 +713,15 @@ export function AdminPromotersPanel({
                               <button
                                 onClick={() => handleSetAgentStatus(a.id, { status: "TERMINATED" })}
                                 disabled={agentActionId === a.id}
-                                title="Toglie la qualifica di promoter: torna un semplice cliente. Può ricandidarsi in autonomia con 'Lavora con noi'."
+                                title={t("adm.prom.deactivateTitle")}
                                 className="px-2.5 py-1.5 rounded-lg bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 text-xs font-semibold transition cursor-pointer disabled:opacity-50"
                               >
-                                Disattiva
+                                {t("adm.prom.deactivate")}
                               </button>
                               <button
                                 onClick={() => handleSetAgentStatus(a.id, { status: "TERMINATED", is_blacklisted: true })}
                                 disabled={agentActionId === a.id}
-                                title="Disattiva e blocca: se si ricandida, resta in attesa di approvazione invece di attivarsi da solo."
+                                title={t("adm.prom.blacklistTitle")}
                                 className="px-2.5 py-1.5 rounded-lg bg-rose-600/10 hover:bg-rose-600/20 border border-rose-500/20 text-rose-400 text-xs font-semibold transition cursor-pointer disabled:opacity-50"
                               >
                                 Blacklist
@@ -736,16 +735,16 @@ export function AdminPromotersPanel({
                                 disabled={agentActionId === a.id}
                                 className="px-2.5 py-1.5 rounded-lg bg-emerald-600/10 hover:bg-emerald-600/20 border border-emerald-500/20 text-emerald-400 text-xs font-semibold transition cursor-pointer disabled:opacity-50"
                               >
-                                Riattiva
+                                {t("adm.prom.reactivate")}
                               </button>
                               {a.is_blacklisted && (
                                 <button
                                   onClick={() => handleSetAgentStatus(a.id, { is_blacklisted: false })}
                                   disabled={agentActionId === a.id}
-                                  title="Toglie il blocco: da ora una nuova candidatura 'Lavora con noi' torna ad attivarsi da sola."
+                                  title={t("adm.prom.unblacklistTitle")}
                                   className="px-2.5 py-1.5 rounded-lg bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 text-xs font-semibold transition cursor-pointer disabled:opacity-50"
                                 >
-                                  Rimuovi blacklist
+                                  {t("adm.prom.unblacklist")}
                                 </button>
                               )}
                             </>
@@ -760,7 +759,7 @@ export function AdminPromotersPanel({
           </table>
         </div>
         <div className="px-6 pb-5">
-          <Pagination {...pagination} label="promoter" />
+          <Pagination {...pagination} label={t("adm.prom.promotersLower")} />
         </div>
       </div>
 
@@ -768,7 +767,7 @@ export function AdminPromotersPanel({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
           <div className="w-full max-w-lg glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-slate-900">Nuovo Promoter</h3>
+              <h3 className="text-lg font-bold text-slate-900">{t("adm.prom.newPromoter")}</h3>
               <button onClick={() => setShowCreate(false)}
                 className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-900 transition cursor-pointer">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -780,32 +779,32 @@ export function AdminPromotersPanel({
             <form onSubmit={handleCreate} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-600 uppercase block">Nome</label>
+                  <label className="text-xs font-semibold text-slate-600 uppercase block">{t("adm.cust.firstName")}</label>
                   <input required value={firstName} onChange={(e) => setFirstName(e.target.value)}
                     className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-600 uppercase block">Cognome</label>
+                  <label className="text-xs font-semibold text-slate-600 uppercase block">{t("adm.cust.lastName")}</label>
                   <input required value={lastName} onChange={(e) => setLastName(e.target.value)}
                     className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
                 </div>
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 uppercase block">Codice Promoter</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">{t("adm.prom.promoterCode")}</label>
                 <input required value={promoterCode} onChange={(e) => setPromoterCode(e.target.value)}
-                  placeholder="Es: S1-MARIO-ROSSI"
+                  placeholder={t("adm.prom.codePlaceholder")}
                   className="w-full rounded-xl glass-input px-3 py-2 text-sm font-mono focus:border-brand-500" />
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 uppercase block">Sponsor (ramo di appartenenza)</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">{t("adm.prom.sponsorLabel")}</label>
                 <select
                   value={parentAgentId}
                   onChange={(e) => setParentAgentId(e.target.value)}
                   className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-white focus:border-brand-500"
                 >
-                  <option value="">— Nessuno (nuova radice di rete) —</option>
+                  <option value="">{t("adm.prom.noSponsor")}</option>
                   {(agents ?? []).map((a) => (
                     <option key={a.id} value={a.id}>{a.display_name} ({a.promoter_code})</option>
                   ))}
@@ -813,21 +812,21 @@ export function AdminPromotersPanel({
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 uppercase block">Cliente già registrato (opzionale)</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">{t("adm.prom.existingCustomer")}</label>
                 <input type="email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)}
-                  placeholder="Email del cliente da promuovere a promoter"
+                  placeholder={t("adm.prom.existingCustomerPlaceholder")}
                   className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
-                <p className="text-[11px] text-slate-500">Se indicata, il login esistente del cliente diventerà anche promoter una volta approvato — invece di crearne uno nuovo senza accesso.</p>
+                <p className="text-[11px] text-slate-500">{t("adm.prom.existingCustomerHint")}</p>
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 uppercase block">Qualifica iniziale</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">{t("adm.prom.initialRank")}</label>
                 <select
                   value={rankId}
                   onChange={(e) => setRankId(e.target.value)}
                   className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-white focus:border-brand-500"
                 >
-                  <option value="">— Nessuna —</option>
+                  <option value="">{t("adm.prom.noneRank")}</option>
                   {ranks.map((r) => (
                     <option key={r.id} value={r.id}>{r.code} — {r.name}</option>
                   ))}
@@ -841,11 +840,11 @@ export function AdminPromotersPanel({
               <div className="flex justify-end gap-3 mt-4">
                 <button type="button" onClick={() => setShowCreate(false)}
                   className="px-4 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 text-xs font-semibold text-slate-600 border border-slate-200 transition cursor-pointer">
-                  Annulla
+                  {t("common.cancel")}
                 </button>
                 <button type="submit" disabled={createLoading}
                   className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50">
-                  {createLoading ? "Creazione..." : "Crea Promoter"}
+                  {createLoading ? t("adm.cust.creating") : t("adm.prom.create")}
                 </button>
               </div>
             </form>
@@ -857,7 +856,7 @@ export function AdminPromotersPanel({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
           <div className="w-full max-w-lg glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-slate-900">Nuovo Promoter Radice</h3>
+              <h3 className="text-lg font-bold text-slate-900">{t("adm.prom.newRootPromoter")}</h3>
               <button onClick={() => setShowCreateRoot(false)}
                 className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-900 transition cursor-pointer">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -866,18 +865,18 @@ export function AdminPromotersPanel({
               </button>
             </div>
             <p className="text-xs text-slate-500 mb-4">
-              Crea un account già attivo, senza sponsor sopra di lui. Genero password temporanea e link personale pronti da consegnare.
+              {t("adm.prom.rootHint")}
             </p>
 
             <form onSubmit={handleCreateRoot} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-600 uppercase block">Nome</label>
+                  <label className="text-xs font-semibold text-slate-600 uppercase block">{t("adm.cust.firstName")}</label>
                   <input required value={rootFirstName} onChange={(e) => setRootFirstName(e.target.value)}
                     className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-600 uppercase block">Cognome</label>
+                  <label className="text-xs font-semibold text-slate-600 uppercase block">{t("adm.cust.lastName")}</label>
                   <input required value={rootLastName} onChange={(e) => setRootLastName(e.target.value)}
                     className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
                 </div>
@@ -890,9 +889,9 @@ export function AdminPromotersPanel({
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 uppercase block">Codice Promoter (opzionale)</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">{t("adm.prom.promoterCodeOptional")}</label>
                 <input value={rootPromoterCode} onChange={(e) => setRootPromoterCode(e.target.value)}
-                  placeholder="Vuoto = generato automaticamente"
+                  placeholder={t("adm.prom.autoGenerated")}
                   className="w-full rounded-xl glass-input px-3 py-2 text-sm font-mono focus:border-brand-500" />
               </div>
 
@@ -903,11 +902,11 @@ export function AdminPromotersPanel({
               <div className="flex justify-end gap-3 mt-4">
                 <button type="button" onClick={() => setShowCreateRoot(false)}
                   className="px-4 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 text-xs font-semibold text-slate-600 border border-slate-200 transition cursor-pointer">
-                  Annulla
+                  {t("common.cancel")}
                 </button>
                 <button type="submit" disabled={rootCreateLoading}
                   className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50">
-                  {rootCreateLoading ? "Creazione..." : "Crea Promoter Radice"}
+                  {rootCreateLoading ? t("adm.cust.creating") : t("adm.prom.createRoot")}
                 </button>
               </div>
             </form>
@@ -919,10 +918,10 @@ export function AdminPromotersPanel({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
           <div className="w-full max-w-lg glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up">
             <h3 className="text-lg font-bold text-slate-900 mb-1">
-              {rootCreateResult.display_name} è attivo
+              {t("adm.prom.isActive", { name: rootCreateResult.display_name })}
             </h3>
             <p className="text-xs text-slate-500 mb-4">
-              Consegna queste credenziali fuori da questa schermata (non restano salvate da nessuna parte): questa è l&apos;unica volta in cui la password viene mostrata. Digli di cambiarla al primo accesso.
+              {t("adm.prom.credentialsHint")}
             </p>
 
             <div className="space-y-3 mb-4">
@@ -931,7 +930,7 @@ export function AdminPromotersPanel({
                 <div className="rounded-xl glass-input px-3 py-2 text-sm font-mono">{rootCreateResult.email}</div>
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-600 uppercase block mb-1">Password temporanea</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block mb-1">{t("adm.prom.tempPassword")}</label>
                 <div className="flex gap-2">
                   <div className="flex-1 rounded-xl glass-input px-3 py-2 text-sm font-mono">{rootCreateResult.temporary_password}</div>
                   <button
@@ -943,12 +942,12 @@ export function AdminPromotersPanel({
                     }}
                     className="px-3 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-xs font-semibold text-slate-600 transition cursor-pointer"
                   >
-                    {rootPasswordCopied ? "Copiata!" : "Copia"}
+                    {rootPasswordCopied ? t("adm.prom.copied") : t("adm.prom.copy")}
                   </button>
                 </div>
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-600 uppercase block mb-1">Link personale (da condividere con i suoi invitati)</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block mb-1">{t("adm.prom.personalLink")}</label>
                 <div className="flex gap-2">
                   <div className="flex-1 rounded-xl glass-input px-3 py-2 text-xs font-mono truncate">{rootCreateResult.personal_link}</div>
                   <button
@@ -960,7 +959,7 @@ export function AdminPromotersPanel({
                     }}
                     className="px-3 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-xs font-semibold text-slate-600 transition cursor-pointer"
                   >
-                    {rootLinkCopied ? "Copiato!" : "Copia"}
+                    {rootLinkCopied ? t("adm.prom.copied") : t("adm.prom.copy")}
                   </button>
                 </div>
                 {/* Same destinations as everywhere else: the admin creating a
@@ -970,7 +969,7 @@ export function AdminPromotersPanel({
                 <ShareButtons
                   className="mt-2"
                   url={rootCreateResult.personal_link}
-                  text="Ecco il tuo link personale Jav:"
+                  text={t("adm.prom.shareText")}
                 />
               </div>
             </div>
@@ -980,7 +979,7 @@ export function AdminPromotersPanel({
                 onClick={() => setRootCreateResult(null)}
                 className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer"
               >
-                Fatto
+                {t("adm.prom.done")}
               </button>
             </div>
           </div>
@@ -991,7 +990,7 @@ export function AdminPromotersPanel({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
           <div className="w-full max-w-lg glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-slate-900">Modifica Promoter</h3>
+              <h3 className="text-lg font-bold text-slate-900">{t("adm.prom.editPromoter")}</h3>
               <button onClick={() => setEditingAgent(null)}
                 className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-900 transition cursor-pointer">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1001,7 +1000,7 @@ export function AdminPromotersPanel({
             </div>
 
             <div className="mb-5 pb-5 border-b border-slate-200">
-              <label className="text-xs font-semibold text-slate-600 uppercase block mb-2">Foto profilo</label>
+              <label className="text-xs font-semibold text-slate-600 uppercase block mb-2">{t("adm.cust.photo")}</label>
               <PhotoUpload
                 crop
                 currentUrl={editPhotoUrl}
@@ -1017,32 +1016,32 @@ export function AdminPromotersPanel({
             <form onSubmit={handleEditSave} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-600 uppercase block">Nome</label>
+                  <label className="text-xs font-semibold text-slate-600 uppercase block">{t("adm.cust.firstName")}</label>
                   <input required value={editFirstName} onChange={(e) => setEditFirstName(e.target.value)}
                     className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-600 uppercase block">Cognome</label>
+                  <label className="text-xs font-semibold text-slate-600 uppercase block">{t("adm.cust.lastName")}</label>
                   <input required value={editLastName} onChange={(e) => setEditLastName(e.target.value)}
                     className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
                 </div>
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 uppercase block">Codice Promoter</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">{t("adm.prom.promoterCode")}</label>
                 <input disabled value={editingAgent.promoter_code}
-                  title="Il codice promoter non è modificabile: è incorporato nei link di invito già condivisi"
+                  title={t("adm.prom.codeLockedTitle")}
                   className="w-full rounded-xl glass-input px-3 py-2 text-sm font-mono opacity-60 cursor-not-allowed" />
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 uppercase block">Qualifica</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">{t("adm.prom.rank")}</label>
                 <select
                   value={editRankId}
                   onChange={(e) => setEditRankId(e.target.value)}
                   className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-white focus:border-brand-500"
                 >
-                  <option value="">— Nessuna —</option>
+                  <option value="">{t("adm.prom.noneRank")}</option>
                   {ranks.map((r) => (
                     <option key={r.id} value={r.id}>{r.code} — {r.name}</option>
                   ))}
@@ -1050,15 +1049,15 @@ export function AdminPromotersPanel({
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 uppercase block">Stato</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">{t("adm.client.status")}</label>
                 <select
                   value={editStatus}
                   onChange={(e) => setEditStatus(e.target.value)}
                   className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-white focus:border-brand-500"
                 >
-                  <option value="ACTIVE">Attivo</option>
-                  <option value="SUSPENDED">Sospeso</option>
-                  <option value="TERMINATED">Cessato</option>
+                  <option value="ACTIVE">{statusLabel("ACTIVE")}</option>
+                  <option value="SUSPENDED">{statusLabel("SUSPENDED")}</option>
+                  <option value="TERMINATED">{statusLabel("TERMINATED")}</option>
                 </select>
               </div>
 
@@ -1069,11 +1068,11 @@ export function AdminPromotersPanel({
               <div className="flex justify-end gap-3 mt-4">
                 <button type="button" onClick={() => setEditingAgent(null)}
                   className="px-4 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 text-xs font-semibold text-slate-600 border border-slate-200 transition cursor-pointer">
-                  Annulla
+                  {t("common.cancel")}
                 </button>
                 <button type="submit" disabled={editLoading}
                   className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50">
-                  {editLoading ? "Salvataggio..." : "Salva Modifiche"}
+                  {editLoading ? t("adm.client.saving") : t("adm.cust.saveChanges")}
                 </button>
               </div>
             </form>
@@ -1092,16 +1091,16 @@ export function AdminPromotersPanel({
       {rejectingAgent && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
           <div className="w-full max-w-md glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up">
-            <h3 className="text-lg font-bold text-slate-900 mb-2">Rifiuta {rejectingAgent.display_name}</h3>
+            <h3 className="text-lg font-bold text-slate-900 mb-2">{t("adm.prom.rejectTitle", { name: rejectingAgent.display_name })}</h3>
             <p className="text-xs text-slate-500 mb-4">
-              Il profilo suggerito viene segnato come cessato. Il codice promoter {rejectingAgent.promoter_code} non sarà più utilizzabile.
+              {t("adm.prom.rejectHint", { code: rejectingAgent.promoter_code })}
             </p>
-            <label className="text-xs font-semibold text-slate-600 uppercase block mb-1">Motivazione (opzionale)</label>
+            <label className="text-xs font-semibold text-slate-600 uppercase block mb-1">{t("adm.prom.reasonOptional")}</label>
             <textarea
               rows={3}
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
-              placeholder="Es: codice duplicato, dati incompleti..."
+              placeholder={t("adm.prom.rejectPlaceholder")}
               className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500 resize-none mb-4"
             />
             <div className="flex justify-end gap-3">
@@ -1109,14 +1108,14 @@ export function AdminPromotersPanel({
                 onClick={() => { setRejectingAgent(null); setRejectReason(""); }}
                 className="px-4 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 text-xs font-semibold text-slate-600 border border-slate-200 transition cursor-pointer"
               >
-                Annulla
+                {t("common.cancel")}
               </button>
               <button
                 onClick={handleReject}
                 disabled={approvalActionId === rejectingAgent.id}
                 className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50"
               >
-                {approvalActionId === rejectingAgent.id ? "Salvataggio..." : "Conferma Rifiuto"}
+                {approvalActionId === rejectingAgent.id ? t("adm.client.saving") : t("adm.prom.confirmReject")}
               </button>
             </div>
           </div>

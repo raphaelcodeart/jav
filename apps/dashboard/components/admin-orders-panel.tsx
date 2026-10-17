@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pagination, usePagination } from "@/components/pagination";
 import { ProductThumbnail } from "@/components/product-thumbnail";
 import { friendlyApiError } from "@/lib/api-error";
-import { vatLineLabel } from "@/lib/product-audience";
+import { useI18n } from "@/lib/i18n/provider";
 import type {
   CustomerRead,
   JavMarketOrderItemRead,
@@ -24,9 +24,6 @@ const STATUS_COLORS: Record<string, string> = {
   PAID: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
   CANCELLED: "bg-rose-500/10 text-rose-400 border-rose-500/20",
 };
-const PAYMENT_METHOD_LABELS: Record<string, string> = {
-  BANK_TRANSFER: "Bonifico",
-};
 
 /** Same unification as customer-orders-panel.tsx::UnifiedOrder -- an order
     of the internal catalog (orders.id) and one of the Shop
@@ -42,6 +39,8 @@ type UnifiedOrder = {
   fulfillment_status?: string;
   customer_display_name: string;
   product_name: string;
+  /** Shop orders: how many cart lines, to name the order at render time. */
+  shop_line_count?: number;
   /** Session 75: le righe di un ordine nato dal carrello. */
   items?: JavMarketOrderItemRead[];
   order_code?: string;
@@ -73,20 +72,6 @@ type UnifiedQuote = {
 
 function ordersBasePath(source: UnifiedOrder["source"]): string {
   return source === "jav_market" ? "/api/proxy/jav-market/orders" : "/api/proxy/orders";
-}
-
-function euro(cents: number): string {
-  return (cents / 100).toLocaleString("it-IT", { style: "currency", currency: "EUR" });
-}
-
-// Wallet credit is JavCash, never plain EUR -- see wallet-panel.tsx's
-// identical helper. Bonifico amounts always stay euro().
-function javCash(cents: number): string {
-  return `${(cents / 100).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} JavCash`;
-}
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString("it-IT", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 /** Same derivation as customer-orders-panel.tsx::orderCode -- must stay
@@ -129,9 +114,8 @@ async function fetchOrders(statusFilter: string): Promise<UnifiedOrder[]> {
     // ordine da carrello deve leggersi per quello che è (Session 75).
     shop.push({
       ...o,
-      product_name: (lines.length > 1
-        ? `${lines.length} articoli`
-        : `${o.product_name}${lines[0] && lines[0].quantity > 1 ? ` × ${lines[0].quantity}` : ""}`) + " (Shop)",
+      product_name: `${o.product_name}${lines[0] && lines[0].quantity > 1 ? ` × ${lines[0].quantity}` : ""}`,
+      shop_line_count: lines.length,
       source: "jav_market",
       residual_amount_cents: o.amount_due_cents,
       items: lines,
@@ -159,6 +143,19 @@ async function fetchQuote(customerUserId: string, productVersionId: string): Pro
     che restano contratti (vedi "Nuovo Contratto"). Gli ordini dello Shop
     li crea il cliente dal suo carrello. */
 export function AdminOrdersPanel() {
+  const { t, fmt } = useI18n();
+  const euro = (cents: number) => fmt.euro(cents);
+  // Wallet credit is JavCash, never plain EUR -- see wallet-panel.tsx's
+  // identical helper. Bonifico amounts always stay euro().
+  const javCash = (cents: number) =>
+    `${(cents / 100).toLocaleString(fmt.tag, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} JavCash`;
+  const formatDate = (iso: string) =>
+    fmt.date(new Date(iso), { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  const statusLabel = (code: string) => t.dyn(`mkt.orders.status.${code}`, STATUS_LABELS[code] ?? code);
+  const orderName = (o: UnifiedOrder) =>
+    o.source === "jav_market"
+      ? `${(o.shop_line_count ?? 0) > 1 ? t("mkt.orders.itemsCount", { n: o.shop_line_count ?? 0 }) : o.product_name} (${t("mkt.orders.shop")})`
+      : o.product_name;
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState("AWAITING_PAYMENT");
   const [showCreate, setShowCreate] = useState(false);
@@ -207,7 +204,7 @@ export function AdminOrdersPanel() {
     if (!productVersionId) return;
     const creditCents = Math.round(parseFloat(creditAmount.replace(",", ".")) * 100);
     if (!Number.isFinite(creditCents) || creditCents < 0) {
-      setCreateError("Importo in JavCash non valido.");
+      setCreateError(t("mkt.orders.invalidCredit"));
       return;
     }
     setCreateLoading(true);
@@ -230,7 +227,7 @@ export function AdminOrdersPanel() {
       setNote("");
       await invalidate();
     } catch (err: any) {
-      setCreateError(err.message || "Impossibile creare l'ordine.");
+      setCreateError(err.message || t("mkt.orders.createFailed"));
     } finally {
       setCreateLoading(false);
     }
@@ -293,13 +290,13 @@ export function AdminOrdersPanel() {
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
         <p className="text-sm text-slate-500">
-          Acquisti di prodotti dropshipping/partner e dello Shop, con sconto in JavCash opzionale -- un unico elenco.
+          {t("mkt.orders.intro")}
         </p>
         <button
           onClick={() => { setShowCreate(!showCreate); setCreateError(null); }}
           className="px-4 py-2 rounded-xl text-xs font-semibold bg-brand-600 hover:bg-brand-500 text-white shadow-lg shadow-brand-500/20 transition cursor-pointer shrink-0"
         >
-          {showCreate ? "Annulla" : "+ Nuovo Ordine"}
+          {showCreate ? t("common.cancel") : t("mkt.orders.new")}
         </button>
       </div>
 
@@ -308,32 +305,32 @@ export function AdminOrdersPanel() {
           <form onSubmit={handleCreate} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 uppercase block">Cliente</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">{t("mkt.orders.customer")}</label>
                 <select required value={customerUserId} onChange={(e) => setCustomerUserId(e.target.value)}
                   className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-white focus:border-brand-500">
-                  <option value="">Seleziona...</option>
+                  <option value="">{t("mkt.orders.select")}</option>
                   {orderableCustomers.map((c) => (
                     <option key={c.id} value={c.user_id!}>{c.display_name}</option>
                   ))}
                 </select>
-                <p className="text-[10px] text-slate-500">Solo clienti con un account collegato compaiono qui.</p>
+                <p className="text-[10px] text-slate-500">{t("mkt.orders.customerHint")}</p>
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 uppercase block">Prodotto</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">{t("mkt.orders.product")}</label>
                 <select
                   required
                   value={productVersionId}
                   onChange={(e) => setProductVersionId(e.target.value)}
                   className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-white focus:border-brand-500"
                 >
-                  <option value="">Seleziona...</option>
+                  <option value="">{t("mkt.orders.select")}</option>
                   {orderableProducts.map((p) => (
                     <option key={p.id} value={p.current_version!.id}>
                       {p.current_version!.name} ({euro(p.current_version!.base_price_cents)})
                     </option>
                   ))}
                 </select>
-                <p className="text-[10px] text-slate-500">Solo prodotti dropshipping/partner -- i prodotti Interno Jav si vendono come contratto.</p>
+                <p className="text-[10px] text-slate-500">{t("mkt.orders.productHint")}</p>
               </div>
             </div>
 
@@ -341,20 +338,20 @@ export function AdminOrdersPanel() {
               <div className="p-4 rounded-xl bg-slate-900/5 border border-slate-200 space-y-3">
                 <div className="grid grid-cols-3 gap-3 text-xs">
                   <div>
-                    <p className="text-[10px] text-slate-500 uppercase">Prezzo prodotto</p>
+                    <p className="text-[10px] text-slate-500 uppercase">{t("mkt.orders.productPrice")}</p>
                     <p className="font-semibold text-slate-900">{euro(quote.amount_cents)}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] text-slate-500 uppercase">Sconto max in JavCash</p>
+                    <p className="text-[10px] text-slate-500 uppercase">{t("mkt.orders.maxCredit")}</p>
                     <p className="font-semibold text-brand-600">{quote.credit_discount_percentage}% ({euro(quote.max_creditable_cents)})</p>
                   </div>
                   <div>
-                    <p className="text-[10px] text-slate-500 uppercase">Saldo cliente</p>
+                    <p className="text-[10px] text-slate-500 uppercase">{t("mkt.orders.customerBalance")}</p>
                     <p className="font-semibold text-slate-900">{euro(quote.customer_wallet_balance_cents)}</p>
                   </div>
                 </div>
                 <div className="space-y-1 pt-2 border-t border-slate-200">
-                  <label className=" font-semibold text-slate-600 uppercase block">JavCash da applicare</label>
+                  <label className=" font-semibold text-slate-600 uppercase block">{t("mkt.orders.creditToApply")}</label>
                   <input
                     inputMode="decimal"
                     value={creditAmount}
@@ -364,22 +361,22 @@ export function AdminOrdersPanel() {
                 </div>
                 {residualPreview != null && (
                   <p className="text-xs text-slate-600">
-                    Residuo da bonifico: <strong className="text-brand-600">{euro(Math.max(residualPreview, 0))}</strong>
-                    {residualPreview <= 0 && <span className="text-emerald-400"> -- copre l&apos;intero importo, nessun bonifico necessario</span>}
+                    {t("mkt.orders.residual")} <strong className="text-brand-600">{euro(Math.max(residualPreview, 0))}</strong>
+                    {residualPreview <= 0 && <span className="text-emerald-400"> -- {t("mkt.orders.fullyCovered")}</span>}
                   </p>
                 )}
               </div>
             )}
 
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-600 uppercase block">Nota (opzionale)</label>
+              <label className="text-xs font-semibold text-slate-600 uppercase block">{t("mkt.orders.note")}</label>
               <input value={note} onChange={(e) => setNote(e.target.value)}
                 className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
             </div>
 
             <button type="submit" disabled={createLoading || !quote}
               className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50">
-              {createLoading ? "Creazione..." : "Crea Ordine"}
+              {createLoading ? t("mkt.orders.creating") : t("mkt.orders.create")}
             </button>
             {createError && (
               <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs">{createError}</div>
@@ -399,45 +396,45 @@ export function AdminOrdersPanel() {
                 : " bg-slate-900/5 border-slate-300 text-slate-600 hover:bg-slate-100"
             }`}
           >
-            {s === "ALL" ? "Tutti" : STATUS_LABELS[s]}
+            {s === "ALL" ? t("mkt.orders.all") : statusLabel(s)}
           </button>
         ))}
       </div>
 
-      {loadError && <p className="text-sm text-rose-400">Impossibile caricare gli ordini.</p>}
+      {loadError && <p className="text-sm text-rose-400">{t("mkt.orders.loadFailed")}</p>}
 
       <div className="glass-card rounded-2xl border-slate-200 bg-white/70 divide-y divide-slate-200 overflow-hidden">
         {orders === undefined ? (
-          <p className="text-center py-8 text-slate-500 text-sm">Caricamento...</p>
+          <p className="text-center py-8 text-slate-500 text-sm">{t("mkt.orders.loading")}</p>
         ) : orders.length === 0 ? (
-          <p className="text-center py-8 text-slate-500 text-sm">Nessun ordine in questo stato.</p>
+          <p className="text-center py-8 text-slate-500 text-sm">{t("mkt.orders.empty")}</p>
         ) : (
           pagination.pageItems.map((o) => (
             <div key={o.id} className="p-5">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="flex items-start gap-3 min-w-0">
                   <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0 border border-slate-200">
-                    <ProductThumbnail imageUrl={o.product_image_url} alt={o.product_name} iconClassName="w-5 h-5 text-brand-600/40" />
+                    <ProductThumbnail imageUrl={o.product_image_url} alt={orderName(o)} iconClassName="w-5 h-5 text-brand-600/40" />
                   </div>
                   <div>
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <span className="font-medium text-slate-900">{o.customer_display_name}</span>
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${STATUS_COLORS[o.status]}`}>
-                        {STATUS_LABELS[o.status]}
+                        {statusLabel(o.status)}
                       </span>
                       <span className="px-2 py-0.5 rounded-full font-bold border bg-slate-900/5 border-slate-300 text-slate-600">
-                        {PAYMENT_METHOD_LABELS[o.payment_method] ?? o.payment_method}
+                        {t.dyn(`acc.method.${o.payment_method}`, o.payment_method)}
                       </span>
                     </div>
                     <p className="text-xs text-slate-500">
-                      Ordine <span className="font-mono text-slate-600">#{orderCode(o)}</span> · {formatDate(o.created_at)}
+                      {t("mkt.orders.order")} <span className="font-mono text-slate-600">#{orderCode(o)}</span> · {formatDate(o.created_at)}
                     </p>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      {o.product_name} · Totale {euro(o.amount_cents)}
+                      {orderName(o)} · {t("mkt.orders.total")} {euro(o.amount_cents)}
                       {o.credit_applied_cents > 0 && <> · {javCash(o.credit_applied_cents)}</>}
-                      {" "}· {o.status === "AWAITING_PAYMENT" ? "Residuo" : "Pagato in euro"} {euro(o.residual_amount_cents)}
-                      {(o.bank_transfer_discount_cents ?? 0) > 0 && <> (sconto bonifico -{euro(o.bank_transfer_discount_cents!)})</>}
-                      {(o.vat_amount_cents ?? 0) > 0 && <> · {vatLineLabel(o.vat_percentage ?? 0)} {euro(o.vat_amount_cents!)}</>}
+                      {" "}· {o.status === "AWAITING_PAYMENT" ? t("mkt.orders.residualShort") : t("mkt.orders.paidEuro")} {euro(o.residual_amount_cents)}
+                      {(o.bank_transfer_discount_cents ?? 0) > 0 && <> ({t("mkt.orders.transferDiscount")} -{euro(o.bank_transfer_discount_cents!)})</>}
+                      {(o.vat_amount_cents ?? 0) > 0 && <> · {t("mkt.orders.vatLine", { pct: (o.vat_percentage ?? 0).toLocaleString(fmt.tag, { maximumFractionDigits: 2 }) })} {euro(o.vat_amount_cents!)}</>}
                     </p>
                     {(o.items ?? []).length > 1 && (
                       <ul className="mt-1 space-y-0.5">
@@ -450,15 +447,15 @@ export function AdminOrdersPanel() {
                       </ul>
                     )}
                     {o.cancellation_reason && (
-                      <p className="text-[11px] text-rose-400 mt-1">Motivo annullamento: {o.cancellation_reason}</p>
+                      <p className="text-[11px] text-rose-400 mt-1">{t("mkt.orders.cancelReason")}: {o.cancellation_reason}</p>
                     )}
                     {o.source === "jav_market" && o.status === "PAID" && (
                       <p className={`text-[11px] mt-1 ${o.fulfillment_status === "SHIPPED" || o.fulfillment_status === "DELIVERED" ? "text-sky-400" : "text-amber-700"}`}>
                         {o.fulfillment_status === "DELIVERED"
-                          ? "Consegnato"
+                          ? t("mkt.orders.delivered")
                           : o.fulfillment_status === "SHIPPED"
-                            ? "Spedito"
-                            : "Da spedire: indirizzo, invio al fornitore e tracking in Fai la Spesa con Jav → Ordini"}
+                            ? t("mkt.orders.shipped")
+                            : t("mkt.orders.toShip")}
                       </p>
                     )}
                   </div>
@@ -470,7 +467,7 @@ export function AdminOrdersPanel() {
                       disabled={actionLoadingId === o.id}
                       className="w-full px-4 py-2 rounded-xl bg-emerald-600/10 hover:bg-emerald-600/20 border border-emerald-500/20 text-emerald-400 text-xs font-semibold transition cursor-pointer disabled:opacity-50"
                     >
-                      {actionLoadingId === o.id ? "..." : "Conferma bonifico ricevuto"}
+                      {actionLoadingId === o.id ? "..." : t("mkt.orders.confirmTransfer")}
                     </button>
                     {o.payment_proof_uploaded_at && (
                       <button
@@ -478,14 +475,14 @@ export function AdminOrdersPanel() {
                         disabled={actionLoadingId === o.id}
                         className="w-full px-4 py-2 rounded-xl bg-sky-600/10 hover:bg-sky-600/20 border border-sky-500/20 text-sky-400 text-xs font-semibold transition cursor-pointer disabled:opacity-50"
                       >
-                        Vedi prova di pagamento
+                        {t("mkt.orders.viewProof")}
                       </button>
                     )}
                     <button
                       onClick={() => setCancellingId(cancellingId === o.id ? null : o.id)}
                       className="w-full px-4 py-2 rounded-xl bg-rose-600/10 hover:bg-rose-600/20 border border-rose-500/20 text-rose-400 text-xs font-semibold transition cursor-pointer"
                     >
-                      Annulla
+                      {t("common.cancel")}
                     </button>
                   </div>
                 )}
@@ -493,7 +490,7 @@ export function AdminOrdersPanel() {
               {cancellingId === o.id && (
                 <div className="mt-3 pt-3 border-t border-slate-200 flex items-end gap-2">
                   <div className="space-y-1 flex-1 max-w-sm">
-                    <label className=" font-semibold text-slate-600 uppercase block">Motivo annullamento</label>
+                    <label className=" font-semibold text-slate-600 uppercase block">{t("mkt.orders.cancelReason")}</label>
                     <input autoFocus value={cancelReason} onChange={(e) => setCancelReason(e.target.value)}
                       className="w-full rounded-lg glass-input px-3 py-1.5 text-sm focus:border-brand-500" />
                   </div>
@@ -502,7 +499,7 @@ export function AdminOrdersPanel() {
                     disabled={actionLoadingId === o.id}
                     className="px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50"
                   >
-                    {actionLoadingId === o.id ? "..." : "Conferma annullamento"}
+                    {actionLoadingId === o.id ? "..." : t("mkt.orders.confirmCancel")}
                   </button>
                 </div>
               )}
@@ -510,7 +507,7 @@ export function AdminOrdersPanel() {
           ))
         )}
       </div>
-      <Pagination {...pagination} label="ordini" />
+      <Pagination {...pagination} label={t("mkt.orders.paginationLabel")} />
     </div>
   );
 }

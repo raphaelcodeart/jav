@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { AgentListItemRead } from "@/lib/types";
 import { LevelLegend, TreeNodeRenderer, type TreeNode } from "@/components/network-tree";
 import { NetworkNodeDetailModal } from "@/components/network-node-detail-modal";
+import { useI18n } from "@/lib/i18n/provider";
 
 async function fetchAgents(): Promise<AgentListItemRead[]> {
   const res = await fetch("/api/proxy/network/agents");
@@ -62,6 +63,7 @@ function countNodes(node: TreeNode): number {
 }
 
 export function AdminNetworkPanel() {
+  const { t } = useI18n();
   const { data: agents, error: loadError, isLoading } = useQuery({
     queryKey: ["admin", "agents", "tree"],
     queryFn: fetchAgents,
@@ -97,24 +99,24 @@ export function AdminNetworkPanel() {
   }, [roots, search]);
 
   if (isLoading) {
-    return <p className="text-sm text-slate-500 text-center py-12">Caricamento rete commerciale...</p>;
+    return <p className="text-sm text-slate-500 text-center py-12">{t("net.adminNet.loading")}</p>;
   }
 
   if (loadError) {
-    return <p className="text-sm text-rose-400">Impossibile caricare la rete commerciale.</p>;
+    return <p className="text-sm text-rose-400">{t("net.adminNet.error")}</p>;
   }
 
   return (
     <div className="glass-card rounded-2xl p-6 border-slate-200 bg-white/70">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div>
-          <h3 className="text-lg font-semibold text-slate-900">Rete Commerciale</h3>
+          <h3 className="text-lg font-semibold text-slate-900">{t("net.promoter.nav.network")}</h3>
           <p className="text-xs text-slate-500">
-            Struttura gerarchica completa dell&apos;organizzazione, fino a {maxDepth} livelli di profondità
+            {t("net.adminNet.subtitle", { n: maxDepth })}
           </p>
         </div>
         <span className="px-3 py-1 text-xs font-semibold rounded-full bg-violet-500/10 text-violet-400 border border-violet-500/20 shrink-0">
-          {agents?.length ?? 0} Agenti Totali
+          {t("net.adminNet.total", { n: agents?.length ?? 0 })}
         </span>
       </div>
 
@@ -122,7 +124,7 @@ export function AdminNetworkPanel() {
         <div className="w-full sm:max-w-xs relative">
           <input
             type="text"
-            placeholder="Cerca promoter o codice..."
+            placeholder={t("net.adminNet.search")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full rounded-xl glass-input pl-10 pr-4 py-2 text-xs focus:border-brand-500"
@@ -135,7 +137,7 @@ export function AdminNetworkPanel() {
           onClick={() => setExpandAll((v) => !v)}
           className="px-3 py-2 rounded-xl text-xs font-semibold bg-slate-900/5 hover:bg-slate-100 text-slate-600 border border-slate-200 transition cursor-pointer shrink-0"
         >
-          {expandAll ? "Comprimi tutto" : "Espandi tutto"}
+          {expandAll ? t("net.adminNet.collapseAll") : t("net.adminNet.expandAll")}
         </button>
       </div>
 
@@ -143,7 +145,7 @@ export function AdminNetworkPanel() {
 
       {filteredRoots.length === 0 ? (
         <p className="text-sm text-slate-500 text-center py-8">
-          {search ? "Nessun promoter corrisponde alla ricerca." : "Nessun promoter nella rete."}
+          {search ? t("net.adminNet.noMatch") : t("net.adminNet.empty")}
         </p>
       ) : (
         <div className="overflow-x-auto pb-4 space-y-6">
@@ -151,7 +153,7 @@ export function AdminNetworkPanel() {
             <div key={root.agent_id} className="min-w-[600px] p-2">
               <div className="mb-2 px-1">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                  Radice di rete · {countNodes(root)} membri
+                  {t("net.adminNet.root", { n: countNodes(root) })}
                 </span>
               </div>
               <TreeNodeRenderer

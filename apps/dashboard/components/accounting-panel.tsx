@@ -2,27 +2,25 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AccountingDetailModal } from "@/components/accounting-detail-modal";
+import { AccountingDetailModal, useAccountingFormat } from "@/components/accounting-detail-modal";
 import { JavCashAmount } from "@/components/jav-cash-amount";
 import { Pagination, usePagination } from "@/components/pagination";
-import {
-  euro, formatDate, formatDayShort, formatTime, javCash, monthKey, monthLabel, movementCategory,
-  movementDetailRef, movementDirection, movementEntity, movementLabel, movementReferenceLink,
-} from "@/lib/accounting-format";
+import { monthKey, movementCategory, movementDetailRef, movementDirection } from "@/lib/accounting-format";
 import { downloadCsv } from "@/lib/csv-export";
 import type { AccountingSummaryRead, FinancialMovementRead } from "@/lib/types";
+import { useI18n } from "@/lib/i18n/provider";
 
 type Filter = "ALL" | "PAYMENTS" | "CONTRACTS" | "CASHBACK" | "JAVCASH" | "BANK_TRANSFER" | "IN" | "OUT";
 
-const FILTERS: { key: Filter; label: string; match: (m: FinancialMovementRead) => boolean }[] = [
-  { key: "ALL", label: "Tutti", match: () => true },
-  { key: "PAYMENTS", label: "Pagamenti", match: (m) => m.currency === "EUR" },
-  { key: "CONTRACTS", label: "Contratti", match: (m) => Boolean(m.contract_id) },
-  { key: "CASHBACK", label: "Cashback", match: (m) => movementCategory(m) === "Cashback" },
-  { key: "JAVCASH", label: "JavCash", match: (m) => m.currency === "JAVCASH" },
-  { key: "BANK_TRANSFER", label: "Bonifico", match: (m) => m.payment_method === "BANK_TRANSFER" },
-  { key: "IN", label: "Entrate", match: (m) => movementDirection(m) === "in" },
-  { key: "OUT", label: "Uscite", match: (m) => movementDirection(m) === "out" },
+const FILTERS: { key: Filter; match: (m: FinancialMovementRead) => boolean }[] = [
+  { key: "ALL", match: () => true },
+  { key: "PAYMENTS", match: (m) => m.currency === "EUR" },
+  { key: "CONTRACTS", match: (m) => Boolean(m.contract_id) },
+  { key: "CASHBACK", match: (m) => movementCategory(m) === "Cashback" },
+  { key: "JAVCASH", match: (m) => m.currency === "JAVCASH" },
+  { key: "BANK_TRANSFER", match: (m) => m.payment_method === "BANK_TRANSFER" },
+  { key: "IN", match: (m) => movementDirection(m) === "in" },
+  { key: "OUT", match: (m) => movementDirection(m) === "out" },
 ];
 
 const CATEGORY_STYLE: Record<string, { tile: string; icon: string }> = {
@@ -35,9 +33,9 @@ const CATEGORY_STYLE: Record<string, { tile: string; icon: string }> = {
   Altro: { tile: "bg-slate-500/15 text-slate-400", icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" },
 };
 
-async function fetchJson<T>(path: string): Promise<T> {
+async function fetchJson<T>(path: string, errorText: string): Promise<T> {
   const res = await fetch(path);
-  if (!res.ok) throw new Error("Impossibile caricare la contabilità.");
+  if (!res.ok) throw new Error(errorText);
   return res.json();
 }
 
@@ -79,14 +77,19 @@ function Kpi({
     Every row opens its detail, and every order / contract chip opens that thing with all of its movements -- so each euro
     and each JavCash can be followed back to where it came from. */
 export function AccountingPanel({ onOpenTab }: { onOpenTab?: (tab: string) => void }) {
+  const { t } = useI18n();
+  const {
+    euro, formatDate, javCash, monthLabel, movementLabel, movementEntity, movementReferenceLink, categoryLabel,
+    paymentMethodLabel, plainAmount, formatDateOnly,
+  } = useAccountingFormat();
   const { data: movements, error } = useQuery({
     queryKey: ["accounting", "mine"],
-    queryFn: () => fetchJson<FinancialMovementRead[]>("/api/proxy/accounting/mine"),
+    queryFn: () => fetchJson<FinancialMovementRead[]>("/api/proxy/accounting/mine", t("acct.accounting.loadError")),
     refetchOnWindowFocus: true,
   });
   const { data: summary } = useQuery({
     queryKey: ["accounting", "mine", "summary"],
-    queryFn: () => fetchJson<AccountingSummaryRead>("/api/proxy/accounting/mine/summary"),
+    queryFn: () => fetchJson<AccountingSummaryRead>("/api/proxy/accounting/mine/summary", t("acct.accounting.loadError")),
     refetchOnWindowFocus: true,
   });
   const [filter, setFilter] = useState<Filter>("ALL");
@@ -127,32 +130,32 @@ export function AccountingPanel({ onOpenTab }: { onOpenTab?: (tab: string) => vo
 
   function exportCsv() {
     downloadCsv(
-      `contabilita-${new Date().toISOString().slice(0, 10)}.csv`,
-      ["Data", "Tipo", "Movimento", "Descrizione", "Riferimento", "Valuta", "Metodo di pagamento", "Entrata/Uscita", "Importo", "Nota"],
+      `${t("acct.accounting.csvName")}-${new Date().toISOString().slice(0, 10)}.csv`,
+      [t("acct.col.date"), t("acct.col.type"), t("acct.csv.movement"), t("acct.csv.description"), t("acct.col.reference"), t("acct.csv.currency"), t("acct.csv.paymentMethod"), t("acct.csv.inOut"), t("acct.col.amount"), t("acct.col.note")],
       filtered.map((m) => [
         formatDate(m.created_at),
-        movementCategory(m),
+        categoryLabel(m),
         movementLabel(m),
         m.product_name ?? "",
         movementReferenceLink(m, "/customer")?.label ?? "",
         m.currency === "JAVCASH" ? "JavCash" : "EUR",
-        m.payment_method ? "Bonifico" : "",
-        movementDirection(m) === "in" ? "Entrata" : "Uscita",
-        (Math.abs(m.amount_cents) / 100).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        m.payment_method ? paymentMethodLabel(m.payment_method) : "",
+        movementDirection(m) === "in" ? t("acct.csv.in") : t("acct.csv.out"),
+        plainAmount(Math.abs(m.amount_cents)),
         m.note ?? "",
       ])
     );
   }
 
-  if (error) return <p className="text-sm text-rose-400">Impossibile caricare la contabilità.</p>;
+  if (error) return <p className="text-sm text-rose-400">{t("acct.accounting.loadError")}</p>;
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Contabilità</h2>
+          <h2 className="text-2xl font-bold text-slate-900">{t("acct.accounting.title")}</h2>
           <p className="text-xs text-slate-500 mt-1">
-            Ogni euro pagato e ogni JavCash, con il dettaglio di ciascun movimento.
+            {t("acct.accounting.subtitle")}
           </p>
         </div>
         <button
@@ -163,7 +166,7 @@ export function AccountingPanel({ onOpenTab }: { onOpenTab?: (tab: string) => vo
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
           </svg>
-          Esporta CSV
+          {t("acct.common.exportCsv")}
         </button>
       </div>
 
@@ -175,60 +178,59 @@ export function AccountingPanel({ onOpenTab }: { onOpenTab?: (tab: string) => vo
             <Kpi
               big
               accent="violet"
-              label="Totale speso"
+              label={t("acct.kpi.spentTotal")}
               value={euro(summary.spent_total_cents)}
-              hint={`${summary.payments_count} pagamenti · bonifico ${euro(summary.spent_bank_transfer_cents)}`}
+              hint={t("acct.kpi.spentTotalHint", { n: summary.payments_count, amount: euro(summary.spent_bank_transfer_cents) })}
             />
-            <Kpi big label="Speso questo mese" value={euro(summary.spent_this_month_cents)} />
+            <Kpi big label={t("acct.kpi.spentMonth")} value={euro(summary.spent_this_month_cents)} />
             <Kpi
               big
               accent="orange"
-              label="Saldo JavCash"
+              label={t("acct.kpi.javcashBalance")}
               value={<JavCashAmount cents={summary.javcash_balance_cents} align="left" />}
             />
             <Kpi
               big
               accent="emerald"
-              label="Cashback ricevuto"
+              label={t("acct.kpi.cashbackReceived")}
               value={<JavCashAmount cents={summary.cashback_received_cents} align="left" />}
             />
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-            <Kpi accent="sky" label="Pagato con bonifico" value={euro(summary.spent_bank_transfer_cents)} />
+            <Kpi accent="sky" label={t("acct.kpi.paidBankTransfer")} value={euro(summary.spent_bank_transfer_cents)} />
             <Kpi
-              label="Contratti"
+              label={t("acct.kpi.contracts")}
               value={euro(summary.spent_contracts_cents)}
               hint={
                 <>
-                  {summary.contracts_active} attivi · {summary.instalments_paid} rate pagate
+                  {t("acct.kpi.contractsHint", { active: summary.contracts_active, paid: summary.instalments_paid })}
                   {summary.next_instalment_due_date && summary.next_instalment_cents != null && (
                     <span className="block text-amber-700">
-                      Prossima: {euro(summary.next_instalment_cents)} il{" "}
-                      {new Date(summary.next_instalment_due_date).toLocaleDateString("it-IT")}
+                      {t("acct.kpi.nextInstalment", { amount: euro(summary.next_instalment_cents), date: formatDateOnly(summary.next_instalment_due_date) })}
                     </span>
                   )}
                 </>
               }
             />
             <Kpi
-              label="Shop"
+              label={t("acct.kpi.shop")}
               value={euro(summary.spent_orders_cents)}
-              hint="ordini"
+              hint={t("acct.kpi.orders")}
             />
             <Kpi
-              label="JavCash ricevuti"
+              label={t("acct.kpi.javcashReceived")}
               value={javCash(summary.javcash_received_cents)}
-              hint={`spesi ${javCash(summary.javcash_spent_cents)}`}
+              hint={t("acct.kpi.javcashSpent", { amount: javCash(summary.javcash_spent_cents) })}
             />
             {summary.commissions_total_cents != null ? (
               <Kpi
                 accent="emerald"
-                label="Provvigioni maturate"
+                label={t("acct.kpi.commissions")}
                 value={euro(summary.commissions_total_cents)}
-                hint={`da incassare ${euro(summary.commissions_to_collect_cents ?? 0)} · pagate ${euro(summary.commissions_paid_cents ?? 0)}`}
+                hint={t("acct.kpi.commissionsHint", { toCollect: euro(summary.commissions_to_collect_cents ?? 0), paid: euro(summary.commissions_paid_cents ?? 0) })}
               />
             ) : (
-              <Kpi label="Movimenti totali" value={list.length} hint="JavCash e pagamenti" />
+              <Kpi label={t("acct.kpi.movementsTotal")} value={list.length} hint={t("acct.kpi.movementsTotalHint")} />
             )}
           </div>
         </div>
@@ -243,14 +245,14 @@ export function AccountingPanel({ onOpenTab }: { onOpenTab?: (tab: string) => vo
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Cerca per descrizione, prodotto, importo, n° ordine / contratto…"
+              placeholder={t("acct.accounting.search")}
               className="w-full rounded-xl glass-input pl-9 pr-3 py-2.5 text-sm focus:border-brand-500"
             />
           </div>
           <div className="flex items-center gap-2">
-            <label className="text-[10px] font-bold uppercase text-slate-500">Dal</label>
+            <label className="text-[10px] font-bold uppercase text-slate-500">{t("acct.accounting.from")}</label>
             <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="rounded-xl glass-input px-2.5 py-2 text-xs" />
-            <label className="text-[10px] font-bold uppercase text-slate-500">al</label>
+            <label className="text-[10px] font-bold uppercase text-slate-500">{t("acct.accounting.to")}</label>
             <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="rounded-xl glass-input px-2.5 py-2 text-xs" />
           </div>
         </div>
@@ -265,7 +267,7 @@ export function AccountingPanel({ onOpenTab }: { onOpenTab?: (tab: string) => vo
                   : " bg-slate-900/5 text-slate-600 hover:bg-slate-100"
               }`}
             >
-              {f.label}
+              {t.dyn(`acct.filter.${f.key}`, f.key)}
               <span className="ml-1 opacity-60">{list.filter(f.match).length}</span>
             </button>
           ))}
@@ -274,14 +276,14 @@ export function AccountingPanel({ onOpenTab }: { onOpenTab?: (tab: string) => vo
               onClick={() => { setFilter("ALL"); setSearch(""); setFrom(""); setTo(""); }}
               className="ml-auto text-[11px] font-semibold text-brand-600 hover:text-brand-600 cursor-pointer"
             >
-              Azzera filtri
+              {t("acct.accounting.resetFilters")}
             </button>
           )}
         </div>
         {filtersActive && (
           <p className=" text-slate-500">
-            <strong className=" text-slate-800">{filtered.length}</strong> movimenti · pagati{" "}
-            <strong className=" text-slate-800">{euro(outEur)}</strong> · JavCash ricevuti{" "}
+            <strong className=" text-slate-800">{filtered.length}</strong> {t("acct.accounting.sumMovements")}{" "}
+            <strong className=" text-slate-800">{euro(outEur)}</strong> {t("acct.accounting.sumJavcash")}{" "}
             <strong className=" text-slate-800">{javCash(inJavCash)}</strong>
           </p>
         )}
@@ -291,7 +293,7 @@ export function AccountingPanel({ onOpenTab }: { onOpenTab?: (tab: string) => vo
         <div className="h-64 rounded-2xl bg-slate-900/5 animate-pulse" />
       ) : filtered.length === 0 ? (
         <div className="rounded-2xl border border-slate-200 p-10 text-center text-sm text-slate-500">
-          Nessun movimento corrisponde alla ricerca.
+          {t("acct.accounting.noMatch")}
         </div>
       ) : (
         <div className="space-y-5">
@@ -303,7 +305,7 @@ export function AccountingPanel({ onOpenTab }: { onOpenTab?: (tab: string) => vo
                   <h3 className="text-sm font-bold text-slate-900">{monthLabel(group.key)}</h3>
                   {spent > 0 && (
                     <span className="text-[11px] text-slate-500">
-                      pagati <strong className=" text-slate-700">{euro(spent)}</strong>
+                      {t("acct.accounting.paid")} <strong className=" text-slate-700">{euro(spent)}</strong>
                     </span>
                   )}
                 </div>
@@ -315,7 +317,7 @@ export function AccountingPanel({ onOpenTab }: { onOpenTab?: (tab: string) => vo
               </section>
             );
           })}
-          <Pagination {...pagination} label="movimenti" />
+          <Pagination {...pagination} label={t("acct.accounting.movementsPlural")} />
         </div>
       )}
 
@@ -340,6 +342,8 @@ export function AccountingPanel({ onOpenTab }: { onOpenTab?: (tab: string) => vo
 }
 
 function MovementRow({ m, onOpen }: { m: FinancialMovementRead; onOpen: (ref: string) => void }) {
+  const { t } = useI18n();
+  const { euro, formatDayShort, formatTime, movementLabel, movementEntity, categoryLabel } = useAccountingFormat();
   const direction = movementDirection(m);
   const category = movementCategory(m);
   const style = CATEGORY_STYLE[category] ?? CATEGORY_STYLE.Altro!;
@@ -370,7 +374,7 @@ function MovementRow({ m, onOpen }: { m: FinancialMovementRead; onOpen: (ref: st
           <span className="sm:hidden font-bold text-slate-400">
             {formatDayShort(m.created_at)} {formatTime(m.created_at)} ·{" "}
           </span>
-          {[m.product_name, m.kind === "WALLET" ? m.note : null].filter(Boolean).join(" · ") || category}
+          {[m.product_name, m.kind === "WALLET" ? m.note : null].filter(Boolean).join(" · ") || categoryLabel(m)}
         </p>
         {entity && (
           <button
@@ -394,7 +398,7 @@ function MovementRow({ m, onOpen }: { m: FinancialMovementRead; onOpen: (ref: st
         </div>
         {m.currency === "EUR" && (
           <p className="text-[10px] font-semibold text-slate-500">
-            {m.payment_method === "BANK_TRANSFER" ? "Bonifico" : "Euro"}
+            {m.payment_method === "BANK_TRANSFER" ? t("acct.paymentMethod.BANK_TRANSFER") : t("acct.mv.euro")}
           </p>
         )}
       </div>

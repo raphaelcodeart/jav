@@ -7,8 +7,8 @@ import { ContractRequestPaymentPanel } from "@/components/contract-request-payme
 import { FullScreenPanel } from "@/components/full-screen-panel";
 import { ProductDetailModal } from "@/components/product-detail-modal";
 import { friendlyApiError } from "@/lib/api-error";
-import { pointCode, pointsBreakdown } from "@/lib/contract-status";
-import { contractPrices, formatEuroCents as euro, isBusinessCustomer, productAllowsCustomerKind } from "@/lib/product-audience";
+import { useI18n } from "@/lib/i18n/provider";
+import { contractPrices, isBusinessCustomer, productAllowsCustomerKind } from "@/lib/product-audience";
 import { PROVINCES } from "@/lib/provinces";
 import type {
   BirthplaceRead,
@@ -19,12 +19,19 @@ import type {
 
 type Step = "data" | "documents" | "contracts" | "summary";
 
-const STEPS: { key: Step; label: string }[] = [
-  { key: "data", label: "Dati" },
-  { key: "documents", label: "Documenti" },
-  { key: "contracts", label: "Contratti" },
-  { key: "summary", label: "Riepilogo" },
-];
+const STEPS: Step[] = ["data", "documents", "contracts", "summary"];
+
+type T = ReturnType<typeof useI18n>["t"];
+
+/** "Contratto 1", "Contratto 2": a contract's place in the pratica. */
+function pointCode(t: T, point: { position?: number }): string {
+  return point.position ? t("ctr.point.codeN", { n: point.position }) : t("ctr.point.code");
+}
+
+/** "1 contratto" / "3 contratti". */
+function contractsCount(t: T, n: number): string {
+  return n === 1 ? t("ctr.count.oneContract") : t("ctr.count.nContracts", { n });
+}
 
 /** Tetto sui contratti di una pratica (MAX_POINTS_PER_REQUEST lato API). */
 const MAX_POINTS = 50;
@@ -44,7 +51,7 @@ async function fetchRequest(id: string): Promise<ContractRequestDetailRead> {
 
 async function fetchProducts(): Promise<ProductCatalogRead[]> {
   const res = await fetch("/api/proxy/products");
-  if (!res.ok) throw new Error("Impossibile caricare il catalogo prodotti.");
+  if (!res.ok) throw new Error("products fetch failed");
   return res.json();
 }
 
@@ -107,6 +114,8 @@ export function ContractRequestWizard({
   holder?: { firstName?: string | null; lastName?: string | null; pec?: string | null; fiscalCode?: string | null };
   onClose: () => void;
 }) {
+  const { t, fmt } = useI18n();
+  const euro = fmt.euro;
   const queryClient = useQueryClient();
   const promoterMode = Boolean(customer);
   const [requestId, setRequestId] = useState<string | null>(initialRequestId ?? null);
@@ -140,7 +149,7 @@ export function ContractRequestWizard({
     .sort(
       (a, b) =>
         a.current_version!.base_price_cents - b.current_version!.base_price_cents ||
-        a.current_version!.name.localeCompare(b.current_version!.name, "it")
+        a.current_version!.name.localeCompare(b.current_version!.name, fmt.tag)
     );
   const step: Step | null = chosenStep ?? (request ? resumeStepFor(request) : null);
 
@@ -166,45 +175,45 @@ export function ContractRequestWizard({
       queryClient.invalidateQueries({ queryKey: ["customer", "contracts"] });
       return detail;
     } catch (err: any) {
-      setActionError(err.message || "Operazione non riuscita.");
+      setActionError(err.message || t("common.failed"));
       return null;
     } finally {
       setBusy(null);
     }
   }
 
-  const customerName = [customer?.firstName, customer?.lastName].filter(Boolean).join(" ") || "il cliente";
+  const customerName = [customer?.firstName, customer?.lastName].filter(Boolean).join(" ") || t("ctr.wiz.theCustomer");
   const title = promoterMode
     ? requestId
-      ? `Pratica per ${request?.holder_name || customerName}`
-      : `Nuova pratica per ${customerName}`
+      ? t("ctr.wiz.praticaFor", { name: request?.holder_name || customerName })
+      : t("ctr.wiz.newPraticaFor", { name: customerName })
     : request
-      ? `Pratica ${request.code}`
-      : "Attiva nuovo contratto";
+      ? t("ctr.wiz.praticaCode", { code: request.code })
+      : t("ctr.wiz.activateNew");
   const liveTotal = (request?.points ?? []).reduce((sum, p) => sum + (p.gross_amount_cents ?? 0), 0);
   const isDraft = !request || request.status === "DRAFT";
 
   return (
     <FullScreenPanel
-      eyebrow={request ? `Pratica ${request.code}` : "Attiva nuovo contratto"}
+      eyebrow={request ? t("ctr.wiz.praticaCode", { code: request.code }) : t("ctr.wiz.activateNew")}
       title={title}
       onClose={onClose}
       subtitle={
         <div className="space-y-2">
           <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
-            {STEPS.map((s, i) => {
-              const current = s.key === step;
+            {STEPS.map((key, i) => {
+              const current = key === step;
               // Past the documents only once identity, bill (and visura /
               // P.IVA for a business) are in -- a draft only: a sent
               // pratica is just being looked at.
               const documentsDone = !isDraft || (request?.documents_blocking ?? []).length === 0;
               const reachable =
-                s.key === "data" ||
-                (Boolean(requestId) && (s.key === "documents" || documentsDone));
+                key === "data" ||
+                (Boolean(requestId) && (key === "documents" || documentsDone));
               return (
                 <button
-                  key={s.key}
-                  onClick={() => reachable && goTo(s.key)}
+                  key={key}
+                  onClick={() => reachable && goTo(key)}
                   disabled={!reachable}
                   className={`flex items-center gap-1.5 px-2 py-1 rounded-lg shrink-0 transition ${
                     current ? "bg-brand-600/15" : reachable ? "hover:bg-slate-100 cursor-pointer" : "opacity-50"
@@ -218,7 +227,7 @@ export function ContractRequestWizard({
                     {i + 1}
                   </span>
                   <span className={`text-[11px] font-semibold ${current ? " text-slate-900" : "text-slate-500"}`}>
-                    {s.label}
+                    {t(`ctr.wiz.step.${key}`)}
                   </span>
                 </button>
               );
@@ -226,8 +235,8 @@ export function ContractRequestWizard({
           </div>
           {request && request.points.length > 0 && (
             <p className=" text-slate-500">
-              {pointsBreakdown(request.points)}
-              {liveTotal > 0 && <> · totale <strong className="text-brand-600 tabular-nums">{euro(liveTotal)}</strong></>}
+              {contractsCount(t, request.points.length)}
+              {liveTotal > 0 && <> · {t("ctr.log.total")} <strong className="text-brand-600 tabular-nums">{euro(liveTotal)}</strong></>}
             </p>
           )}
         </div>
@@ -242,14 +251,13 @@ export function ContractRequestWizard({
       {step === "data" && fiscalWarning && (
         <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-2">
           <p className="text-xs font-semibold text-amber-700">
-            Attenzione: il codice fiscale non sembra tornare con i dati scritti
+            {t("ctr.wiz.fiscalWarnTitle")}
           </p>
           <ul className="list-disc pl-5 text-xs text-amber-800 space-y-0.5">
             {fiscalWarning.map((p) => <li key={p}>{p}</li>)}
           </ul>
           <p className=" text-slate-600">
-            I dati sono salvati. Controlla nome, cognome, data e luogo di nascita e il codice fiscale (nome e cognome
-            invertiti?) e premi di nuovo «Continua», oppure vai avanti così.
+            {t("ctr.wiz.fiscalWarnBody")}
           </p>
           <button
             type="button"
@@ -259,7 +267,7 @@ export function ContractRequestWizard({
             }}
             className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-xs font-semibold text-white transition cursor-pointer"
           >
-            Continua comunque
+            {t("ctr.pfc.continueAnyway")}
           </button>
         </div>
       )}
@@ -320,26 +328,25 @@ export function ContractRequestWizard({
       {step === "documents" && request && (
         <div className="space-y-5">
           <div>
-            <h3 className="text-sm font-bold text-slate-900">Documenti</h3>
+            <h3 className="text-sm font-bold text-slate-900">{t("ctr.pfc.flow.documents")}</h3>
             <p className="text-xs text-slate-500 mt-1">
-              Si caricano una volta sola e valgono per tutta la pratica ({pointsBreakdown(request.points)}).
-              Ogni documento può avere più pagine: fotografa fronte e retro (fino a 20 pagine).
+              {t("ctr.wiz.docsIntro", { contracts: contractsCount(t, request.points.length) })}
             </p>
           </div>
           <ContractDocumentsPanel requestId={request.id} />
           {isDraft && (request.documents_blocking ?? []).length > 0 && (
             <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 text-xs">
-              Per andare avanti carica almeno una pagina di: <strong>{request.documents_blocking.join(", ")}</strong>.
+              {t("ctr.wiz.docsBlocking")} <strong>{request.documents_blocking.join(", ")}</strong>.
             </div>
           )}
           <div className="flex gap-2">
-            <button onClick={() => goTo("data")} className={secondaryButton}>← Dati</button>
+            <button onClick={() => goTo("data")} className={secondaryButton}>{t("ctr.wiz.backData")}</button>
             <button
               onClick={() => goTo("contracts")}
               disabled={isDraft && (request.documents_blocking ?? []).length > 0}
               className={`flex-1 ${primaryButton}`}
             >
-              Continua: scegli le offerte
+              {t("ctr.wiz.continueOffers")}
             </button>
           </div>
         </div>
@@ -381,7 +388,7 @@ export function ContractRequestWizard({
           }
           onSubmit={() => mutate("submit", `/${request.id}/submit`, { method: "POST" })}
           onCancelDraft={async () => {
-            if (!window.confirm("Eliminare questa pratica in bozza?")) return;
+            if (!window.confirm(t("ctr.wiz.confirmDeleteDraft"))) return;
             const detail = await mutate("cancel", `/${request.id}/cancel`, { method: "POST" });
             if (detail) onClose();
           }}
@@ -395,8 +402,8 @@ export function ContractRequestWizard({
           customerKind={kind}
           ctaLabel={
             preview.pointId
-              ? "Scegli per questo contratto"
-              : "Chiudi"
+              ? t("ctr.wiz.chooseForThis")
+              : t("common.close")
           }
           onClose={() => setPreview(null)}
           onBuy={async (versionId) => {
@@ -418,25 +425,26 @@ export function ContractRequestWizard({
 // --- 1. Dati: intestatario, indirizzo, quanti contratti -------------------------------
 
 function AddressFields({ value, onChange }: { value: AddressValue; onChange: (value: AddressValue) => void }) {
+  const { t } = useI18n();
   return (
     <>
       <div className="space-y-1">
-        <label className={labelClass}>Indirizzo</label>
+        <label className={labelClass}>{t("ctr.f.address")}</label>
         <input
           required
           value={value.street}
           onChange={(e) => onChange({ ...value, street: e.target.value })}
-          placeholder="Via/Piazza e numero civico"
+          placeholder={t("ctr.wiz.streetPlaceholder")}
           className={inputClass}
         />
       </div>
       <div className="grid grid-cols-6 gap-2">
         <div className="col-span-3 space-y-1">
-          <label className={labelClass}>Città</label>
+          <label className={labelClass}>{t("ctr.wiz.city")}</label>
           <input required value={value.city} onChange={(e) => onChange({ ...value, city: e.target.value })} className={inputClass} />
         </div>
         <div className="col-span-1 space-y-1">
-          <label className={labelClass}>Prov.</label>
+          <label className={labelClass}>{t("ctr.wiz.province")}</label>
           <select
             required
             value={value.province}
@@ -448,7 +456,7 @@ function AddressFields({ value, onChange }: { value: AddressValue; onChange: (va
           </select>
         </div>
         <div className="col-span-2 space-y-1">
-          <label className={labelClass}>CAP</label>
+          <label className={labelClass}>{t("ctr.wiz.postalCode")}</label>
           <input
             required
             minLength={5}
@@ -474,6 +482,7 @@ function BirthplaceInput({
   value: { code: string; label: string } | null;
   onChange: (value: { code: string; label: string } | null) => void;
 }) {
+  const { t } = useI18n();
   const [text, setText] = useState(value?.label ?? "");
   const [open, setOpen] = useState(false);
   const query = text.trim();
@@ -487,7 +496,7 @@ function BirthplaceInput({
     enabled: open && !value && query.length >= 2,
     staleTime: 5 * 60_000,
   });
-  const label = (p: BirthplaceRead) => `${p.name} (${p.foreign ? "estero" : p.province})`;
+  const label = (p: BirthplaceRead) => `${p.name} (${p.foreign ? t("ctr.wiz.abroad") : p.province})`;
 
   return (
     <div className="relative">
@@ -501,14 +510,14 @@ function BirthplaceInput({
         }}
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
-        placeholder="Comune, o Stato se all'estero"
+        placeholder={t("ctr.wiz.birthplacePlaceholder")}
         autoComplete="off"
         className={inputClass}
       />
       {open && !value && query.length >= 2 && (
         <div className="absolute z-20 mt-1 w-full max-h-60 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl">
           {options.length === 0 ? (
-            <p className="px-3 py-2 text-xs text-slate-500">{isFetching ? "Cerco…" : "Nessun comune o Stato con questo nome"}</p>
+            <p className="px-3 py-2 text-xs text-slate-500">{isFetching ? t("ctr.wiz.searching") : t("ctr.wiz.noBirthplace")}</p>
           ) : (
             options.map((p) => (
               <button
@@ -525,7 +534,7 @@ function BirthplaceInput({
                 {label(p)}
                 {!p.active && (
                   <span className="ml-1 text-[10px] text-slate-500">
-                    comune soppresso{p.until ? ` nel ${p.until}` : ""}
+                    {p.until ? t("ctr.wiz.suppressedIn", { year: p.until }) : t("ctr.wiz.suppressed")}
                   </span>
                 )}
               </button>
@@ -568,6 +577,7 @@ function DataStep({
     count: number
   ) => void;
 }) {
+  const { t } = useI18n();
   const readOnly = Boolean(request && request.status !== "DRAFT");
   // Session 85: privato or azienda is chosen here, per pratica. "Azienda"
   // keeps the customer's own business kind (ditta, condominio) when it has one.
@@ -635,40 +645,40 @@ function DataStep({
     >
       <fieldset disabled={readOnly} className="space-y-4">
         <div className="space-y-1">
-          <label className={labelClass}>Il contratto è per</label>
+          <label className={labelClass}>{t("ctr.wiz.contractFor")}</label>
           <select
             value={business ? businessKind : "PRIVATE"}
             onChange={(e) => setHolderKind(e.target.value)}
             className={`${inputClass} bg-white`}
           >
-            <option value="PRIVATE">Privato</option>
-            <option value={businessKind}>Azienda / Partita IVA</option>
+            <option value="PRIVATE">{t("ctr.kind.PRIVATE")}</option>
+            <option value={businessKind}>{t("ctr.wiz.businessOption")}</option>
           </select>
         </div>
 
         {business && (
           <div className="space-y-1">
-            <label className={labelClass}>Ragione sociale</label>
+            <label className={labelClass}>{t("ctr.create.companyName")}</label>
             <input required value={companyName} onChange={(e) => setCompanyName(e.target.value)} autoComplete="organization" className={inputClass} />
           </div>
         )}
 
         <h3 className="text-sm font-bold text-slate-900">
-          {business ? "Legale rappresentante" : "Intestatario del contratto"}
+          {business ? t("ctr.f.legalRep") : t("ctr.wiz.contractHolder")}
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1">
-            <label className={labelClass}>Nome</label>
+            <label className={labelClass}>{t("ctr.wiz.firstName")}</label>
             <input required value={firstName} onChange={(e) => setFirstName(e.target.value)} autoComplete="given-name" className={inputClass} />
           </div>
           <div className="space-y-1">
-            <label className={labelClass}>Cognome</label>
+            <label className={labelClass}>{t("ctr.wiz.lastName")}</label>
             <input required value={lastName} onChange={(e) => setLastName(e.target.value)} autoComplete="family-name" className={inputClass} />
           </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1">
-            <label className={labelClass}>Data di nascita</label>
+            <label className={labelClass}>{t("ctr.wiz.birthDate")}</label>
             <input
               required
               type="date"
@@ -681,7 +691,7 @@ function DataStep({
             />
           </div>
           <div className="space-y-1">
-            <label className={labelClass}>Luogo di nascita</label>
+            <label className={labelClass}>{t("ctr.wiz.birthPlace")}</label>
             <BirthplaceInput
               value={birthPlace}
               onChange={(place) => {
@@ -689,12 +699,12 @@ function DataStep({
                 if (place) setPlaceMissing(false);
               }}
             />
-            {placeMissing && <p className="text-[10px] text-rose-400">Scegli il luogo dall&apos;elenco che compare mentre scrivi.</p>}
+            {placeMissing && <p className="text-[10px] text-rose-400">{t("ctr.wiz.pickFromList")}</p>}
           </div>
         </div>
         <div className="space-y-1">
           <label className={labelClass}>
-            {business ? "Codice fiscale del legale rappresentante" : "Codice fiscale"}
+            {business ? t("ctr.wiz.legalRepFiscalCode") : t("ctr.f.fiscalCode")}
           </label>
           <input
             required
@@ -708,21 +718,21 @@ function DataStep({
             className={`${inputClass} font-mono tracking-wide`}
           />
           <p className="text-[10px] text-slate-500">
-            Lo controlliamo con nome, cognome, data e luogo di nascita: se qualcosa non torna te lo diciamo subito.
+            {t("ctr.wiz.fiscalCodeHint")}
           </p>
         </div>
         <div className="space-y-1">
           <label className={labelClass}>Email</label>
-          <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nome@esempio.it" className={inputClass} />
-          <p className="text-[10px] text-slate-500">Email di riferimento per questi contratti, anche diversa da quella dell&apos;account.</p>
+          <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={t("ctr.wiz.emailPlaceholder")} className={inputClass} />
+          <p className="text-[10px] text-slate-500">{t("ctr.wiz.emailHint")}</p>
         </div>
         <div className="space-y-1">
           <label className={labelClass}>
             PEC{" "}
             {business ? (
-              <span className="normal-case font-semibold text-brand-600">(obbligatoria per le aziende)</span>
+              <span className="normal-case font-semibold text-brand-600">{t("ctr.wiz.pecRequiredBusiness")}</span>
             ) : (
-              <span className="normal-case font-normal text-slate-500">(facoltativa)</span>
+              <span className="normal-case font-normal text-slate-500">({t("common.optional").toLowerCase()})</span>
             )}
           </label>
           <input
@@ -735,13 +745,13 @@ function DataStep({
           />
           {business && (
             <p className="text-[10px] text-slate-500">
-              Per un contratto aziendale servono sia l&apos;email sia la PEC: è dove l&apos;azienda riceve le comunicazioni ufficiali.
+              {t("ctr.wiz.pecHint")}
             </p>
           )}
         </div>
         <div className="space-y-1">
           <label className={labelClass}>
-            IBAN per addebito{promoterMode && <span className="normal-case font-normal text-slate-500"> (facoltativo)</span>}
+            {t("ctr.f.debitIban")}{promoterMode && <span className="normal-case font-normal text-slate-500"> ({t("common.optional").toLowerCase()})</span>}
           </label>
           <input
             required={!promoterMode}
@@ -752,16 +762,16 @@ function DataStep({
             maxLength={42}
             className={`${inputClass} font-mono tracking-wide`}
           />
-          <p className="text-[10px] text-slate-500">Potrai modificarlo in qualsiasi momento da “I miei Contratti”.</p>
+          <p className="text-[10px] text-slate-500">{t("ctr.wiz.ibanHint")}</p>
         </div>
 
-        <h3 className="text-sm font-bold text-ink-900 pt-3">Residenza / sede</h3>
+        <h3 className="text-sm font-bold text-ink-900 pt-3">{t("ctr.wiz.residence")}</h3>
         <AddressFields value={address} onChange={setAddress} />
 
         <div className="pt-3 border-t border-ink-200 space-y-3">
           <PointCounter
-            label="Quanti contratti vuoi attivare?"
-            hint="Uno per ogni persona o servizio: ognuno ha la sua offerta"
+            label={t("ctr.wiz.howMany")}
+            hint={t("ctr.wiz.howManyHint")}
             value={count}
             max={MAX_POINTS}
             onChange={(n) => setCount(Math.max(1, n))}
@@ -770,10 +780,10 @@ function DataStep({
       </fieldset>
       <button type="submit" disabled={busy} className={`w-full ${primaryButton}`}>
         {busy
-          ? "Salvataggio..."
+          ? t("ctr.wiz.saving")
           : readOnly
-            ? "Continua"
-            : `Continua con ${count === 1 ? "1 contratto" : `${count} contratti`}: documenti`}
+            ? t("ctr.wiz.continue")
+            : t("ctr.wiz.continueWith", { contracts: contractsCount(t, count) })}
       </button>
     </form>
   );
@@ -837,6 +847,8 @@ function PackageOption({
   onChoose: () => void;
   onPreview: () => void;
 }) {
+  const { t, fmt } = useI18n();
+  const euro = fmt.euro;
   const v = product.current_version!;
   const prices = contractPrices(v, kind, { assumeBusinessWhenUnknown: false });
   return (
@@ -856,17 +868,17 @@ function PackageOption({
           <span className="block text-sm font-bold text-slate-900 tabular-nums">
             {euro(prices.oneGo.grossCents)}
             <span className="ml-1 font-normal text-slate-500">
-              annuale, unica soluzione{prices.oneGo.vatCents > 0 ? " · IVA incl." : ""}
+              {t("ctr.wiz.yearlyOneGo")}{prices.oneGo.vatCents > 0 ? ` · ${t("ctr.wiz.vatIncl")}` : ""}
             </span>
           </span>
           <span className="block text-slate-500 tabular-nums">
-            oppure {euro(prices.monthlyGrossCents)} × 12 mesi = {euro(prices.instalments.grossCents)}
-            {v.contract_cashback_percentage > 0 ? ` · cashback ${v.contract_cashback_percentage}%` : ""}
+            {t("ctr.wiz.orMonthly", { monthly: euro(prices.monthlyGrossCents), total: euro(prices.instalments.grossCents) })}
+            {v.contract_cashback_percentage > 0 ? ` · ${t("ctr.wiz.cashbackPct", { pct: v.contract_cashback_percentage })}` : ""}
           </span>
         </span>
       </button>
       <button onClick={onPreview} className="px-2.5 py-1 rounded-lg text-[11px] font-semibold text-brand-600 hover:bg-brand-500/10 cursor-pointer shrink-0">
-        Anteprima
+        {t("ctr.wiz.preview")}
       </button>
     </div>
   );
@@ -893,6 +905,8 @@ function ContractsStep({
   onBack: () => void;
   onNext: () => void;
 }) {
+  const { t, fmt } = useI18n();
+  const euro = fmt.euro;
   const editable = request.status === "DRAFT";
   const [openPoint, setOpenPoint] = useState<string | null>(null);
   const missing = request.points.filter((p) => !p.product_version_id).length;
@@ -900,9 +914,9 @@ function ContractsStep({
   return (
     <div className="space-y-5">
       <div>
-        <h3 className="text-sm font-bold text-ink-900">Scegli l&apos;offerta per ogni contratto</h3>
+        <h3 className="text-sm font-bold text-ink-900">{t("ctr.wiz.chooseOfferEach")}</h3>
         <p className="text-xs text-ink-500 mt-1">
-          Ogni contratto è a sé: puoi scegliere offerte diverse. Apri “Anteprima” per leggerla prima di sceglierla.
+          {t("ctr.wiz.chooseOfferHint")}
         </p>
       </div>
 
@@ -915,7 +929,7 @@ function ContractsStep({
           <div key={point.id} className="p-4 rounded-2xl border border-slate-200 bg-white/70 space-y-3">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-sm font-bold text-ink-900">{pointCode(point)}</p>
+                <p className="text-sm font-bold text-ink-900">{pointCode(t, point)}</p>
               </div>
               {point.gross_amount_cents != null && (
                 <span className="text-sm font-bold text-brand-600 tabular-nums shrink-0">{euro(point.gross_amount_cents)}</span>
@@ -923,7 +937,7 @@ function ContractsStep({
             </div>
 
             {packages.length === 0 ? (
-              <p className="text-xs text-amber-700">Nessuna offerta disponibile al momento.</p>
+              <p className="text-xs text-amber-700">{t("ctr.wiz.noOffers")}</p>
             ) : (
               <div className="space-y-2">
                 {packages.map((product) => (
@@ -938,7 +952,7 @@ function ContractsStep({
                   />
                 ))}
                 {point.product_version_id && !packages.some((p) => p.current_version!.id === point.product_version_id) && (
-                  <p className="text-[11px] text-slate-400">Contratto scelto: {point.product_name}</p>
+                  <p className="text-[11px] text-slate-400">{t("ctr.wiz.chosenContract", { name: point.product_name ?? "" })}</p>
                 )}
               </div>
             )}
@@ -948,7 +962,7 @@ function ContractsStep({
                 onClick={() => setOpenPoint(openPoint === point.id ? null : point.id)}
                 className="text-xs font-semibold text-slate-600 hover:text-brand-600 cursor-pointer"
               >
-                {openPoint === point.id ? "▾" : "▸"} Allegati di questo contratto
+                {openPoint === point.id ? "▾" : "▸"} {t("ctr.wiz.thisAttachments")}
               </button>
               {openPoint === point.id && (
                 <div className="mt-3">
@@ -961,9 +975,9 @@ function ContractsStep({
       </div>
 
       <div className="flex gap-2">
-        <button onClick={onBack} className={secondaryButton}>← Documenti</button>
+        <button onClick={onBack} className={secondaryButton}>{t("ctr.wiz.backDocuments")}</button>
         <button onClick={onNext} className={`flex-1 ${primaryButton}`}>
-          {missing > 0 ? `Continua (${missing} ${missing === 1 ? "contratto" : "contratti"} senza offerta)` : "Continua: riepilogo"}
+          {missing > 0 ? t("ctr.wiz.continueMissing", { contracts: contractsCount(t, missing) }) : t("ctr.wiz.continueSummary")}
         </button>
       </div>
     </div>
@@ -979,6 +993,7 @@ function BulkChoice({
   busy: boolean;
   onApply: (versionId: string) => void;
 }) {
+  const { t } = useI18n();
   const [choice, setChoice] = useState("");
   return (
     <div className="flex flex-col sm:flex-row gap-2 p-3 rounded-xl bg-slate-900/5 border border-slate-200">
@@ -987,13 +1002,13 @@ function BulkChoice({
         onChange={(e) => setChoice(e.target.value)}
         className="flex-1 rounded-xl glass-input px-3 py-2 text-xs bg-white"
       >
-        <option value="">Stessa offerta per tutti i contratti…</option>
+        <option value="">{t("ctr.wiz.sameOfferAll")}</option>
         {packages.map((p) => (
           <option key={p.id} value={p.current_version!.id}>{p.current_version!.name}</option>
         ))}
       </select>
       <button onClick={() => choice && onApply(choice)} disabled={!choice || busy} className={secondaryButton}>
-        {busy ? "Applicazione..." : "Applica a tutti"}
+        {busy ? t("ctr.wiz.applying") : t("ctr.wiz.applyAll")}
       </button>
     </div>
   );
@@ -1022,6 +1037,8 @@ function SummaryStep({
   onCancelDraft: () => void;
   onClose: () => void;
 }) {
+  const { t, fmt } = useI18n();
+  const euro = fmt.euro;
   const { data: sharedDocs } = useRequestDocuments(request.id);
   const [notesText, setNotesText] = useState(request.notes ?? "");
   const sharedMissing = (sharedDocs?.required ?? []).filter((r) => r.required !== false && r.document === null).length;
@@ -1032,18 +1049,18 @@ function SummaryStep({
   return (
     <div className="space-y-5">
       <div>
-        <h3 className="text-sm font-bold text-slate-900">{isDraft ? "Riepilogo della pratica" : "Pratica inviata"}</h3>
+        <h3 className="text-sm font-bold text-slate-900">{isDraft ? t("ctr.wiz.summaryTitle") : t("ctr.wiz.submittedTitle")}</h3>
         <p className="text-xs text-slate-500 mt-1">
           {isDraft
-            ? `Controlla i contratti scelti. Inviando la pratica si aprono ${request.points.length} ${
-                request.points.length === 1 ? "contratto" : "contratti indipendenti"
-              }, ognuno verificato e attivato per conto suo.`
-            : "Ogni contratto viene verificato dall'amministrazione per conto suo e si attiva appena i suoi documenti sono approvati."}
+            ? request.points.length === 1
+              ? t("ctr.wiz.summaryIntroOne")
+              : t("ctr.wiz.summaryIntroMany", { n: request.points.length })
+            : t("ctr.wiz.submittedIntro")}
         </p>
       </div>
 
       <div className="p-3 rounded-xl bg-slate-900/5 border border-slate-200 text-slate-500">
-        Intestatario: <strong className=" text-slate-800">{request.holder_name}</strong>
+        {t("ctr.f.holder")}: <strong className=" text-slate-800">{request.holder_name}</strong>
         {request.email ? ` · ${request.email}` : ""}
         {request.street ? ` · ${request.street}, ${request.postal_code} ${request.city} (${request.province})` : ""}
       </div>
@@ -1052,9 +1069,9 @@ function SummaryStep({
         {request.points.map((point) => (
           <div key={point.id} className="flex items-center justify-between gap-3 px-4 py-3">
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-slate-900">{pointCode(point)}</p>
+              <p className="text-sm font-semibold text-slate-900">{pointCode(t, point)}</p>
               <p className={`text-[11px] ${point.product_name ? " text-slate-500" : "text-amber-700"}`}>
-                {point.product_name ?? "Offerta non ancora scelta"}
+                {point.product_name ?? t("ctr.wiz.offerNotChosen")}
               </p>
             </div>
             <span className="text-sm font-semibold text-slate-900 tabular-nums shrink-0">
@@ -1063,17 +1080,17 @@ function SummaryStep({
           </div>
         ))}
         <div className="flex items-center justify-between gap-3 px-4 py-3 bg-slate-900/5">
-          <span className="text-sm font-bold text-slate-900">Totale</span>
+          <span className="text-sm font-bold text-slate-900">{t("ctr.pay.total")}</span>
           <span className="text-base font-extrabold text-brand-600 tabular-nums">{euro(total)}</span>
         </div>
       </div>
 
       {(sharedMissing > 0 || pointsMissingDocs > 0) && (
         <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 text-xs">
-          Mancano ancora dei documenti
-          {sharedMissing > 0 ? ` (${sharedMissing} d'identità)` : ""}
-          {pointsMissingDocs > 0 ? ` (allegati di ${pointsMissingDocs} ${pointsMissingDocs === 1 ? "contratto" : "contratti"})` : ""}. Puoi inviare e pagare lo stesso e
-          caricarli dopo: ogni contratto si attiva quando i suoi documenti sono approvati.
+          {t("ctr.wiz.docsStillMissing")}
+          {sharedMissing > 0 ? ` (${t("ctr.wiz.nIdentity", { n: sharedMissing })})` : ""}
+          {pointsMissingDocs > 0 ? ` (${t("ctr.wiz.attachmentsOf", { contracts: contractsCount(t, pointsMissingDocs) })})` : ""}.{" "}
+          {t("ctr.wiz.docsLaterHint")}
         </div>
       )}
 
@@ -1090,11 +1107,11 @@ function SummaryStep({
         <div className="space-y-2">
           {(request.documents_blocking ?? []).length > 0 ? (
             <button onClick={onGoToDocuments} className={`w-full ${primaryButton}`}>
-              Carica i documenti obbligatori: {request.documents_blocking.join(", ")}
+              {t("ctr.wiz.uploadRequired", { docs: request.documents_blocking.join(", ") })}
             </button>
           ) : request.points_without_package > 0 ? (
             <button onClick={onChooseContracts} className={`w-full ${primaryButton}`}>
-              Scegli l&apos;offerta per i contratti mancanti
+              {t("ctr.wiz.chooseMissingOffers")}
             </button>
           ) : (
             <button
@@ -1109,22 +1126,21 @@ function SummaryStep({
               className={`w-full ${primaryButton}`}
             >
               {busy === "submit"
-                ? "Invio in corso..."
-                : `Invia la pratica (${request.points.length} ${request.points.length === 1 ? "contratto" : "contratti"})`}
+                ? t("ctr.wiz.submitting")
+                : t("ctr.wiz.submit", { contracts: contractsCount(t, request.points.length) })}
             </button>
           )}
           <button onClick={onCancelDraft} disabled={busy === "cancel"} className="w-full text-xs text-slate-500 hover:text-rose-400 py-2 cursor-pointer">
-            Elimina questa bozza
+            {t("ctr.wiz.deleteDraft")}
           </button>
         </div>
       ) : promoterMode ? (
         <div className="space-y-3">
           <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm">
-            Pratica inviata. Il cliente può pagarla dal suo account, in “I miei Contratti”, anche prima che i documenti
-            siano approvati.
+            {t("ctr.wiz.submittedPromoter")}
           </div>
           <PaymentLinkBox requestId={request.id} holderName={request.holder_name} />
-          <button onClick={onClose} className={`w-full ${secondaryButton}`}>Chiudi</button>
+          <button onClick={onClose} className={`w-full ${secondaryButton}`}>{t("common.close")}</button>
         </div>
       ) : (
         <ContractRequestPaymentPanel requestId={request.id} />
@@ -1139,12 +1155,13 @@ function SummaryStep({
  *  cercarla fra i suoi contratti. Il link da solo non apre niente a nessuno --
  *  serve comunque la sua password, e la pratica si vede solo dal suo account. */
 function PaymentLinkBox({ requestId, holderName }: { requestId: string; holderName: string | null }) {
+  const { t } = useI18n();
   const [copied, setCopied] = useState(false);
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const link = `${origin}/customer?pratica=${requestId}`;
-  const message =
-    `Ciao${holderName ? ` ${holderName.split(" ")[0]}` : ""}, la tua pratica Jav è pronta. ` +
-    `Entra con la tua email e password da questo link e trovi subito il pagamento: ${link}`;
+  const message = holderName
+    ? t("ctr.wiz.waMessageNamed", { name: holderName.split(" ")[0] ?? holderName, link })
+    : t("ctr.wiz.waMessage", { link });
 
   async function copy() {
     try {
@@ -1159,9 +1176,9 @@ function PaymentLinkBox({ requestId, holderName }: { requestId: string; holderNa
   return (
     <div className="p-4 rounded-2xl border-2 border-brand-500/50 bg-brand-500/10 space-y-3">
       <div>
-        <p className="text-sm font-bold text-slate-900">Manda questo link al tuo cliente</p>
+        <p className="text-sm font-bold text-slate-900">{t("ctr.wiz.sendLinkTitle")}</p>
         <p className="text-xs text-slate-600 mt-1">
-          Aprendolo fa il login con la sua email e password e si trova direttamente sul pagamento di questa pratica.
+          {t("ctr.wiz.sendLinkHint")}
         </p>
       </div>
       <p className="px-3 py-2 rounded-lg bg-white font-mono text-brand-700 break-all select-all">
@@ -1169,7 +1186,7 @@ function PaymentLinkBox({ requestId, holderName }: { requestId: string; holderNa
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <button onClick={copy} className={primaryButton}>
-          {copied ? "Link copiato ✓" : "Copia link"}
+          {copied ? t("ctr.wiz.linkCopied") : t("ctr.wiz.copyLink")}
         </button>
         <a
           href={`https://wa.me/?text=${encodeURIComponent(message)}`}
@@ -1177,7 +1194,7 @@ function PaymentLinkBox({ requestId, holderName }: { requestId: string; holderNa
           rel="noopener noreferrer"
           className={`${secondaryButton} text-center`}
         >
-          Invia su WhatsApp
+          {t("ctr.wiz.sendWhatsApp")}
         </a>
       </div>
     </div>
@@ -1203,6 +1220,7 @@ function NotesBox({
   setText: (text: string) => void;
   onSave: (notes: string | null) => Promise<ContractRequestDetailRead | null>;
 }) {
+  const { t } = useI18n();
   const [saved, setSaved] = useState(false);
   const editable = request.status === "DRAFT";
 
@@ -1210,7 +1228,7 @@ function NotesBox({
     if (!request.notes) return null;
     return (
       <div className="p-3 rounded-xl bg-slate-900/5 border border-slate-200">
-        <p className={labelClass}>Note per l&apos;amministrazione</p>
+        <p className={labelClass}>{t("ctr.adm.notesForAdmin")}</p>
         <p className="text-sm text-slate-700 whitespace-pre-wrap mt-1">{request.notes}</p>
       </div>
     );
@@ -1219,7 +1237,7 @@ function NotesBox({
   return (
     <div className="space-y-1.5">
       <label className={labelClass}>
-        Note per l&apos;amministrazione <span className="normal-case font-normal text-slate-500">(facoltative)</span>
+        {t("ctr.adm.notesForAdmin")} <span className="normal-case font-normal text-slate-500">({t("common.optional").toLowerCase()})</span>
       </label>
       <textarea
         rows={3}
@@ -1234,13 +1252,13 @@ function NotesBox({
         }}
         placeholder={
           promoterMode
-            ? "Tutto quello che l'amministrazione deve sapere su questo cliente o su questa pratica…"
-            : "Un messaggio per noi: orari in cui chiamarti, altri dettagli utili…"
+            ? t("ctr.wiz.notesPlaceholderPromoter")
+            : t("ctr.wiz.notesPlaceholderCustomer")
         }
         className={`${inputClass} resize-none`}
       />
       <p className="text-[10px] text-slate-500">
-        {busy ? "Salvataggio…" : saved ? "Note salvate." : "Le legge l'amministrazione quando verifica la pratica."}
+        {busy ? t("ctr.wiz.savingEllipsis") : saved ? t("ctr.wiz.notesSaved") : t("ctr.wiz.notesHint")}
       </p>
     </div>
   );

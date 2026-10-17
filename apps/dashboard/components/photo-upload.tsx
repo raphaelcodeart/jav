@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { ImageCropDialog } from "@/components/ui/image-cropper";
 import { friendlyApiError } from "@/lib/api-error";
+import { useI18n } from "@/lib/i18n/provider";
 
 interface PhotoUploadProps {
   currentUrl: string | null;
@@ -21,6 +22,7 @@ interface PhotoUploadProps {
     customer, promoter and product photos -- same upload mechanics, same
     "name prominent, id small below"-style fallback everywhere. */
 export function PhotoUpload({ currentUrl, uploadPath, onUploaded, alt, size = 96, crop = false }: PhotoUploadProps) {
+  const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -53,7 +55,7 @@ export function PhotoUpload({ currentUrl, uploadPath, onUploaded, alt, size = 96
       const newUrl: string | undefined = updated.photo_url ?? updated.image_url;
       if (newUrl) onUploaded(newUrl);
     } catch (err: any) {
-      setError("Caricamento fallito. Riprova.");
+      setError(t("acct.photo.failed"));
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = "";
@@ -83,7 +85,7 @@ export function PhotoUpload({ currentUrl, uploadPath, onUploaded, alt, size = 96
           htmlFor={`photo-input-${uploadPath}`}
           className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 cursor-pointer transition"
         >
-          {uploading ? "Caricamento..." : displayUrl ? "Cambia foto" : "Carica foto"}
+          {uploading ? t("acct.photo.uploading") : displayUrl ? t("acct.photo.change") : t("acct.photo.upload")}
         </label>
         {error && <p className="text-[11px] text-rose-400">{error}</p>}
       </div>

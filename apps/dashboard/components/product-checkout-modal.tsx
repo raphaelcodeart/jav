@@ -5,14 +5,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { friendlyApiError } from "@/lib/api-error";
 import type { OrderQuoteRead, OrderRead } from "@/lib/types";
 import { JavCashConfirmCode } from "@/components/javcash-confirm-code";
-
-function euro(cents: number): string {
-  return (cents / 100).toLocaleString("it-IT", { style: "currency", currency: "EUR" });
-}
-
-function javCash(cents: number): string {
-  return `${(cents / 100).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} JavCash`;
-}
+import { javCash as javCashIn } from "@/components/marketplace-checkout-bits";
+import { useI18n } from "@/lib/i18n/provider";
 
 async function fetchQuote(productVersionId: string): Promise<OrderQuoteRead> {
   const res = await fetch(`/api/proxy/orders/quote/mine?product_version_id=${productVersionId}`);
@@ -96,6 +90,9 @@ export function ProductCheckoutModal({
   productName: string;
   onClose: () => void;
 }) {
+  const { t, fmt } = useI18n();
+  const euro = fmt.euro;
+  const javCash = (cents: number) => javCashIn(cents, fmt.tag);
   const queryClient = useQueryClient();
   const { data: quote, error: quoteError } = useQuery({
     queryKey: ["customer", "orders", "quote", productVersionId],
@@ -183,11 +180,11 @@ export function ProductCheckoutModal({
   async function handleConfirm() {
     if (!quote) return;
     if (needsPaymentMethod && !paymentMethod) {
-      setSubmitError("Seleziona un metodo di pagamento.");
+      setSubmitError(t("shopx.checkout.selectMethod"));
       return;
     }
     if (creditCents > 0 && !otpCode.trim()) {
-      setSubmitError("Inserisci il codice di conferma ricevuto via email per usare i tuoi JavCash.");
+      setSubmitError(t("shopx.checkout.enterCode"));
       return;
     }
     setSubmitLoading(true);
@@ -216,7 +213,7 @@ export function ProductCheckoutModal({
       }
       setStep("bank_instructions");
     } catch (err: any) {
-      setSubmitError(err.message || "Impossibile completare l'acquisto.");
+      setSubmitError(err.message || t("shopx.checkout.failed"));
     } finally {
       setSubmitLoading(false);
     }
@@ -226,9 +223,10 @@ export function ProductCheckoutModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
       <div className="w-full max-w-xl glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold text-slate-900">Acquista {quote ? "" : productName}</h3>
+          <h3 className="text-lg font-bold text-slate-900">{quote ? t("shopx.checkout.buy") : t("shopx.checkout.buyName", { name: productName })}</h3>
           <button
             onClick={onClose}
+            aria-label={t("common.close")}
             className="p-1.5 rounded-lg hover:bg-slate-900/10 text-slate-400 transition cursor-pointer"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -237,9 +235,9 @@ export function ProductCheckoutModal({
           </button>
         </div>
 
-        {quoteError && <p className="text-sm text-rose-400">Impossibile caricare il preventivo.</p>}
+        {quoteError && <p className="text-sm text-rose-400">{t("shopx.checkout.quoteFailed")}</p>}
         {step === "choose" && !quote && !quoteError && (
-          <div className="py-10 text-center text-sm text-slate-500">Caricamento preventivo...</div>
+          <div className="py-10 text-center text-sm text-slate-500">{t("shopx.checkout.quoteLoading")}</div>
         )}
 
         {step === "success" && placedOrder && (
@@ -248,13 +246,13 @@ export function ProductCheckoutModal({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <p className="text-sm text-slate-600">
-              Ordine confermato -- pagato interamente con i tuoi JavCash.
+              {t("shopx.checkout.paidFully")}
             </p>
             <button
               onClick={onClose}
               className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer"
             >
-              Chiudi
+              {t("common.close")}
             </button>
           </div>
         )}
@@ -262,26 +260,25 @@ export function ProductCheckoutModal({
         {step === "bank_instructions" && placedOrder && (
           <div className="space-y-3">
             <p className="text-sm text-slate-600">
-              Ordine creato. Paga <strong className="text-brand-600">{euro(placedOrder.residual_amount_cents)}</strong> tramite
-              bonifico per confermarlo.
+              {t("shopx.checkout.createdPay")} <strong className="text-brand-600">{euro(placedOrder.residual_amount_cents)}</strong> {t("shopx.checkout.createdPayConfirm")}
             </p>
             <div className="p-4 rounded-xl bg-slate-900/5 border border-slate-200 text-xs space-y-1.5">
               {paymentInfo?.iban ? (
                 <>
                   <p><span className="text-slate-500">IBAN:</span> <span className="font-mono">{paymentInfo.iban}</span></p>
-                  <p><span className="text-slate-500">Intestatario:</span> {paymentInfo.holder}</p>
+                  <p><span className="text-slate-500">{t("shopx.bank.holder")}</span> {paymentInfo.holder}</p>
                   {paymentInfo.instructions && <p className=" text-slate-500 pt-1">{paymentInfo.instructions}</p>}
                 </>
               ) : (
-                <p className="text-slate-500">Contatta l&apos;amministrazione per le coordinate bancarie.</p>
+                <p className="text-slate-500">{t("shopx.bank.contactAdmin")}</p>
               )}
-              <p className="pt-1"><span className="text-slate-500">Causale consigliata:</span> <span className="font-mono text-brand-600">Ordine {placedOrder.id.slice(0, 8).toUpperCase()}</span></p>
+              <p className="pt-1"><span className="text-slate-500">{t("shopx.bank.referenceSuggested")}</span> <span className="font-mono text-brand-600">{t("shopx.bank.referenceValue", { code: placedOrder.id.slice(0, 8).toUpperCase() })}</span></p>
             </div>
             <button
               onClick={onClose}
               className="w-full px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer"
             >
-              Ho capito
+              {t("shopx.gotIt")}
             </button>
           </div>
         )}
@@ -294,7 +291,7 @@ export function ProductCheckoutModal({
               <div className="flex items-end gap-3 flex-wrap">
                 <div>
                   <p className="text-[10px] text-slate-500 uppercase tracking-wide">
-                    {creditCents > 0 ? "Prezzo scontato" : "Prezzo"}
+                    {creditCents > 0 ? t("shopx.checkout.discountedPrice") : t("shopx.checkout.price")}
                   </p>
                   <p className={`text-2xl font-extrabold ${creditCents > 0 ? "text-emerald-400" : " text-slate-900"}`}>
                     {euro(Math.max(residualCents, 0))}
@@ -302,7 +299,7 @@ export function ProductCheckoutModal({
                 </div>
                 {creditCents > 0 && (
                   <div className="pb-1">
-                    <p className="text-[10px] text-slate-500 uppercase tracking-wide">Prezzo pieno</p>
+                    <p className="text-[10px] text-slate-500 uppercase tracking-wide">{t("shopx.checkout.fullPrice")}</p>
                     <p className="text-sm text-slate-500 line-through">{euro(quote.amount_cents)}</p>
                   </div>
                 )}
@@ -314,8 +311,8 @@ export function ProductCheckoutModal({
               </div>
               {quote.max_creditable_cents > 0 && (
                 <p className="text-[11px] text-slate-500 mt-2">
-                  Il tuo saldo: <strong className=" text-slate-900">{javCash(quote.customer_wallet_balance_cents)}</strong>
-                  {" "}· su questo prodotto puoi usarne fino a {javCash(maxUsableCents)} (max {quote.credit_discount_percentage}% di sconto)
+                  {t("shopx.checkout.yourBalance")} <strong className=" text-slate-900">{javCash(quote.customer_wallet_balance_cents)}</strong>
+                  {" "}· {t("shopx.checkout.productUpTo", { amount: javCash(maxUsableCents), pct: quote.credit_discount_percentage })}
                 </p>
               )}
             </div>
@@ -326,14 +323,14 @@ export function ProductCheckoutModal({
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                   <div className="flex items-center gap-2.5">
                     <StepBadge n={1} />
-                    <Toggle checked={useCredit} onChange={handleToggleCredit} label="Usa i tuoi JavCash per abbassare il prezzo" />
+                    <Toggle checked={useCredit} onChange={handleToggleCredit} label={t("shopx.checkout.useToLower")} />
                   </div>
                 </div>
 
                 {useCredit && (
                   <div className="pl-8 space-y-3">
                     <p className="text-[11px] text-slate-500">
-                      I tuoi JavCash valgono 1:1 come sconto: ogni JavCash speso abbassa il prezzo di 1&euro;.
+                      {t("shopx.checkout.oneToOne")}
                     </p>
                     <div className="flex flex-wrap gap-2">
                       {[0.25, 0.5, 0.75, 1].map((fraction) => {
@@ -350,14 +347,14 @@ export function ProductCheckoutModal({
                                 : " bg-slate-900/5 border-slate-300 text-slate-600 hover:bg-slate-100"
                             }`}
                           >
-                            {fraction === 1 ? "Massimo" : `${Math.round(fraction * 100)}%`}
+                            {fraction === 1 ? t("shopx.checkout.max") : `${Math.round(fraction * 100)}%`}
                           </button>
                         );
                       })}
                     </div>
                     <div className="flex items-center gap-2">
                       <label className=" font-semibold text-slate-600 uppercase shrink-0">
-                        Importo personalizzato
+                        {t("shopx.checkout.customAmount")}
                       </label>
                       <input
                         inputMode="decimal"
@@ -368,7 +365,7 @@ export function ProductCheckoutModal({
                       <span className="text-xs text-slate-500 shrink-0">JavCash</span>
                     </div>
                     <p className="text-xs px-3 py-2 rounded-lg bg-brand-500/10 border border-brand-500/20 text-brand-600">
-                      Stai usando <strong>{javCash(creditCents)}</strong> = <strong>{effectiveDiscountPct}% di sconto</strong> su questo ordine.
+                      {t("shopx.checkout.usingPrefix")} <strong>{javCash(creditCents)}</strong> = <strong>{t("shopx.checkout.pctDiscount", { pct: effectiveDiscountPct })}</strong> {t("shopx.checkout.onThisOrder")}
                     </p>
                   </div>
                 )}
@@ -380,10 +377,10 @@ export function ProductCheckoutModal({
               <div className="p-4 rounded-xl border border-slate-200 space-y-2.5">
                 <div className="flex items-center gap-2.5">
                   <StepBadge n={2} done={!!otpCode.trim()} />
-                  <p className="text-sm font-semibold text-slate-900">Conferma i JavCash</p>
+                  <p className="text-sm font-semibold text-slate-900">{t("shopx.checkout.confirmJavCash")}</p>
                 </div>
                 <p className="text-[11px] text-slate-500 pl-8">
-                  Per sicurezza, confermi l&apos;uso dei tuoi JavCash con il tuo PIN o con un codice che ti mandiamo via email.
+                  {t("shopx.checkout.confirmJavCashText")}
                 </p>
                 <div className="pl-8">
                   <JavCashConfirmCode
@@ -404,12 +401,10 @@ export function ProductCheckoutModal({
               <div className="p-4 rounded-xl border border-slate-200 space-y-2.5">
                 <div className="flex items-center gap-2.5">
                   <StepBadge n={creditCents > 0 ? 3 : 2} />
-                  <Toggle checked={cashbackRequested} onChange={setCashbackRequested} label="Riscuoti subito cashback" />
+                  <Toggle checked={cashbackRequested} onChange={setCashbackRequested} label={t("shopx.checkout.cashbackNow")} />
                 </div>
                 <p className="text-[11px] text-slate-500 pl-8">
-                  Paga il <strong className="text-brand-600">{quote.cashback_percentage}%</strong> in più ora
-                  ({euro(Math.round((residualCents * quote.cashback_percentage) / 100))}) e ricevi l&apos;intero importo
-                  pagato oggi accreditato come JavCash sul tuo wallet, non appena il pagamento è confermato.
+                  {t("shopx.checkout.cashbackText", { pct: quote.cashback_percentage, amount: euro(Math.round((residualCents * quote.cashback_percentage) / 100)) })}
                 </p>
               </div>
             )}
@@ -419,11 +414,11 @@ export function ProductCheckoutModal({
               <div className="p-4 rounded-xl border border-slate-200 space-y-2.5">
                 <div className="flex items-center gap-2.5">
                   <StepBadge n={[creditCents > 0, canRequestCashback].filter(Boolean).length + 2} done={!!paymentMethod} />
-                  <p className="text-sm font-semibold text-slate-900">Come vuoi pagare il resto?</p>
+                  <p className="text-sm font-semibold text-slate-900">{t("shopx.checkout.howPayRest")}</p>
                 </div>
                 {noMethodAvailable ? (
                   <p className="text-xs text-rose-400 pl-8">
-                    Nessun metodo di pagamento è al momento disponibile per completare questo ordine. Contatta l&apos;amministrazione.
+                    {t("shopx.checkout.noMethodNow")}
                   </p>
                 ) : (
                   <div className="pl-8 flex gap-2.5">
@@ -431,7 +426,7 @@ export function ProductCheckoutModal({
                       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M3 21h18M4 10h16M4 10l8-6 8 6M6 10v9m4-9v9m4-9v9m4-9v9" />
                       </svg>
-                      Bonifico
+                      {t("shopx.checkout.bankTransfer")}
                     </div>
                   </div>
                 )}
@@ -441,29 +436,29 @@ export function ProductCheckoutModal({
             {/* Always-visible running total */}
             <div className="p-4 rounded-xl bg-gradient-to-br from-brand-600/10 to-brand-400/5 border border-brand-500/20 space-y-1.5">
               <div className="flex items-center justify-between">
-                <p className="text-xs text-slate-500">Prezzo prodotto</p>
+                <p className="text-xs text-slate-500">{t("shopx.checkout.productPrice")}</p>
                 <p className="text-xs text-slate-500">{euro(quote.amount_cents)}</p>
               </div>
               {creditCents > 0 && (
                 <div className="flex items-center justify-between">
-                  <p className="text-xs text-slate-500">JavCash usati</p>
+                  <p className="text-xs text-slate-500">{t("shopx.checkout.javCashUsed")}</p>
                   <p className="text-xs text-emerald-400">-{javCash(creditCents)}</p>
                 </div>
               )}
               {cashbackSurchargeCents > 0 && (
                 <div className="flex items-center justify-between">
-                  <p className="text-xs text-slate-500">Cashback ({quote.cashback_percentage}%)</p>
+                  <p className="text-xs text-slate-500">{t("shopx.checkout.cashbackPct", { pct: quote.cashback_percentage })}</p>
                   <p className="text-xs text-brand-600">+{euro(cashbackSurchargeCents)}</p>
                 </div>
               )}
               <div className="flex items-center justify-between pt-1.5 border-t border-slate-300">
-                <p className="text-sm font-bold text-slate-900">Totale da pagare ora</p>
+                <p className="text-sm font-bold text-slate-900">{t("shopx.checkout.totalNow")}</p>
                 <p className={`text-xl font-extrabold ${totalToPayCents > 0 ? "text-brand-600" : "text-emerald-400"}`}>
                   {euro(Math.max(totalToPayCents, 0))}
                 </p>
               </div>
               {totalToPayCents <= 0 && (
-                <p className="text-[11px] text-emerald-400 text-right">Coperto interamente dai tuoi JavCash</p>
+                <p className="text-[11px] text-emerald-400 text-right">{t("shopx.checkout.coveredJavCash")}</p>
               )}
             </div>
 
@@ -480,7 +475,7 @@ export function ProductCheckoutModal({
               }
               className="w-full px-4 py-3 rounded-xl bg-gradient-to-r from-brand-600 to-brand-400 hover:from-brand-500 hover:to-brand-400 text-sm font-bold text-white shadow-lg shadow-brand-500/20 transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99]"
             >
-              {submitLoading ? "Elaborazione..." : totalToPayCents > 0 ? "Conferma e procedi al pagamento" : "Conferma ordine"}
+              {submitLoading ? t("shopx.checkout.processing") : totalToPayCents > 0 ? t("shopx.checkout.confirmProceed") : t("shopx.checkout.confirmOrder")}
             </button>
           </div>
         )}

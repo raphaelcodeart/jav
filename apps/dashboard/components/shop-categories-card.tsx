@@ -20,18 +20,20 @@ import type { ShopCategoryRead, ShopKey } from "@/lib/types";
  *  prodotti di quello shop: vive accanto alla lista, non in una pagina a
  *  parte, così la categoria si crea nel momento in cui serve. */
 
-async function fetchShopCategories(shop: ShopKey): Promise<ShopCategoryRead[]> {
+async function fetchShopCategories(shop: ShopKey, fallback: string): Promise<ShopCategoryRead[]> {
   const res = await fetch(`/api/proxy/shop-categories?shop=${shop}`);
-  if (!res.ok) throw new Error(await friendlyApiError(res, "Impossibile caricare le categorie."));
+  if (!res.ok) throw new Error(await friendlyApiError(res, fallback));
   return res.json();
 }
 
 /** Le categorie di uno shop, in ordine di posizione. Usata sia dal pannello
     admin sia dalle schede prodotto: una sola query condivisa per shop. */
 export function useShopCategories(shop: ShopKey, enabled = true) {
+  const { t } = useI18n();
+  const fallback = t("mkt.cat.loadFailed");
   return useQuery({
     queryKey: ["shop-categories", shop],
-    queryFn: () => fetchShopCategories(shop),
+    queryFn: () => fetchShopCategories(shop, fallback),
     enabled,
     staleTime: 60_000,
   });
@@ -44,14 +46,15 @@ export function useShopCategories(shop: ShopKey, enabled = true) {
 export async function saveProductCategories(
   shop: ShopKey,
   productId: string,
-  categoryIds: string[]
+  categoryIds: string[],
+  fallback = "Impossibile salvare le categorie del prodotto."
 ): Promise<void> {
   const res = await fetch("/api/proxy/shop-categories/assignments", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ shop, product_id: productId, category_ids: categoryIds }),
   });
-  if (!res.ok) throw new Error(await friendlyApiError(res, "Impossibile salvare le categorie del prodotto."));
+  if (!res.ok) throw new Error(await friendlyApiError(res, fallback));
 }
 
 /** Due liste di id sono la stessa scelta? L'ordine non conta: il server
@@ -80,6 +83,7 @@ export interface ShopCategoriesCardProps {
     shop non trovava dove intervenire sulle categorie: una card richiudibile
     in mezzo ai prodotti non si vede abbastanza. */
 export function ManageCategoriesButton({ shops }: ShopCategoriesCardProps) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [selectedShop, setSelectedShop] = useState<ShopKey | null>(null);
   const shop: ShopKey = shops.some((s) => s.key === selectedShop)
@@ -98,12 +102,12 @@ export function ManageCategoriesButton({ shops }: ShopCategoriesCardProps) {
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h10" />
         </svg>
-        Gestisci Categorie
+        {t("mkt.cat.manageButton")}
       </button>
       {open && (
         <FullScreenPanel
-          title="Categorie dello shop"
-          subtitle={`Con queste il cliente filtra i prodotti${current ? ` di ${current.label}` : ""}. Eliminare una categoria non elimina i prodotti.`}
+          title={t("mkt.cat.title")}
+          subtitle={current ? t("mkt.cat.subtitleOf", { shop: current.label }) : t("mkt.cat.subtitle")}
           onClose={() => setOpen(false)}
         >
           <div className="space-y-4">
@@ -136,6 +140,7 @@ export function ManageCategoriesButton({ shops }: ShopCategoriesCardProps) {
 }
 
 export function ShopCategoriesCard({ shops }: ShopCategoriesCardProps) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [selectedShop, setSelectedShop] = useState<ShopKey | null>(null);
   // Derivato, mai sincronizzato: se le etichette cambiano (le sezioni dello
@@ -153,12 +158,12 @@ export function ShopCategoriesCard({ shops }: ShopCategoriesCardProps) {
         className="w-full flex flex-wrap items-center justify-between gap-2 px-5 py-4 text-left cursor-pointer"
       >
         <span>
-          <span className="block text-sm font-bold text-slate-900">Categorie dello shop</span>
+          <span className="block text-sm font-bold text-slate-900">{t("mkt.cat.title")}</span>
           <span className="block text-xs text-slate-500 mt-0.5">
-            Le categorie con cui il cliente filtra i prodotti di questo shop, sotto il pulsante dello shop.
+            {t("mkt.cat.cardHint")}
           </span>
         </span>
-        <span className="text-xs font-semibold text-brand-600">{open ? "Chiudi" : "Gestisci"}</span>
+        <span className="text-xs font-semibold text-brand-600">{open ? t("common.close") : t("mkt.cat.manage")}</span>
       </button>
 
       {open && (
@@ -232,7 +237,7 @@ export function CategoryList({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error(await friendlyApiError(res, "Impossibile salvare la categoria."));
+      if (!res.ok) throw new Error(await friendlyApiError(res, t("mkt.cat.saveFailed")));
       setDrafts((d) => {
         const next = { ...d };
         delete next[category.id];
@@ -240,7 +245,7 @@ export function CategoryList({
       });
       await refresh();
     } catch (err: any) {
-      setActionError(err.message || "Impossibile salvare la categoria.");
+      setActionError(err.message || t("mkt.cat.saveFailed"));
     } finally {
       setBusyId(null);
     }
@@ -263,11 +268,11 @@ export function CategoryList({
           position: categories?.length ? Math.max(...categories.map((c) => c.position)) + 1 : 0,
         }),
       });
-      if (!res.ok) throw new Error(await friendlyApiError(res, "Impossibile creare la categoria."));
+      if (!res.ok) throw new Error(await friendlyApiError(res, t("mkt.cat.createFailed")));
       setNewName("");
       await refresh();
     } catch (err: any) {
-      setActionError(err.message || "Impossibile creare la categoria.");
+      setActionError(err.message || t("mkt.cat.createFailed"));
     } finally {
       setCreating(false);
     }
@@ -279,11 +284,11 @@ export function CategoryList({
     setDeleteError(null);
     try {
       const res = await fetch(`/api/proxy/shop-categories/${deleting.id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error(await friendlyApiError(res, "Impossibile eliminare la categoria."));
+      if (!res.ok) throw new Error(await friendlyApiError(res, t("mkt.cat.deleteFailed")));
       setDeleting(null);
       await refresh();
     } catch (err: any) {
-      setDeleteError(err.message || "Impossibile eliminare la categoria.");
+      setDeleteError(err.message || t("mkt.cat.deleteFailed"));
     } finally {
       setDeleteBusy(false);
     }
@@ -296,11 +301,10 @@ export function CategoryList({
       )}
 
       {categories === undefined ? (
-        <p className="text-xs text-slate-500 py-2">Caricamento categorie...</p>
+        <p className="text-xs text-slate-500 py-2">{t("mkt.cat.loading")}</p>
       ) : categories.length === 0 ? (
         <p className="text-xs text-slate-500 py-2">
-          Nessuna categoria per questo shop. Aggiungine una qui sotto: finché non ce n&apos;è nessuna, il cliente vede
-          tutti i prodotti senza filtri.
+          {t("mkt.cat.emptyList")}
         </p>
       ) : (
         <div className="rounded-xl border border-slate-200 divide-y divide-slate-200">
@@ -314,7 +318,7 @@ export function CategoryList({
                 <input
                   className="w-16 rounded-md glass-input px-2 py-1.5 text-xs text-center"
                   inputMode="numeric"
-                  title="Ordine di comparsa"
+                  title={t("mkt.cat.position")}
                   value={position}
                   onChange={(e) => setDrafts({ ...drafts, [c.id]: { ...draft, position: e.target.value } })}
                 />
@@ -325,7 +329,7 @@ export function CategoryList({
                   onChange={(e) => setDrafts({ ...drafts, [c.id]: { ...draft, name: e.target.value } })}
                 />
                 <span className="text-[11px] text-slate-500 w-20 text-right shrink-0">
-                  {c.product_count} {c.product_count === 1 ? "prodotto" : "prodotti"}
+                  {c.product_count === 1 ? t("mkt.cat.productOne") : t("mkt.cat.productMany", { n: c.product_count })}
                 </span>
                 {producers && (
                   <select
@@ -356,7 +360,7 @@ export function CategoryList({
                       })
                     }
                   >
-                    {busyId === c.id ? "..." : "Salva"}
+                    {busyId === c.id ? "..." : t("common.save")}
                   </button>
                 )}
                 <button
@@ -364,16 +368,16 @@ export function CategoryList({
                   className={ghostClass}
                   disabled={busyId === c.id}
                   onClick={() => patch(c, { active: !c.active })}
-                  title={c.active ? "Nascondila al cliente" : "Rendila visibile al cliente"}
+                  title={c.active ? t("mkt.cat.hideTitle") : t("mkt.cat.showTitle")}
                 >
-                  {c.active ? "Visibile" : "Nascosta"}
+                  {c.active ? t("mkt.cat.visible") : t("mkt.cat.hidden")}
                 </button>
                 <button
                   type="button"
                   className="px-3 py-1.5 rounded-lg bg-slate-900/5 hover:bg-rose-600 hover:text-white border border-slate-300 text-xs font-semibold text-slate-600 transition cursor-pointer"
                   onClick={() => { setDeleting(c); setDeleteError(null); }}
                 >
-                  Elimina
+                  {t("mkt.cat.delete")}
                 </button>
               </div>
             );
@@ -384,13 +388,13 @@ export function CategoryList({
       <form onSubmit={create} className="flex flex-wrap items-end gap-2">
         <label className="flex-1 min-w-[180px]">
           <span className="block font-semibold text-slate-500 uppercase tracking-wide mb-1">
-            Nuova categoria
+            {t("mkt.cat.new")}
           </span>
           <input
             className={inputClass}
             maxLength={120}
             value={newName}
-            placeholder="Es. Casa, Elettronica, Regali"
+            placeholder={t("mkt.cat.newPlaceholder")}
             onChange={(e) => setNewName(e.target.value)}
           />
         </label>
@@ -399,28 +403,26 @@ export function CategoryList({
           disabled={creating || !newName.trim()}
           className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-bold text-white transition cursor-pointer disabled:opacity-50"
         >
-          {creating ? "..." : "Aggiungi categoria"}
+          {creating ? "..." : t("mkt.cat.add")}
         </button>
       </form>
 
       {producers && <p className="text-[11px] text-slate-500">{t("shopSuppliers.categorySupplierHint")}</p>}
       <p className="text-[11px] text-slate-500">
-        Il numero a sinistra è l&apos;ordine in cui le categorie compaiono al cliente. Una categoria nascosta sparisce
-        dai filtri dello Shop ma resta qui, con i suoi prodotti: i prodotti tornano semplicemente visibili senza filtro.
+        {t("mkt.cat.footer")}
       </p>
 
       {deleting && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
           <div className="w-full max-w-md glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up">
-            <h3 className="text-lg font-bold text-slate-900 mb-2">Elimina categoria</h3>
+            <h3 className="text-lg font-bold text-slate-900 mb-2">{t("mkt.cat.deleteTitle")}</h3>
             <p className="text-xs text-slate-500 mb-4">
-              Stai per eliminare la categoria{" "}
+              {t("mkt.cat.deleteBefore")}{" "}
               <span className="font-semibold text-slate-700">&quot;{deleting.name}&quot;</span>.{" "}
               <strong className=" text-slate-800">
-                I {deleting.product_count} prodotti che contiene non vengono eliminati
+                {t("mkt.cat.deleteStrong", { n: deleting.product_count })}
               </strong>
-              : restano in vendita e semplicemente non appartengono più a nessuna categoria, finché non li assegni a
-              un&apos;altra. Se ti serve solo toglierla dai filtri del cliente, usa &ldquo;Visibile / Nascosta&rdquo;.
+              {t("mkt.cat.deleteAfter")}
             </p>
             {deleteError && <p className="text-xs text-rose-400 mb-3">{deleteError}</p>}
             <div className="flex justify-end gap-3">
@@ -428,14 +430,14 @@ export function CategoryList({
                 onClick={() => { setDeleting(null); setDeleteError(null); }}
                 className="px-4 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 text-xs font-semibold text-slate-600 border border-slate-200 transition cursor-pointer"
               >
-                Annulla
+                {t("common.cancel")}
               </button>
               <button
                 onClick={confirmDelete}
                 disabled={deleteBusy}
                 className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50"
               >
-                {deleteBusy ? "Eliminazione..." : "Elimina categoria"}
+                {deleteBusy ? t("mkt.cat.deleting") : t("mkt.cat.deleteTitle")}
               </button>
             </div>
           </div>
@@ -456,6 +458,7 @@ export function ProductCategoriesField({
   value: string[];
   onChange: (next: string[]) => void;
 }) {
+  const { t } = useI18n();
   const { data: categories, error } = useShopCategories(shop);
 
   function toggle(id: string) {
@@ -465,15 +468,15 @@ export function ProductCategoriesField({
   return (
     <div>
       <span className="block font-semibold text-slate-500 uppercase tracking-wide mb-1">
-        Categorie nello Shop
+        {t("mkt.cat.fieldLabel")}
       </span>
       {error ? (
         <p className="text-[11px] text-rose-400">{(error as Error).message}</p>
       ) : categories === undefined ? (
-        <p className="text-[11px] text-slate-500">Caricamento categorie...</p>
+        <p className="text-[11px] text-slate-500">{t("mkt.cat.loading")}</p>
       ) : categories.length === 0 ? (
         <p className="text-[11px] text-slate-500">
-          Nessuna categoria per questo shop: creale nella card &ldquo;Categorie dello shop&rdquo;.
+          {t("mkt.cat.fieldEmpty")}
         </p>
       ) : (
         <div className="flex flex-wrap gap-2">
@@ -492,15 +495,14 @@ export function ProductCategoriesField({
               >
                 {checked ? "✓ " : ""}
                 {c.name}
-                {!c.active && " (nascosta)"}
+                {!c.active && ` (${t("mkt.cat.hiddenLower")})`}
               </button>
             );
           })}
         </div>
       )}
       <p className="text-[10px] text-slate-500 mt-1">
-        Un prodotto può stare in più categorie o in nessuna. Le categorie non cambiano prezzo né disponibilità: servono
-        solo al cliente per trovarlo.
+        {t("mkt.cat.fieldHint")}
       </p>
     </div>
   );
@@ -519,11 +521,11 @@ const PRODUCTS_ENDPOINT: Record<ShopKey, string[]> = {
 
 type AssignableProduct = { id: string; name: string; category_ids?: string[]; category?: string };
 
-async function fetchAssignableProducts(shop: ShopKey): Promise<AssignableProduct[]> {
+async function fetchAssignableProducts(shop: ShopKey, fallback: string): Promise<AssignableProduct[]> {
   const lists = await Promise.all(
     PRODUCTS_ENDPOINT[shop].map(async (url) => {
       const res = await fetch(url);
-      if (!res.ok) throw new Error(await friendlyApiError(res, "Impossibile caricare i prodotti."));
+      if (!res.ok) throw new Error(await friendlyApiError(res, fallback));
       return (await res.json()) as AssignableProduct[];
     })
   );
@@ -541,6 +543,7 @@ async function fetchAssignableProducts(shop: ShopKey): Promise<AssignableProduct
     si tolgono). Serve soprattutto dopo un'importazione in blocco, quando i
     prodotti sono decine e le categorie arrivano dopo. */
 export function BulkAssign({ shop, categories }: { shop: ShopKey; categories: ShopCategoryRead[] | undefined }) {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [categoryId, setCategoryId] = useState("");
@@ -550,7 +553,7 @@ export function BulkAssign({ shop, categories }: { shop: ShopKey; categories: Sh
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const { data: products, error } = useQuery({
     queryKey: ["shop-categories", "assignable", shop],
-    queryFn: () => fetchAssignableProducts(shop),
+    queryFn: () => fetchAssignableProducts(shop, t("mkt.cat.productsLoadFailed")),
     enabled: open,
   });
 
@@ -580,7 +583,7 @@ export function BulkAssign({ shop, categories }: { shop: ShopKey; categories: Sh
           ? Array.from(new Set([...current, category.id]))
           : current.filter((id) => id !== category.id);
         if (next.length === current.length && add) continue;
-        await saveProductCategories(shop, product.id, next);
+        await saveProductCategories(shop, product.id, next, t("mkt.cat.saveProductFailed"));
       }
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["shop-categories", shop] }),
@@ -591,11 +594,11 @@ export function BulkAssign({ shop, categories }: { shop: ShopKey; categories: Sh
       setMessage({
         ok: true,
         text: add
-          ? `Aggiunti a “${category.name}”.`
-          : `Tolti da “${category.name}”.`,
+          ? t("mkt.cat.addedTo", { name: category.name })
+          : t("mkt.cat.removedFrom", { name: category.name }),
       });
     } catch (err: any) {
-      setMessage({ ok: false, text: err.message || "Operazione non riuscita." });
+      setMessage({ ok: false, text: err.message || t("common.failed") });
     } finally {
       setBusy(false);
     }
@@ -610,7 +613,7 @@ export function BulkAssign({ shop, categories }: { shop: ShopKey; categories: Sh
         onClick={() => setOpen((v) => !v)}
         className="text-xs font-semibold text-brand-600 cursor-pointer"
       >
-        {open ? "Chiudi assegnazione in blocco" : "Assegna più prodotti a una categoria"}
+        {open ? t("mkt.cat.bulkClose") : t("mkt.cat.bulkOpen")}
       </button>
       {open && (
         <div className="space-y-3">
@@ -621,7 +624,7 @@ export function BulkAssign({ shop, categories }: { shop: ShopKey; categories: Sh
               onChange={(e) => setCategoryId(e.target.value)}
               className="rounded-lg glass-input px-3 py-2 text-sm focus:border-brand-500"
             >
-              <option value="">Scegli la categoria...</option>
+              <option value="">{t("mkt.cat.chooseCategory")}</option>
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name} ({c.product_count})
@@ -631,14 +634,14 @@ export function BulkAssign({ shop, categories }: { shop: ShopKey; categories: Sh
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Filtra i prodotti per nome..."
+              placeholder={t("mkt.cat.filterProducts")}
               className="flex-1 min-w-[180px] rounded-lg glass-input px-3 py-2 text-sm focus:border-brand-500"
             />
           </div>
           {!products ? (
-            <p className="text-xs text-slate-500">Caricamento dei prodotti...</p>
+            <p className="text-xs text-slate-500">{t("mkt.cat.productsLoading")}</p>
           ) : visible.length === 0 ? (
-            <p className="text-xs text-slate-500">Nessun prodotto da assegnare.</p>
+            <p className="text-xs text-slate-500">{t("mkt.cat.noProducts")}</p>
           ) : (
             <div className="max-h-64 overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-200">
               {visible.map((p) => (
@@ -646,7 +649,7 @@ export function BulkAssign({ shop, categories }: { shop: ShopKey; categories: Sh
                   <input type="checkbox" checked={picked.has(p.id)} onChange={() => toggle(p.id)} />
                   <span className="flex-1 truncate text-slate-700">{p.name}</span>
                   {category && (p.category_ids ?? []).includes(category.id) && (
-                    <span className="text-[10px] font-bold text-emerald-400">già dentro</span>
+                    <span className="text-[10px] font-bold text-emerald-400">{t("mkt.cat.alreadyIn")}</span>
                   )}
                 </label>
               ))}
@@ -659,7 +662,7 @@ export function BulkAssign({ shop, categories }: { shop: ShopKey; categories: Sh
               onClick={() => apply(true)}
               className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-bold text-white cursor-pointer disabled:opacity-50"
             >
-              {busy ? "Attendi..." : `Aggiungi alla categoria (${picked.size})`}
+              {busy ? t("mkt.cat.wait") : t("mkt.cat.addToCategory", { n: picked.size })}
             </button>
             <button
               type="button"
@@ -667,7 +670,7 @@ export function BulkAssign({ shop, categories }: { shop: ShopKey; categories: Sh
               onClick={() => apply(false)}
               className="px-3 py-2 rounded-xl bg-slate-900/5 border border-slate-300 text-slate-600 text-xs font-semibold cursor-pointer disabled:opacity-50"
             >
-              Togli dalla categoria
+              {t("mkt.cat.removeFromCategory")}
             </button>
             {message && <span className={`text-xs ${message.ok ? "text-emerald-400" : "text-rose-400"}`}>{message.text}</span>}
           </div>

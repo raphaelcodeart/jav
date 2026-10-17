@@ -3,16 +3,17 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { friendlyApiError } from "@/lib/api-error";
+import { useI18n } from "@/lib/i18n/provider";
 
 type WelcomeBonusStatus = { available: boolean; amount_cents: number };
 
-function javCash(cents: number): string {
-  return `${(cents / 100).toLocaleString("it-IT", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} JavCash`;
+function javCash(cents: number, tag: string): string {
+  return `${(cents / 100).toLocaleString(tag, { minimumFractionDigits: 0, maximumFractionDigits: 2 })} JavCash`;
 }
 
-async function fetchWelcomeBonus(): Promise<WelcomeBonusStatus> {
+async function fetchWelcomeBonus(t: ReturnType<typeof useI18n>["t"]): Promise<WelcomeBonusStatus> {
   const res = await fetch("/api/proxy/wallets/me/welcome-bonus");
-  if (!res.ok) throw new Error("Impossibile verificare l'omaggio di benvenuto.");
+  if (!res.ok) throw new Error(t("acct.bonus.checkError"));
   return res.json();
 }
 
@@ -27,10 +28,11 @@ async function fetchWelcomeBonus(): Promise<WelcomeBonusStatus> {
     the user id), so a double-click can't mint a second bonus even if the
     button's own disabled state were bypassed. */
 export function WelcomeBonusCard() {
+  const { t, fmt } = useI18n();
   const queryClient = useQueryClient();
   const { data: bonus } = useQuery({
     queryKey: ["wallet", "welcome-bonus"],
-    queryFn: fetchWelcomeBonus,
+    queryFn: () => fetchWelcomeBonus(t),
   });
 
   const [claiming, setClaiming] = useState(false);
@@ -52,7 +54,7 @@ export function WelcomeBonusCard() {
         queryClient.invalidateQueries({ queryKey: ["accounting"] }),
       ]);
     } catch (err: any) {
-      setError(err.message || "Impossibile riscattare l'omaggio.");
+      setError(err.message || t("acct.bonus.claimError"));
       setClaiming(false);
     }
   }
@@ -67,9 +69,9 @@ export function WelcomeBonusCard() {
           </svg>
         </span>
         <div>
-          <p className="text-sm font-bold text-slate-900">Omaggio riscattato!</p>
+          <p className="text-sm font-bold text-slate-900">{t("acct.bonus.claimed")}</p>
           <p className="text-xs text-slate-500">
-            {javCash(bonus?.amount_cents ?? 0)} sono già disponibili sul tuo wallet.
+            {t("acct.bonus.claimedText", { amount: javCash(bonus?.amount_cents ?? 0, fmt.tag) })}
           </p>
         </div>
       </div>
@@ -90,11 +92,10 @@ export function WelcomeBonusCard() {
         </span>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-bold text-slate-900">
-            Il tuo omaggio di benvenuto ti aspetta
+            {t("acct.bonus.title")}
           </p>
           <p className="text-xs text-slate-500 mt-0.5">
-            Ricevi <strong className="text-brand-600">{javCash(bonus.amount_cents)}</strong> sul tuo
-            wallet, da usare subito per i tuoi acquisti. Puoi riscattarlo una sola volta.
+            {t("acct.bonus.textBefore")}<strong className="text-brand-600">{javCash(bonus.amount_cents, fmt.tag)}</strong>{t("acct.bonus.textAfter")}
           </p>
           {error && <p className="text-xs text-rose-400 mt-1.5">{error}</p>}
         </div>
@@ -103,7 +104,7 @@ export function WelcomeBonusCard() {
           disabled={claiming}
           className="shrink-0 px-5 py-2.5 rounded-xl bg-gradient-to-r from-brand-600 to-brand-400 hover:from-brand-500 hover:to-brand-400 text-white text-xs font-bold shadow-lg shadow-brand-500/20 transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
         >
-          {claiming ? "Riscatto in corso..." : "Riscatta il tuo omaggio"}
+          {claiming ? t("acct.bonus.claiming") : t("acct.bonus.claim")}
         </button>
       </div>
     </div>

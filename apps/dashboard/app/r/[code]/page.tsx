@@ -7,26 +7,24 @@ import { AuthLayout } from "@/components/auth/auth-layout";
 import { PasswordInput } from "@/components/password-input";
 import { translateErrorDetail } from "@/lib/api-error";
 import type { PromoterCodeRead } from "@/lib/types";
+import { useI18n } from "@/lib/i18n/provider";
 
-const KIND_LABELS: Record<string, string> = {
-  PRIVATE: "Privato",
-  SOLE_PROPRIETOR: "Partita IVA",
-  COMPANY: "Azienda",
-  CONDOMINIUM: "Condominio",
-};
+// Labels: net.newCust.kind.<code>
+const KINDS = ["PRIVATE", "SOLE_PROPRIETOR", "COMPANY", "CONDOMINIUM"];
 
 const PRIVATE_LIKE = new Set(["PRIVATE", "SOLE_PROPRIETOR"]);
 
-async function resolveReferralCode(code: string, organizationId: string): Promise<PromoterCodeRead> {
+async function resolveReferralCode(code: string, organizationId: string, invalidMessage: string): Promise<PromoterCodeRead> {
   // `org` is optional: without it the API resolves the installation's club.
   const query = organizationId ? `?org=${encodeURIComponent(organizationId)}` : "";
   const res = await fetch(`/api/public/referral/${encodeURIComponent(code)}${query}`);
-  if (!res.ok) throw new Error("Link di invito non valido o scaduto.");
+  if (!res.ok) throw new Error(invalidMessage);
   return res.json();
 }
 
 export default function ReferralLandingPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = use(params);
+  const { t } = useI18n();
   const searchParams = useSearchParams();
   const organizationId = searchParams.get("org") ?? "";
   const productId = searchParams.get("product");
@@ -35,7 +33,7 @@ export default function ReferralLandingPage({ params }: { params: Promise<{ code
 
   const { data: promoterCode, error: resolveErrorObj, isLoading: resolving } = useQuery({
     queryKey: ["referral", "resolve", code, organizationId],
-    queryFn: () => resolveReferralCode(code, organizationId),
+    queryFn: () => resolveReferralCode(code, organizationId, t("net.ref.invalidLink")),
     retry: false,
   });
   const resolveError = resolveErrorObj instanceof Error ? resolveErrorObj.message : null;
@@ -57,11 +55,11 @@ export default function ReferralLandingPage({ params }: { params: Promise<{ code
     e.preventDefault();
     setSubmitError(null);
     if (password !== passwordConfirm) {
-      setSubmitError("Le due password non coincidono.");
+      setSubmitError(t("reset.mismatch"));
       return;
     }
     if (!acceptPrivacy) {
-      setSubmitError("Devi accettare l'informativa sulla privacy per registrarti.");
+      setSubmitError(t("net.ref.mustAccept"));
       return;
     }
     setSubmitting(true);
@@ -84,12 +82,12 @@ export default function ReferralLandingPage({ params }: { params: Promise<{ code
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.detail ? translateErrorDetail(body.detail) : "Registrazione non riuscita.");
+        throw new Error(body.detail ? translateErrorDetail(body.detail) : t("net.ref.failed"));
       }
       setSuccess(true);
       setTimeout(() => router.push("/login"), 2500);
     } catch (err: any) {
-      setSubmitError(err.message || "Registrazione non riuscita.");
+      setSubmitError(err.message || t("net.ref.failed"));
     } finally {
       setSubmitting(false);
     }
@@ -100,7 +98,7 @@ export default function ReferralLandingPage({ params }: { params: Promise<{ code
 
         {resolving && (
           <div className="text-center">
-            <p className="text-sm text-slate-500">Verifica invito in corso...</p>
+            <p className="text-sm text-slate-500">{t("net.ref.checking")}</p>
           </div>
         )}
 
@@ -109,10 +107,10 @@ export default function ReferralLandingPage({ params }: { params: Promise<{ code
             <svg className="w-12 h-12 text-rose-700 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <h2 className="text-lg font-semibold text-slate-900 mb-2">Invito non valido</h2>
+            <h2 className="text-lg font-semibold text-slate-900 mb-2">{t("net.ref.invalidTitle")}</h2>
             <p className="text-sm text-slate-500">{resolveError}</p>
             <p className="text-xs text-slate-500 mt-4">
-              La registrazione è possibile solo tramite invito di un promoter. Contatta chi ti ha condiviso questo link.
+              {t("net.ref.invalidHint")}
             </p>
           </div>
         )}
@@ -122,26 +120,26 @@ export default function ReferralLandingPage({ params }: { params: Promise<{ code
             <div className="mb-6 text-center">
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-brand-500/10 text-brand-600 border border-brand-500/20">
                 {promoterCode.promoter_display_name
-                  ? `Invitato da ${promoterCode.promoter_display_name}`
-                  : "Sei stato invitato da un promoter Jav"}
+                  ? t("net.ref.invitedBy", { name: promoterCode.promoter_display_name })
+                  : t("net.ref.invitedGeneric")}
               </span>
               {productName && (
                 <div className="mt-3">
-                  <p className="text-xs text-slate-500">Offerta consigliata</p>
+                  <p className="text-xs text-slate-500">{t("net.ref.recommended")}</p>
                   <p className="text-sm font-semibold text-slate-900">{productName}</p>
                   {productId && <p className="font-mono text-[10px] text-slate-500">{productId}</p>}
                 </div>
               )}
-              <h1 className="text-xl font-bold text-slate-900 mt-2">Completa la registrazione</h1>
+              <h1 className="text-xl font-bold text-slate-900 mt-2">{t("net.ref.title")}</h1>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 uppercase block">Tipologia</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">{t("net.ref.kind")}</label>
                 <select value={kind} onChange={(e) => setKind(e.target.value)}
                   className="w-full rounded-xl glass-input px-3 py-2.5 text-sm bg-white focus:border-brand-500">
-                  {Object.entries(KIND_LABELS).map(([code2, label]) => (
-                    <option key={code2} value={code2}>{label}</option>
+                  {KINDS.map((code2) => (
+                    <option key={code2} value={code2}>{t.dyn(`net.newCust.kind.${code2}`, code2)}</option>
                   ))}
                 </select>
               </div>
@@ -149,52 +147,52 @@ export default function ReferralLandingPage({ params }: { params: Promise<{ code
               {PRIVATE_LIKE.has(kind) ? (
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-600 uppercase block">Nome</label>
+                    <label className="text-xs font-semibold text-slate-600 uppercase block">{t("signup.firstName")}</label>
                     <input required value={firstName} onChange={(e) => setFirstName(e.target.value)}
                       className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-600 uppercase block">Cognome</label>
+                    <label className="text-xs font-semibold text-slate-600 uppercase block">{t("signup.lastName")}</label>
                     <input required value={lastName} onChange={(e) => setLastName(e.target.value)}
                       className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
                   </div>
                 </div>
               ) : (
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-600 uppercase block">Ragione sociale</label>
+                  <label className="text-xs font-semibold text-slate-600 uppercase block">{t("net.newCust.companyName")}</label>
                   <input required value={companyName} onChange={(e) => setCompanyName(e.target.value)}
                     className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
                 </div>
               )}
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 uppercase block">Telefono</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">{t("signup.phone")}</label>
                 <input value={phone} onChange={(e) => setPhone(e.target.value)}
                   className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 uppercase block">Email</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">{t("net.newCust.email")}</label>
                 <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                   className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 uppercase block">Password</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">{t("net.ref.password")}</label>
                 <PasswordInput required minLength={8} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Almeno 8 caratteri"
+                  placeholder={t("reset.min8")}
                   className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 uppercase block">Ripeti Password</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase block">{t("reset.repeat")}</label>
                 <PasswordInput required minLength={8} autoComplete="new-password" value={passwordConfirm} onChange={(e) => setPasswordConfirm(e.target.value)}
-                  placeholder="Ripeti la password"
+                  placeholder={t("reset.repeatPlaceholder")}
                   className={`w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500 ${
                     passwordConfirm && password !== passwordConfirm ? "border-rose-500/50" : ""
                   }`} />
                 {passwordConfirm && password !== passwordConfirm && (
-                  <p className="text-[11px] text-rose-700">Le password non coincidono.</p>
+                  <p className="text-[11px] text-rose-700">{t("reset.mismatchShort")}</p>
                 )}
               </div>
 
@@ -206,8 +204,16 @@ export default function ReferralLandingPage({ params }: { params: Promise<{ code
                   className="mt-0.5 w-4 h-4 rounded border-slate-200 accent-brand-500 shrink-0"
                 />
                 <span>
-                  Ho letto l&apos;<a href="/privacidade" target="_blank" className="font-semibold text-brand-700 underline">informativa sulla privacy</a> e
-                  accetto i <a href="/termos" target="_blank" className="font-semibold text-brand-700 underline">termini e condizioni</a> (Regolamento (UE) 2016/679, GDPR).
+                  {/* {privacy} / {terms} in the sentence become the two links. */}
+                  {t("net.ref.consent").split(/(\{privacy\}|\{terms\})/).map((part, i) =>
+                    part === "{privacy}" ? (
+                      <a key={i} href="/privacidade" target="_blank" className="font-semibold text-brand-700 underline">{t("net.ref.privacyLink")}</a>
+                    ) : part === "{terms}" ? (
+                      <a key={i} href="/termos" target="_blank" className="font-semibold text-brand-700 underline">{t("net.ref.termsLink")}</a>
+                    ) : (
+                      part
+                    ),
+                  )}
                 </span>
               </label>
 
@@ -217,7 +223,7 @@ export default function ReferralLandingPage({ params }: { params: Promise<{ code
 
               <button type="submit" disabled={submitting || !acceptPrivacy}
                 className="w-full rounded-xl bg-gradient-to-r from-brand-600 to-brand-400 hover:from-brand-500 hover:to-brand-400 py-3 text-sm font-semibold text-white shadow-lg transition duration-300 disabled:opacity-50 cursor-pointer mt-2">
-                {submitting ? "Registrazione in corso..." : "Registrati"}
+                {submitting ? t("net.ref.submitting") : t("net.ref.submit")}
               </button>
             </form>
           </div>
@@ -228,11 +234,11 @@ export default function ReferralLandingPage({ params }: { params: Promise<{ code
             <svg className="w-12 h-12 text-emerald-600 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
-            <h2 className="text-lg font-semibold text-slate-900 mb-2">Registrazione completata</h2>
+            <h2 className="text-lg font-semibold text-slate-900 mb-2">{t("net.ref.doneTitle")}</h2>
             <p className="text-sm text-slate-500 mb-2">
-              Ti abbiamo inviato un&apos;email di conferma: clicca sul link per attivare il tuo account.
+              {t("net.ref.doneText")}
             </p>
-            <p className="text-sm text-slate-500">Verrai reindirizzato al login...</p>
+            <p className="text-sm text-slate-500">{t("reset.redirecting")}</p>
           </div>
         )}
     </AuthLayout>

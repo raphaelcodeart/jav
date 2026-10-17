@@ -1600,3 +1600,27 @@ checkout le rifiuta comunque. Lo shop del club vende sempre.
   quando sono mensilità o iscrizioni normali (dal tipo e dal periodo); per il
   resto resta la descrizione del server. La ricevuta si apre in una finestra
   (URL firmato), il rifiuto chiede un motivo con quattro motivi pronti.
+
+## Piani con colore, prove dalle quote, staff da account esistenti, rete inviti
+
+- **Colore del gruppo**: `club_plans.color` (#RRGGBB, migrazione 0031); senza
+  colore la scheda prende la tavolozza (`plans-panel.tsx::PLAN_PALETTE`).
+  `GET /club/admin/plans` dà anche `athletes_count` (attivi).
+- **Prova dalla quota**: nelle quote della segreteria (`GET /club/admin/fees`,
+  quadro del mese) ogni quota porta `proof_id`/`proof_status`, l'ultima prova
+  collegata anche se rifiutata (`service.py::latest_proofs_of_fees`); la si
+  apre con lo stesso visualizzatore dei Comprovativos.
+- **Staff da un account esistente**: `clubs.py::add_staff` con l'email di un
+  account **dello stesso club** gli aggiunge il ruolo (niente invito, la
+  password resta); un account di un altro club è rifiutato. Il menu utente
+  mostra le aree del club per chi ha più ruoli (`area-switcher.tsx::clubAreasFor`).
+- **Rete inviti**: `GET /club/invite` dà anche `balance_cents` (saldo
+  JavCash) e `network`: gli atleti delle famiglie entrate dal link, «Nome I.»,
+  mensilità pagate e credito reso (`referrals.py::_network`: i crediti
+  `CLUB_REFERRAL` per quota, esclusi quelli stornati). La home dell'atleta ha
+  «Segna la tua presenza» (porta alle lezioni) e la scheda d'invito.
+- **Loja**: i nomi predefiniti delle sezioni sono «Judogi, cinture e
+  abbigliamento judo», «Equipaggiamento sportivo del club», «Prodotti
+  partner Suplementos24» e si mostrano tradotti finché l'amministratore non
+  li cambia (`sections.*.custom`, `labels_custom`); la Loja si apre sul primo
+  negozio con prodotti.

@@ -5,27 +5,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pagination, usePagination } from "@/components/pagination";
 import { friendlyApiError } from "@/lib/api-error";
 import type { TicketDetailRead, TicketRead } from "@/lib/types";
+import { useI18n } from "@/lib/i18n/provider";
 
-const CATEGORY_LABELS: Record<string, string> = {
-  ASSISTENZA_TECNICA: "Assistenza tecnica",
-  FATTURAZIONE: "Fatturazione",
-  CONTRATTO: "Contratto",
-  COMMISSIONI: "Commissioni",
-  ALTRO: "Altro",
-  CHIUSURA_ACCOUNT: "Chiusura account",
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  OPEN: "Aperto",
-  IN_PROGRESS: "In lavorazione",
-  RESOLVED: "Risolto",
-  CLOSED: "Chiuso",
-};
-
-const OPENER_LABELS: Record<string, string> = {
-  CUSTOMER: "Cliente",
-  PROMOTER: "Promoter",
-};
+// Codes the API uses; labels come from i18n (acct.ticket.*), shared with
+// support-tickets-panel.tsx.
+const CATEGORY_CODES = ["ASSISTENZA_TECNICA", "FATTURAZIONE", "CONTRATTO", "COMMISSIONI", "ALTRO", "CHIUSURA_ACCOUNT"];
+const STATUS_CODES = ["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"];
 
 function statusColor(status: string): string {
   switch (status) {
@@ -40,19 +25,19 @@ function statusColor(status: string): string {
   }
 }
 
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" });
+function formatDateTime(iso: string, tag: string): string {
+  return new Date(iso).toLocaleString(tag, { dateStyle: "short", timeStyle: "short" });
 }
 
-async function fetchAllTickets(): Promise<TicketRead[]> {
+async function fetchAllTickets(t: ReturnType<typeof useI18n>["t"]): Promise<TicketRead[]> {
   const res = await fetch("/api/proxy/support/tickets");
-  if (!res.ok) throw new Error("Impossibile caricare i ticket.");
+  if (!res.ok) throw new Error(t("acct.tickets.loadError"));
   return res.json();
 }
 
-async function fetchTicketDetailAsStaff(id: string): Promise<TicketDetailRead> {
+async function fetchTicketDetailAsStaff(t: ReturnType<typeof useI18n>["t"], id: string): Promise<TicketDetailRead> {
   const res = await fetch(`/api/proxy/support/tickets/${id}/staff`);
-  if (!res.ok) throw new Error("Impossibile caricare il ticket.");
+  if (!res.ok) throw new Error(t("acct.tickets.loadOneError"));
   return res.json();
 }
 
@@ -65,8 +50,9 @@ function TrashIcon({ className }: { className?: string }) {
 }
 
 export function AdminTicketsPanel() {
+  const { t, fmt } = useI18n();
   const queryClient = useQueryClient();
-  const { data: tickets, error: listError } = useQuery({ queryKey: ["admin", "tickets"], queryFn: fetchAllTickets });
+  const { data: tickets, error: listError } = useQuery({ queryKey: ["admin", "tickets"], queryFn: () => fetchAllTickets(t) });
 
   const [openerFilter, setOpenerFilter] = useState<string>("ALL");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
@@ -80,7 +66,7 @@ export function AdminTicketsPanel() {
 
   const { data: detail } = useQuery({
     queryKey: ["admin", "tickets", "detail", selectedId],
-    queryFn: () => fetchTicketDetailAsStaff(selectedId as string),
+    queryFn: () => fetchTicketDetailAsStaff(t, selectedId as string),
     enabled: !!selectedId,
   });
 
@@ -89,21 +75,21 @@ export function AdminTicketsPanel() {
   const [replyError, setReplyError] = useState<string | null>(null);
   const [statusLoading, setStatusLoading] = useState(false);
 
-  const filteredTickets = (tickets ?? []).filter((t) => {
-    const matchesOpener = openerFilter === "ALL" || t.opened_by_role === openerFilter;
-    const matchesStatus = statusFilter === "ALL" || t.status === statusFilter;
-    const matchesCategory = categoryFilter === "ALL" || t.category === categoryFilter;
+  const filteredTickets = (tickets ?? []).filter((ticket) => {
+    const matchesOpener = openerFilter === "ALL" || ticket.opened_by_role === openerFilter;
+    const matchesStatus = statusFilter === "ALL" || ticket.status === statusFilter;
+    const matchesCategory = categoryFilter === "ALL" || ticket.category === categoryFilter;
     const q = searchQuery.trim().toLowerCase();
     const matchesSearch =
       q === "" ||
-      t.subject.toLowerCase().includes(q) ||
-      (t.opened_by_name ?? "").toLowerCase().includes(q);
+      ticket.subject.toLowerCase().includes(q) ||
+      (ticket.opened_by_name ?? "").toLowerCase().includes(q);
     return matchesOpener && matchesStatus && matchesCategory && matchesSearch;
   });
 
   const pagination = usePagination(filteredTickets);
 
-  const openCount = (tickets ?? []).filter((t) => t.status === "OPEN").length;
+  const openCount = (tickets ?? []).filter((ticket) => ticket.status === "OPEN").length;
 
   async function refreshDetail() {
     await queryClient.invalidateQueries({ queryKey: ["admin", "tickets", "detail", selectedId] });
@@ -125,7 +111,7 @@ export function AdminTicketsPanel() {
       setReply("");
       await refreshDetail();
     } catch (err: any) {
-      setReplyError(err.message || "Impossibile inviare la risposta.");
+      setReplyError(err.message || t("acct.tickets.replyError"));
     } finally {
       setReplyLoading(false);
     }
@@ -153,12 +139,12 @@ export function AdminTicketsPanel() {
     setDeleteError(null);
     try {
       const res = await fetch(`/api/proxy/support/tickets/${deletingTicket.id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error(await friendlyApiError(res, "Impossibile eliminare il ticket."));
+      if (!res.ok) throw new Error(await friendlyApiError(res, t("acct.tickets.deleteError")));
       if (selectedId === deletingTicket.id) setSelectedId(null);
       setDeletingTicket(null);
       await queryClient.invalidateQueries({ queryKey: ["admin", "tickets"] });
     } catch (err: any) {
-      setDeleteError(err.message || "Impossibile eliminare il ticket.");
+      setDeleteError(err.message || t("acct.tickets.deleteError"));
     } finally {
       setDeleteLoading(false);
     }
@@ -167,11 +153,11 @@ export function AdminTicketsPanel() {
   const deleteConfirmModal = deletingTicket && (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
       <div className="w-full max-w-md glass-card rounded-2xl p-6 border-slate-300 bg-white animate-scale-up">
-        <h3 className="text-lg font-bold text-slate-900 mb-2">Elimina ticket</h3>
+        <h3 className="text-lg font-bold text-slate-900 mb-2">{t("acct.tickets.delete")}</h3>
         <p className="text-xs text-slate-500 mb-4">
-          Stai per eliminare definitivamente il ticket{" "}
-          <span className="font-semibold text-slate-700">&quot;{deletingTicket.subject}&quot;</span> e
-          tutti i suoi messaggi. L&apos;operazione non può essere annullata.
+          {t("acct.tickets.deleteTextBefore")}{" "}
+          <span className="font-semibold text-slate-700">&quot;{deletingTicket.subject}&quot;</span>{" "}
+          {t("acct.tickets.deleteTextAfter")}
         </p>
         {deleteError && <p className="text-xs text-rose-400 mb-3">{deleteError}</p>}
         <div className="flex justify-end gap-3">
@@ -179,14 +165,14 @@ export function AdminTicketsPanel() {
             onClick={() => { setDeletingTicket(null); setDeleteError(null); }}
             className="px-4 py-2 rounded-xl bg-slate-900/5 hover:bg-slate-100 text-xs font-semibold text-slate-600 border border-slate-200 transition cursor-pointer"
           >
-            Annulla
+            {t("common.cancel")}
           </button>
           <button
             onClick={handleDeleteTicket}
             disabled={deleteLoading}
             className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50"
           >
-            {deleteLoading ? "Eliminazione..." : "Elimina definitivamente"}
+            {deleteLoading ? t("acct.tickets.deleting") : t("acct.tickets.deleteForever")}
           </button>
         </div>
       </div>
@@ -200,7 +186,7 @@ export function AdminTicketsPanel() {
           onClick={() => setSelectedId(null)}
           className="text-xs text-slate-400 hover:text-slate-900 transition cursor-pointer flex items-center gap-1"
         >
-          ← Torna a tutti i ticket
+          ← {t("acct.tickets.backAll")}
         </button>
 
         <div className="glass-card rounded-2xl p-6 border-slate-200 bg-white/70">
@@ -208,8 +194,8 @@ export function AdminTicketsPanel() {
             <div>
               <h3 className="text-lg font-semibold text-slate-900">{detail.subject}</h3>
               <p className="text-xs text-slate-500 mt-1">
-                {OPENER_LABELS[detail.opened_by_role] ?? detail.opened_by_role} · {detail.opened_by_name ?? "—"} ·{" "}
-                {CATEGORY_LABELS[detail.category] ?? detail.category}
+                {t.dyn(`acct.ticket.opener.${detail.opened_by_role}`, detail.opened_by_role)} · {detail.opened_by_name ?? "—"} ·{" "}
+                {t.dyn(`acct.ticket.category.${detail.category}`, detail.category)}
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -219,15 +205,15 @@ export function AdminTicketsPanel() {
                 disabled={statusLoading}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold border bg-white cursor-pointer ${statusColor(detail.status)}`}
               >
-                {Object.entries(STATUS_LABELS).map(([code, label]) => (
-                  <option key={code} value={code}>{label}</option>
+                {STATUS_CODES.map((code) => (
+                  <option key={code} value={code}>{t.dyn(`acct.ticket.status.${code}`, code)}</option>
                 ))}
               </select>
               <button
                 type="button"
                 onClick={() => { if (detail.status === "RESOLVED") setDeletingTicket(detail); }}
                 disabled={detail.status !== "RESOLVED"}
-                title={detail.status === "RESOLVED" ? "Elimina ticket" : "Solo i ticket risolti possono essere eliminati"}
+                title={detail.status === "RESOLVED" ? t("acct.tickets.delete") : t("acct.tickets.onlyResolved")}
                 className="p-2 rounded-xl border border-slate-300 text-slate-400 hover:text-rose-400 hover:border-rose-500/30 hover:bg-rose-500/10 transition cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-slate-400 disabled:hover:border-slate-300 disabled:hover:bg-transparent"
               >
                 <TrashIcon className="w-4 h-4" />
@@ -249,9 +235,9 @@ export function AdminTicketsPanel() {
                   >
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        {isStaff ? "Tu (Assistenza)" : m.author_name ?? OPENER_LABELS[m.author_role] ?? m.author_role}
+                        {isStaff ? t("acct.tickets.youSupport") : m.author_name ?? t.dyn(`acct.ticket.opener.${m.author_role}`, m.author_role)}
                       </span>
-                      <span className="text-[10px] text-slate-500">{formatDateTime(m.created_at)}</span>
+                      <span className="text-[10px] text-slate-500">{formatDateTime(m.created_at, fmt.tag)}</span>
                     </div>
                     <p className="whitespace-pre-wrap">{m.body}</p>
                   </div>
@@ -265,7 +251,7 @@ export function AdminTicketsPanel() {
               required
               value={reply}
               onChange={(e) => setReply(e.target.value)}
-              placeholder="Rispondi..."
+              placeholder={t("acct.tickets.replyShort")}
               className="flex-1 rounded-xl glass-input px-3 py-2.5 text-sm focus:border-brand-500"
             />
             <button
@@ -273,7 +259,7 @@ export function AdminTicketsPanel() {
               disabled={replyLoading}
               className="px-4 py-2 rounded-xl text-xs font-semibold bg-brand-600 hover:bg-brand-500 text-white transition cursor-pointer disabled:opacity-50"
             >
-              {replyLoading ? "Invio..." : "Rispondi"}
+              {replyLoading ? t("acct.wallet.sending") : t("acct.tickets.reply")}
             </button>
           </form>
           {replyError && <p className="text-xs text-rose-400 mt-2">{replyError}</p>}
@@ -288,13 +274,13 @@ export function AdminTicketsPanel() {
       <div className="flex flex-col gap-3">
         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
           <p className="text-sm text-slate-500 flex-1">
-            Ticket aperti da clienti e promoter. {openCount} in attesa di risposta.
+            {t("acct.tickets.adminIntro", { n: openCount })}
           </p>
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Cerca per oggetto o nome..."
+            placeholder={t("acct.tickets.search")}
             className="rounded-xl glass-input px-3 py-2 text-xs bg-white focus:border-brand-500 w-full sm:w-64"
           />
         </div>
@@ -304,18 +290,18 @@ export function AdminTicketsPanel() {
             onChange={(e) => setOpenerFilter(e.target.value)}
             className="rounded-xl glass-input px-3 py-2 text-xs bg-white focus:border-brand-500"
           >
-            <option value="ALL">Cliente e Promoter</option>
-            <option value="CUSTOMER">Solo Clienti</option>
-            <option value="PROMOTER">Solo Promoter</option>
+            <option value="ALL">{t("acct.tickets.filterBoth")}</option>
+            <option value="CUSTOMER">{t("acct.tickets.filterCustomers")}</option>
+            <option value="PROMOTER">{t("acct.tickets.filterPromoters")}</option>
           </select>
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
             className="rounded-xl glass-input px-3 py-2 text-xs bg-white focus:border-brand-500"
           >
-            <option value="ALL">Tutte le categorie</option>
-            {Object.entries(CATEGORY_LABELS).map(([code, label]) => (
-              <option key={code} value={code}>{label}</option>
+            <option value="ALL">{t("acct.tickets.allCategories")}</option>
+            {CATEGORY_CODES.map((code) => (
+              <option key={code} value={code}>{t.dyn(`acct.ticket.category.${code}`, code)}</option>
             ))}
           </select>
           <select
@@ -323,52 +309,52 @@ export function AdminTicketsPanel() {
             onChange={(e) => setStatusFilter(e.target.value)}
             className="rounded-xl glass-input px-3 py-2 text-xs bg-white focus:border-brand-500"
           >
-            <option value="ALL">Tutti gli stati</option>
-            {Object.entries(STATUS_LABELS).map(([code, label]) => (
-              <option key={code} value={code}>{label}</option>
+            <option value="ALL">{t("acct.tickets.allStatuses")}</option>
+            {STATUS_CODES.map((code) => (
+              <option key={code} value={code}>{t.dyn(`acct.ticket.status.${code}`, code)}</option>
             ))}
           </select>
         </div>
       </div>
 
-      {listError && <p className="text-sm text-rose-400">Impossibile caricare i ticket.</p>}
+      {listError && <p className="text-sm text-rose-400">{t("acct.tickets.loadError")}</p>}
 
       <div className="space-y-3">
         {tickets === undefined ? (
-          <p className="text-sm text-slate-500 text-center py-8">Caricamento...</p>
+          <p className="text-sm text-slate-500 text-center py-8">{t("acct.common.loading")}</p>
         ) : filteredTickets.length === 0 ? (
           <div className="glass-card rounded-2xl p-12 text-center border-slate-200">
-            <p className="text-sm text-slate-500">Nessun ticket corrisponde ai filtri impostati.</p>
+            <p className="text-sm text-slate-500">{t("acct.tickets.noMatch")}</p>
           </div>
         ) : (
-          pagination.pageItems.map((t) => (
+          pagination.pageItems.map((ticket) => (
             <div
-              key={t.id}
+              key={ticket.id}
               className="glass-card rounded-2xl p-4 border-slate-200 bg-white/70 hover:bg-slate-100 transition flex items-center justify-between gap-4"
             >
               <button
-                onClick={() => setSelectedId(t.id)}
+                onClick={() => setSelectedId(ticket.id)}
                 className="min-w-0 flex-1 text-left cursor-pointer"
               >
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-brand-600 shrink-0">
-                    {OPENER_LABELS[t.opened_by_role] ?? t.opened_by_role}
+                    {t.dyn(`acct.ticket.opener.${ticket.opened_by_role}`, ticket.opened_by_role)}
                   </span>
-                  <p className="text-sm font-semibold text-slate-900 truncate">{t.subject}</p>
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border shrink-0 ${statusColor(t.status)}`}>
-                    {STATUS_LABELS[t.status] ?? t.status}
+                  <p className="text-sm font-semibold text-slate-900 truncate">{ticket.subject}</p>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border shrink-0 ${statusColor(ticket.status)}`}>
+                    {t.dyn(`acct.ticket.status.${ticket.status}`, ticket.status)}
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-500 mt-1">
-                  {t.opened_by_name ?? "—"} · {CATEGORY_LABELS[t.category] ?? t.category} · {t.message_count} messaggi
-                  {t.last_message_at ? ` · ultimo aggiornamento ${formatDateTime(t.last_message_at)}` : ""}
+                  {ticket.opened_by_name ?? "—"} · {t.dyn(`acct.ticket.category.${ticket.category}`, ticket.category)} · {t("acct.tickets.messages", { n: ticket.message_count })}
+                  {ticket.last_message_at ? ` · ${t("acct.tickets.lastUpdate", { date: formatDateTime(ticket.last_message_at, fmt.tag) })}` : ""}
                 </p>
               </button>
               <button
                 type="button"
-                onClick={() => { if (t.status === "RESOLVED") setDeletingTicket(t); }}
-                disabled={t.status !== "RESOLVED"}
-                title={t.status === "RESOLVED" ? "Elimina ticket" : "Solo i ticket risolti possono essere eliminati"}
+                onClick={() => { if (ticket.status === "RESOLVED") setDeletingTicket(ticket); }}
+                disabled={ticket.status !== "RESOLVED"}
+                title={ticket.status === "RESOLVED" ? t("acct.tickets.delete") : t("acct.tickets.onlyResolved")}
                 className="shrink-0 p-2 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-slate-500 disabled:hover:bg-transparent"
               >
                 <TrashIcon className="w-4 h-4" />
@@ -377,7 +363,7 @@ export function AdminTicketsPanel() {
           ))
         )}
       </div>
-      <Pagination {...pagination} label="ticket" />
+      <Pagination {...pagination} label={t("acct.tickets.plural")} />
       {deleteConfirmModal}
     </div>
   );

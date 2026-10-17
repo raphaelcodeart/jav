@@ -3,10 +3,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { friendlyApiError } from "@/lib/api-error";
 import type { DocumentationPostRead } from "@/lib/types";
+import { useI18n } from "@/lib/i18n/provider";
 
-async function fetchFeed(): Promise<DocumentationPostRead[]> {
+async function fetchFeed(t: ReturnType<typeof useI18n>["t"]): Promise<DocumentationPostRead[]> {
   const res = await fetch("/api/proxy/documentation");
-  if (!res.ok) throw new Error(await friendlyApiError(res, "Impossibile caricare la documentazione."));
+  if (!res.ok) throw new Error(await friendlyApiError(res, t("acct.docFeed.loadError")));
   return res.json();
 }
 
@@ -15,9 +16,10 @@ async function fetchFeed(): Promise<DocumentationPostRead[]> {
  * the customer or the promoter dashboard, so a single shared component avoids
  * keeping two copies of this rendering logic in sync. */
 export function DocumentationFeed() {
+  const { t, fmt } = useI18n();
   const { data: posts, error, isLoading } = useQuery({
     queryKey: ["documentation", "feed"],
-    queryFn: fetchFeed,
+    queryFn: () => fetchFeed(t),
   });
 
   if (isLoading) {
@@ -29,7 +31,7 @@ export function DocumentationFeed() {
   if (!posts || posts.length === 0) {
     return (
       <div className="glass-card rounded-2xl p-8 border-slate-200 bg-white/70 text-center text-sm text-slate-500">
-        Non c&apos;è ancora nessuna news o documentazione disponibile.
+        {t("acct.docFeed.empty")}
       </div>
     );
   }
@@ -62,7 +64,7 @@ export function DocumentationFeed() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  Guarda il video
+                  {t("acct.docFeed.watchVideo")}
                 </a>
               )}
               {p.pdf_url && (
@@ -75,12 +77,12 @@ export function DocumentationFeed() {
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H8a2 2 0 01-2-2V5a2 2 0 012-2h6l6 6v11a2 2 0 01-2 2z" />
                   </svg>
-                  {p.pdf_filename ? `Scarica ${p.pdf_filename}` : "Scarica PDF"}
+                  {p.pdf_filename ? t("acct.docFeed.downloadFile", { name: p.pdf_filename }) : t("acct.docFeed.downloadPdf")}
                 </a>
               )}
             </div>
             <span className="text-[10px] text-slate-500 mt-auto pt-2">
-              {new Date(p.created_at).toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" })}
+              {fmt.date(new Date(p.created_at), { day: "numeric", month: "long", year: "numeric" })}
             </span>
           </div>
         </article>

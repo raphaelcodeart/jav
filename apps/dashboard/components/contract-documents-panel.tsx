@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DocumentPreviewModal } from "@/components/document-preview-modal";
 import { friendlyApiError } from "@/lib/api-error";
+import { useI18n } from "@/lib/i18n/provider";
 
 type DocumentRead = {
   id: string;
@@ -52,27 +53,8 @@ type ContractDocumentsRead = {
 /** Pages one document may have (MAX_PAGES_PER_DOCUMENT in the API). */
 const MAX_PAGES = 20;
 
-const DOCUMENT_TYPE_LABELS: Record<string, string> = {
-  IDENTITY: "Documento d'identità",
-  FISCAL_CODE: "Codice fiscale",
-  CHAMBER_OF_COMMERCE: "Visura camerale / Certificato di attribuzione P.IVA",
-  OTHER: "Documento aggiuntivo",
-};
-
-/** What each slot is for, in the words a customer standing at a scanner
-    would use. Shown under the title so nobody has to guess what to upload. */
-const DOCUMENT_TYPE_HINTS: Record<string, string> = {
-  IDENTITY: "Carta d'identità, patente o passaporto dell'intestatario, in corso di validità: fronte e retro.",
-  FISCAL_CODE: "Tessera sanitaria o codice fiscale dell'intestatario.",
-  CHAMBER_OF_COMMERCE:
-    "Visura camerale (azienda o ditta) oppure, per un libero professionista, il certificato di attribuzione della partita IVA.",
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  PENDING_REVIEW: "In attesa di verifica",
-  APPROVED: "Approvato",
-  REJECTED: "Respinto",
-};
+/* Slot labels: `ctr.docs.type.<TYPE>`; what each slot is for, in the words
+   a customer standing at a scanner would use: `ctr.docs.hint.<TYPE>`. */
 
 const ACCEPTED_CONTENT_TYPES = "application/pdf,image/jpeg,image/png";
 const MIN_DESCRIPTION_LENGTH = 3;
@@ -87,7 +69,7 @@ function statusColor(status: string): string {
 
 async function fetchDocuments(path: string): Promise<ContractDocumentsRead> {
   const res = await fetch(path);
-  if (!res.ok) throw new Error("Impossibile caricare i documenti.");
+  if (!res.ok) throw new Error("documents fetch failed");
   return res.json();
 }
 
@@ -97,9 +79,9 @@ function documentsPath({ contractId, requestId }: { contractId?: string; request
     : `/api/proxy/contract-requests/${requestId}/documents`;
 }
 
-async function fetchDocumentUrl(documentId: string): Promise<string> {
+async function fetchDocumentUrl(documentId: string, errorText: string): Promise<string> {
   const res = await fetch(`/api/proxy/documents/${documentId}/url`);
-  if (!res.ok) throw new Error("Impossibile aprire il documento.");
+  if (!res.ok) throw new Error(errorText);
   const data = await res.json();
   return data.url;
 }
@@ -143,6 +125,10 @@ export function ContractDocumentsPanel({
   isStaff?: boolean;
   onlyTypes?: string[];
 }) {
+  const { t, fmt } = useI18n();
+  const typeLabel = (type: string) => t.dyn(`ctr.docs.type.${type}`, type);
+  const typeHint = (type: string) => t.dyn(`ctr.docs.hint.${type}`, "");
+  const statusLabel = (status: string) => t.dyn(`ctr.docs.status.${status}`, status);
   const queryClient = useQueryClient();
   const contractQuery = useQuery({
     queryKey: ["documents", "contract", contractId],
@@ -197,7 +183,7 @@ export function ContractDocumentsPanel({
     } catch (err: any) {
       // The server's own message when there is one (a file too large, a
       // label too short) -- it says something the generic sentence can't.
-      setUploadError(err?.message || `${DOCUMENT_TYPE_LABELS[documentType] ?? documentType}: caricamento fallito.`);
+      setUploadError(err?.message || t("ctr.docs.uploadFailed", { type: typeLabel(documentType) }));
       return false;
     } finally {
       setUploadingType(null);
@@ -210,7 +196,7 @@ export function ContractDocumentsPanel({
     if (!files) return;
     const list = Array.from(files).slice(0, Math.max(0, room));
     if (files.length > list.length) {
-      setUploadError(`Massimo ${MAX_PAGES} pagine per documento: caricate le prime ${list.length}.`);
+      setUploadError(t("ctr.docs.tooManyPages", { max: MAX_PAGES, n: list.length }));
     }
     for (const file of list) {
       const ok = await handleUpload(documentType, file);
@@ -220,7 +206,7 @@ export function ContractDocumentsPanel({
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
   async function handleDelete(doc: DocumentRead) {
-    if (!window.confirm(`Togliere la pagina "${doc.original_filename}"?`)) return;
+    if (!window.confirm(t("ctr.docs.confirmRemovePage", { name: doc.original_filename }))) return;
     setDeletingId(doc.id);
     setUploadError(null);
     try {
@@ -228,7 +214,7 @@ export function ContractDocumentsPanel({
       if (!res.ok) throw new Error(await friendlyApiError(res));
       await refresh();
     } catch (err: any) {
-      setUploadError(err?.message || "Impossibile togliere la pagina.");
+      setUploadError(err?.message || t("ctr.docs.removePageError"));
     } finally {
       setDeletingId(null);
     }
@@ -258,7 +244,7 @@ export function ContractDocumentsPanel({
       setReviewNote("");
       await refresh();
     } catch {
-      setUploadError("Impossibile aggiornare lo stato del documento.");
+      setUploadError(t("ctr.docs.reviewError"));
     }
   }
 
@@ -273,7 +259,7 @@ export function ContractDocumentsPanel({
             <input
               value={reviewNote}
               onChange={(e) => setReviewNote(e.target.value)}
-              placeholder="Nota (opzionale)..."
+              placeholder={t("ctr.docs.notePlaceholder")}
               className="w-full rounded-lg glass-input px-3 py-1.5 text-xs focus:border-brand-500"
             />
             <div className="flex gap-2">
@@ -281,19 +267,19 @@ export function ContractDocumentsPanel({
                 onClick={() => handleReview(doc.id, "APPROVED")}
                 className="px-3 py-1 rounded-lg bg-emerald-600/10 hover:bg-emerald-600/20 border border-emerald-500/20 text-emerald-400 text-xs font-semibold transition cursor-pointer"
               >
-                Approva
+                {t("ctr.docs.approve")}
               </button>
               <button
                 onClick={() => handleReview(doc.id, "REJECTED")}
                 className="px-3 py-1 rounded-lg bg-rose-600/10 hover:bg-rose-600/20 border border-rose-500/20 text-rose-400 text-xs font-semibold transition cursor-pointer"
               >
-                Respingi
+                {t("ctr.docs.reject")}
               </button>
               <button
                 onClick={() => { setReviewingId(null); setReviewNote(""); }}
                 className="px-3 py-1 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-400 text-xs font-semibold transition cursor-pointer"
               >
-                Annulla
+                {t("common.cancel")}
               </button>
             </div>
           </>
@@ -302,15 +288,15 @@ export function ContractDocumentsPanel({
             onClick={() => setReviewingId(doc.id)}
             className="px-3 py-1 rounded-lg bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 text-xs font-semibold transition cursor-pointer"
           >
-            Verifica documento
+            {t("ctr.docs.review")}
           </button>
         )}
       </div>
     );
   }
 
-  if (isLoading) return <p className="text-sm text-slate-500">Caricamento documenti...</p>;
-  if (error) return <p className="text-sm text-rose-400">Impossibile caricare i documenti.</p>;
+  if (isLoading) return <p className="text-sm text-slate-500">{t("ctr.docs.loading")}</p>;
+  if (error) return <p className="text-sm text-rose-400">{t("ctr.docs.loadError")}</p>;
   if (!data) return null;
 
   const extra = data.extra ?? [];
@@ -331,10 +317,10 @@ export function ContractDocumentsPanel({
       >
         <span className="font-semibold">
           {missing === 0
-            ? "Tutti i documenti obbligatori sono stati caricati."
+            ? t("ctr.docs.allUploaded")
             : missing === 1
-              ? "Manca 1 documento obbligatorio."
-              : `Mancano ${missing} documenti obbligatori.`}
+              ? t("ctr.docs.missingOne")
+              : t("ctr.docs.missingN", { n: missing })}
         </span>
         <span className="font-bold tabular-nums shrink-0">
           {uploadedRequired}/{requiredRows.length}
@@ -365,31 +351,31 @@ export function ContractDocumentsPanel({
             <div className="flex items-start justify-between gap-3 flex-wrap">
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-slate-900">
-                  {DOCUMENT_TYPE_LABELS[row.document_type] ?? row.document_type}
+                  {typeLabel(row.document_type)}
                   {isRequired ? (
                     <span className="ml-2 text-[10px] font-semibold text-brand-600 uppercase tracking-wide">
-                      Obbligatorio
+                      {t("ctr.docs.required")}
                     </span>
                   ) : (
                     <span className="ml-2 text-[10px] font-semibold text-slate-500 uppercase tracking-wide">
-                      Facoltativo
+                      {t("common.optional")}
                     </span>
                   )}
                 </p>
-                {DOCUMENT_TYPE_HINTS[row.document_type] && pages.length === 0 && (
+                {typeHint(row.document_type) && pages.length === 0 && (
                   <p className=" text-slate-500 mt-0.5">
-                    {DOCUMENT_TYPE_HINTS[row.document_type]}
+                    {typeHint(row.document_type)}
                   </p>
                 )}
                 {pages.length > 0 && (
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    {pages.length} {pages.length === 1 ? "pagina" : "pagine"}
-                    {inherited && " · caricato sulla pratica, vale per tutti i punti"}
+                    {pages.length === 1 ? t("ctr.docs.onePage") : t("ctr.docs.nPages", { n: pages.length })}
+                    {inherited && ` · ${t("ctr.docs.inherited")}`}
                   </p>
                 )}
               </div>
               <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border shrink-0 ${statusColor(doc?.status ?? "MISSING")}`}>
-                {doc ? STATUS_LABELS[doc.status] ?? doc.status : "Non caricato"}
+                {doc ? statusLabel(doc.status) : t("ctr.docs.notUploaded")}
               </span>
             </div>
 
@@ -402,9 +388,7 @@ export function ContractDocumentsPanel({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
                 </svg>
                 <span>
-                  <strong>Non deve essere più vecchio di 3 mesi.</strong> Una visura camerale o un certificato di
-                  attribuzione della partita IVA con data di emissione anteriore a 3 mesi non è valido e la pratica
-                  verrà respinta: scaricane uno aggiornato prima di caricarlo.
+                  <strong>{t("ctr.docs.visuraMaxAge")}</strong> {t("ctr.docs.visuraMaxAgeBody")}
                 </span>
               </div>
             )}
@@ -423,26 +407,26 @@ export function ContractDocumentsPanel({
                       <div className="min-w-0 flex-1">
                         <p className="text-xs text-slate-700 truncate">{pageDoc.original_filename}</p>
                         <p className="text-[10px] text-slate-500 truncate">
-                          {pageDoc.uploaded_by_name ?? "—"} · {new Date(pageDoc.created_at).toLocaleDateString("it-IT")}
+                          {pageDoc.uploaded_by_name ?? "—"} · {new Date(pageDoc.created_at).toLocaleDateString(fmt.tag)}
                         </p>
                       </div>
                       {pageDoc.status !== "PENDING_REVIEW" && (
                         <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold border shrink-0 ${statusColor(pageDoc.status)}`}>
-                          {STATUS_LABELS[pageDoc.status] ?? pageDoc.status}
+                          {statusLabel(pageDoc.status)}
                         </span>
                       )}
                       <button
                         onClick={() => setPreviewDoc(pageDoc)}
                         className="px-2 py-1 rounded-md font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer shrink-0"
                       >
-                        Vedi
+                        {t("ctr.docs.view")}
                       </button>
                       {pageDoc.status !== "APPROVED" && !(inherited && !isStaff) && (
                         <button
                           onClick={() => handleDelete(pageDoc)}
                           disabled={deletingId === pageDoc.id}
-                          title="Togli questa pagina"
-                          aria-label={`Togli la pagina ${i + 1}`}
+                          title={t("ctr.docs.removeThisPage")}
+                          aria-label={t("ctr.docs.removePageN", { n: i + 1 })}
                           className="p-1 rounded-md text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 cursor-pointer shrink-0 disabled:opacity-40"
                         >
                           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -453,7 +437,7 @@ export function ContractDocumentsPanel({
                     </div>
                     {pageDoc.review_note && (
                       <p className=" text-slate-500 mt-1.5">
-                        <span className="font-semibold">Nota amministrazione:</span> {pageDoc.review_note}
+                        <span className="font-semibold">{t("ctr.docs.adminNote")}</span> {pageDoc.review_note}
                       </p>
                     )}
                     {reviewControls(pageDoc)}
@@ -497,29 +481,29 @@ export function ContractDocumentsPanel({
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
-                  {ownPages === 0 ? "Fotografa" : "Fotografa un'altra pagina"}
+                  {ownPages === 0 ? t("ctr.docs.takePhoto") : t("ctr.docs.takePhotoAnother")}
                 </label>
                 <label
                   htmlFor={inputId}
                   className={`px-3 py-1.5 rounded-lg bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 text-xs font-semibold cursor-pointer transition ${busyHere ? "pointer-events-none opacity-50" : ""}`}
                 >
                   {busyHere
-                    ? "Caricamento..."
+                    ? t("ctr.common.loading")
                     : inherited
-                      ? "Carica per questo punto"
+                      ? t("ctr.docs.uploadForThis")
                       : ownPages === 0
-                        ? "Carica file"
-                        : "+ Aggiungi pagina da file"}
+                        ? t("ctr.docs.uploadFile")
+                        : t("ctr.docs.addPageFromFile")}
                 </label>
                 {ownPages > 0 && (
                   <span className="text-[10px] text-slate-500">
-                    {ownPages}/{MAX_PAGES} pagine
+                    {t("ctr.docs.pagesRatio", { n: ownPages, max: MAX_PAGES })}
                   </span>
                 )}
               </div>
             ) : (
               <p className="mt-2 text-[11px] text-slate-500">
-                Raggiunto il massimo di {MAX_PAGES} pagine: togline una per aggiungerne un&apos;altra.
+                {t("ctr.docs.maxReached", { max: MAX_PAGES })}
               </p>
             )}
           </div>
@@ -533,12 +517,12 @@ export function ContractDocumentsPanel({
           asked for BEFORE the file picker opens rather than after. */}
       <div className="pt-1">
         <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-          Altri documenti allegati
+          {t("ctr.docs.otherTitle")}
         </p>
 
         {extra.length === 0 && !addingExtra && (
           <p className="text-[11px] text-slate-500 mb-2">
-            Nessun allegato aggiuntivo. Puoi aggiungerne quanti ne servono.
+            {t("ctr.docs.noExtra")}
           </p>
         )}
 
@@ -551,28 +535,28 @@ export function ContractDocumentsPanel({
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-slate-900">
-                    {doc.description || DOCUMENT_TYPE_LABELS[doc.document_type] || doc.document_type}
+                    {doc.description || typeLabel(doc.document_type)}
                   </p>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    {doc.original_filename} · caricato da {doc.uploaded_by_name ?? "—"} il{" "}
-                    {new Date(doc.created_at).toLocaleDateString("it-IT")}
+                    {doc.original_filename} ·{" "}
+                    {t("ctr.docs.uploadedByOn", { name: doc.uploaded_by_name ?? "—", date: new Date(doc.created_at).toLocaleDateString(fmt.tag) })}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${statusColor(doc.status)}`}>
-                    {STATUS_LABELS[doc.status] ?? doc.status}
+                    {statusLabel(doc.status)}
                   </span>
                   <button
                     onClick={() => setPreviewDoc(doc)}
                     className="px-2.5 py-1 rounded-lg bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 text-xs font-semibold transition cursor-pointer"
                   >
-                    Visualizza
+                    {t("ctr.docs.show")}
                   </button>
                 </div>
               </div>
               {doc.review_note && (
                 <p className=" text-slate-500 mt-2">
-                  <span className="font-semibold">Nota amministrazione:</span> {doc.review_note}
+                  <span className="font-semibold">{t("ctr.docs.adminNote")}</span> {doc.review_note}
                 </p>
               )}
               {reviewControls(doc)}
@@ -583,18 +567,18 @@ export function ContractDocumentsPanel({
         {addingExtra ? (
           <div className="mt-2 p-3 rounded-xl bg-slate-900/5 border border-brand-500/20 space-y-2">
             <label className=" font-semibold text-slate-600 uppercase block">
-              Che documento stai allegando?
+              {t("ctr.docs.extraQuestion")}
             </label>
             <input
               autoFocus
               value={extraLabel}
               maxLength={MAX_DESCRIPTION_LENGTH}
               onChange={(e) => setExtraLabel(e.target.value)}
-              placeholder="Es. Carta d'identità retro, Delega firmata, Contratto di locazione"
+              placeholder={t("ctr.docs.extraPlaceholder")}
               className="w-full rounded-xl glass-input px-3 py-2.5 text-sm focus:border-brand-500"
             />
             <p className="text-[10px] text-slate-500">
-              Scrivi cos&apos;è, così l&apos;amministrazione sa cosa sta verificando. PDF, JPG o PNG, massimo 15 MB, oppure scatta una foto.
+              {t("ctr.docs.extraHint")}
             </p>
             <input
               ref={extraFileInput}
@@ -625,20 +609,20 @@ export function ContractDocumentsPanel({
                 disabled={!canPickExtraFile || uploadingType === "OTHER"}
                 className="px-3 py-1.5 rounded-lg bg-brand-600/10 hover:bg-brand-600/20 border border-brand-500/20 text-brand-600 text-xs font-semibold transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                {uploadingType === "OTHER" ? "Caricamento..." : "Scegli il file e carica"}
+                {uploadingType === "OTHER" ? t("ctr.common.loading") : t("ctr.docs.chooseAndUpload")}
               </button>
               <button
                 onClick={() => extraCameraInput.current?.click()}
                 disabled={!canPickExtraFile || uploadingType === "OTHER"}
                 className="px-3 py-1.5 rounded-lg bg-slate-900/5 hover:bg-slate-100 border border-slate-300 text-slate-600 text-xs font-semibold transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                Scatta una foto
+                {t("ctr.docs.shootPhoto")}
               </button>
               <button
                 onClick={() => { setAddingExtra(false); setExtraLabel(""); }}
                 className="px-3 py-1.5 rounded-lg bg-slate-900/5 hover:bg-slate-100 text-slate-400 text-xs font-semibold transition cursor-pointer"
               >
-                Annulla
+                {t("common.cancel")}
               </button>
             </div>
           </div>
@@ -647,17 +631,17 @@ export function ContractDocumentsPanel({
             onClick={() => setAddingExtra(true)}
             className="mt-2 w-full px-3 py-2.5 rounded-xl border border-dashed border-slate-300 text-slate-600 hover:border-brand-500/40 hover:text-brand-600 text-xs font-semibold transition cursor-pointer"
           >
-            + Aggiungi un altro documento
+            {t("ctr.docs.addAnother")}
           </button>
         )}
       </div>
       {previewDoc && (
         <DocumentPreviewModal
           key={previewDoc.id}
-          title={previewDoc.description || DOCUMENT_TYPE_LABELS[previewDoc.document_type] || "Documento"}
+          title={previewDoc.description || t.dyn(`ctr.docs.type.${previewDoc.document_type}`, t("ctr.docs.document"))}
           filename={previewDoc.original_filename}
           contentType={previewDoc.content_type}
-          loadUrl={() => fetchDocumentUrl(previewDoc.id)}
+          loadUrl={() => fetchDocumentUrl(previewDoc.id, t("ctr.docs.openError"))}
           onClose={() => setPreviewDoc(null)}
         />
       )}

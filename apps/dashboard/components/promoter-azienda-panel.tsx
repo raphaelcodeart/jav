@@ -4,27 +4,7 @@ import { Fragment, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { BranchContractRead, BranchSummaryRead, RankProgressRead } from "@/lib/types";
-
-const STATUS_LABELS: Record<string, string> = {
-  DRAFT: "Bozza",
-  SUBMITTED: "Inviata",
-  DOCUMENTS_PENDING: "Documenti mancanti",
-  UNDER_REVIEW: "In revisione",
-  APPROVED: "Approvata",
-  PAYMENT_PENDING: "In attesa di pagamento",
-  PAID: "Pagata",
-  ACTIVATION_PENDING: "In attivazione",
-  ACTIVE: "Attiva",
-  SUSPENDED: "Sospesa",
-  CANCELLED: "Cessata",
-  EXPIRED: "Scaduta",
-  RENEWED: "Rinnovata",
-  REJECTED: "Respinta",
-};
-
-function euro(cents: number): string {
-  return (cents / 100).toLocaleString("it-IT", { style: "currency", currency: "EUR" });
-}
+import { useI18n } from "@/lib/i18n/provider";
 
 async function fetchBranchSummary(agentId: string): Promise<BranchSummaryRead> {
   const res = await fetch(`/api/proxy/network/agents/${agentId}/branch-summary`);
@@ -57,6 +37,8 @@ function ProgressBar({ current, target }: { current: number; target: number }) {
 }
 
 export function PromoterAziendaPanel({ agentId }: { agentId: string }) {
+  const { t, fmt } = useI18n();
+  const euro = fmt.euro;
   const { data: summary, error: summaryError, isLoading: summaryLoading } = useQuery({
     queryKey: ["promoter", "branch-summary", agentId],
     queryFn: () => fetchBranchSummary(agentId),
@@ -90,11 +72,11 @@ export function PromoterAziendaPanel({ agentId }: { agentId: string }) {
       perLevel
         .filter((row) => row.depth > 0) // "Tu" (depth 0) skews the scale and isn't part of the downline
         .map((row) => ({
-          name: `Liv. ${row.depth}`,
-          Persone: row.agentCount,
-          Contratti: row.contracts,
+          name: t("net.azienda.levelShort", { n: row.depth }),
+          people: row.agentCount,
+          contracts: row.contracts,
         })),
-    [perLevel]
+    [perLevel, t]
   );
 
   const directCount = summary?.agents.filter((a) => a.depth === 1).length ?? 0;
@@ -121,43 +103,43 @@ export function PromoterAziendaPanel({ agentId }: { agentId: string }) {
   return (
     <div className="space-y-6">
       {(summaryError || contractsError) && (
-        <p className="text-sm text-rose-400">Impossibile caricare i dati della rete.</p>
+        <p className="text-sm text-rose-400">{t("net.azienda.loadError")}</p>
       )}
 
       {/* KPI cards -- top-level totals across the whole downline, promoter can
           only ever see below themselves (branch-scoped by the API). */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="glass-card rounded-2xl p-5 border-slate-200 bg-white/70">
-          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Persone in rete</p>
+          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">{t("net.azienda.kpi.people")}</p>
           <p className="text-xl font-bold text-slate-900">{summaryLoading ? "…" : totals?.people_total ?? 0}</p>
-          <p className="text-[10px] text-slate-500 mt-1">{directCount} diretti</p>
+          <p className="text-[10px] text-slate-500 mt-1">{t("net.azienda.kpi.direct", { n: directCount })}</p>
         </div>
         <div className="glass-card rounded-2xl p-5 border-slate-200 bg-white/70">
-          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Livelli sotto di te</p>
+          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">{t("net.azienda.kpi.levels")}</p>
           <p className="text-xl font-bold text-slate-900">{summaryLoading ? "…" : totals?.levels_below ?? 0}</p>
         </div>
         <div className="glass-card rounded-2xl p-5 border-slate-200 bg-white/70">
-          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Contratti chiusi</p>
+          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">{t("net.azienda.kpi.closed")}</p>
           <p className="text-xl font-bold text-emerald-400">{summaryLoading ? "…" : totals?.contracts_closed ?? 0}</p>
         </div>
         <div className="glass-card rounded-2xl p-5 border-slate-200 bg-white/70">
-          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Provvigioni totali</p>
+          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">{t("net.azienda.kpi.commission")}</p>
           <p className="text-xl font-bold text-brand-600">{summaryLoading ? "…" : euro(totals?.commission_cents ?? 0)}</p>
         </div>
         <div className="glass-card rounded-2xl p-5 border-slate-200 bg-white/70">
-          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Rifiutati</p>
+          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">{t("net.azienda.kpi.rejected")}</p>
           <p className="text-xl font-bold text-rose-400">{summaryLoading ? "…" : totals?.contracts_rejected ?? 0}</p>
         </div>
         <div className="glass-card rounded-2xl p-5 border-slate-200 bg-white/70">
-          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">In attesa (pending)</p>
+          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">{t("net.azienda.kpi.pending")}</p>
           <p className="text-xl font-bold text-amber-700">{summaryLoading ? "…" : totals?.contracts_pending ?? 0}</p>
         </div>
         <div className="glass-card rounded-2xl p-5 border-slate-200 bg-white/70">
-          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">In lavorazione</p>
+          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">{t("net.azienda.inProgress")}</p>
           <p className="text-xl font-bold text-sky-400">{summaryLoading ? "…" : totals?.contracts_in_progress ?? 0}</p>
         </div>
         <div className="glass-card rounded-2xl p-5 border-slate-200 bg-white/70">
-          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Contratti totali</p>
+          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">{t("net.azienda.kpi.total")}</p>
           <p className="text-xl font-bold text-slate-900">{summaryLoading ? "…" : totals?.contracts ?? 0}</p>
         </div>
       </div>
@@ -167,7 +149,7 @@ export function PromoterAziendaPanel({ agentId }: { agentId: string }) {
           <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          {totalProblems} {totalProblems === 1 ? "contratto ha" : "contratti hanno"} bisogno di attenzione nella tua rete.
+          {totalProblems === 1 ? t("net.azienda.problemsOne") : t("net.azienda.problemsMany", { n: totalProblems })}
         </div>
       )}
 
@@ -183,20 +165,20 @@ export function PromoterAziendaPanel({ agentId }: { agentId: string }) {
                 </svg>
               </div>
               <p className="text-sm text-slate-600">
-                Hai raggiunto la qualifica massima (<span className="font-bold text-brand-600">{rankProgress.current_rank_name}</span>).
+                {t("net.azienda.maxRank")} (<span className="font-bold text-brand-600">{rankProgress.current_rank_name}</span>).
               </p>
             </div>
           ) : rankProgress.next_rank_code ? (
             <>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold text-slate-900">
-                  Verso la qualifica <span className="text-brand-600">{rankProgress.next_rank_code}</span> — {rankProgress.next_rank_name}
+                  {t("net.azienda.towardsRank")} <span className="text-brand-600">{rankProgress.next_rank_code}</span> — {rankProgress.next_rank_name}
                 </h3>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
                   <div className="flex items-center justify-between text-xs mb-1.5">
-                    <span className=" text-slate-500">Volume personale</span>
+                    <span className=" text-slate-500">{t("net.azienda.personalVolume")}</span>
                     <span className="font-semibold text-slate-600">
                       {euro(rankProgress.personal_volume_cents)} / {euro(rankProgress.personal_volume_threshold_cents)}
                     </span>
@@ -205,7 +187,7 @@ export function PromoterAziendaPanel({ agentId }: { agentId: string }) {
                 </div>
                 <div>
                   <div className="flex items-center justify-between text-xs mb-1.5">
-                    <span className=" text-slate-500">Volume di gruppo (tutta la tua rete)</span>
+                    <span className=" text-slate-500">{t("net.azienda.groupVolume")}</span>
                     <span className="font-semibold text-slate-600">
                       {euro(rankProgress.group_volume_cents)} / {euro(rankProgress.group_volume_threshold_cents)}
                     </span>
@@ -214,7 +196,7 @@ export function PromoterAziendaPanel({ agentId }: { agentId: string }) {
                 </div>
               </div>
               <p className="text-[10px] text-slate-500 mt-4">
-                Valori indicativi calcolati sul totale storico dei contratti attivi (personali e di tutta la tua rete). Soglie provvisorie in attesa del regolamento provvigionale ufficiale.
+                {t("net.azienda.rankDisclaimer")}
               </p>
             </>
           ) : null}
@@ -224,8 +206,8 @@ export function PromoterAziendaPanel({ agentId }: { agentId: string }) {
       {/* Per-level breakdown + chart + drill-down */}
       <div className="glass-card rounded-2xl border-slate-200 bg-white/70 overflow-hidden">
         <div className="p-5 pb-0 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-slate-900">Riepilogo per livello</h3>
-          <p className="text-[11px] text-slate-500">Clicca un livello per il dettaglio</p>
+          <h3 className="text-sm font-semibold text-slate-900">{t("net.azienda.byLevel")}</h3>
+          <p className="text-[11px] text-slate-500">{t("net.azienda.clickLevel")}</p>
         </div>
         {chartData.length > 0 && (
           <div className="h-56 px-5 pt-4">
@@ -235,8 +217,8 @@ export function PromoterAziendaPanel({ agentId }: { agentId: string }) {
                 <XAxis dataKey="name" tick={{ fill: "#94a3b8", fontSize: 11 }} />
                 <YAxis allowDecimals={false} tick={{ fill: "#94a3b8", fontSize: 11 }} />
                 <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid rgba(148,163,184,0.2)", borderRadius: 8, fontSize: 12 }} />
-                <Bar dataKey="Persone" fill="#38bdf8" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Contratti" fill="#f97316" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="people" name={t("net.azienda.col.people")} fill="#38bdf8" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="contracts" name={t("net.azienda.col.contracts")} fill="#f97316" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -245,10 +227,10 @@ export function PromoterAziendaPanel({ agentId }: { agentId: string }) {
           <table className="w-full border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-slate-200 text-slate-500 font-semibold">
-                <th className="py-2 pr-4">Livello</th>
-                <th className="py-2 pr-4">Persone</th>
-                <th className="py-2 pr-4">Contratti</th>
-                <th className="py-2 pr-4 text-right">Provvigioni</th>
+                <th className="py-2 pr-4">{t("net.adminComm.col.level")}</th>
+                <th className="py-2 pr-4">{t("net.azienda.col.people")}</th>
+                <th className="py-2 pr-4">{t("net.azienda.col.contracts")}</th>
+                <th className="py-2 pr-4 text-right">{t("net.azienda.col.commissions")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
@@ -260,14 +242,14 @@ export function PromoterAziendaPanel({ agentId }: { agentId: string }) {
                     selectedLevel === row.depth ? "bg-brand-500/10" : "hover:bg-slate-100"
                   }`}
                 >
-                  <td className="py-2 pr-4 font-medium text-slate-900">Livello {row.depth}</td>
+                  <td className="py-2 pr-4 font-medium text-slate-900">{t("net.azienda.levelN", { n: row.depth })}</td>
                   <td className="py-2 pr-4">{row.agentCount}</td>
                   <td className="py-2 pr-4">{row.contracts}</td>
                   <td className="py-2 pr-4 text-right font-semibold text-brand-600">{euro(row.commission)}</td>
                 </tr>
               ))}
               {perLevel.filter((row) => row.depth > 0).length === 0 && !summaryLoading && (
-                <tr><td colSpan={4} className="text-center py-6 text-slate-500">Nessun dato disponibile.</td></tr>
+                <tr><td colSpan={4} className="text-center py-6 text-slate-500">{t("net.adminComm.noData")}</td></tr>
               )}
             </tbody>
           </table>
@@ -278,33 +260,33 @@ export function PromoterAziendaPanel({ agentId }: { agentId: string }) {
       <div className="glass-card rounded-2xl border-slate-200 bg-white/70 overflow-hidden">
         <div className="p-5 pb-0 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-slate-900">
-            {selectedLevel === null ? "Contratti per persona" : `Livello ${selectedLevel} -- dettaglio`}
+            {selectedLevel === null ? t("net.azienda.perPerson") : t("net.azienda.levelDetail", { n: selectedLevel })}
           </h3>
           {selectedLevel !== null && (
             <button
               onClick={() => setSelectedLevel(null)}
               className="text-xs text-brand-600 hover:text-brand-600 transition cursor-pointer"
             >
-              Torna alla vista generale
+              {t("net.azienda.backToOverview")}
             </button>
           )}
         </div>
         {levelDetail && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-5 pt-4">
             <div className="rounded-xl bg-slate-900/5 p-3 text-center">
-              <p className="text-[10px] text-slate-500 uppercase">Persone</p>
+              <p className="text-[10px] text-slate-500 uppercase">{t("net.azienda.col.people")}</p>
               <p className="text-lg font-bold text-slate-900">{levelDetail.agents.length}</p>
             </div>
             <div className="rounded-xl bg-slate-900/5 p-3 text-center">
-              <p className="text-[10px] text-slate-500 uppercase">Chiusi</p>
+              <p className="text-[10px] text-slate-500 uppercase">{t("net.azienda.closed")}</p>
               <p className="text-lg font-bold text-emerald-400">{levelDetail.closed}</p>
             </div>
             <div className="rounded-xl bg-slate-900/5 p-3 text-center">
-              <p className="text-[10px] text-slate-500 uppercase">In lavorazione</p>
+              <p className="text-[10px] text-slate-500 uppercase">{t("net.azienda.inProgress")}</p>
               <p className="text-lg font-bold text-sky-400">{levelDetail.inProgress}</p>
             </div>
             <div className="rounded-xl bg-slate-900/5 p-3 text-center">
-              <p className="text-[10px] text-slate-500 uppercase">Problemi</p>
+              <p className="text-[10px] text-slate-500 uppercase">{t("net.azienda.problems")}</p>
               <p className="text-lg font-bold text-rose-400">{levelDetail.problem}</p>
             </div>
           </div>
@@ -313,20 +295,20 @@ export function PromoterAziendaPanel({ agentId }: { agentId: string }) {
           <table className="w-full border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-slate-200 text-slate-500 font-semibold">
-                <th className="py-2 pr-4">Nome</th>
-                <th className="py-2 pr-4">Livello</th>
-                <th className="py-2 pr-4">Totali</th>
-                <th className="py-2 pr-4">Processati</th>
-                <th className="py-2 pr-4">In lavorazione</th>
-                <th className="py-2 pr-4">Problemi</th>
-                <th className="py-2 pr-4 text-right">Provvigioni</th>
+                <th className="py-2 pr-4">{t("net.azienda.col.name")}</th>
+                <th className="py-2 pr-4">{t("net.adminComm.col.level")}</th>
+                <th className="py-2 pr-4">{t("net.azienda.col.total")}</th>
+                <th className="py-2 pr-4">{t("net.azienda.col.processed")}</th>
+                <th className="py-2 pr-4">{t("net.azienda.inProgress")}</th>
+                <th className="py-2 pr-4">{t("net.azienda.problems")}</th>
+                <th className="py-2 pr-4 text-right">{t("net.azienda.col.commissions")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
               {agentsForTable.map((a) => (
                 <tr key={a.agent_id} className=" text-slate-600">
                   <td className="py-2 pr-4 font-medium text-slate-900">{a.display_name}</td>
-                  <td className="py-2 pr-4">{a.depth === 0 ? "Tu" : a.depth}</td>
+                  <td className="py-2 pr-4">{a.depth === 0 ? t("net.azienda.you") : a.depth}</td>
                   <td className="py-2 pr-4">{a.contracts_total}</td>
                   <td className="py-2 pr-4 text-emerald-400">{a.contracts_processed}</td>
                   <td className="py-2 pr-4 text-amber-700">{a.contracts_in_progress}</td>
@@ -350,22 +332,22 @@ export function PromoterAziendaPanel({ agentId }: { agentId: string }) {
       {/* Contract-level detail with contact action */}
       <div className="glass-card rounded-2xl border-slate-200 bg-white/70 overflow-hidden">
         <div className="p-5 pb-0 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-slate-900">Contratti della rete</h3>
+          <h3 className="text-sm font-semibold text-slate-900">{t("net.azienda.networkContracts")}</h3>
           <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer">
             <input type="checkbox" checked={onlyProblems} onChange={(e) => setOnlyProblems(e.target.checked)} className="cursor-pointer" />
-            Solo con problemi
+            {t("net.azienda.onlyProblems")}
           </label>
         </div>
         <div className="overflow-x-auto p-5">
           <table className="w-full border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-slate-200 text-slate-500 font-semibold">
-                <th className="py-2 pr-4">Cliente</th>
-                <th className="py-2 pr-4">Prodotto</th>
-                <th className="py-2 pr-4">Venditore</th>
-                <th className="py-2 pr-4">Stato</th>
-                <th className="py-2 pr-4 text-right">Provvigione</th>
-                <th className="py-2 pr-4 text-right">Azioni</th>
+                <th className="py-2 pr-4">{t("net.adminComm.csv.customer")}</th>
+                <th className="py-2 pr-4">{t("net.adminComm.csv.product")}</th>
+                <th className="py-2 pr-4">{t("net.azienda.col.seller")}</th>
+                <th className="py-2 pr-4">{t("net.adminComm.col.status")}</th>
+                <th className="py-2 pr-4 text-right">{t("net.azienda.col.commission")}</th>
+                <th className="py-2 pr-4 text-right">{t("net.adminComm.col.actions")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
@@ -388,20 +370,20 @@ export function PromoterAziendaPanel({ agentId }: { agentId: string }) {
                             ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                             : "bg-amber-500/10 text-amber-700 border-amber-500/20"
                       }`}>
-                        {STATUS_LABELS[c.status] ?? c.status}
+                        {t.dyn(`net.sim.cstatus.${c.status}`, c.status)}
                       </span>
                     </td>
                     <td className="py-2 pr-4 text-right font-semibold text-brand-600">{euro(c.commission_cents)}</td>
                     <td className="py-2 pr-4 text-right">
                       {c.customer_email && (
                         <a
-                          href={`mailto:${c.customer_email}${c.is_problem ? `?subject=${encodeURIComponent("La tua iscrizione Jav")}&body=${encodeURIComponent(c.admin_note ? `Ciao, per completare la tua iscrizione serve: ${c.admin_note}` : "Ciao, ho notato che il tuo contratto è in attesa di documenti. Posso aiutarti a completarli?")}` : ""}`}
+                          href={`mailto:${c.customer_email}${c.is_problem ? `?subject=${encodeURIComponent(t("net.azienda.mail.subject"))}&body=${encodeURIComponent(c.admin_note ? t("net.azienda.mail.bodyNote", { note: c.admin_note }) : t("net.azienda.mail.bodyDocs"))}` : ""}`}
                           className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-brand-600/10 hover:bg-brand-600/20 border border-brand-500/20 text-brand-600 text-xs font-semibold transition cursor-pointer"
                         >
                           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                           </svg>
-                          Contatta
+                          {t("net.azienda.contact")}
                         </a>
                       )}
                     </td>
@@ -409,7 +391,7 @@ export function PromoterAziendaPanel({ agentId }: { agentId: string }) {
                   {c.is_problem && c.admin_note && (
                     <tr className="bg-rose-500/5">
                       <td colSpan={6} className="px-4 py-2 text-xs text-rose-300">
-                        <span className="font-bold uppercase tracking-wider mr-2">Nota amministrazione:</span>
+                        <span className="font-bold uppercase tracking-wider mr-2">{t("net.azienda.adminNote")}</span>
                         {c.admin_note}
                       </td>
                     </tr>
@@ -417,7 +399,7 @@ export function PromoterAziendaPanel({ agentId }: { agentId: string }) {
                 </Fragment>
               ))}
               {filteredContracts.length === 0 && (
-                <tr><td colSpan={6} className="text-center py-6 text-slate-500">Nessun contratto trovato.</td></tr>
+                <tr><td colSpan={6} className="text-center py-6 text-slate-500">{t("net.azienda.noContracts")}</td></tr>
               )}
             </tbody>
           </table>
