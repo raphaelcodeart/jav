@@ -28,6 +28,8 @@ import { ClubShopPanel } from "@/components/club/club-shop-panel";
 import { EVENT_KIND_STYLE, EventIcon } from "@/components/club/event-icon";
 import { ClubDocumentsPanel } from "@/components/club/club-documents";
 import { AthleteMarks } from "@/components/club/person-marks";
+import { AthletesTable } from "@/components/club/athletes-table";
+import { ProofsPanel } from "@/components/club/proofs-panel";
 import { SlotEditModal } from "@/components/club/slot-edit-modal";
 import { ContactInbox } from "@/components/club/contact-inbox";
 import { AthletePublicPageSection } from "@/components/club/athlete-public-page";
@@ -164,7 +166,7 @@ export function ClubAdminPanel({ section: controlled, onGo, canInvest = false }:
         {section === "plans" && <Plans />}
         {section === "accounting" && <ClubAccounting />}
         {section === "fees" && <Fees />}
-        {section === "proofs" && <Proofs />}
+        {section === "proofs" && <ProofsPanel />}
         {section === "absence" && <AbsencePanel />}
         {section === "certificates" && <Certificates />}
         {section === "competitions" && features.competitions && <Competitions />}
@@ -225,47 +227,13 @@ function Overview({ onGo }: { onGo: (s: Section) => void }) {
 // --- Atleti -----------------------------------------------------------------------------------
 
 function Athletes() {
-  const [q, setQ] = useState("");
-  const [status, setStatus] = useState("ACTIVE");
-  const qs = new URLSearchParams({ ...(q ? { q } : {}), ...(status ? { status } : {}) }).toString();
-  const { data, isLoading } = useQuery({ queryKey: ["club", "admin", "athletes", qs], queryFn: () => clubGet<AdminAthlete[]>(A(`/athletes?${qs}`)) });
   const { data: plans } = useQuery({ queryKey: ["club", "admin", "plans"], queryFn: () => clubGet<Plan[]>(A("/plans")) });
   const [editing, setEditing] = useState<AdminAthlete | null>(null);
-  const paged = usePaged(data ?? [], 25);
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row gap-3">
-        <Input placeholder="Cerca per nome o email del genitore…" value={q} onChange={(e) => setQ(e.target.value)} />
-        <Select value={status} onChange={(e) => setStatus(e.target.value)} className="sm:w-48">
-          <option value="ACTIVE">Attivi</option>
-          <option value="SUSPENDED">Sospesi</option>
-          <option value="LEFT">Usciti</option>
-          <option value="">Tutti</option>
-        </Select>
-      </div>
-      {isLoading ? <Skeleton className="h-64" /> : (data ?? []).length === 0 ? <EmptyState title="Nessun atleta" text="I genitori aggiungono i loro figli dalla propria area." /> : (
-        <Table>
-          <THead><tr><TH>Atleta</TH><TH>Cintura</TH><TH>Piano</TH><TH>Genitore</TH><TH>Certificato</TH><TH className="text-right">Da pagare</TH></tr></THead>
-          <TBody>
-            {paged.items.map((a) => {
-              const cert = CERTIFICATE_LABELS[a.certificate.status] ?? CERTIFICATE_LABELS.MISSING!;
-              return (
-                <TR key={a.id} onClick={() => setEditing(a)} className="cursor-pointer">
-                  <TD><p className="font-semibold text-ink-900">{fullName(a)} <AthleteMarks id={a.id} /></p><p className="text-xs text-ink-500"><span title="Età federale: gli anni compiuti entro il 31 dicembre">{a.federal_age ?? a.season_age} anni fed.</span> · {a.sex === "F" ? "F" : "M"}</p></TD>
-                  <TD><BeltBadge belt={a.belt} size="sm" /></TD>
-                  <TD>{a.plan?.name ?? <Badge tone="warning">Da assegnare</Badge>}{a.plan_locked && <span title="Piano bloccato" className="ml-1">🔒</span>}</TD>
-                  <TD className="text-xs">{a.guardian_email ?? "—"}</TD>
-                  <TD><Badge tone={cert.tone} dot>{cert.label.replace("Certificato ", "")}</Badge></TD>
-                  <TD className="text-right font-semibold">{a.due_cents > 0 ? <span className={a.overdue_count ? "text-rose-600" : ""}>{euro(a.due_cents)}</span> : "—"}</TD>
-                </TR>
-              );
-            })}
-          </TBody>
-        </Table>
-      )}
-      <Pagination page={paged.page} pages={paged.pages} onChange={(p) => { paged.setPage(p); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
+    <>
+      <AthletesTable onOpen={setEditing} />
       {editing && <AthleteAdminModal athlete={editing} plans={plans ?? []} onClose={() => setEditing(null)} />}
-    </div>
+    </>
   );
 }
 
@@ -559,56 +527,6 @@ function MarkPaidModal({ fee, onClose }: { fee: Fee; onClose: () => void }) {
         <Field label="Nota (facoltativa)" htmlFor="mp-note"><Input id="mp-note" value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder="es. ricevuta n. 123" /></Field>
       </div>
     </Modal>
-  );
-}
-
-// --- Prove caricate ---------------------------------------------------------------------------
-
-function Proofs() {
-  const [status, setStatus] = useState("ACCEPTED");
-  const { data, isLoading } = useQuery({ queryKey: ["club", "admin", "proofs", status], queryFn: () => clubGet<AdminProof[]>(A(`/payment-proofs${status ? `?status=${status}` : ""}`)) });
-  const run = useRun();
-  const toast = useToast();
-  const paged = usePaged(data ?? [], 12);
-  async function open(id: string) {
-    try {
-      const { url } = await clubGet<{ url: string }>(A(`/payment-proofs/${id}/url`));
-      window.open(url, "_blank", "noopener");
-    } catch (e) {
-      toast({ tone: "error", title: "Impossibile aprire la ricevuta", text: (e as Error).message });
-    }
-  }
-  return (
-    <div className="space-y-4">
-      <p className="text-sm text-ink-500">Le quote risultano pagate appena il genitore carica la ricevuta del bonifico o dice a chi ha dato i contanti (quella persona riceve un avviso). Controlla quando vuoi: se una prova non è valida, rifiutala e le quote tornano da pagare (il genitore riceve il motivo).</p>
-      <Tabs value={status || "ALL"} onChange={(k) => setStatus(k === "ALL" ? "" : k)} items={[{ key: "ACCEPTED", label: "Registrate" }, { key: "REJECTED", label: "Rifiutate" }, { key: "ALL", label: "Tutte" }]} />
-      {isLoading ? <Skeleton className="h-64" /> : (data ?? []).length === 0 ? <EmptyState title="Nessuna prova" /> : (
-        <div className="grid md:grid-cols-2 gap-4">
-          {paged.items.map((p) => (
-            <div key={p.id} className="glass-card rounded-3xl p-5 space-y-3">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="font-display text-2xl text-ink-900">{euro(p.amount_cents)}</p>
-                  <p className="text-xs text-ink-500">{shortDate(p.created_at)} · {p.uploaded_by_email ?? "—"}</p>
-                </div>
-                <Badge tone={p.status === "REJECTED" ? "danger" : "success"} dot>{p.status === "REJECTED" ? "Rifiutata" : "Registrata"}</Badge>
-              </div>
-              <ul className="text-sm text-ink-700 space-y-0.5">{p.fees.map((f) => <li key={f.id}>• {f.athlete_name}: {f.description} ({euro(f.amount_cents)})</li>)}</ul>
-              {p.method === "CASH" && <p className="text-sm font-semibold text-ink-800">💶 Contanti consegnati a {p.cash_received_by_name ?? "—"}</p>}
-              {p.note && <p className="text-xs text-ink-500 italic">“{p.note}”</p>}
-              {p.rejection_reason && <p className="text-xs text-rose-600">Motivo: {p.rejection_reason}</p>}
-              <div className="flex gap-2">
-                {p.original_filename && <Button size="sm" variant="secondary" onClick={() => open(p.id)}>Vedi ricevuta ↗</Button>}
-                {p.status !== "REJECTED" && (
-                  <Button size="sm" variant="ghost" onClick={() => { const reason = window.prompt("Perché la prova non è valida? Il genitore leggerà questo testo."); if (reason && reason.length >= 3) void run(() => clubSend(A(`/payment-proofs/${p.id}/reject`), "POST", { reason }), "Prova rifiutata, quote riaperte"); }}>Rifiuta</Button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-      <Pagination page={paged.page} pages={paged.pages} onChange={(p) => { paged.setPage(p); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
-    </div>
   );
 }
 

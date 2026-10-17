@@ -35,18 +35,33 @@ export function usePersonKinds() {
   }, [data]);
 }
 
-/** I simboli, piccoli, da mettere dopo un nome. */
-export function PersonMarks({ kinds, className = "" }: { kinds: PersonKind[]; className?: string }) {
+/** Il colore di ogni ruolo nella versione grande (colonna «Ruolo»). */
+const TONE: Record<PersonKind, string> = {
+  ATHLETE: "bg-brand-50 ring-brand-200",
+  PARENT: "bg-amber-50 ring-amber-200",
+  COACH: "bg-emerald-50 ring-emerald-200",
+  ASSISTANT_COACH: "bg-emerald-50 ring-emerald-200",
+  MONITOR: "bg-sky-50 ring-sky-200",
+  ASSISTANT_MONITOR: "bg-sky-50 ring-sky-200",
+  REFEREE: "bg-violet-50 ring-violet-200",
+  SECRETARY: "bg-ink-100 ring-ink-200",
+};
+
+/** I simboli, piccoli, da mettere dopo un nome; `size="md"`: grandi e
+ *  colorati, per la colonna del ruolo nelle tabelle. */
+export function PersonMarks({ kinds, className = "", size = "sm" }: { kinds: PersonKind[]; className?: string; size?: "sm" | "md" }) {
   const { t } = useI18n();
   if (!kinds.length) return null;
   const sorted = [...kinds].sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b));
   return (
-    <span className={`inline-flex items-center gap-0.5 align-middle ${className}`}>
+    <span className={`inline-flex items-center align-middle ${size === "md" ? "gap-1" : "gap-0.5"} ${className}`}>
       {sorted.map((k) => {
         const label = t.dyn(`people.kind.${k}`, k);
         return (
           <span key={k} title={label} aria-label={label} role="img"
-            className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-ink-50 text-[12px] leading-none ring-1 ring-ink-100">
+            className={size === "md"
+              ? `inline-flex h-8 w-8 items-center justify-center rounded-xl text-base leading-none shadow-sm ring-1 ${TONE[k]}`
+              : "inline-flex h-5 w-5 items-center justify-center rounded-md bg-ink-50 text-[12px] leading-none ring-1 ring-ink-100"}>
             {PERSON_KIND_ICONS[k]}
           </span>
         );

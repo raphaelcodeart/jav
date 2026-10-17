@@ -1578,3 +1578,25 @@ checkout le rifiuta comunque. Lo shop del club vende sempre.
   della pagina del club. Apre la chat con lo stesso numero (`wa.me`, un numero di 9 cifre
   senza prefisso diventa +351; `components/site/social-icons.tsx`).
 
+
+## La tabella atleti e le prove di pagamento della segreteria
+
+- **Tabella atleti** (`components/club/athletes-table.tsx`,
+  `GET /club/admin/athletes`): oltre alla scheda dell'atleta l'API dà
+  `member_number`, l'encarregado (`guardian_name`, `guardian_email`,
+  `guardian_phone` da `customers.phone`) e `invited_by`: `PERSON` se la
+  famiglia si è registrata dal link «Invita un amico» di una persona del club
+  (`friend_referrals`, sorgente `CLUB_LINK`; `user_id` per i simboli del
+  ruolo), `WRITTEN` se il modulo d'iscrizione ha un nome in «chi ti ha
+  invitato» (`club_applications.referred_by`), altrimenti nulla (= il club).
+  Tutto in poche query (`router.py::_athlete_registry`). La ricerca `q`
+  guarda anche nº de sócio, licenza FPJ ed email dell'encarregado.
+  Ordinamento, filtri rapidi e CSV lavorano nel browser.
+- **Prove di pagamento** (`components/club/proofs-panel.tsx`,
+  `GET /club/admin/payment-proofs?q=&method=&from=&to=`): la ricerca e i
+  filtri li fa l'API (`service.py::list_proofs`, giorni di Lisbona), così una
+  prova vecchia si trova anche oltre il limite di 500; lo stato si sceglie
+  nel browser con i conteggi. Le quote si mostrano nella lingua di chi guarda
+  quando sono mensilità o iscrizioni normali (dal tipo e dal periodo); per il
+  resto resta la descrizione del server. La ricevuta si apre in una finestra
+  (URL firmato), il rifiuto chiede un motivo con quattro motivi pronti.

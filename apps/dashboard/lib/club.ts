@@ -209,6 +209,10 @@ export interface Proof {
   /** BANK_TRANSFER (con la ricevuta) o CASH (consegnati a qualcuno). */
   method?: "BANK_TRANSFER" | "MBWAY" | "CASH";
   cash_received_by_name?: string | null;
+  /** "MEN-2026-0042": il numero della ricevuta. */
+  receipt_number?: string | null;
+  /** Il giorno del pagamento dichiarato (null = quello del caricamento). */
+  paid_on?: string | null;
   fees: Fee[];
 }
 
@@ -545,6 +549,14 @@ export interface Roster {
 export interface AdminAthlete extends AthleteCard {
   guardian_user_id: string;
   guardian_email: string | null;
+  /** Il nº de sócio del club. */
+  member_number?: string | null;
+  /** L'encarregado de educação (il titolare del conto). */
+  guardian_name?: string | null;
+  guardian_phone?: string | null;
+  /** Chi ha portato l'atleta nel club: una persona (link «Invita un
+   *  amico»), un nome scritto nel modulo; null = il club. */
+  invited_by?: { kind: "PERSON" | "WRITTEN"; name: string; user_id?: string | null } | null;
 }
 
 export interface AdminCertificate {

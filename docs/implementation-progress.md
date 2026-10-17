@@ -819,3 +819,12 @@ inglese), con il cirillico nei font (Inter `cyrillic`, Russo One per i
 titoli). Il servizio `stt` sta nel profilo compose `voice` (non parte con
 `up -d`). Guida di migrazione §15 aggiornata (revision 0030, 132 tabelle,
 `/backend/health`, Pillow, `set-password.sh`).
+
+Poi: **WhatsApp** come voce con l'icona anche nel piè di pagina e nella
+pagina del club. **Comprovativos** rifatti (riepilogo, ricerca e filtri
+nell'API, schede per metodo, ricevuta dentro la pagina, rifiuto con motivi
+pronti, tutto tradotto). **Tabella atleti** con ruolo, nº de sócio, licença
+FPJ, nascita, età federativa, género, encarregado, contatto e «invitato
+da», ordinamento, filtri rapidi e CSV. Password del super admin
+reimpostata su richiesta. Test: `tests/test_club_admin_lists.py`. Nessuna
+migrazione.

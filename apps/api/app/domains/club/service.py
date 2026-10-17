@@ -10,7 +10,8 @@ sì (stesso principio di core/deps.py::require_permission).
 
 import logging
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, or_, select, text
 from sqlalchemy.dialects.postgresql import insert
@@ -416,9 +417,12 @@ async def search_athletes(
         stmt = stmt.where(ClubAthlete.plan_id == plan_id)
     if q:
         like = f"%{q.strip()}%"
+        # Nome, nº de sócio, licenza FPJ o email dell'encarregado.
         stmt = stmt.where(
             (ClubAthlete.first_name.ilike(like)) | (ClubAthlete.last_name.ilike(like))
             | (func.concat(ClubAthlete.first_name, " ", ClubAthlete.last_name).ilike(like))
+            | ClubAthlete.member_number.ilike(like) | ClubAthlete.federation_number.ilike(like)
+            | ClubAthlete.guardian_user_id.in_(select(User.id).where(User.email.ilike(like)))
         )
     return list((await db.execute(stmt.order_by(ClubAthlete.last_name, ClubAthlete.first_name).limit(limit))).scalars())
 
@@ -1142,13 +1146,41 @@ async def get_proof(db: AsyncSession, *, scope: ClubScope, proof_id: uuid.UUID) 
 
 async def list_proofs(
     db: AsyncSession, *, scope: ClubScope, uploaded_by_user_id: uuid.UUID | None = None,
-    status: str | None = None, limit: int = 500,
+    status: str | None = None, limit: int = 500, q: str | None = None, method: str | None = None,
+    date_from: date | None = None, date_to: date | None = None,
 ) -> list[ClubPaymentProof]:
+    """Le prove del club, dalla più recente. `q` cerca nel numero della
+    ricevuta, nella nota, in chi ha ricevuto i contanti, nell'email di chi
+    l'ha caricata e nel nome degli atleti delle quote coperte; il periodo è
+    sul giorno del caricamento. I filtri stanno qui e non nel browser: con
+    il limite, una prova vecchia si trova lo stesso."""
     stmt = select(ClubPaymentProof).where(ClubPaymentProof.club_id == scope.club_id)
     if uploaded_by_user_id is not None:
         stmt = stmt.where(ClubPaymentProof.uploaded_by_user_id == uploaded_by_user_id)
     if status:
         stmt = stmt.where(ClubPaymentProof.status == status)
+    if method:
+        stmt = stmt.where(ClubPaymentProof.method == method)
+    # I giorni sono quelli del Portogallo, non di UTC.
+    lisbon = ZoneInfo("Europe/Lisbon")
+    if date_from:
+        stmt = stmt.where(ClubPaymentProof.created_at >= datetime.combine(date_from, time.min, tzinfo=lisbon))
+    if date_to:
+        stmt = stmt.where(ClubPaymentProof.created_at < datetime.combine(date_to + timedelta(days=1), time.min, tzinfo=lisbon))
+    if q and q.strip():
+        like = f"%{q.strip()}%"
+        athletes = (
+            select(ClubPaymentProofFee.proof_id)
+            .join(ClubFee, ClubFee.id == ClubPaymentProofFee.fee_id)
+            .join(ClubAthlete, ClubAthlete.id == ClubFee.athlete_id)
+            .where(func.concat(ClubAthlete.first_name, " ", ClubAthlete.last_name).ilike(like))
+        )
+        stmt = stmt.where(
+            ClubPaymentProof.receipt_number.ilike(like) | ClubPaymentProof.note.ilike(like)
+            | ClubPaymentProof.cash_received_by_name.ilike(like)
+            | ClubPaymentProof.uploaded_by_user_id.in_(select(User.id).where(User.email.ilike(like)))
+            | ClubPaymentProof.id.in_(athletes)
+        )
     return list((await db.execute(stmt.order_by(ClubPaymentProof.created_at.desc()).limit(limit))).scalars())
 
 

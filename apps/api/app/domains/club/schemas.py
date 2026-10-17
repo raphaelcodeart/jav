@@ -727,9 +727,25 @@ class AttendanceWrite(BaseModel):
     note: str | None = Field(default=None, max_length=300)
 
 
+class InvitedByRead(BaseModel):
+    """Chi ha portato l'atleta nel club: PERSON (una persona del club, dal suo
+    link «Invita un amico»; `user_id` per i suoi simboli), WRITTEN (il nome
+    scritto nel modulo d'iscrizione). Senza nessuno dei due: il club."""
+
+    kind: str
+    name: str
+    user_id: uuid.UUID | None = None
+
+
 class AdminAthleteRead(AthleteCardRead):
     guardian_user_id: uuid.UUID
     guardian_email: str | None
+    #: Il nº de sócio del club.
+    member_number: str | None = None
+    #: L'encarregado de educação (il titolare del conto): nome e telefono.
+    guardian_name: str | None = None
+    guardian_phone: str | None = None
+    invited_by: InvitedByRead | None = None
 
 
 class AdminCertificateRead(BaseModel):

@@ -210,10 +210,29 @@ Lo stato dell'ordine lo vedi in "I miei Ordini".
 Ogni club ha la sua segreteria (ruolo **Segreteria**), che vede **solo il
 proprio club**: entrando, l'area si apre direttamente sul club. Le sezioni:
 
-- **Atleti**: elenco con filtri (stato, piano, ricerca), scheda con famiglia,
-  quote, certificati, cinture, gare. Si può fissare a mano il piano di un
-  atleta (non cambierà più da solo con l'età), cambiarne lo stato (attivo,
-  sospeso, uscito), registrare il tesseramento federale.
+- **Atleti**: la tabella dell'anagrafe. Colonne: **ruolo** (🥋 atleta,
+  👪 genitore, 🧑‍🏫 treinador…), **nº de sócio**, **licença FPJ** (con la
+  scadenza: verde, ⏳ in scadenza, ⛔ scaduta), **nome** (sotto: chi l'ha
+  portato nel club — chi l'ha invitato col suo link, il nome scritto nel
+  modulo, o «iscritto dal club»), **nascita**, **età federativa**,
+  **género**, cintura e piano, **encarregado** (nome ed email), **contatto**
+  (telefono, WhatsApp), certificato e quanto deve. Si cerca per nome, nº de
+  sócio, licenza o email dell'encarregado; si ordina toccando le
+  intestazioni con ▲; i filtri rapidi mostrano chi ha debiti, il certificato
+  o la licenza da sistemare, chi è senza nº de sócio; **CSV** scarica
+  l'elenco filtrato (per Excel). Il nome resta fermo a sinistra quando si
+  scorre. Toccando una riga si apre la scheda: famiglia, quote, certificati,
+  cinture, gare; si può fissare a mano il piano (non cambierà più con l'età),
+  cambiare lo stato (attivo, sospeso, uscito), registrare il tesseramento.
+- **Comprovativos** (prove di pagamento): in alto quanto è entrato nel
+  periodo (totale, numero, bonifico/MB Way, contanti). Si cerca per atleta,
+  email, nº della ricevuta, nota o chi ha preso i contanti; si filtra per
+  metodo e periodo (mese, 3 mesi, stagione, sempre) e per stato
+  (registrate/rifiutate, con i conteggi). Ogni scheda dice importo, metodo,
+  nº della ricevuta, quando e chi, e le quote coperte atleta per atleta.
+  **Vedi ricevuta** la apre dentro la pagina (foto o PDF); **Rifiuta**
+  chiede un motivo (ce ne sono di pronti) che la famiglia riceve, e le quote
+  tornano da pagare.
 - **Piani**: le fasce d'età con quota mensile, iscrizione annuale, giorno di
   scadenza e mesi fatturati. Un piano in uso non si cancella.
 - **Quote**: elenco con filtri. Su una quota: **segna pagata** — scegli come

@@ -831,14 +831,67 @@ async def admin_delete_plan(
 
 async def _admin_athletes_read(db: AsyncSession, athletes: list[ClubAthlete]) -> list[AdminAthleteRead]:
     cards = await family_service.athlete_cards(db, athletes=athletes)
-    emails = dict(
-        (await db.execute(select(User.id, User.email).where(User.id.in_({a.guardian_user_id for a in athletes})))).all()
-    ) if athletes else {}
-    guardians = {a.id: a.guardian_user_id for a in athletes}
-    return [
-        AdminAthleteRead(**c, guardian_user_id=guardians[c["id"]], guardian_email=emails.get(guardians[c["id"]]))
-        for c in cards
-    ]
+    extra = await _athlete_registry(db, athletes)
+    by_id = {a.id: a for a in athletes}
+    return [AdminAthleteRead(**c, member_number=by_id[c["id"]].member_number, **extra[c["id"]]) for c in cards]
+
+
+async def _athlete_registry(db: AsyncSession, athletes: list[ClubAthlete]) -> dict[uuid.UUID, dict]:
+    """Le colonne d'anagrafe della tabella atleti, in poche query per tutti:
+    l'encarregado (nome, email, telefono) e chi ha portato l'atleta nel
+    club (referrals.py: il link «Invita un amico» del titolare; altrimenti il
+    nome scritto nel modulo d'iscrizione)."""
+    from app.domains.club.people import _names
+    from app.domains.club.records_models import ClubApplication
+    from app.domains.club.referrals import SOURCE_CLUB_LINK
+    from app.domains.customers.models import Customer
+    from app.domains.friend_referrals.models import FriendReferral
+
+    if not athletes:
+        return {}
+    guardian_ids = {a.guardian_user_id for a in athletes}
+    emails = dict((await db.execute(select(User.id, User.email).where(User.id.in_(guardian_ids)))).all())
+    phones = dict(
+        (await db.execute(select(Customer.user_id, Customer.phone).where(Customer.user_id.in_(guardian_ids)))).all()
+    )
+    referrers = dict(
+        (
+            await db.execute(
+                select(Customer.user_id, FriendReferral.referrer_user_id)
+                .join(FriendReferral, FriendReferral.referred_customer_id == Customer.id)
+                .where(Customer.user_id.in_(guardian_ids), FriendReferral.source == SOURCE_CLUB_LINK)
+                .order_by(FriendReferral.created_at)
+            )
+        ).all()
+    )
+    written = dict(
+        (
+            await db.execute(
+                select(ClubApplication.athlete_id, ClubApplication.referred_by).where(
+                    ClubApplication.athlete_id.in_({a.id for a in athletes}),
+                    ClubApplication.referred_by.is_not(None),
+                )
+            )
+        ).all()
+    )
+    names = await _names(db, guardian_ids | set(referrers.values()))
+    out: dict[uuid.UUID, dict] = {}
+    for a in athletes:
+        referrer = referrers.get(a.guardian_user_id)
+        if referrer is not None:
+            invited = {"kind": "PERSON", "name": names.get(referrer) or "—", "user_id": referrer}
+        elif (written.get(a.id) or "").strip():
+            invited = {"kind": "WRITTEN", "name": written[a.id].strip()}
+        else:
+            invited = None
+        out[a.id] = {
+            "guardian_user_id": a.guardian_user_id,
+            "guardian_email": emails.get(a.guardian_user_id),
+            "guardian_name": names.get(a.guardian_user_id),
+            "guardian_phone": phones.get(a.guardian_user_id),
+            "invited_by": invited,
+        }
+    return out
 
 
 @admin_router.get("/athletes", response_model=list[AdminAthleteRead])
@@ -1109,10 +1162,16 @@ async def admin_start_season(
 @admin_router.get("/payment-proofs", response_model=list[AdminProofRead])
 async def admin_list_proofs(
     status_filter: str | None = Query(default=None, alias="status"),
+    q: str | None = Query(default=None, max_length=100),
+    method: str | None = Query(default=None, pattern="^(BANK_TRANSFER|MBWAY|CASH)$"),
+    date_from: date | None = Query(default=None, alias="from"),
+    date_to: date | None = Query(default=None, alias="to"),
     current_user: ClubUser = Depends(require_club_permission(MANAGE)),
     db: AsyncSession = Depends(get_db),
 ) -> list[AdminProofRead]:
-    proofs = await club_service.list_proofs(db, scope=current_user.scope, status=status_filter)
+    proofs = await club_service.list_proofs(
+        db, scope=current_user.scope, status=status_filter, q=q, method=method, date_from=date_from, date_to=date_to,
+    )
     fees = await club_service.fees_by_proof(db, proof_ids=[p.id for p in proofs])
     # Anche le quote riaperte da un rifiuto restano legate alla prova:
     # la segreteria vede che cosa copriva.
