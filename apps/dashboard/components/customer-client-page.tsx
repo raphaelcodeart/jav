@@ -11,6 +11,7 @@ import { DashboardWalletStats } from "@/components/dashboard-wallet-stats";
 import { WelcomeBonusCard } from "@/components/welcome-bonus-card";
 import { CustomerOrdersPanel } from "@/components/customer-orders-panel";
 import { CustomerProductsPanel } from "@/components/customer-products-panel";
+import { FamilyJudogiSection } from "@/components/club/judogi-shop";
 import { CustomerPromoterApplicationCard } from "@/components/customer-promoter-application-card";
 import { FriendReferralsPanel } from "@/components/friend-referrals-panel";
 import { DocumentationFeed } from "@/components/documentation-feed";
@@ -147,6 +148,8 @@ const NAV_ITEMS: NavItem[] = [
   {
     key: "products",
     label: "Shop",
+    // I desideri dei figli e gli ordini dei judogi stanno in cima allo Shop.
+    notificationTypes: ["CLUB_WISHLIST_ADDED", "CLUB_JUDOGI_ORDER_STATUS"],
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
@@ -500,6 +503,7 @@ export function CustomerClientPage({ email, organizationId }: CustomerClientPage
 
       {activeTab === "products" && (
         <div className="space-y-6">
+          <FamilyJudogiSection />
           <CustomerProductsPanel
             visibleCategories={["PARTNER", "DROPSHIPPING"]}
             showShopTab

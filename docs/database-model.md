@@ -1463,3 +1463,30 @@ game.fights                   un incontro deciso dal server: kind CAREER|RANDORI
   + opponent_player_id -> game.players (CASCADE, solo randori)
   + UNIQUE (player_id, context_key): un turno di gara della carriera una volta sola
 ```
+
+**Judogi e lista dei desideri** (migrazione 0039, `club/operations_models.py`,
+`club/judogi.py`):
+
+```
+club_judogi_prices      il listino del calcolatore, per club: kimono_type (KIMONO_TYPES),
+                        brand, color (WHITE | BLUE | PINK | WHITE_PINK_STRIPES), size_cm
+                        (80–220), price_cents >= 0, active;
+                        UNIQUE (club_id, kimono_type, brand, color, size_cm)
+club_equipment_orders   + base_price_cents, customization_cents, trade_in_discount_cents:
+                          il conto congelato (NULL negli ordini importati)
+                        + color_code: il codice del listino (`color` resta il nome)
+                        + UNIQUE parziale (athlete_id, kimono_type, color, brand, size_cm)
+                          WHERE status = 'PENDING': lo stesso judogi in attesa una volta sola
+club_wishlist_items     i desideri dell'atleta minorenne: athlete_id (CASCADE),
+                        requested_by_user_id, kind (PRODUCT | JUDOGI), product_id ->
+                        jav_market_products (CASCADE), variant_id (SET NULL), config JSONB
+                        (scelte + conto visto, solo da mostrare), note, status (OPEN |
+                        ORDERED | DISMISSED), equipment_order_id / jav_market_order_id
+                        (SET NULL), decided_by_user_id, decided_at;
+                        CHECK target (PRODUCT con product_id, JUDOGI con config);
+                        UNIQUE parziali: (athlete_id, product_id) aperti PRODUCT,
+                        (athlete_id) aperto JUDOGI
+```
+
+Personalizzazione e permuta del club stanno in `clubs.settings["judogi"]`
+(`customization_cents`, default 3500; `trade_in_percent`, default 50).

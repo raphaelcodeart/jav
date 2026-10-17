@@ -268,6 +268,22 @@ async def page_my_jav_market_products(
     )
 
 
+@router.get("/products/mine/{product_id}")
+async def get_my_jav_market_product(
+    product_id: uuid.UUID,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Un prodotto della vetrina, per aprirlo da un link o da un desiderio."""
+    card = await service.customer_product(
+        db, organization_id=current_user.organization_id, product_id=product_id,
+        viewer_club_id=await _viewer_club(db, current_user.user_id),
+    )
+    if card is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Prodotto non disponibile.")
+    return card
+
+
 async def _viewer_club(db: AsyncSession, user_id: uuid.UUID) -> uuid.UUID | None:
     from app.domains.users.models import User
 

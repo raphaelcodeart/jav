@@ -19,8 +19,9 @@ export function SecretaryClientPage({ email }: { email?: string }) {
     label: t.dyn(`clubNav.${s.key}`, s.key),
     icon: <span className="text-base leading-none" aria-hidden="true">{s.icon}</span>,
     group: t(GROUPS[s.group]),
-    // Il pallino sui "Messaggi" quando ne arriva uno dal sito.
-    notificationTypes: s.key === "messages" ? ["CONTACT_MESSAGE"] : undefined,
+    // Il pallino sui "Messaggi" quando ne arriva uno dal sito, sui
+    // "Judogi" quando una famiglia ne ordina uno.
+    notificationTypes: s.key === "messages" ? ["CONTACT_MESSAGE"] : s.key === "judogi" ? ["CLUB_JUDOGI_ORDER"] : undefined,
   }));
   return (
     <AppShell roleLabel={club ? `${t("clubs.role.SECRETARY")} · ${club.name}` : t("clubs.role.SECRETARY")} email={email}

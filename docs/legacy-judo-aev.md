@@ -68,8 +68,8 @@ Legenda: ✅ c'è già in Jav · 🟡 c'è, va esteso · 🆕 manca, si costruis
 | Più atleti per famiglia (fratelli) | ✅ | Il titolare e i suoi atleti |
 | Consensi RGPD (política obrigatória con versione, fotografias per atleta, storico, export JSON) | 🟡 | Si aggiunge il registro dei consensi con versione della politica, storico e revoca; il consenso foto pilota la pagina pubblica |
 | Richieste di modifica dei dati (grau, categoria de peso, peso) | 🆕 | Il genitore chiede, la segreteria approva o rifiuta |
-| Ordine di judogi ("pedido de fato": tipo, colore, marca, taglia, nome da ricamare, < 13 anni solo il nome) | 🆕 | **Pedidos de fato** del club (stati pendente → em preparação → entregue / cancelado), con la quota da pagare; export per il fornitore |
-| Calcolatore prezzo judogi con permuta al 50% | 🆕 | Listino dei judogi del club e permuta: il prezzo lo calcola il server |
+| Ordine di judogi ("pedido de fato": tipo, colore, marca, taglia, nome da ricamare, < 13 anni solo il nome) | ✅ | **Fatto (migrazione 0039)**: ordini dal calcolatore (titolare, atleta maggiorenne, segreteria) con la quota `EQUIPMENT`; stati pendente → em preparação → entregue / cancelado; CSV per il fornitore. Il minorenne lo mette nella lista dei desideri. docs/club-portal.md, "Judogi: calcolatore, ordini e lista dei desideri" |
+| Calcolatore prezzo judogi con permuta al 50% | ✅ | **Fatto (migrazione 0039)**: listino come dato (`club_judogi_prices`, caricato con quello di `jav/fatos/data/catalog.php`, refusi 13/14 € corretti in 23/24), personalizzazione 35 € e permuta 50% regole del club, taglia dall'altezza fra quelle esistenti |
 | Documenti dell'atleta (Segurança Social, giustificazioni, autorizzazione parentale…) | 🆕 | Archivio documenti dell'atleta nel bucket privato |
 | Domanda d'iscrizione pubblica (ficha completa) → approvazione → nº de sócio + email di benvenuto | 🟡 | Il modulo pubblico del club si allarga ai campi della ficha; all'approvazione nasce l'atleta con il nº de sócio |
 | Export atleti CSV, **Excel FPJ**, **Allianz (Anexo 5)** | 🆕 | Export dalla lista atleti |

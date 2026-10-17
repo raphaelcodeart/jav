@@ -184,6 +184,12 @@ un corso.
 per quale figlio è, e paghi con bonifico (con l'eventuale credito JavCash).
 Lo stato dell'ordine lo vedi in "I miei Ordini".
 
+Per il **judogi del club** c'è il calcolatore: in cima allo Shop premi
+**Calcula o teu judogui** e scegli figlio, tipo, colore, marca e taglia (con
+l'altezza ti suggerisce quella giusta) ed eventualmente il judogi usato che
+restituisci (vale la metà del suo prezzo). L'ordine diventa una quota del
+figlio, da pagare come le altre. Vedi "Judogi e lista dei desideri" più sotto.
+
 ### 2.9 Il resto
 
 - **JavCash**: il credito interno (bonus di benvenuto, cashback). Si spende
@@ -794,3 +800,27 @@ cinture, club e punti del gioco non sono quelli veri.
 - I relatórios: la segreteria trova quelli degli eventi in **Eventos e provas
   → Relatórios** e quelli delle lezioni in **Relatórios das aulas**; il
   treinador li scrive nelle sue schede **Eventos** e **Caderno**.
+
+## Judogi e lista dei desideri
+
+- **Il calcolatore** (Shop della famiglia, Loja dell'area dell'atleta): sei
+  passi — atleta, tipo, colore, marca e taglia, judogi restituito, riepilogo.
+  Il prezzo lo calcola il club: judogi + personalizzazione obbligatoria (35 €)
+  − metà del valore del judogi restituito. Sotto i 13 anni sul judogi si
+  ricama solo il nome proprio.
+- **Chi ordina**: il genitore (titolare) per ogni figlio; l'atleta
+  maggiorenne con il suo accesso per sé. L'ordine diventa una quota
+  dell'atleta: si paga dalle quote come le altre. Lo stato (pendente, em
+  preparação, entregue) lo vedi in **Encomendas de judoguis** e ti arriva una
+  notifica quando cambia.
+- **L'atleta minorenne** ha la sua **Loja**: vede tutti i prodotti e il
+  calcolatore, ma invece di comprare mette **♡ Quero**. Il genitore riceve la
+  notifica e trova i desideri in cima allo Shop: **Encomendar** (il judogi si
+  apre già scelto; il prodotto con il figlio già indicato), **Já comprado** o
+  **Fica para outra vez**. Il figlio vede la risposta nella sua lista.
+- **Segreteria → Judogi**: le encomendas per stato, con ricerca, il bottone
+  per farle avanzare (→ Em preparação → Entregue) o annullarle (la quota non
+  pagata sparisce) e il **CSV per il fornitore**; il **listino** (prezzo per
+  marca, colore e taglia, modificabile; ● in vendita, ○ no; aggiungi una
+  taglia o una marca nuova) e le **regole** (personalizzazione, % della
+  permuta).

@@ -15,6 +15,7 @@ import { CertificatesTab } from "@/components/club/athlete-detail-modal";
 import { ClubBoard } from "@/components/club/club-board";
 import { InviteCard } from "@/components/club/invite-card";
 import { GamesHub } from "@/components/game/games-hub";
+import { AthleteShop } from "@/components/club/judogi-shop";
 import { AppShell, type NavItem } from "@/components/app-shell";
 import { AreaCompetitions, AthleteMoneyCard } from "@/components/club/athlete-area-extras";
 import { AreaEvents } from "@/components/club/area-events";
@@ -57,12 +58,14 @@ const STATUS_STYLE: Record<AreaLesson["status"], string> = {
  *  l'atleta con il suo accesso (nome utente, email o QR) e il titolare del
  *  conto per ognuno dei suoi atleti. Lezioni del mese, presenza di oggi,
  *  cintura e traguardi, quote in lettura; la formazione arriverà qui. */
-type AreaSection = "home" | "lessons" | "fees" | "certificate" | "competitions" | "board" | "games" | "achievements" | "invite";
+type AreaSection = "home" | "lessons" | "fees" | "certificate" | "competitions" | "shop" | "board" | "games" | "achievements" | "invite";
 
 const AREA_NAV: { key: AreaSection; icon: string; label: MessageKey }[] = [
   { key: "home", icon: "🏠", label: "area.nav.home" },
   { key: "lessons", icon: "🗓️", label: "area.nav.lessons" },
   { key: "competitions", icon: "🏆", label: "area.nav.competitions" },
+  // La Loja: lo Shop e il calcolatore dei judogi; il minorenne desidera, non compra.
+  { key: "shop", icon: "🛍️", label: "area.nav.shop" },
   { key: "board", icon: "📰", label: "area.nav.board" },
   { key: "fees", icon: "💶", label: "area.nav.fees" },
   { key: "certificate", icon: "🩺", label: "area.nav.certificate" },
@@ -401,6 +404,7 @@ function Area({ id, section, onGo }: { id: string; section: AreaSection; onGo: (
         </>
       )}
 
+      {section === "shop" && <AthleteShop athleteId={a.id} />}
       {section === "games" && <GamesHub />}
 
       {section === "invite" && <InviteCard />}
