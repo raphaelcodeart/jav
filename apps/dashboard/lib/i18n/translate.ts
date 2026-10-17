@@ -7,10 +7,11 @@ import { pt } from "@/lib/i18n/messages/pt";
 import { es } from "@/lib/i18n/messages/es";
 import { fr } from "@/lib/i18n/messages/fr";
 import { de } from "@/lib/i18n/messages/de";
+import { uk } from "@/lib/i18n/messages/uk";
 
 export type { MessageKey };
 
-const MESSAGES: Record<Locale, Record<MessageKey, string>> = { pt, en, it, es, fr, de };
+const MESSAGES: Record<Locale, Record<MessageKey, string>> = { pt, en, it, es, fr, de, uk };
 
 export type Vars = Record<string, string | number>;
 

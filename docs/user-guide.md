@@ -15,10 +15,13 @@ Apri il browser (dal telefono va benissimo) sull'indirizzo del club, per
 esempio `https://jav.ecodo.ai/login`.
 
 **Lingua.** In alto a destra c'è una bandierina: tocca e scegli **portoghese**,
-**inglese**, **italiano**, **spagnolo**, **francese** o **tedesco**. Si parte in portoghese; la scelta resta salvata sul
-dispositivo (anche dopo l'uscita). Per ora sono tradotti l'accesso e l'area
-famiglie; il resto e i messaggi che arrivano dal server sono ancora in
-italiano.
+**inglese**, **italiano**, **spagnolo**, **francese**, **tedesco** o **ucraino**.
+Si parte in portoghese; la scelta resta salvata sul dispositivo (anche dopo
+l'uscita). Sono tradotti il sito, l'accesso, le aree di famiglie, atleti e
+staff e quasi tutta la segreteria; la console della piattaforma, l'area
+promoter e i messaggi che arrivano dal server (email, notifiche, errori) sono
+ancora in italiano. JAVBOT e i giochi rispondono in portoghese a chi sceglie
+lo spagnolo e in inglese a chi sceglie francese, tedesco o ucraino.
 
 Servono **Organization ID** (te lo comunica la segreteria), **email** e
 **password**.
@@ -627,8 +630,9 @@ il telefono, compresa la foto della ricevuta e del certificato.
   Incolla gli indirizzi di Facebook, Instagram, YouTube e TikTok: le icone
   compaiono in fondo a ogni pagina del sito. Vuoto = nessuna icona.
 - **Social del club**: Sito del club → contatti, anche TikTok.
-- **WhatsApp**: sotto ogni numero di telefono del sito c'è il bottone verde
-  che apre la chat con quel numero.
+- **WhatsApp**: nella pagina Contactos c'è la scheda WhatsApp subito sotto il
+  telefono; nel piè di pagina e nelle pagine dei club c'è il bottone verde
+  sotto il numero. Aprono la chat con quel numero.
 - **Scheda del judoca**: la segreteria (o il superadmin entrato nel club)
   carica foto, video e biografia dalla scheda dell'atleta → «Pagina
   pubblica», o da Sito → Judoka; sul sito compaiono nelle schede Foto, Video

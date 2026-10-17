@@ -47,6 +47,14 @@ function Flag({ locale, className }: { locale: Locale; className?: string }) {
       </svg>
     );
   }
+  if (locale === "uk") {
+    return (
+      <svg viewBox="0 0 3 2" className={box} aria-hidden="true">
+        <rect width="3" height="1" fill="#0057b7" />
+        <rect y="1" width="3" height="1" fill="#ffd700" />
+      </svg>
+    );
+  }
   if (locale === "it") {
     return (
       <svg viewBox="0 0 3 2" className={box} aria-hidden="true">

@@ -161,8 +161,11 @@ Variabili che vanno adattate al nuovo server (non generate a caso):
   `api` e i due worker (`up -d --force-recreate api celery-worker
   celery-beat`): il `.env` si legge all'avvio.
 - `STT_URL` — opzionale, predefinito `http://stt:8001`: il servizio Whisper
-  del microfono di JAVBOT (container `stt`, circa 750 MB di RAM). Vuoto,
-  il microfono risponde «non disponibile».
+  del microfono di JAVBOT (container `stt`, fino a 1,2 GB di RAM). Il
+  microfono oggi è **nascosto** nell'interfaccia e il container sta dietro il
+  profilo compose `voice`: non parte con `up -d` (per accenderlo,
+  `--profile voice up -d stt`). Senza il servizio il microfono risponde «non
+  disponibile».
 
 **Mai committare `.env` nel repository.** È già in `.gitignore`; se `git status`
 lo mostra come modificabile, fermati e controlla prima di fare qualsiasi `git add`.
@@ -178,7 +181,9 @@ Le migrazioni Alembic girano **automaticamente** all'avvio del container `api`
 (vedi il `command` del servizio `api` in `docker-compose.dev.yml`) — non serve
 lanciarle a mano la prima volta.
 
-Verifica che tutti i 9 container (compreso `stt`, il microfono di JAVBOT) siano `healthy` (aspetta 30-60 secondi):
+Verifica che gli 8 container (postgres, redis, minio, api, celery-worker,
+celery-beat, dashboard, nginx) siano `healthy` o `Up` (aspetta 30-60 secondi).
+`stt`, il microfono di JAVBOT, non c'è: è nel profilo opzionale `voice`.
 
 ```bash
 docker compose -f docker-compose.dev.yml ps
@@ -1092,14 +1097,16 @@ docker compose -f docker-compose.dev.yml ps
 # 2. Lo schema è quello giusto
 docker compose -f docker-compose.dev.yml exec -T postgres \
   psql -U jav -d jav -tc "SELECT version_num FROM alembic_version;"
-# atteso: la revision dell'ultima migrazione (oggi 0006, 0006_sito_pubblico.py)
+# atteso: la revision dell'ultima migrazione (oggi 0030,
+#         0030_social_tiktok_e_biografia.py: `ls apps/api/alembic/versions | sort | tail -1`)
 
 docker compose -f docker-compose.dev.yml exec -T postgres \
   psql -U jav -d jav -tc \
   "SELECT count(*) FROM information_schema.tables
     WHERE table_schema='public' AND table_type='BASE TABLE';"
 # atteso: lo stesso numero di CREATE TABLE in docs/database-schema.sql
-#         (oggi 94, alembic_version compresa) -- se non torna, lo schema e il
+#         (oggi 132, alembic_version compresa: `grep -c "^CREATE TABLE"
+#         docs/database-schema.sql`) -- se non torna, lo schema e il
 #         codice sono fuori sincrono
 
 # 3. L'applicazione risponde. Attenzione: solo nginx espone una porta sull'host
@@ -1111,7 +1118,22 @@ docker compose -f docker-compose.dev.yml exec -T api python -c \
 
 # ...oppure dall'esterno, una volta che dominio e certificato ci sono:
 curl -s -o /dev/null -w "%{http_code}\n" https://IL-TUO-DOMINIO/login   # 200
+
+# 4. L'accesso diretto all'API (/backend/) risponde: il calendario degli
+#    eventi dell'area lo usa dal browser. Rifallo dopo ogni deploy che
+#    ricrea `api` (§8 #11).
+curl -s -o /dev/null -w "%{http_code}\n" https://IL-TUO-DOMINIO/backend/health   # 200
+curl -s -o /dev/null -w "%{http_code}\n" "https://IL-TUO-DOMINIO/backend/api/public-site/events?from=2026-01-01&to=2026-12-31"   # 200
+
+# 5. Le foto si aprono e si ricomprimono (Pillow nell'immagine api)
+docker compose -f docker-compose.dev.yml exec -T api python -c \
+  "import PIL.features as f; print(f.check('jpg'), f.check('webp'))"   # True True
 ```
+
+Per entrare la prima volta in un account esistente (una segreteria importata,
+il super admin) senza email configurata: `./scripts/set-password.sh EMAIL`
+dal terminale del server (chiede la password due volte, non la mostra), o dal
+super admin il bottone **🔑 Link di accesso** accanto allo staff di un club.
 
 Un confronto più severo, che dice **cosa** è diverso e non solo quanto:
 
@@ -1139,6 +1161,10 @@ allineati.
 | `relation "…" does not exist` applicando una migrazione nuova | Chiavi esterne cicliche: creale dopo le tabelle (§8 #20) |
 | Il certificato di un dominio non arriva | Il DNS ha un secondo record (redirect o parcheggio del registrar) oltre all'IP del server |
 | Celery riparte con il codice vecchio | `celery-worker` e `celery-beat` vogliono `--force-recreate` |
+| Nell'area «Não consigo carregar os eventos», `/backend/*` 502 | nginx con un target statico verso un IP vecchio di `api`: la `location /backend/` deve avere `set` + `rewrite` + `proxy_pass` con variabile (§8 #11) |
+| Una foto viene rifiutata («non è un'immagine leggibile») | Il file è rotto o non è un'immagine: il server la apre con Pillow prima di salvarla (`core/storage.py::optimize_image`) |
+| Il server ha poca RAM libera | Il container `stt` è stato acceso a mano (`--profile voice`): fermalo, il microfono è nascosto |
+| `/customer` dà «Qualcosa è andato storto» | Un accesso solo atleta (o di altro ruolo) è arrivato sull'area famiglia: oggi viene rimandato a `/area`; se si ripete, controlla i ruoli nel token |
 
 ### 15.5 Cosa l'installazione nuova non eredita
 

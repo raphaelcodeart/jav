@@ -243,19 +243,30 @@ qui l'essenziale.
 
 ## 6. Interfaccia
 
-- L'interfaccia è in **sei lingue: portoghese (pt-PT, la predefinita),
-  inglese, italiano, spagnolo, francese e tedesco**, scelte con la
-  bandierina in alto (cookie `jav_lang`, letto dal layout radice). Un testo
-  nuovo non si scrive nel componente: si aggiunge una chiave nei sei file di
+- L'interfaccia è in **sette lingue: portoghese (pt-PT, la predefinita),
+  inglese, italiano, spagnolo, francese, tedesco e ucraino**, scelte con la
+  bandierina in alto (cookie `jav_lang`, letto dal layout radice; elenco in
+  `lib/i18n/config.ts`, bandiere SVG in `components/language-switcher.tsx`).
+  Un testo nuovo non si scrive nel componente: si aggiunge una chiave nei
+  sette file di
   `apps/dashboard/lib/i18n/messages/` (`it.ts` è la sorgente, gli altri non
   compilano se manca una chiave; una chiave assente ricade sull'inglese) e si usa `const { t, fmt } = useI18n()`; importi e date con
   `fmt.euro` / `fmt.shortDate`, mai con `"it-IT"` scritto a mano. Per le
   etichette che arrivano come codice dall'API (cinture, livelli, traguardi)
   `t.dyn(\`chiave.${codice}\`, etichettaApi)`.
-  **Tradotto finora**: login e recupero password, barra e menu, area
-  famiglie del club. Ancora solo in italiano: admin, promoter, staff, Shop,
-  contratti, wallet, e i messaggi che arrivano dal backend (errori, notifiche,
-  email, motivi di non idoneità a una gara).
+  **Tradotto**: sito pubblico, login e recupero password, barra e menu, area
+  famiglie, area atleta, area staff, quasi tutta la segreteria del club.
+  Ancora solo in italiano: la console della piattaforma (clienti, promoter,
+  prodotti, impostazioni), l'area promoter, carrello e wallet, contratti, e i
+  messaggi che arrivano dal backend (errori, notifiche, email, motivi di non
+  idoneità a una gara). JAVBOT e i giochi parlano pt, en, it: spagnolo →
+  portoghese, francese/tedesco/ucraino → inglese (`javbot/texts.py::NEAREST_LANG`,
+  `game/service.py::_lang`). Una lingua nuova: un file in `messages/`, la
+  voce in `config.ts` (tag Intl e nome), la bandiera, `translate.ts`, le
+  due mappe del backend, `club/contact.py::LOCALES`, la chiave
+  `inbox.locale.<lingua>` — e un alfabeto nuovo vuole i suoi caratteri in
+  `app/layout.tsx` (per il cirillico: subset `cyrillic` di Inter e Russo One
+  dietro Audiowide, che ha solo il latino).
 - Ogni messaggio, anche di errore, è scritto per chi lo legge. Chi usa questa
   applicazione — un genitore dal telefono — non è tecnico: "Si è verificato
   un errore" è un fallimento, non un messaggio.
@@ -349,8 +360,18 @@ nell'ordine:
    ruoli, gradi, piano provvigioni, primo amministratore) — oppure il
    ripristino di un backup con dati (`scripts/restore.sh`).
 5. Caddy + HTTPS (§4.6), crontab dei backup (§4.8).
-6. Dall'interfaccia: SMTP, IBAN e intestatario del conto, piani del club,
-   corsi, prodotti dello Shop.
+6. Verifiche della guida §15.3, in particolare
+   `https://<dominio>/backend/health` → 200: il calendario degli eventi
+   dell'area chiama `/backend/` dal browser, e nginx deve seguire l'IP di
+   `api` dopo ogni deploy (variabile + `set` prima del `rewrite`).
+7. Dall'interfaccia: SMTP, IBAN e intestatario del conto, piani del club,
+   corsi, prodotti dello Shop. Per entrare in un account senza email
+   configurata: `./scripts/set-password.sh EMAIL` dal server, o il bottone
+   **🔑 Link di accesso** del super admin per lo staff di un club.
+
+Il container `stt` (il microfono di JAVBOT, nascosto) **non parte** con
+`up -d`: sta nel profilo compose `voice`. Si accende solo se si riattiva il
+microfono (`--profile voice up -d stt`, 1,2 GB di RAM).
 
 `docs/database-schema.sql` è il **modello della struttura** (solo struttura,
 nessun dato), generato da un database costruito da Alembic: serve a

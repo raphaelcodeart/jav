@@ -1,7 +1,7 @@
 // The interface languages. Portuguese first: it is the default for anyone who
 // has not chosen yet, and the first flag in the switcher.
 
-export const LOCALES = ["pt", "en", "it", "es", "fr", "de"] as const;
+export const LOCALES = ["pt", "en", "it", "es", "fr", "de", "uk"] as const;
 export type Locale = (typeof LOCALES)[number];
 
 export const DEFAULT_LOCALE: Locale = "pt";
@@ -20,6 +20,7 @@ export const INTL_TAGS: Record<Locale, string> = {
   es: "es-ES",
   fr: "fr-FR",
   de: "de-DE",
+  uk: "uk-UA",
 };
 
 export const LOCALE_NAMES: Record<Locale, string> = {
@@ -29,6 +30,7 @@ export const LOCALE_NAMES: Record<Locale, string> = {
   es: "Español",
   fr: "Français",
   de: "Deutsch",
+  uk: "Українська",
 };
 
 export function isLocale(value: unknown): value is Locale {

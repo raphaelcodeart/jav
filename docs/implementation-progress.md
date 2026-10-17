@@ -809,3 +809,13 @@ puntini da 6 px, l'elenco del mese fuori schermo). Ora il giorno con eventi
 è un cerchio colorato con puntini più grandi e il numero di eventi; toccarlo
 porta all'elenco di quel giorno; l'intestazione mostra l'iniziale del giorno
 («SEGUNDATERÇA…» si sovrapponeva). Computer invariato.
+
+Poi: **contatti** con la scheda WhatsApp (come email e telefono, icona di
+WhatsApp) tra telefono e «Dove siamo»; nella **home** le schede dei club
+sopra la copertina del carosello; nella scheda dell'atleta **«Ha già il
+judogi bianco»** è un interruttore dentro il riquadro. **Settima lingua:
+ucraino** (`uk.ts`, 2833 testi, bandiera, `uk-UA`; JAVBOT e giochi in
+inglese), con il cirillico nei font (Inter `cyrillic`, Russo One per i
+titoli). Il servizio `stt` sta nel profilo compose `voice` (non parte con
+`up -d`). Guida di migrazione §15 aggiornata (revision 0030, 132 tabelle,
+`/backend/health`, Pillow, `set-password.sh`).

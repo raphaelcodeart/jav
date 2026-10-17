@@ -5,7 +5,7 @@ import { Container, PageIntro } from "@/components/site/blocks";
 import { ContactForm } from "@/components/site/contact-form";
 import { siteI18n } from "@/components/site/i18n";
 import { Reveal } from "@/components/site/reveal";
-import { WhatsAppButton } from "@/components/site/social-icons";
+import { SocialGlyph, whatsappUrl } from "@/components/site/social-icons";
 import { SiteShell } from "@/components/site/site-shell";
 import { JAV_CONTACTS } from "@/lib/jav-contacts";
 import { publicSite } from "@/lib/public-site";
@@ -36,8 +36,15 @@ export default async function ContactsPage() {
           </ContactCard>
           <ContactCard icon="📞" label={t("site.contacts.phone")}>
             <a href={JAV_CONTACTS.phoneHref} className="font-semibold text-ink-900 hover:text-brand-700">{JAV_CONTACTS.phone}</a>
-            <WhatsAppButton phone={JAV_CONTACTS.phone} label={t("site.contacts.whatsapp")} className="mt-3" />
           </ContactCard>
+          {/* WhatsApp: una scheda come il telefono, con la sua icona. */}
+          {whatsappUrl(JAV_CONTACTS.phone) && (
+            <ContactCard icon={<SocialGlyph kind="whatsapp" className="h-6 w-6 text-[#25D366]" />} label="WhatsApp">
+              <a href={whatsappUrl(JAV_CONTACTS.phone)!} target="_blank" rel="noopener noreferrer" className="font-semibold text-ink-900 hover:text-brand-700">
+                {t("site.contacts.whatsapp")}
+              </a>
+            </ContactCard>
+          )}
           <ContactCard icon="📍" label={t("site.contacts.where")}>
             <span className="font-semibold text-ink-900">{t("site.contacts.region")}</span>
           </ContactCard>
@@ -58,7 +65,7 @@ export default async function ContactsPage() {
   );
 }
 
-function ContactCard({ icon, label, children }: { icon: string; label: string; children: ReactNode }) {
+function ContactCard({ icon, label, children }: { icon: ReactNode; label: string; children: ReactNode }) {
   return (
     <div className="glass-card flex items-center gap-4 rounded-2xl p-5">
       <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-brand-50 text-xl" aria-hidden="true">{icon}</span>

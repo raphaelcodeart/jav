@@ -555,7 +555,8 @@ quote del mese e l'inizio stagione (`/club/admin/jobs/...`).
 
 Il portale **JudoArteVida** (`/`, `/clubes`, `/clubes/<slug>`, `/judocas/<id>`,
 `/eventos`, `/eventos/<id>`, `/ranking`, `/contactos`) presenta la rete dei club come una
-federazione: chi è, i club attivi in un carosello, gli eventi, il ranking, le
+federazione: chi è, i club attivi in un carosello (le schede per scegliere il
+club sopra la copertina, `components/site/club-carousel.tsx`), gli eventi, il ranking, le
 ultime medaglie, e come iscriversi. Non serve il login; il login resta a un
 clic ("Entrar" in alto). Le API sono `GET /public-site/...`, senza
 autenticazione (`club/site_router.py`, servizio `club/site.py`).
@@ -856,9 +857,10 @@ apposta:
 
 > **Oggi è nascosto** (`VOICE_INPUT_ENABLED = false` in
 > `components/javbot/use-voice-input.ts`): con 2 CPU la trascrizione
-> impiegava circa 10 secondi e sbagliava parole. Il servizio `stt` è fermo
-> (`docker compose stop stt`) per liberare memoria. Per riaccenderlo: `true`
-> lì, `up -d stt`, e un server più potente o un modello migliore.
+> impiegava circa 10 secondi e sbagliava parole. Il servizio `stt` sta dietro
+> il profilo compose **`voice`**: `up -d` non lo avvia e non occupa memoria.
+> Per riaccenderlo: `true` lì, `docker compose -f docker-compose.dev.yml
+> --profile voice up -d stt`, e un server più potente o un modello migliore.
 
 Nei due JAVBOT, accanto al campo di testo, c'è il bottone 🎤: si parla
 invece di scrivere. Il browser registra (al massimo un minuto, `MediaRecorder`:
@@ -1369,6 +1371,11 @@ solo il periodo: ogni importo nasce sul server.
   associazione distrettuale in un'unica quota, anche a rate).
 - **Pronto per le gare**: quota annuale pagata e judogi bianco (un maschio
   anche con l'azul). Per ora è un avviso: non blocca l'iscrizione.
+- **«Ha già il judogi bianco»** è un interruttore dentro il riquadro del
+  judogi bianco nella scheda dell'atleta (famiglia e area atleta,
+  `athlete-health-card.tsx`): si sposta subito e torna indietro se il
+  salvataggio non va (`PATCH /club/athletes/{id}` o
+  `PUT /club/athlete-area/{id}/white-judogi`).
 
 ## La bacheca del circuito
 
@@ -1565,7 +1572,9 @@ checkout le rifiuta comunque. Lo shop del club vende sempre.
 - **I social del club**: Instagram, Facebook, YouTube e ora **TikTok**
   (`club_sites.tiktok_url`, migrazione 0030), dalla segreteria in Sito →
   contatti; compaiono nella pagina del club.
-- **WhatsApp**: sotto ogni telefono (pagina `/contactos`, piè di pagina,
-  scheda contatti del club) il bottone verde apre la chat con lo stesso
-  numero (`wa.me`, un numero di 9 cifre senza prefisso diventa +351).
+- **WhatsApp**: nella pagina `/contactos` è una scheda come le altre
+  (email, telefono, WhatsApp, dove siamo) con l'icona di WhatsApp; nel piè di
+  pagina e nella scheda contatti del club è il bottone verde sotto il
+  telefono. Apre la chat con lo stesso numero (`wa.me`, un numero di 9 cifre
+  senza prefisso diventa +351; `components/site/social-icons.tsx`).
 

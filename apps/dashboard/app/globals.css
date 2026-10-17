@@ -8,7 +8,7 @@
    own: they mean the same thing in every brand. */
 @theme {
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-display: var(--font-audiowide), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-audiowide), var(--font-russo), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 
   --color-brand-50: #fff3f0;
   --color-brand-100: #ffe3dc;

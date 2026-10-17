@@ -120,9 +120,13 @@ services:
     healthcheck:
       disable: true
 
-  # La voce di JAVBOT in testo (apps/stt, docs/javbot.md): Whisper qui, mai
-  # fuori. Solo nella rete dei container: lo chiama l'API, non il browser.
+  # La voce di JAVBOT in testo (apps/stt, docs/club-portal.md «Il microfono»):
+  # Whisper qui, mai fuori. Solo nella rete dei container: lo chiama l'API,
+  # non il browser. Il microfono oggi è nascosto (VOICE_INPUT_ENABLED in
+  # use-voice-input.ts), quindi il servizio non parte con `up -d`: si accende
+  # con `--profile voice` (1,2 GB di RAM).
   stt:
+    profiles: ["voice"]
     build:
       context: ./apps/stt
     restart: unless-stopped

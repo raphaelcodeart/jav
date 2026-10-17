@@ -1545,6 +1545,7 @@ export const fr: Record<MessageKey, string> = {
   "crop.cancel": "Annuler",
   "crop.use": "Utiliser cette photo",
   "crop.failed": "Cette image ne s'ouvre pas : essayez une autre photo (JPG, PNG ou WebP).",
+  "inbox.locale.uk": "écrit en ukrainien",
   "nav.club-courses": "Cours",
   "nav.club-ranking": "Ranking",
   "nav.contracts": "Mes contrats",

@@ -1547,6 +1547,7 @@ export const it = {
   "crop.cancel": "Annulla",
   "crop.use": "Usa questa foto",
   "crop.failed": "Questa immagine non si apre: prova con un'altra foto (JPG, PNG o WebP).",
+  "inbox.locale.uk": "scrive in ucraino",
   "nav.club-courses": "Corsi",
   "nav.club-ranking": "Ranking",
   "nav.contracts": "I miei Contratti",

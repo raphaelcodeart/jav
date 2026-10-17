@@ -76,7 +76,9 @@ services:
       disable: true
 
   # La voce di JAVBOT in testo (apps/stt): solo nella rete interna.
+  # Opzionale (`--profile voice`): il microfono di JAVBOT è nascosto.
   stt:
+    profiles: ["voice"]
     image: ${REGISTRY:-jav}/stt:${IMAGE_TAG:-latest}
     restart: unless-stopped
     mem_limit: 1200m

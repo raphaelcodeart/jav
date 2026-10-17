@@ -789,8 +789,8 @@ WEEKDAYS = {
 
 
 #: Le lingue dell'interfaccia che JAVBOT non parla ancora: lo spagnolo
-#: legge il portoghese, francese e tedesco l'inglese.
-NEAREST_LANG = {"es": "pt", "fr": "en", "de": "en"}
+#: legge il portoghese; francese, tedesco e ucraino l'inglese.
+NEAREST_LANG = {"es": "pt", "fr": "en", "de": "en", "uk": "en"}
 
 
 def lang_of(value: str | None) -> str:

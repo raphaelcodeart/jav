@@ -54,7 +54,11 @@ export function AthleteHealthCard({ athlete: a, mode, onChanged, onAction }: {
     }
   }
 
+  // L'interruttore si sposta subito; se il salvataggio non va, torna indietro.
+  const [pendingWhite, setPendingWhite] = useState<boolean | null>(null);
+  const savingWhite = pendingWhite !== null;
   async function setWhite(value: boolean) {
+    setPendingWhite(value);
     try {
       if (mode === "area") await clubSend(`/athlete-area/${a.id}/white-judogi`, "PUT", { white_judogi: value });
       else await clubSend(`/athletes/${a.id}`, "PATCH", { white_judogi: value });
@@ -62,6 +66,8 @@ export function AthleteHealthCard({ athlete: a, mode, onChanged, onAction }: {
       onChanged?.();
     } catch (e) {
       toast({ tone: "error", title: t("health.saveFailed"), text: (e as Error).message });
+    } finally {
+      setPendingWhite(null);
     }
   }
 
@@ -144,11 +150,9 @@ export function AthleteHealthCard({ athlete: a, mode, onChanged, onAction }: {
               {!o.can_compete && <p className="text-xs">{o.compete_missing.map((c) => t.dyn(`health.need.${c}`, c)).join(" · ")}</p>}
             </div>
             <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-              {o.items.map((i) => (
-                <li key={i.code}>
-                  <button type="button" onClick={() => onAction?.(i.code)}
-                    className={cn("flex h-full w-full cursor-pointer items-start gap-3 rounded-2xl p-3 text-left ring-2 transition hover:-translate-y-0.5",
-                      i.ok ? "bg-emerald-50/60 ring-emerald-200" : "bg-rose-50 ring-rose-300 animate-[pulse_3s_ease-in-out_infinite]")}>
+              {o.items.map((i) => {
+                const head = (
+                  <>
                     <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xl", i.ok ? "bg-emerald-500" : "bg-rose-500")}>
                       <span aria-hidden="true">{ICON[i.code]}</span>
                     </span>
@@ -156,15 +160,41 @@ export function AthleteHealthCard({ athlete: a, mode, onChanged, onAction }: {
                       <span className="block text-sm font-semibold text-ink-900">{i.ok ? "✓ " : "! "}{t.dyn(`health.item.${i.code}`, i.code)}</span>
                       <span className="block text-xs text-ink-600">{detail(i, t, fmt)}</span>
                     </span>
-                  </button>
-                  {i.code === "WHITE_JUDOGI" && (
-                    <label className="mt-1.5 flex cursor-pointer items-center gap-2 px-1 text-xs text-ink-600">
-                      <input type="checkbox" className="h-4 w-4 accent-brand-600" checked={!!a.white_judogi} onChange={(e) => void setWhite(e.target.checked)} />
-                      {t("health.haveWhite")}
-                    </label>
-                  )}
-                </li>
-              ))}
+                  </>
+                );
+                const box = cn("rounded-2xl ring-2 transition",
+                  i.ok ? "bg-emerald-50/60 ring-emerald-200" : "bg-rose-50 ring-rose-300 animate-[pulse_3s_ease-in-out_infinite]");
+                if (i.code === "WHITE_JUDOGI") {
+                  // Il judogi bianco: l'interruttore «Ha já judogi branco» sta
+                  // dentro il riquadro, non sotto.
+                  const on = pendingWhite ?? !!a.white_judogi;
+                  return (
+                    <li key={i.code} className={cn(box, "flex h-full flex-col")}>
+                      <button type="button" onClick={() => onAction?.(i.code)} className="flex w-full flex-1 cursor-pointer items-start gap-3 p-3 pb-2 text-left">
+                        {head}
+                      </button>
+                      <button type="button" role="switch" aria-checked={on} disabled={savingWhite}
+                        onClick={() => void setWhite(!on)}
+                        className={cn("mx-2 mb-2 flex cursor-pointer items-center justify-between gap-3 rounded-xl px-3 py-2 text-left text-xs font-semibold transition disabled:cursor-wait disabled:opacity-70",
+                          on ? "bg-emerald-500/10 text-emerald-900" : "bg-white/80 text-ink-700 ring-1 ring-ink-900/10 hover:bg-white")}>
+                        <span>{t("health.haveWhite")}</span>
+                        <span aria-hidden="true" className={cn("relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors", on ? "bg-emerald-500" : "bg-ink-300")}>
+                          <motion.span layout transition={{ type: "spring", stiffness: 600, damping: 34 }}
+                            className={cn("absolute h-5 w-5 rounded-full bg-white shadow", on ? "right-0.5" : "left-0.5")} />
+                        </span>
+                      </button>
+                    </li>
+                  );
+                }
+                return (
+                  <li key={i.code}>
+                    <button type="button" onClick={() => onAction?.(i.code)}
+                      className={cn(box, "flex h-full w-full cursor-pointer items-start gap-3 p-3 text-left hover:-translate-y-0.5")}>
+                      {head}
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           </div>
         )}

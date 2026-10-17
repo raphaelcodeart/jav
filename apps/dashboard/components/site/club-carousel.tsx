@@ -49,6 +49,50 @@ export function ClubCarousel({ clubs }: { clubs: ClubCard[] }) {
         if (e.key === "ArrowLeft") go(-1);
       }}
     >
+      {/* Prima i club da scegliere, poi la copertina di quello scelto. */}
+      {count > 1 && (
+        <div className="mb-4 flex gap-3 overflow-x-auto pb-2" role="tablist" aria-label={t("site.carousel.choose")}>
+          {clubs.map((club, i) => {
+            const active = i === index % count;
+            return (
+              <button
+                key={club.slug}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setIndex(i)}
+                className={cn(
+                  "relative flex min-w-[12rem] shrink-0 items-center gap-3 overflow-hidden rounded-2xl border px-4 py-3 text-left transition-colors cursor-pointer",
+                  active ? "border-brand-300 bg-brand-50" : "border-ink-900/10 bg-white hover:border-brand-200",
+                )}
+              >
+                <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl font-display text-sm", active ? "bg-brand-500 text-white" : "bg-ink-100 text-ink-700")}>
+                  {club.logo_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- logo caricato dal club
+                    <img src={club.logo_url} alt="" className="h-full w-full bg-white object-contain p-0.5" />
+                  ) : (
+                    club.name.slice(0, 1)
+                  )}
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold text-ink-900">{club.name}</span>
+                  {club.city && <span className="block truncate text-xs text-ink-500">{club.city}</span>}
+                </span>
+                {active && playing && (
+                  <motion.span
+                    key={`progress-${index}`}
+                    className="absolute bottom-0 left-0 h-0.5 bg-brand-500"
+                    initial={{ width: "0%" }}
+                    animate={{ width: "100%" }}
+                    transition={{ duration: INTERVAL_MS / 1000, ease: "linear" }}
+                    aria-hidden="true"
+                  />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
       <div className="relative overflow-hidden rounded-[2rem] bg-ink-950 shadow-lift min-h-[26rem] sm:min-h-[30rem]" aria-live={playing ? "off" : "polite"}>
         <AnimatePresence mode="popLayout" initial={false}>
           <motion.div
@@ -121,49 +165,6 @@ export function ClubCarousel({ clubs }: { clubs: ClubCard[] }) {
         )}
       </div>
 
-      {count > 1 && (
-        <div className="mt-4 flex gap-3 overflow-x-auto pb-2" role="tablist" aria-label={t("site.carousel.choose")}>
-          {clubs.map((club, i) => {
-            const active = i === index % count;
-            return (
-              <button
-                key={club.slug}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => setIndex(i)}
-                className={cn(
-                  "relative flex min-w-[12rem] shrink-0 items-center gap-3 overflow-hidden rounded-2xl border px-4 py-3 text-left transition-colors cursor-pointer",
-                  active ? "border-brand-300 bg-brand-50" : "border-ink-900/10 bg-white hover:border-brand-200",
-                )}
-              >
-                <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl font-display text-sm", active ? "bg-brand-500 text-white" : "bg-ink-100 text-ink-700")}>
-                  {club.logo_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- logo caricato dal club
-                    <img src={club.logo_url} alt="" className="h-full w-full bg-white object-contain p-0.5" />
-                  ) : (
-                    club.name.slice(0, 1)
-                  )}
-                </span>
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-semibold text-ink-900">{club.name}</span>
-                  {club.city && <span className="block truncate text-xs text-ink-500">{club.city}</span>}
-                </span>
-                {active && playing && (
-                  <motion.span
-                    key={`progress-${index}`}
-                    className="absolute bottom-0 left-0 h-0.5 bg-brand-500"
-                    initial={{ width: "0%" }}
-                    animate={{ width: "100%" }}
-                    transition={{ duration: INTERVAL_MS / 1000, ease: "linear" }}
-                    aria-hidden="true"
-                  />
-                )}
-              </button>
-            );
-          })}
-        </div>
-      )}
     </section>
   );
 }
