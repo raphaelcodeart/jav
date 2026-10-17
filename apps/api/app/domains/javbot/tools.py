@@ -635,8 +635,8 @@ async def staff_unpaid_month(ctx: ToolContext, _args: dict) -> dict:
 
 
 async def staff_lessons_today(ctx: ToolContext, _args: dict) -> dict:
-    """Le lezioni di oggi: tutte per la segreteria, le proprie per un
-    istruttore (come /club/staff/lessons)."""
+    """Le lezioni di oggi: tutte per la segreteria, quelle dei corsi che vede
+    per un istruttore (come /club/staff/lessons)."""
     from app.domains.club import lessons as lessons_service
 
     scope = ctx.require(INSTRUCT)

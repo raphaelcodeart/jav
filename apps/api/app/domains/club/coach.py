@@ -7,12 +7,13 @@ docs/club-portal.md, "L'area del treinador".
 - **il quaderno del treinador**: le note delle lezioni (corso + giorno: che
   cosa si è fatto, le tecniche, le osservazioni), una storia per corso che
   si sfoglia e si cerca; e le note personali sugli atleti;
-- **i miei atleti**: gli iscritti ai corsi che insegna, con presenze recenti,
-  certificato medico e note.
+- **i miei atleti**: gli iscritti ai corsi che vede (e chi non è in nessun
+  corso), con presenze recenti, certificato medico e note.
 
-Chi vede che cosa (il controllo è qui, non nel router): un treinador vede i
-corsi di cui è titolare o adjunto, e gli atleti iscritti a quei corsi; la
-segreteria (`manager=True`, chi ha `club.manage`) vede tutto il club. Le note
+Chi vede che cosa (il controllo è qui, non nel router): un treinador vede
+tutti i corsi del club tranne quelli da cui la segreteria l'ha escluso
+(`courses.visible_course_filter`), gli atleti iscritti a quei corsi e quelli
+attivi che non sono in nessun corso; la segreteria (`manager=True`, chi ha `club.manage`) vede tutto il club. Le note
 le corregge solo chi le ha scritte; toglierle può anche la segreteria. Le note
 sugli atleti non escono mai dall'area dello staff: niente famiglia, niente
 atleta.
@@ -48,10 +49,11 @@ EVENTS_AHEAD_DAYS = 60
 async def my_courses(
     db: AsyncSession, *, scope: ClubScope, user_id: uuid.UUID, manager: bool, only_active: bool = False,
 ) -> list[ClubCourse]:
-    """I corsi di chi chiede (titolare o adjunto), anche quelli chiusi: le
-    loro note restano sue. La segreteria: tutti quelli del club."""
+    """I corsi che chi chiede vede (tutti, tranne quelli da cui è escluso; i
+    suoi per primi), anche quelli chiusi: le loro note restano sue. La
+    segreteria: tutti quelli del club."""
     return await courses_service.list_courses(
-        db, scope=scope, only_active=only_active, instructor_user_id=None if manager else user_id,
+        db, scope=scope, only_active=only_active, visible_to_user_id=None if manager else user_id,
     )
 
 
@@ -59,7 +61,7 @@ async def _course(
     db: AsyncSession, *, scope: ClubScope, user_id: uuid.UUID, manager: bool, course_id: uuid.UUID,
 ) -> ClubCourse:
     course = await courses_service.get_course(db, scope=scope, course_id=course_id)
-    if not manager and not await courses_service.teaches(db, course=course, user_id=user_id):
+    if not manager and not await courses_service.can_see(db, course=course, user_id=user_id):
         raise ClubNotFoundError("Corso non trovato.")
     return course
 
@@ -79,8 +81,9 @@ async def my_athlete_ids(
 async def _athlete(
     db: AsyncSession, *, scope: ClubScope, user_id: uuid.UUID, manager: bool, athlete_id: uuid.UUID,
 ) -> ClubAthlete:
-    """L'atleta, se chi chiede lo allena (o è la segreteria). Un atleta di un
-    altro corso, per un treinador, non esiste."""
+    """L'atleta, se chi chiede lo vede (o è la segreteria): iscritto a un
+    corso che vede, o attivo e senza corsi. Un atleta che sta solo in corsi da
+    cui il treinador è escluso, per lui, non esiste."""
     athlete = await db.get(ClubAthlete, athlete_id)
     if athlete is None or athlete.club_id != scope.club_id:
         raise ClubNotFoundError("Atleta non trovato.")
@@ -94,9 +97,16 @@ async def _athlete(
                 )
             )
         ).first()
-        if enrolled is None:
+        if enrolled is None and (athlete.status != "ACTIVE" or await _in_any_active_course(db, athlete.id)):
             raise ClubNotFoundError("Atleta non trovato.")
     return athlete
+
+
+async def _in_any_active_course(db: AsyncSession, athlete_id: uuid.UUID) -> bool:
+    return (await db.execute(
+        select(ClubCourseAthlete.id).join(ClubCourse, ClubCourse.id == ClubCourseAthlete.course_id)
+        .where(ClubCourseAthlete.athlete_id == athlete_id, ClubCourse.active.is_(True))
+    )).first() is not None
 
 
 async def _names(db: AsyncSession, ids: set) -> dict[uuid.UUID, str]:
@@ -395,12 +405,16 @@ async def my_athletes(
 
     courses = {c.id: c.name for c in await my_courses(db, scope=scope, user_id=user_id, manager=manager, only_active=True)}
     by_athlete = await my_athlete_ids(db, scope=scope, user_id=user_id, manager=manager)
-    if manager:
-        # La segreteria vede anche chi non è (ancora) iscritto a un corso.
-        for (athlete_id,) in (await db.execute(
-            select(ClubAthlete.id).where(ClubAthlete.club_id == scope.club_id, ClubAthlete.status == "ACTIVE")
-        )).all():
-            by_athlete.setdefault(athlete_id, [])
+    # Anche chi non è (ancora) iscritto a un corso: la segreteria tutti gli
+    # attivi, un treinador quelli che non stanno in nessun corso attivo (gli
+    # iscritti solo a corsi da cui è escluso restano fuori).
+    in_courses = select(ClubCourseAthlete.athlete_id).join(ClubCourse, ClubCourse.id == ClubCourseAthlete.course_id) \
+        .where(ClubCourse.active.is_(True))
+    loose = select(ClubAthlete.id).where(ClubAthlete.club_id == scope.club_id, ClubAthlete.status == "ACTIVE")
+    if not manager:
+        loose = loose.where(ClubAthlete.id.not_in(in_courses))
+    for (athlete_id,) in (await db.execute(loose)).all():
+        by_athlete.setdefault(athlete_id, [])
     if not by_athlete:
         return []
     athletes = list((await db.execute(

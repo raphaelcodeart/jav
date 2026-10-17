@@ -843,6 +843,26 @@ class ClubCourseStaff(UUIDPKMixin, TimestampMixin, Base):
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), index=True)
 
 
+class ClubCourseCoachExclusion(UUIDPKMixin, TimestampMixin, Base):
+    """Un treinador che NON vede un corso. Di regola ogni treinador del club
+    vede tutti i corsi e i loro atleti (nei club piccoli si insegna in tutti
+    i gruppi): la segreteria toglie un corso a qualcuno scrivendo qui, non
+    assegnando i corsi uno per uno. Il titolare e gli adjunto del corso lo
+    vedono comunque."""
+
+    __tablename__ = "club_course_coach_exclusions"
+    __table_args__ = (UniqueConstraint("course_id", "user_id", name="uq_club_course_coach_exclusions_course_user"),)
+
+    club_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("clubs.id"), index=True)
+    course_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("club_courses.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), index=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+
+
 class ClubWorkSession(UUIDPKMixin, TimestampMixin, Base):
     """Il cartellino: un'entrata e un'uscita di chi lavora nel club. Una sola
     aperta per persona (indice UNIQUE parziale): due "Entro" di fila non

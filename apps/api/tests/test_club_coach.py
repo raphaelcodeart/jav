@@ -138,6 +138,12 @@ async def test_notes_are_for_the_coaches_of_the_athlete_and_the_secretary(db, sc
     sara = await _athlete(db, scope, parent, birth_date=date(2013, 2, 2), first_name="Sara", sex="F")
     mine = await _course_with(db, scope, admin, mine_coach, [luca])
     theirs = await _course_with(db, scope, admin, other_coach, [sara], name="Agonisti")
+    # Ogni treinador vede tutti i corsi: qui la segreteria li separa (le
+    # esclusioni sono provate in test_club_coach_visibility.py).
+    await courses_service.set_coach_exclusions(db, scope=scope, course_id=mine.id, user_ids=[other_coach.id],
+                                               actor_user_id=admin.id)
+    await courses_service.set_coach_exclusions(db, scope=scope, course_id=theirs.id, user_ids=[mine_coach.id],
+                                               actor_user_id=admin.id)
     today = date(2026, 10, 17)
     me = {"scope": scope, "user_id": mine_coach.id, "manager": False}
     them = {"scope": scope, "user_id": other_coach.id, "manager": False}

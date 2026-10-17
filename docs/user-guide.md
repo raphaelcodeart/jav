@@ -245,6 +245,11 @@ proprio club**: entrando, l'area si apre direttamente sul club. Le sezioni:
   vedere e gestire tutti gli orari insieme. Una turma appartiene a un gruppo
   quando le loro età si toccano (la stessa regola del sito e di JAVBOT); una
   turma senza età non è di nessun gruppo, e la pagina lo segnala.
+  Nella scheda di una turma scegli il treinador principale, gli **adjunto**
+  e, se serve, i **treinador che NON vedono questa turma**: di regola ogni
+  treinador vede tutte le turmas e i loro atleti, quindi non c'è niente da
+  assegnare perché un treinador trovi i suoi allievi; si spunta qualcuno
+  solo per togliergli quella turma.
 - **Marcar presenças**: in alto i giorni del mese con lezioni, come bottoni
   (verdi se le presenze sono già segnate, gialli se mancano, grigi i
   prossimi; frecce per cambiare mese): un tocco apre la giornata. Resta anche
@@ -507,10 +512,15 @@ Nell'area amministrazione, pagina dello Shop («Fai la Spesa con Jav»):
 
 ## 4. Per i treinador (e gli adjunto)
 
+**Vedi tutte le turmas del club** e tutti i loro atleti, anche se non te ne
+hanno assegnata nessuna: le turmas che insegni vengono per prime, con
+★ «minha». Se la segreteria ti ha tolto una turma, quella turma e gli atleti
+che stanno solo lì non li vedi.
+
 Entrando si apre **Presenze di oggi**: la lezione in corso è già scelta; un
 tocco sul cerchio segna l'entrata dell'atleta, 📝 aggiunge una nota per la
 segreteria. Si può scegliere un altro giorno per correggere. **Calendario**
-mostra le lezioni della settimana dei tuoi corsi; **Cartellino** ha il
+mostra le lezioni della settimana delle turmas che vedi; **Cartellino** ha il
 pulsante Entro / Esco e le ore di oggi e del mese.
 
 Le famiglie, dalla loro pagina, possono segnare "È arrivato" solo per oggi.

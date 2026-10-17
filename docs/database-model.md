@@ -1461,3 +1461,16 @@ game.fights                   un incontro deciso dal server: kind CAREER|RANDORI
   + opponent_player_id -> game.players (CASCADE, solo randori)
   + UNIQUE (player_id, context_key): un turno di gara della carriera una volta sola
 ```
+
+**Che cosa vede un treinador** (migrazione 0038, `club/courses.py::visible_course_filter`):
+
+```
+club_course_coach_exclusions  club_id, course_id -> club_courses (ON DELETE CASCADE),
+                              user_id -> users, created_by_user_id -> users, created_at;
+                              UNIQUE (course_id, user_id)
+```
+
+Di regola ogni treinador del club vede tutti i corsi e i loro atleti: una riga
+qui toglie un corso a una persona. Chi insegna il corso (`club_courses.instructor_user_id`
+o `club_course_staff`) lo vede comunque. Non tocca i soldi: la quota del
+treinador sui corsi JAV resta del titolare.

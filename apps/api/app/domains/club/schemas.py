@@ -717,6 +717,11 @@ class CourseRead(BaseModel):
     athletes_count: int
     #: Per il genitore: quali dei suoi atleti sono iscritti.
     my_athlete_ids: list[uuid.UUID] = []
+    #: Per il treinador: True se insegna il corso (titolare o adjunto).
+    mine: bool = False
+    #: Per la segreteria: gli adjunto e i treinador che NON vedono il corso.
+    staff_user_ids: list[uuid.UUID] = []
+    excluded_coach_ids: list[uuid.UUID] = []
     # I corsi JAV: luogo, pagina pubblica, percentuale del treinador.
     venue_name: str | None = None
     venue_address: str | None = None
@@ -1058,6 +1063,12 @@ class CourseStaffWrite(BaseModel):
     user_ids: list[uuid.UUID]
 
 
+class CourseCoachExclusionsWrite(BaseModel):
+    """I treinador che NON vedono il corso (vuoto = lo vedono tutti)."""
+
+    user_ids: list[uuid.UUID] = Field(default_factory=list, max_length=200)
+
+
 class LessonRead(BaseModel):
     """Una lezione: un orario settimanale di un corso, in un giorno preciso."""
 
@@ -1072,6 +1083,8 @@ class LessonRead(BaseModel):
     present: int
     #: True per la lezione in corso adesso (o la prossima, oggi).
     current: bool = False
+    #: True se chi chiede insegna il corso (titolare o adjunto).
+    mine: bool = False
 
 
 class WorkSessionRead(BaseModel):
