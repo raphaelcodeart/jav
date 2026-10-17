@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { Countdown, moment } from "@/components/site/countdown";
+import { Countdown } from "@/components/site/countdown";
+import { moment } from "@/lib/event-time";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
@@ -104,7 +105,7 @@ export default async function EventPage({ params, searchParams }: Params) {
           {event.status === "OPEN" && deadlineIn >= 0 && (
             <Countdown size="lg" target={moment(event.registration_deadline, event.registration_deadline_time, "endOfDay")} label={t("countdown.registrationsClose")} />
           )}
-          {startsIn >= 0 && (
+          {startsIn >= 0 && !/^ANULAD[OA]/i.test(event.name) && (
             <Countdown size="lg" tone="brand" target={moment(event.starts_on, event.starts_at_time, "morning")} label={t("countdown.eventStarts")} />
           )}
           <div className="overflow-hidden rounded-3xl bg-white shadow-soft ring-1 ring-ink-900/5">

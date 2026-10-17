@@ -1937,3 +1937,12 @@ congelati all'emissione. Ogni query filtra per club.
   confermare.
 - **Costi fissi**: la spesa del primo mese porta il giorno del costo fisso
   anche se cade prima della data d'inizio.
+
+### Eventi annullati e conti alla rovescia
+
+Un evento della rete annullato resta in calendario con il nome che inizia per
+«ANULADO — », stato `CLOSED` e il motivo nella descrizione (non si cancella:
+le iscrizioni restano tracciate). Per questi eventi il conto alla rovescia non
+compare. Il conto alla rovescia (`components/site/countdown.tsx`, istante da
+`lib/event-time.ts::moment`) mostra la chiusura delle iscrizioni finché sono
+aperte, poi l'inizio della gara; nella pagina della gara tutti e due, grandi.
