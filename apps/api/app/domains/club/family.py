@@ -63,6 +63,9 @@ def fee_dict(fee: ClubFee, *, today: date, athlete: ClubAthlete | None = None) -
         "waive_reason": fee.waive_reason,
         "competition_id": fee.competition_id,
         "course_id": fee.course_id,
+        "waive_kind": fee.waive_kind,
+        "split_from_fee_id": fee.split_from_fee_id,
+        "split_reason": fee.split_reason,
     }
 
 

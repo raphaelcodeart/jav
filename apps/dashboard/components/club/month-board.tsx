@@ -12,10 +12,12 @@ import { useToast } from "@/components/ui/toast";
 import { AthleteMarks } from "@/components/club/person-marks";
 import { ProofPicker } from "@/components/ui/proof-picker";
 import { ReceiptViewer } from "@/components/club/proofs-panel";
+import { ExemptMonthModal, PartialPayModal, useMoneyUndo } from "@/components/club/money-actions";
 import { feeLabel } from "@/lib/fee-label";
 import { clubGet, clubSend, type Fee, type MonthBoard, type MonthBoardState, type MonthRow } from "@/lib/club";
 import { cn } from "@/lib/cn";
 import { useI18n } from "@/lib/i18n/provider";
+import { stateLabel } from "@/lib/money2";
 
 // Il quadro del mese (apps/api/app/domains/club/month_board.py): la prima
 // cosa che la segreteria deve vedere. Il mese corrente in grande, quanto si
@@ -30,7 +32,9 @@ export const MONTH_STATE_STYLE: Record<MonthBoardState, { tone: string; ring: st
   PAID: { tone: "bg-emerald-50 text-emerald-800", ring: "ring-emerald-200", icon: "✅" },
   DUE: { tone: "bg-amber-50 text-amber-800", ring: "ring-amber-200", icon: "⏳" },
   OVERDUE: { tone: "bg-rose-50 text-rose-700", ring: "ring-rose-300", icon: "⚠️" },
+  PARTIAL: { tone: "bg-amber-50 text-amber-900", ring: "ring-amber-300", icon: "½" },
   WAIVED: { tone: "bg-ink-50 text-ink-600", ring: "ring-ink-100", icon: "🤝" },
+  MONTH_EXEMPT: { tone: "bg-sky-50 text-sky-800", ring: "ring-sky-200", icon: "🎗️" },
   EXEMPT: { tone: "bg-sky-50 text-sky-800", ring: "ring-sky-200", icon: "🎗️" },
   NONE: { tone: "bg-ink-50 text-ink-500", ring: "ring-ink-100", icon: "—" },
 };
@@ -124,17 +128,31 @@ function initials(r: MonthRow) {
   return `${r.first_name[0] ?? ""}${r.last_name[0] ?? ""}`.toUpperCase();
 }
 
+/** Che cosa si può fare su una mensilità oltre a «Segna pagato»: pagarla in
+ *  parte, esentare il mese, annullare l'una o l'altra (money-actions.tsx). */
+type BoxActions = {
+  partial: (fee: Fee, title: string) => void;
+  exempt: (row: MonthRow) => void;
+  undo: (kind: "exempt" | "partial", feeId: string) => void;
+};
+
+const OPEN_STATES = ["DUE", "OVERDUE", "PARTIAL"];
+
 /** Il riquadro di un atleta: chi, gruppo, quanto, stato, e il bottone. */
-function PersonBox({ row, onPay, onProof, index }: {
-  row: MonthRow; onPay: (fees: Fee[], title: string) => void; onProof: (fee: Fee) => void; index: number;
+function PersonBox({ row, onPay, onProof, index, actions }: {
+  row: MonthRow; onPay: (fees: Fee[], title: string) => void; onProof: (fee: Fee) => void; index: number; actions: BoxActions;
 }) {
   const { t, fmt } = useI18n();
   // La prova mandata dalla famiglia (anche rifiutata): si apre da qui.
   const withProof = [...(row.fee ? [row.fee] : []), ...row.arrears, ...row.other_due].find((f) => f.proof_id);
   const style = MONTH_STATE_STYLE[row.state];
   const extra = [...row.arrears, ...row.other_due];
-  const toPay = [...(row.fee && (row.state === "DUE" || row.state === "OVERDUE") ? [row.fee] : []), ...extra];
+  const toPay = [...(row.fee && OPEN_STATES.includes(row.state) ? [row.fee] : []), ...extra];
   const name = `${row.first_name} ${row.last_name}`;
+  const parts = row.parts ?? [];
+  // «Annulla parziale» si fa sulla parte pagata da cui nasce il resto aperto.
+  const splitParent = row.state === "PARTIAL" ? row.fee?.split_from_fee_id ?? null : null;
+  const reason = parts.find((p) => p.split_reason)?.split_reason;
   return (
     <motion.li layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}
       transition={{ delay: Math.min(index, 16) * 0.02 }}
@@ -152,9 +170,25 @@ function PersonBox({ row, onPay, onProof, index }: {
         </div>
       </div>
       <div className={cn("mt-3 flex items-center justify-between gap-2 rounded-2xl px-3 py-2", style.tone)}>
-        <span className="text-sm font-semibold">{style.icon} {t(`month.state.${row.state}`)}</span>
-        <span className="font-display text-xl">{row.fee ? fmt.euro(row.fee.amount_cents) : "—"}</span>
+        <span className="text-sm font-semibold">{style.icon} {stateLabel(row.state, t)}</span>
+        <span className="font-display text-xl">{row.state === "PARTIAL" ? fmt.euro(row.due_cents ?? 0) : row.fee ? fmt.euro(row.fee.amount_cents) : "—"}</span>
       </div>
+      {row.state === "PARTIAL" && (
+        <div className="mt-1.5 space-y-1">
+          <div className="h-1.5 overflow-hidden rounded-full bg-amber-100" aria-hidden="true">
+            <div className="h-full rounded-full bg-emerald-400"
+              style={{ width: `${Math.round(((row.paid_cents ?? 0) * 100) / Math.max((row.paid_cents ?? 0) + (row.due_cents ?? 0), 1))}%` }} />
+          </div>
+          <p className="text-[11px] text-amber-900">
+            {t("money2.board.partialLine", { paid: fmt.euro(row.paid_cents ?? 0), total: fmt.euro((row.paid_cents ?? 0) + (row.due_cents ?? 0)) })}
+            {row.fee?.overdue ? ` · ${t("month.state.OVERDUE")}` : ""}
+          </p>
+          {reason && <p className="truncate text-[11px] italic text-ink-500" title={reason}>“{reason}”</p>}
+        </div>
+      )}
+      {row.state === "MONTH_EXEMPT" && row.fee?.waive_reason && (
+        <p className="mt-1 truncate text-[11px] italic text-sky-800" title={row.fee.waive_reason}>“{row.fee.waive_reason}”</p>
+      )}
       {row.state === "PAID" && row.fee?.paid_at && (
         <p className="mt-1 text-[11px] text-emerald-700">
           {fmt.shortDate(row.fee.paid_at)}{row.fee.payment_method ? ` · ${t(`month.method.${row.fee.payment_method}`)}` : ""}{row.fee.cash_received_by_name ? ` · ${row.fee.cash_received_by_name}` : ""}
@@ -187,6 +221,34 @@ function PersonBox({ row, onPay, onProof, index }: {
         ) : row.state === "PAID" ? (
           <p className="text-center text-xs font-semibold text-emerald-700">✓ {t("month.allDone")}</p>
         ) : null}
+        {/* La mensilità del mese: pagarla in parte, o esentare il mese. */}
+        {(row.fee && OPEN_STATES.includes(row.state)) || row.state === "NONE" ? (
+          <div className="grid grid-cols-2 gap-2">
+            {row.fee && OPEN_STATES.includes(row.state) ? (
+              <button type="button" onClick={() => actions.partial(row.fee!, name)}
+                className="cursor-pointer rounded-xl bg-amber-50 px-2 py-2 text-xs font-semibold text-amber-900 ring-1 ring-amber-200 transition hover:bg-amber-100">
+                ½ {t("money2.board.partial")}
+              </button>
+            ) : <span />}
+            {row.state !== "PARTIAL" ? (
+              <button type="button" onClick={() => actions.exempt(row)}
+                className="cursor-pointer rounded-xl bg-sky-50 px-2 py-2 text-xs font-semibold text-sky-800 ring-1 ring-sky-200 transition hover:bg-sky-100">
+                🎗️ {t("money2.board.exempt")}
+              </button>
+            ) : splitParent ? (
+              <button type="button" onClick={() => actions.undo("partial", splitParent)}
+                className="cursor-pointer rounded-xl px-2 py-2 text-xs font-semibold text-ink-500 ring-1 ring-ink-200 transition hover:bg-ink-50">
+                ↶ {t("money2.board.undoPartial")}
+              </button>
+            ) : <span />}
+          </div>
+        ) : null}
+        {row.state === "MONTH_EXEMPT" && row.fee && (
+          <button type="button" onClick={() => actions.undo("exempt", row.fee!.id)}
+            className="w-full cursor-pointer rounded-xl px-2 py-2 text-xs font-semibold text-sky-800 ring-1 ring-sky-200 transition hover:bg-sky-50">
+            ↶ {t("money2.board.undoExempt")}
+          </button>
+        )}
       </div>
     </motion.li>
   );
@@ -195,13 +257,16 @@ function PersonBox({ row, onPay, onProof, index }: {
 /** La segreteria: il mese con tutti gli atleti. `compact` (panoramica): il
  *  mese corrente, chi manca, e il link al quadro completo. */
 export function MonthBoardPanel({ compact = false, onOpen }: { compact?: boolean; onOpen?: () => void }) {
-  const { t } = useI18n();
+  const { t, fmt } = useI18n();
   const [period, setPeriod] = useState(currentPeriod);
   const [filter, setFilter] = useState<Filter>("todo");
   const [group, setGroup] = useState("");
   const [q, setQ] = useState("");
   const [paying, setPaying] = useState<{ fees: Fee[]; title: string } | null>(null);
   const [viewingProof, setViewingProof] = useState<{ id: string; status?: string | null } | null>(null);
+  const [partial, setPartial] = useState<{ fee: Fee; title: string } | null>(null);
+  const [exempting, setExempting] = useState<MonthRow | null>(null);
+  const undo = useMoneyUndo();
   const { data, isLoading, error } = useQuery({
     queryKey: ["club", "admin", "month", period],
     queryFn: () => clubGet<MonthBoard>(`/admin/month?period=${period}`),
@@ -217,7 +282,7 @@ export function MonthBoardPanel({ compact = false, onOpen }: { compact?: boolean
     return (data?.rows ?? []).filter((r) => {
       if (group && (r.group ?? "") !== group) return false;
       if (needle && !`${r.first_name} ${r.last_name} ${r.guardian_email ?? ""}`.toLowerCase().includes(needle)) return false;
-      if (filter === "todo") return r.state === "DUE" || r.state === "OVERDUE";
+      if (filter === "todo") return OPEN_STATES.includes(r.state);
       if (filter === "paid") return r.state === "PAID";
       if (filter === "other") return r.arrears.length > 0 || r.other_due.length > 0;
       return true;
@@ -230,7 +295,7 @@ export function MonthBoardPanel({ compact = false, onOpen }: { compact?: boolean
   const shopWaiting = (shop.data ?? []).filter((o) => o.status === "AWAITING_PAYMENT");
 
   if (compact) {
-    const todo = data.rows.filter((r) => r.state === "DUE" || r.state === "OVERDUE");
+    const todo = data.rows.filter((r) => OPEN_STATES.includes(r.state));
     return (
       <div className="space-y-4">
         <MonthHeader board={data} period={period} compact />
@@ -244,7 +309,7 @@ export function MonthBoardPanel({ compact = false, onOpen }: { compact?: boolean
               {todo.slice(0, 24).map((r) => (
                 <li key={r.athlete_id} className={cn("inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold ring-1",
                   r.state === "OVERDUE" ? "bg-rose-50 text-rose-700 ring-rose-200" : "bg-amber-50 text-amber-800 ring-amber-200")}>
-                  {r.first_name} {r.last_name[0]}. · {r.fee ? `${(r.fee.amount_cents / 100).toFixed(0)} €` : ""}
+                  {r.first_name} {r.last_name[0]}. · {r.fee ? fmt.euro(r.state === "PARTIAL" ? r.due_cents ?? 0 : r.fee.amount_cents) : ""}
                 </li>
               ))}
               {todo.length > 24 && <li className="self-center text-sm text-ink-500">+ {todo.length - 24}</li>}
@@ -303,12 +368,19 @@ export function MonthBoardPanel({ compact = false, onOpen }: { compact?: boolean
         <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
           <AnimatePresence initial={false}>
             {rows.map((r, i) => <PersonBox key={r.athlete_id} row={r} index={i} onPay={(fees, title) => setPaying({ fees, title })}
+              actions={{ partial: (fee, title) => setPartial({ fee, title }), exempt: setExempting, undo }}
               onProof={(f) => setViewingProof(f.proof_id ? { id: f.proof_id, status: f.proof_status } : null)} />)}
           </AnimatePresence>
         </ul>
       )}
       {tt.none > 0 && filter === "all" && <p className="text-xs text-ink-500">{t("month.noneNote", { n: tt.none })}</p>}
       {paying && <QuickPayModal fees={paying.fees} title={paying.title} onClose={() => setPaying(null)} />}
+      {partial && <PartialPayModal fee={partial.fee} title={partial.title} onClose={() => setPartial(null)} />}
+      {exempting && (
+        <ExemptMonthModal athleteId={exempting.athlete_id} name={`${exempting.first_name} ${exempting.last_name}`}
+          period={data.period} periodName={monthLabel(data.period, fmt)} amountCents={exempting.fee?.amount_cents ?? null}
+          onClose={() => setExempting(null)} />
+      )}
       <ReceiptViewer proof={viewingProof} onClose={() => setViewingProof(null)} />
     </div>
   );
@@ -417,7 +489,7 @@ export function FamilyMonthCard({ board, onPay }: { board: MonthBoard; onPay: (f
   const { t, fmt } = useI18n();
   if (board.rows.length === 0) return null;
   const due = board.rows.flatMap((r) => [
-    ...(r.fee && (r.state === "DUE" || r.state === "OVERDUE") ? [r.fee] : []), ...r.arrears, ...r.other_due,
+    ...(r.fee && OPEN_STATES.includes(r.state) ? [r.fee] : []), ...r.arrears, ...r.other_due,
   ]);
   const total = due.reduce((s, f) => s + f.amount_cents, 0);
   return (
@@ -447,9 +519,14 @@ export function FamilyMonthCard({ board, onPay }: { board: MonthBoard; onPay: (f
                 <span className="text-xs text-ink-500">{r.group ?? ""}</span>
               </div>
               <div className={cn("mt-2 flex items-center justify-between rounded-xl px-3 py-2", style.tone)}>
-                <span className="text-sm font-semibold">{style.icon} {t(`month.state.${r.state}`)}</span>
-                <span className="font-display text-xl">{r.fee ? fmt.euro(r.fee.amount_cents) : "—"}</span>
+                <span className="text-sm font-semibold">{style.icon} {stateLabel(r.state, t)}</span>
+                <span className="font-display text-xl">{r.state === "PARTIAL" ? fmt.euro(r.due_cents ?? 0) : r.fee ? fmt.euro(r.fee.amount_cents) : "—"}</span>
               </div>
+              {r.state === "PARTIAL" && (
+                <p className="mt-1 text-[11px] text-amber-900">
+                  {t("money2.board.partialLine", { paid: fmt.euro(r.paid_cents ?? 0), total: fmt.euro((r.paid_cents ?? 0) + (r.due_cents ?? 0)) })}
+                </p>
+              )}
               {[...r.arrears, ...r.other_due].map((f) => (
                 <p key={f.id} className="mt-1.5 flex justify-between gap-2 text-xs text-ink-600">
                   <span className="truncate">{KIND_ICONS[f.kind] ?? "•"} {feeLabel(f, t, fmt)}</span><span className="shrink-0 font-semibold">{fmt.euro(f.amount_cents)}</span>

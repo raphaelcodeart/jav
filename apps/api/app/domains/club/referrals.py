@@ -106,7 +106,9 @@ async def _network(db: AsyncSession, *, club: Club, user_id: uuid.UUID, wallet_i
         (
             await db.execute(
                 select(ClubFee.athlete_id, func.count())
-                .where(ClubFee.athlete_id.in_(ids), ClubFee.kind == "MONTHLY", ClubFee.status == "PAID")
+                # I resti di un pagamento parziale sono lo stesso mese.
+                .where(ClubFee.athlete_id.in_(ids), ClubFee.kind == "MONTHLY", ClubFee.status == "PAID",
+                       ClubFee.split_from_fee_id.is_(None))
                 .group_by(ClubFee.athlete_id)
             )
         ).all()
@@ -204,6 +206,15 @@ async def on_fee_paid(db: AsyncSession, *, fee: ClubFee) -> None:
     from app.domains.wallets import service as wallets_service
 
     if fee.kind != "MONTHLY" or fee.status != "PAID" or fee.athlete_id is None or fee.paid_at is None:
+        return
+    # Un mese pagato in parte non è ancora pagato: il credito arriva una
+    # volta sola, con il pagamento che chiude il mese (l'ultimo resto).
+    open_rest = (
+        await db.execute(
+            select(ClubFee.id).where(ClubFee.split_from_fee_id == fee.id, ClubFee.status == "DUE").limit(1)
+        )
+    ).first()
+    if open_rest is not None:
         return
     try:
         athlete = await db.get(ClubAthlete, fee.athlete_id)

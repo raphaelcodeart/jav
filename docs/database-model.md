@@ -1424,3 +1424,40 @@ club_documents   organization_id, club_id, category (DECLARATION | FEDERATION | 
                  content_type, size_bytes, uploaded_by_user_id, created_at
 ```
 
+
+**Relatórios degli eventi** (migrazione 0033, `club/event_reports.py`):
+
+```
+club_event_reports        organization_id, club_id, competition_id, author_user_id, title,
+                          description, narrative, updated_at, created_at;
+                          UNIQUE (club_id, competition_id, author_user_id): uno per autore e evento
+club_event_report_costs   report_id (ON DELETE CASCADE), kind (HOTEL | TRAVEL | FUEL | FOOD |
+                          ENTRY_FEES | OTHER), amount_cents >= 0, note; UNIQUE (report_id, kind)
+club_event_report_photos  report_id (ON DELETE CASCADE), storage_key (bucket privato), content_type
+```
+
+I risultati del relatório non si salvano: si leggono da `club_competition_entries`.
+
+**Pagamento parziale e mese esente** (migrazione 0032, `club/fee_splits.py`):
+
+```
+club_fees            + waive_kind (NULL = condono | EXEMPT = «Isenta este mês», CHECK)
+                     + split_from_fee_id -> club_fees (indice): il resto di un pagamento
+                       parziale punta alla quota da cui nasce; periodo della quota + "/rN"
+                     + split_reason: perché non si è pagato tutto
+club_payment_proofs  CHECK file_or_credit: anche "registrata dalla segreteria"
+                     (reviewed_by_user_id NOT NULL), per «Segna pagato» senza foto
+```
+
+**JAV Games: combattimenti e randori** (migrazione 0035, schema `game`,
+scritta a mano: `app/game/models.py`, docs/games.md):
+
+```
+game.players.randori_points   int, default 1000: i punti del Randori del club
+game.fights                   un incontro deciso dal server: kind CAREER|RANDORI,
+                              mode SIM|STEP, state (JSONB, lo stato del motore
+                              fight.py), status ACTIVE|FINISHED, won, points
+  + player_id -> game.players (CASCADE)
+  + opponent_player_id -> game.players (CASCADE, solo randori)
+  + UNIQUE (player_id, context_key): un turno di gara della carriera una volta sola
+```

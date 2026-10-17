@@ -839,3 +839,32 @@ dell'interfaccia**: circa 2.500 testi spostati nelle chiavi (8 agenti, un
 prefisso ciascuno), controllata aprendo ogni sezione di ogni ruolo in
 portoghese. Test: `test_club_admin_lists.py` (staff da account esistente),
 `test_club_pricing.py` (rete inviti).
+
+## 17/10/2026 — Contabilità, gare, treinador, area atleta, giochi (migrazioni 0032–0035)
+
+Lavoro diviso fra quattro agenti in parallelo, ognuno con file, migrazione e
+database di test propri, e unito qui:
+- **Contabilità** (0032): pagamento parziale (la quota si divide: parte pagata
+  con ricevuta, resto da pagare `YYYY-MM/rN` con motivo), «Isenta este mês»
+  (`WAIVED` + `waive_kind=EXEMPT`, fuori da atteso, debiti, incassi e avvisi),
+  verifica contabile con 5 bug corretti (fra cui il 500 di «Segna pagato»
+  senza foto), «📑 Relatórios»: atleti × mesi, incassi per metodo, debiti per
+  famiglia, isenzioni/perdoni, numerario per persona, entrate/uscite; CSV e
+  XLSX. Test: `test_club_money2.py`.
+- **Gare** (0033): il treinador segna peso, categoria, risultato e nota degli
+  iscritti (stesso servizio della segreteria → ranking); dettaglio della gara
+  in popup dal calendario, con i contatti dell'encarregado per lo staff;
+  relatórios di evento con costi, foto (bucket privato) e risultati, PDF
+  unito per periodo (solo segreteria). Test: `test_club_event_reports.py`.
+- **Treinador** (0034): home, turni modificabili con registro delle modifiche,
+  post nella bacheca, ranking riparato (chiamava rotte della segreteria),
+  quaderno (note delle lezioni e note private per atleta), «Os meus atletas».
+  Test: `test_club_coach.py`.
+- **Area atleta**: tre pulsanti grandi (presenza, comprovativo, prova) e
+  scorciatoie; conti alla rovescia (iscrizioni e inizio gara) su sito, area e
+  pagina della gara (`components/site/countdown.tsx`).
+- **Giochi** (0035, schema `game`): Judo Career compatta con HUD, schermo
+  intero per i giochi, combattimento passo per passo deciso dal server,
+  terzo gioco «Randori do Clube» con punti tra amici del club e limiti.
+  Test: `test_game_fights.py`.
+Test completi: 621 passati, 1 fallito già noto.

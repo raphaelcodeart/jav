@@ -39,6 +39,8 @@ class NewsPostRead(BaseModel):
     published: bool
     published_at: datetime
     author_name: str | None
+    #: Chi l'ha scritto: un treinador corregge solo i suoi (news.update_staff_post).
+    author_user_id: uuid.UUID | None = None
     #: CLUB (solo i soci) o NETWORK (tutto il circuito).
     audience: str = "CLUB"
     #: Chi firma: il club, o JudoArteVida per i post della piattaforma.

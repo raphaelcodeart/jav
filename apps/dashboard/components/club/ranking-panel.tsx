@@ -15,9 +15,15 @@ import { useI18n } from "@/lib/i18n/provider";
 
 /** Jav Ranking: points from competition results × the competition's level,
  *  per season, sex and age band. Families see everyone (it's a ranking),
- *  their own athletes highlighted. `admin` reads the staff endpoint. */
+ *  their own athletes highlighted. `admin` (segreteria, treinador) reads the
+ *  staff endpoints: `/staff/ranking` and `/staff/config` want only
+ *  `club.instruct`, which both have; `/admin/ranking` wanted `club.manage`
+ *  and `/config` `club.family`, so the coach got a 403 and an empty page. */
 export function RankingPanel({ admin = false }: { admin?: boolean }) {
-  const { data: config } = useQuery({ queryKey: ["club", "config"], queryFn: () => clubGet<ClubConfig>("/config") });
+  const { data: config } = useQuery({
+    queryKey: ["club", admin ? "staff" : "family", "config"],
+    queryFn: () => clubGet<ClubConfig>(admin ? "/staff/config" : "/config"),
+  });
   const [sex, setSex] = useState<"" | "M" | "F">("");
   const { t } = useI18n();
   const [band, setBand] = useState("");
@@ -33,7 +39,7 @@ export function RankingPanel({ admin = false }: { admin?: boolean }) {
   const qs = params.toString();
   const { data, isLoading, error } = useQuery({
     queryKey: ["club", "ranking", admin, sex, band, year, clubOnly],
-    queryFn: () => clubGet<Ranking>(`${admin ? "/admin" : ""}/ranking${qs ? `?${qs}` : ""}`),
+    queryFn: () => clubGet<Ranking>(`${admin ? "/staff" : ""}/ranking${qs ? `?${qs}` : ""}`),
   });
   const rows = data?.rows ?? [];
 

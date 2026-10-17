@@ -25,6 +25,7 @@ function poses(e: FightEvent | undefined, finished: boolean, fight: Fight): { A:
     case "ATTACK": out[e.by] = "attack"; out[other] = "block"; return out;
     case "BLOCK": out[e.by] = "block"; out[other] = "grip"; return out;
     case "SHIDO": return { A: "idle", B: "idle" };
+    case "YUKO":
     case "WAZA_ARI":
     case "IPPON": out[e.by] = "attack"; out[other] = "thrown"; return out;
   }
@@ -38,13 +39,14 @@ function roundLabel(f: Fight, t: CareerT): string {
   return t("fightRound", { n: f.round });
 }
 
-function ScoreRow({ name, belt, s, tone, highlight }: { name: string; belt: Belt; s: { waza: number; ippon: number; shido: number }; tone: string; highlight: boolean }) {
+function ScoreRow({ name, belt, s, tone, highlight }: { name: string; belt: Belt; s: { waza: number; ippon: number; shido: number; yuko?: number }; tone: string; highlight: boolean }) {
   return (
     <div className={cn("flex items-center gap-2 px-3 py-2", tone)}>
       <span className="h-3 w-3 shrink-0 rounded-full ring-1 ring-white/50" style={{ background: BELT_HEX[belt] }} />
       <span className="min-w-0 flex-1 truncate text-sm font-bold">{name}</span>
       <span className={cn("w-8 text-center font-display text-xl tabular-nums", s.ippon ? "text-accent-300" : "")} aria-label="ippon">{s.ippon}</span>
       <span className="w-8 text-center font-display text-xl tabular-nums" aria-label="waza-ari">{s.waza}</span>
+      <span className="w-8 text-center font-display text-xl tabular-nums" aria-label="yuko">{s.yuko ?? 0}</span>
       <span className="flex w-10 justify-center gap-0.5" aria-label={`shido ${s.shido}`}>
         {Array.from({ length: 3 }, (_, i) => (
           <span key={i} className={cn("h-4 w-2 rounded-sm", i < s.shido ? "bg-accent-400" : "bg-white/15")} />
@@ -99,7 +101,7 @@ export function FightScene({ fights, comp, heroName, heroBelt, t, onDone }: {
         {/* tabellone */}
         <div className="mt-4 overflow-hidden rounded-2xl bg-black/60 ring-1 ring-white/10 shadow-lift">
           <div className="flex justify-end gap-2 bg-white/5 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-white/60">
-            <span className="w-8 text-center">I</span><span className="w-8 text-center">W</span><span className="w-10 text-center">S</span>
+            <span className="w-8 text-center">I</span><span className="w-8 text-center">W</span><span className="w-8 text-center">Y</span><span className="w-10 text-center">S</span>
             <span className="w-4" />
           </div>
           <ScoreRow name={`${heroName} (${t("you")})`} belt={heroBelt} s={sc.A} tone="bg-white/10" highlight={finished && fight.won} />

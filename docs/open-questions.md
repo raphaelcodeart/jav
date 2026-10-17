@@ -220,3 +220,10 @@ Scelte fatte senza il titolare, da confermare:
   titolare): va scritto nell'informativa privacy delle famiglie, con la
   possibilità di chiedere di non comparire.
 
+
+- **Contabilità: i mesi si tagliano in UTC** (`club/accounting.py::_month_of`),
+  mentre l'elenco delle prove usa l'ora di Lisbona: con l'ora legale un
+  pagamento tra mezzanotte e l'una del 1° conta nel mese prima. Passare
+  all'ora del club cambierebbe anche i mesi chiusi. Da decidere, insieme a
+  una eventuale «chiusura del mese» (audit di ottobre 2026,
+  `docs/club-portal.md`, "Audit della contabilità").

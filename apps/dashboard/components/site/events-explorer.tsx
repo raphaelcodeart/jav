@@ -1,5 +1,6 @@
 "use client";
 
+import { Countdown, moment } from "@/components/site/countdown";
 import Link from "next/link";
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -353,6 +354,14 @@ function EventRow({ e, todayIso, index }: { e: PublicEvent; todayIso: string; in
           {(e.age_groups ?? []).slice(0, 4).map((a) => <span key={a} className="rounded-full bg-accent-50 px-2 py-0.5 font-semibold text-accent-800">{t.dyn(`site.ev.age.${a}`, a)}</span>)}
           {e.circular_url && <a href={e.circular_url} target="_blank" rel="noopener" className="rounded-full bg-white px-2 py-0.5 font-semibold text-brand-700 ring-1 ring-brand-200 hover:bg-brand-50">📄 {t("site.ev.circular")}</a>}
         </div>
+        {/* Quanto manca: alla chiusura delle iscrizioni se aperte, se no alla gara. */}
+        {e.ends_on >= todayIso && (
+          <div className="relative z-10 mt-2 flex flex-wrap gap-2">
+            {e.status === "OPEN" && e.registration_deadline >= todayIso
+              ? <Countdown target={moment(e.registration_deadline, e.registration_deadline_time, "endOfDay")} label={t("countdown.registrations")} />
+              : <Countdown target={moment(e.starts_on, e.starts_at_time, "morning")} label={t("countdown.starts")} tone="brand" />}
+          </div>
+        )}
       </div>
     </motion.article>
   );

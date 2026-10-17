@@ -8,7 +8,9 @@ attivo, con il suo gruppo (il piano), l'importo e lo stato:
 
 - PAID     pagata;
 - DUE      da pagare (OVERDUE se la scadenza è passata);
+- PARTIAL  pagata in parte: il resto è da pagare (club/fee_splits.py);
 - WAIVED   condonata;
+- MONTH_EXEMPT  «Isenta este mês»: quel mese non paga (fee_splits.py);
 - EXEMPT   l'atleta non paga la mensilità (`exempt_monthly`);
 - NONE     nessuna quota per il mese (piano senza mensilità in quel mese,
            atleta arrivato dopo, quota non ancora generata).
@@ -29,6 +31,7 @@ from datetime import date, timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domains.club import fee_splits
 from app.domains.club.models import ClubAthlete, ClubFee, ClubPlan
 from app.domains.club.scope import ClubScope
 from app.domains.club.service import ClubValidationError
@@ -48,12 +51,10 @@ def parse_period(period: str | None, *, today: date) -> tuple[str, date, date]:
     return f"{year:04d}-{month:02d}", first, last
 
 
-def _state(fee: ClubFee | None, athlete: ClubAthlete, *, today: date) -> str:
-    if fee is None:
+def _state(parts: list[ClubFee], athlete: ClubAthlete, *, today: date) -> str:
+    if not parts:
         return "EXEMPT" if athlete.exempt_monthly else "NONE"
-    if fee.status == "DUE":
-        return "OVERDUE" if fee.due_date < today else "DUE"
-    return fee.status
+    return fee_splits.group_state(parts, today=today)
 
 
 async def _rows(
@@ -70,22 +71,25 @@ async def _rows(
     plans = {p.id: p for p in (await db.execute(
         select(ClubPlan).where(ClubPlan.club_id == scope.club_id)
     )).scalars()}
-    monthly: dict[uuid.UUID, ClubFee] = {}
+    # La mensilità del mese è la quota e, se pagata in parte, i suoi resti.
+    monthly: dict[uuid.UUID, list[ClubFee]] = {}
     arrears: dict[uuid.UUID, list[ClubFee]] = {}
     others: dict[uuid.UUID, list[ClubFee]] = {}
     for f in fees:
-        if f.kind == "MONTHLY" and f.period == period:
-            monthly[f.athlete_id] = f
+        month = fee_splits.base_period(f.period) if f.kind == "MONTHLY" else None
+        if month == period:
+            monthly.setdefault(f.athlete_id, []).append(f)
         elif f.status != "DUE":
             continue
-        elif f.kind == "MONTHLY" and f.period < period:
+        elif month is not None and month < period:
             arrears.setdefault(f.athlete_id, []).append(f)
         elif f.kind != "MONTHLY" and f.due_date <= last_day:
             others.setdefault(f.athlete_id, []).append(f)
     by_id = {a.id: a for a in athletes}
     rows = []
     for a in athletes:
-        fee = monthly.get(a.id)
+        parts = fee_splits.order_parts(monthly.get(a.id, []))
+        fee = fee_splits.group_main(parts) if parts else None
         plan = plans.get(a.plan_id) if a.plan_id else None
         rows.append({
             "athlete_id": a.id,
@@ -94,8 +98,10 @@ async def _rows(
             "photo_url": a.photo_url,
             "guardian_user_id": a.guardian_user_id,
             "group": plan.name if plan else None,
-            "state": _state(fee, a, today=today),
+            "state": _state(parts, a, today=today),
             "fee": fee_dict(fee, today=today, athlete=a) if fee else None,
+            "parts": [fee_dict(p, today=today, athlete=a) for p in parts] if len(parts) > 1 else [],
+            **fee_splits.group_numbers(parts),
             "arrears": [fee_dict(f, today=today, athlete=by_id[a.id]) for f in sorted(arrears.get(a.id, []), key=lambda f: f.period)],
             "other_due": [fee_dict(f, today=today, athlete=by_id[a.id]) for f in sorted(others.get(a.id, []), key=lambda f: f.due_date)],
         })
@@ -103,16 +109,19 @@ async def _rows(
 
 
 def _totals(rows: list[dict]) -> dict:
-    counted = [r for r in rows if r["fee"] and r["state"] != "WAIVED"]
+    # Le somme dalle parti: una mensilità pagata in parte conta la parte
+    # pagata nell'incassato e il resto in ciò che manca; condonate ed
+    # esenti (parti WAIVED) non contano in nessuno dei due.
     return {
         "athletes": len(rows),
-        "expected_cents": sum(r["fee"]["amount_cents"] for r in counted),
-        "collected_cents": sum(r["fee"]["amount_cents"] for r in counted if r["state"] == "PAID"),
-        "missing_cents": sum(r["fee"]["amount_cents"] for r in counted if r["state"] in ("DUE", "OVERDUE")),
+        "expected_cents": sum(r["paid_cents"] + r["due_cents"] for r in rows),
+        "collected_cents": sum(r["paid_cents"] for r in rows),
+        "missing_cents": sum(r["due_cents"] for r in rows),
         "paid": sum(1 for r in rows if r["state"] == "PAID"),
-        "to_pay": sum(1 for r in rows if r["state"] in ("DUE", "OVERDUE")),
-        "overdue": sum(1 for r in rows if r["state"] == "OVERDUE"),
-        "exempt": sum(1 for r in rows if r["state"] in ("EXEMPT", "WAIVED")),
+        "to_pay": sum(1 for r in rows if r["state"] in ("DUE", "OVERDUE", "PARTIAL")),
+        "overdue": sum(1 for r in rows if r["state"] == "OVERDUE" or (r["state"] == "PARTIAL" and r["fee"]["overdue"])),
+        "partial": sum(1 for r in rows if r["state"] == "PARTIAL"),
+        "exempt": sum(1 for r in rows if r["state"] in ("EXEMPT", "WAIVED", "MONTH_EXEMPT")),
         "none": sum(1 for r in rows if r["state"] == "NONE"),
         "arrears_cents": sum(f["amount_cents"] for r in rows for f in r["arrears"]),
         "other_due_cents": sum(f["amount_cents"] for r in rows for f in r["other_due"]),
@@ -141,7 +150,7 @@ async def club_month(db: AsyncSession, *, scope: ClubScope, period: str | None, 
     # La prova di ogni quota, da aprire dal quadro prima di segnarla pagata.
     from app.domains.club import service as club_service
 
-    fee_rows = [f for r in rows for f in ([r["fee"]] if r["fee"] else []) + r["arrears"] + r["other_due"]]
+    fee_rows = [f for r in rows for f in ([r["fee"]] if r["fee"] else []) + r["parts"] + r["arrears"] + r["other_due"]]
     club_service.attach_proofs(fee_rows, await club_service.latest_proofs_of_fees(db, fee_ids=[f["id"] for f in fee_rows]))
     return {
         "period": period, "first_day": first, "last_day": last,

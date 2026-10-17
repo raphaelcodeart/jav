@@ -44,6 +44,8 @@ export interface Figures {
   absence_cents: number;
   waived_cents: number;
   missed_cents: number;
+  /** Mensilità esenti («Isenta este mês»): fuori dall'emesso e dai mancati incassi. */
+  exempt_cents?: number;
   expenses_cents: number;
   expenses_by_category: Record<string, number>;
   staff_cents: number;

@@ -8,7 +8,7 @@ import { COLOR_HEX, Judoka, Tatami, type Pose } from "./ui";
 // Il dojo "3D" della scheda principale: parete di legno, kamiza con il nome,
 // tatami in prospettiva, il protagonista al centro e gli allievi intorno.
 
-export function DojoScene({ state, pose, t }: { state: CareerState; pose: Pose; t: CareerT }) {
+export function DojoScene({ state, pose, t, compact }: { state: CareerState; pose: Pose; t: CareerT; compact?: boolean }) {
   const club = state.club;
   const color = COLOR_HEX[club?.color ?? state.hero.color];
   const kids = (club?.athletes ?? []).slice(0, 6);
@@ -38,7 +38,7 @@ export function DojoScene({ state, pose, t }: { state: CareerState; pose: Pose; 
         </motion.div>
       </div>
 
-      <Tatami className="relative mt-2 h-52 sm:h-64">
+      <Tatami className={compact ? "relative mt-1 h-36 sm:h-40" : "relative mt-2 h-52 sm:h-64"}>
         <div className="absolute inset-x-0 bottom-5 flex items-end justify-center">
           {kids.slice(0, 3).map((a, i) => (
             <div key={a.id} className="-mx-2 opacity-90" style={{ marginBottom: 18 + i * 4 }}>
@@ -46,7 +46,7 @@ export function DojoScene({ state, pose, t }: { state: CareerState; pose: Pose; 
             </div>
           ))}
           <div className="z-10 mx-2">
-            <Judoka belt={state.hero.belt} pose={pose} size={92} />
+            <Judoka belt={state.hero.belt} pose={pose} size={compact ? 70 : 92} />
           </div>
           {kids.slice(3).map((a, i) => (
             <div key={a.id} className="-mx-2 opacity-90" style={{ marginBottom: 26 - i * 4 }}>

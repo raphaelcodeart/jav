@@ -23,6 +23,7 @@ import {
   type ClubSummary, type Debts, type Expense, type Figures, type Ledger, type RecurringExpense, type StaffCost,
 } from "@/lib/club-accounting";
 import { downloadCsv } from "@/lib/csv-export";
+import { MoneyReports } from "@/components/club/money-reports";
 import { useI18n } from "@/lib/i18n/provider";
 
 // La contabilità del club: la home con i numeri che contano e la pagina
@@ -196,7 +197,7 @@ function DebtorList({ debts, limit }: { debts: Debts; limit?: number }) {
 
 // --- La pagina Contabilità -----------------------------------------------------------------------
 
-type AccTab = "statement" | "ledger" | "expenses" | "recurring" | "staff" | "debts";
+type AccTab = "statement" | "ledger" | "expenses" | "recurring" | "staff" | "debts" | "reports";
 
 export function ClubAccounting() {
   const { t } = useI18n();
@@ -208,24 +209,31 @@ export function ClubAccounting() {
   const thisYear = new Date().getFullYear();
   return (
     <div className="space-y-6">
-      {/* Il periodo vale per tutto ciò che c'è sotto. */}
-      <div className="flex flex-wrap items-end gap-3">
-        <Tabs value={mode} onChange={(k) => setMode(k as "month" | "year")} items={[{ key: "month", label: t("acc.month") }, { key: "year", label: t("acc.year") }]} />
-        {mode === "month" ? (
-          <Input type="month" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} className="w-48" aria-label={t("acc.month")} />
-        ) : (
-          <Select value={year} onChange={(e) => setYear(e.target.value)} className="w-32" aria-label={t("acc.year")}>
-            {Array.from({ length: 6 }, (_, i) => String(thisYear - i)).map((y) => <option key={y} value={y}>{y}</option>)}
-          </Select>
-        )}
-      </div>
-      <Tabs value={tab} onChange={(k) => setTab(k as AccTab)} items={(["statement", "ledger", "expenses", "recurring", "staff", "debts"] as const).map((k) => ({ key: k, label: t.dyn(`acc.tab.${k}`, k) }))} />
+      {/* Il periodo vale per tutto ciò che c'è sotto (i relatórios hanno il loro). */}
+      {tab !== "reports" && (
+        <div className="flex flex-wrap items-end gap-3">
+          <Tabs value={mode} onChange={(k) => setMode(k as "month" | "year")} items={[{ key: "month", label: t("acc.month") }, { key: "year", label: t("acc.year") }]} />
+          {mode === "month" ? (
+            <Input type="month" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} className="w-48" aria-label={t("acc.month")} />
+          ) : (
+            <Select value={year} onChange={(e) => setYear(e.target.value)} className="w-32" aria-label={t("acc.year")}>
+              {Array.from({ length: 6 }, (_, i) => String(thisYear - i)).map((y) => <option key={y} value={y}>{y}</option>)}
+            </Select>
+          )}
+        </div>
+      )}
+      <Tabs value={tab} onChange={(k) => setTab(k as AccTab)} items={[
+        ...(["statement", "ledger", "expenses", "recurring", "staff", "debts"] as const).map((k) => ({ key: k, label: t.dyn(`acc.tab.${k}`, k) })),
+        { key: "reports", label: `📑 ${t("money2.reports.tab")}` },
+      ]} />
       {tab === "statement" && <Statement period={period} />}
       {tab === "ledger" && <LedgerPanel period={period} />}
       {tab === "expenses" && <ExpensesPanel period={period} />}
       {tab === "recurring" && <RecurringPanel />}
       {tab === "staff" && <StaffPanel period={period} />}
       {tab === "debts" && <DebtsPanel />}
+      {/* I relatórios hanno il loro periodo (stagione o anno). */}
+      {tab === "reports" && <MoneyReports />}
     </div>
   );
 }
@@ -309,6 +317,9 @@ function Statement({ period }: { period: string }) {
           <StatementLine label={t("acc.missed.absence")} explain={t("acc.missed.absenceExplain")} cents={f.absence_cents} />
           <StatementLine label={t("acc.missed.waived")} explain={t("acc.missed.waivedExplain")} cents={f.waived_cents} />
           <StatementLine strong label={t("acc.missed.total")} cents={f.missed_cents} />
+          {(f.exempt_cents ?? 0) > 0 && (
+            <StatementLine label={`🎗️ ${t("money2.acc.exempt")}`} explain={t("money2.acc.exemptExplain")} cents={f.exempt_cents ?? 0} />
+          )}
         </section>
         <Comparison data={data} />
       </div>

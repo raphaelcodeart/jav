@@ -7,15 +7,17 @@ import { cn } from "@/lib/cn";
 import {
   ACTION_ENERGY, CLUB_START_BALANCE, COACH_COURSE_COST, COACH_MIN_AGE, heroAge, COACH_COURSE_SESSIONS, MAX_ACTIONS,
   REF_COURSE_COST, REF_COURSE_SESSIONS, TECHNIQUES, actionAvailable, beltRank, enrollCoachCourse,
-  enrollRefereeCourse, promotionStatus, type ActionId, type City, type HeroColor,
+  enrollRefereeCourse, gameDate, promotionStatus, type ActionId, type City, type HeroColor,
 } from "./engine";
 import { DojoScene } from "./dojo-scene";
-import { money } from "./i18n";
+import { money, monthName } from "./i18n";
+import type { TabId } from "./panel-misc";
 import { CityPicker, ColorPicker } from "./new-career";
 import { Bar, BeltBadge, Card, SectionTitle, logText, type PanelProps, type Pose } from "./ui";
 
-// Scheda "Eu / Treino": il dojo, le statistiche, le azioni della settimana,
-// la prossima cintura, i corsi (arbitro, allenatore) e l'apertura del club.
+// Il piano della settimana (il dojo, la prossima gara, le azioni, il grande
+// bottone «Avanza») e la scheda «Progressi» (statistiche, prossima cintura,
+// corsi di arbitro e allenatore, apertura del club), più il diario.
 
 export const ACTION_ICON: Record<ActionId, string> = {
   TRAIN_TECH: "🥋", TRAIN_PHYS: "🏋️", REST: "😴", STUDY: "📚", COMPETE: "🏆",
@@ -24,18 +26,18 @@ export const ACTION_ICON: Record<ActionId, string> = {
 
 export interface TeachPlan { technique: string; ids: number[] | null }
 
-export function MePanel(props: PanelProps & {
+export function WeekPlanner(props: PanelProps & {
   chosen: ActionId[];
   onToggle: (a: ActionId) => void;
   teach: TeachPlan;
   setTeach: (t: TeachPlan) => void;
   pose: Pose;
-  onPromote: () => void;
-  onGoAcademy: () => void;
-  onOpenClub: (v: { name: string; color: HeroColor; city: City }) => void;
-  onRestart: () => void;
+  advanceLabel: string;
+  advanceAccent: boolean;
+  onAdvance: () => void;
+  onGoTab: (tab: TabId) => void;
 }) {
-  const { state, t, locale, examsPassed, apply, chosen, onToggle, teach, setTeach } = props;
+  const { state, t, locale, chosen, onToggle, teach, setTeach } = props;
   const h = state.hero;
   const list: ActionId[] = ["TRAIN_TECH", "TRAIN_PHYS", "REST", "STUDY"];
   (["COMPETE", "TEACH", "REFEREE", "REF_COURSE", "COACH_COURSE"] as const).forEach((a) => {
@@ -43,13 +45,130 @@ export function MePanel(props: PanelProps & {
   });
   const spent = chosen.reduce((s, a) => s + Math.max(0, ACTION_ENERGY[a]), 0);
   const left = h.energia - spent;
-  const ps = promotionStatus(state, examsPassed);
+  const d = gameDate(state.week);
+  const next = state.calendar.find((c) => c.week >= state.week && (state.heroRegs.includes(c.id) || c.week - state.week <= 4));
 
   return (
-    <div className="space-y-4">
-      <DojoScene state={state} pose={props.pose} t={t} />
+    <Card className="space-y-3 p-3 sm:p-4">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="font-display text-lg text-ink-900">
+          🗓️ {t("plannerTitle")} <span className="text-sm font-semibold capitalize text-ink-500">· {monthName(d.month, locale)}, {t("week", { w: d.weekOfMonth })}</span>
+        </h3>
+        <span className="shrink-0 rounded-full bg-ink-900 px-2.5 py-1 text-xs font-bold text-white">{t("actionsChosen", { n: chosen.length, max: MAX_ACTIONS })}</span>
+      </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)]">
+        <div className="space-y-2">
+          <DojoScene state={state} pose={props.pose} t={t} compact />
+          {next && (
+            <button type="button" onClick={() => props.onGoTab("calendar")}
+              className={cn("flex w-full cursor-pointer items-center gap-2 rounded-2xl px-3 py-2 text-left text-xs font-semibold ring-1 transition hover:ring-brand-300",
+                next.week === state.week ? "bg-accent-100 text-ink-900 ring-accent-300" : "bg-ink-50 text-ink-700 ring-ink-100")}>
+              <span className="text-lg" aria-hidden="true">🏆</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-bold">{t("nextComp", { name: t("compName", { level: t(`level_${next.level}`), city: next.city }) })}</span>
+                <span className="text-ink-500">{next.week === state.week ? t("compThisWeek") : t("nextCompWhen", { n: next.week - state.week })}
+                  {state.heroRegs.includes(next.id) ? ` · ${t("registered")}` : ""}</span>
+              </span>
+              <span aria-hidden="true">›</span>
+            </button>
+          )}
+        </div>
+
+        <div>
+          {/* azioni */}
+          <p className="mb-2 text-xs font-semibold text-ink-500">{t("chooseActions")}</p>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {list.map((a) => {
+              const on = chosen.includes(a);
+              const cost = ACTION_ENERGY[a];
+              const ok = actionAvailable(state, a);
+              const tooTired = !on && cost > 0 && cost > left;
+              const full = !on && chosen.length >= MAX_ACTIONS;
+              const locked = a === "COMPETE" && on;
+              return (
+                <motion.button
+                  key={a}
+                  type="button"
+                  whileTap={{ scale: 0.95 }}
+                  disabled={!ok || tooTired || full || locked}
+                  onClick={() => onToggle(a)}
+                  aria-pressed={on}
+                  className={cn(
+                    "relative flex min-h-[4.75rem] cursor-pointer flex-col items-start gap-0.5 rounded-2xl p-2.5 text-left ring-2 transition disabled:cursor-not-allowed",
+                    on ? "bg-gradient-to-br from-brand-500 to-brand-700 text-white ring-brand-300 shadow-brand" : "bg-ink-50 text-ink-900 ring-transparent hover:ring-brand-200",
+                    (!ok || tooTired || full) && !on && "opacity-45",
+                  )}
+                >
+                  <span className="text-xl" aria-hidden="true">{ACTION_ICON[a]}</span>
+                  <span className="text-sm font-bold leading-tight">{t(`act_${a}`)}</span>
+                  <span className={cn("text-[11px]", on ? "text-white/80" : "text-ink-500")}>{tooTired ? t("noEnergy") : t(`actd_${a}`)}</span>
+                  <span className={cn("absolute right-2 top-2 rounded-full px-1.5 py-0.5 text-[10px] font-black", cost < 0 ? "bg-emerald-100 text-emerald-800" : on ? "bg-white/20" : "bg-white text-ink-700")}>
+                    {cost < 0 ? t("energyGain", { n: -cost }) : t("energyCost", { n: `-${cost}` })}
+                  </span>
+                  {on && <span className="absolute bottom-2 right-2 text-lg" aria-hidden="true">✓</span>}
+                </motion.button>
+              );
+            })}
+          </div>
+
+          {chosen.includes("TEACH") && state.club && (
+            <div className="mt-4 rounded-2xl bg-accent-50 p-3 ring-1 ring-accent-200">
+              <p className="text-sm font-bold text-ink-900">{t("teachWhat")}</p>
+              <p className="text-xs text-ink-600">{t("teachHint")}</p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {TECHNIQUES.map((tech) => (
+                  <button key={tech} type="button" onClick={() => setTeach({ ...teach, technique: tech })} aria-pressed={teach.technique === tech}
+                    className={cn("h-9 cursor-pointer rounded-full px-3 text-xs font-bold ring-1 transition", teach.technique === tech ? "bg-ink-900 text-white ring-ink-900" : "bg-white text-ink-700 ring-ink-200")}>
+                    {tech}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-3 text-sm font-bold text-ink-900">{t("teachWho")}</p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <button type="button" onClick={() => setTeach({ ...teach, ids: null })} aria-pressed={teach.ids === null}
+                  className={cn("h-9 cursor-pointer rounded-full px-3 text-xs font-bold ring-1", teach.ids === null ? "bg-brand-600 text-white ring-brand-600" : "bg-white text-ink-700 ring-ink-200")}>
+                  {t("teachAll")}
+                </button>
+                {state.club.athletes.map((a) => {
+                  const on = teach.ids === null || teach.ids.includes(a.id);
+                  return (
+                    <button key={a.id} type="button" disabled={a.lesao > 0}
+                      onClick={() => {
+                        const cur = teach.ids ?? state.club!.athletes.map((x) => x.id);
+                        setTeach({ ...teach, ids: on ? cur.filter((x) => x !== a.id) : [...cur, a.id] });
+                      }}
+                      aria-pressed={on}
+                      className={cn("h-9 cursor-pointer rounded-full px-3 text-xs font-bold ring-1 disabled:opacity-40", on ? "bg-brand-100 text-brand-800 ring-brand-300" : "bg-white text-ink-500 ring-ink-200")}>
+                      {a.name.split(" ")[0]}{a.techniques.includes(teach.technique) ? " ✓" : ""}{a.lesao > 0 ? " 🤕" : ""}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <Button size="xl" className="hidden w-full lg:flex" variant={props.advanceAccent ? "accent" : "primary"} onClick={props.onAdvance}>
+        {props.advanceLabel}
+      </Button>
+    </Card>
+  );
+}
+
+export function ProgressPanel(props: PanelProps & {
+  onPromote: () => void;
+  onGoAcademy: () => void;
+  onOpenClub: (v: { name: string; color: HeroColor; city: City }) => void;
+  onRestart: () => void;
+}) {
+  const { state, t, locale, examsPassed, apply } = props;
+  const h = state.hero;
+  const ps = promotionStatus(state, examsPassed);
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-1 2xl:grid-cols-2">
         <Card>
           <SectionTitle icon="📊">{h.name}</SectionTitle>
           <div className="space-y-3 text-ink-800">
@@ -58,6 +177,7 @@ export function MePanel(props: PanelProps & {
             <Bar label={t("stat_mental")} right={h.mental} value={h.mental} tone="bg-gradient-to-r from-sky-400 to-indigo-600" />
           </div>
           {h.injury > 0 && <p className="mt-3 rounded-xl bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">🤕 {t("al_HERO_INJURED", { n: h.injury })}</p>}
+          <p className="mt-3 text-xs text-ink-500">{t("statsHint")}</p>
         </Card>
 
         {/* prossima cintura */}
@@ -98,86 +218,8 @@ export function MePanel(props: PanelProps & {
           )}
         </Card>
       </div>
-
-      {/* azioni */}
-      <Card>
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <SectionTitle icon="🗓️">{t("chooseActions")}</SectionTitle>
-          <span className="shrink-0 rounded-full bg-ink-900 px-2.5 py-1 text-xs font-bold text-white">{t("actionsChosen", { n: chosen.length, max: MAX_ACTIONS })}</span>
-        </div>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {list.map((a) => {
-            const on = chosen.includes(a);
-            const cost = ACTION_ENERGY[a];
-            const ok = actionAvailable(state, a);
-            const tooTired = !on && cost > 0 && cost > left;
-            const full = !on && chosen.length >= MAX_ACTIONS;
-            const locked = a === "COMPETE" && on;
-            return (
-              <motion.button
-                key={a}
-                type="button"
-                whileTap={{ scale: 0.95 }}
-                disabled={!ok || tooTired || full || locked}
-                onClick={() => onToggle(a)}
-                aria-pressed={on}
-                className={cn(
-                  "relative flex min-h-24 cursor-pointer flex-col items-start gap-1 rounded-2xl p-3 text-left ring-2 transition disabled:cursor-not-allowed",
-                  on ? "bg-gradient-to-br from-brand-500 to-brand-700 text-white ring-brand-300 shadow-brand" : "bg-ink-50 text-ink-900 ring-transparent hover:ring-brand-200",
-                  (!ok || tooTired || full) && !on && "opacity-45",
-                )}
-              >
-                <span className="text-2xl" aria-hidden="true">{ACTION_ICON[a]}</span>
-                <span className="text-sm font-bold leading-tight">{t(`act_${a}`)}</span>
-                <span className={cn("text-[11px]", on ? "text-white/80" : "text-ink-500")}>{tooTired ? t("noEnergy") : t(`actd_${a}`)}</span>
-                <span className={cn("absolute right-2 top-2 rounded-full px-1.5 py-0.5 text-[10px] font-black", cost < 0 ? "bg-emerald-100 text-emerald-800" : on ? "bg-white/20" : "bg-white text-ink-700")}>
-                  {cost < 0 ? t("energyGain", { n: -cost }) : t("energyCost", { n: `-${cost}` })}
-                </span>
-                {on && <span className="absolute bottom-2 right-2 text-lg" aria-hidden="true">✓</span>}
-              </motion.button>
-            );
-          })}
-        </div>
-
-        {chosen.includes("TEACH") && state.club && (
-          <div className="mt-4 rounded-2xl bg-accent-50 p-3 ring-1 ring-accent-200">
-            <p className="text-sm font-bold text-ink-900">{t("teachWhat")}</p>
-            <p className="text-xs text-ink-600">{t("teachHint")}</p>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {TECHNIQUES.map((tech) => (
-                <button key={tech} type="button" onClick={() => setTeach({ ...teach, technique: tech })} aria-pressed={teach.technique === tech}
-                  className={cn("h-9 cursor-pointer rounded-full px-3 text-xs font-bold ring-1 transition", teach.technique === tech ? "bg-ink-900 text-white ring-ink-900" : "bg-white text-ink-700 ring-ink-200")}>
-                  {tech}
-                </button>
-              ))}
-            </div>
-            <p className="mt-3 text-sm font-bold text-ink-900">{t("teachWho")}</p>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              <button type="button" onClick={() => setTeach({ ...teach, ids: null })} aria-pressed={teach.ids === null}
-                className={cn("h-9 cursor-pointer rounded-full px-3 text-xs font-bold ring-1", teach.ids === null ? "bg-brand-600 text-white ring-brand-600" : "bg-white text-ink-700 ring-ink-200")}>
-                {t("teachAll")}
-              </button>
-              {state.club.athletes.map((a) => {
-                const on = teach.ids === null || teach.ids.includes(a.id);
-                return (
-                  <button key={a.id} type="button" disabled={a.lesao > 0}
-                    onClick={() => {
-                      const cur = teach.ids ?? state.club!.athletes.map((x) => x.id);
-                      setTeach({ ...teach, ids: on ? cur.filter((x) => x !== a.id) : [...cur, a.id] });
-                    }}
-                    aria-pressed={on}
-                    className={cn("h-9 cursor-pointer rounded-full px-3 text-xs font-bold ring-1 disabled:opacity-40", on ? "bg-brand-100 text-brand-800 ring-brand-300" : "bg-white text-ink-500 ring-ink-200")}>
-                    {a.name.split(" ")[0]}{a.techniques.includes(teach.technique) ? " ✓" : ""}{a.lesao > 0 ? " 🤕" : ""}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-      </Card>
-
       {/* percorsi: arbitro e allenatore */}
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-1 2xl:grid-cols-2">
         <Card>
           <SectionTitle icon="🧑‍⚖️">{t("refTitle")}</SectionTitle>
           <p className="text-sm text-ink-600">{t("refText", { cost: money(REF_COURSE_COST, locale) })}</p>
@@ -212,21 +254,6 @@ export function MePanel(props: PanelProps & {
 
       {state.phase === "COACH" && !state.club && <OpenClubCard {...props} />}
 
-      {/* diario */}
-      {state.log.length > 0 && (
-        <Card>
-          <SectionTitle icon="📓">{t("recentLog")}</SectionTitle>
-          <ul className="space-y-1.5 text-sm text-ink-700">
-            {state.log.slice(0, 8).map((l, i) => (
-              <li key={i} className="flex gap-2">
-                <span className="shrink-0 rounded-md bg-ink-100 px-1.5 text-[11px] font-bold leading-5 text-ink-500">{l.week}</span>
-                <span>{logText(t, l)}</span>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
-
       <div className="flex justify-center pt-2">
         <Button variant="ghost" size="sm" onClick={props.onRestart}>↺ {t("restart")}</Button>
       </div>
@@ -252,6 +279,24 @@ function OpenClubCard({ state, t, locale, onOpenClub }: PanelProps & { onOpenClu
         <CityPicker value={city} onChange={setCity} label={t("clubCity")} />
         <Button type="submit" variant="accent" size="lg" className="w-full" disabled={!name.trim()}>{t("openClub")} 🏯</Button>
       </form>
+    </Card>
+  );
+}
+
+export function DiaryPanel({ state, t }: PanelProps) {
+  return (
+    <Card>
+      <SectionTitle icon="📓">{t("recentLog")}</SectionTitle>
+      {state.log.length === 0 ? <p className="text-sm text-ink-500">—</p> : (
+        <ul className="space-y-1.5 text-sm text-ink-700">
+          {state.log.slice(0, 40).map((l, i) => (
+            <li key={i} className="flex gap-2">
+              <span className="shrink-0 rounded-md bg-ink-100 px-1.5 text-[11px] font-bold leading-5 text-ink-500">{l.week}</span>
+              <span>{logText(t, l)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </Card>
   );
 }

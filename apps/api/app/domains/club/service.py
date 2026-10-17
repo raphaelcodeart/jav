@@ -878,7 +878,17 @@ async def reopen_fee(db: AsyncSession, *, scope: ClubScope, fee_id: uuid.UUID, a
     was_paid = fee.status == "PAID"
     fee.status = "DUE"
     _clear_payment(fee)
-    fee.waived_at = fee.waived_by_user_id = fee.waive_reason = None
+    fee.waived_at = fee.waived_by_user_id = fee.waive_reason = fee.waive_kind = None
+    if fee.absence_adjustment == "FULL" and fee.amount_cents == 0:
+        # La taxa de falta piena azzera la quota e la condona: riaprirla
+        # vuol dire toglierla, non lasciare una quota «da pagare» da 0 €
+        # che manderebbe avvisi e farebbe scattare la multa.
+        gross = fee.gross_amount_cents if fee.gross_amount_cents is not None else fee.amount_cents
+        fee.amount_cents = gross - (fee.discount_cents or 0)
+        fee.absence_adjustment = None
+    from app.domains.club.fee_splits import merge_remainder
+
+    await merge_remainder(db, fee=fee)
     await audit_service.record(
         db, organization_id=scope.organization_id, actor_user_id=actor_user_id,
         action="club.fee_reopened", entity_type="club_fee", entity_id=str(fee.id),
@@ -1112,6 +1122,10 @@ async def staff_record_payment(
         content_type=content_type if storage_key else None, amount_cents=total, credit_cents=0,
         note=(note or "").strip()[:500] or None, status="ACCEPTED", method=method,
         cash_received_by_user_id=receiver_id, cash_received_by_name=receiver_name,
+        # La segreteria l'ha già controllata: è lei che la registra. È anche
+        # ciò che permette una prova senza foto (carta al POS, MB Way visto
+        # sul telefono): senza, il vincolo file_or_credit la rifiutava.
+        reviewed_by_user_id=actor_user_id, reviewed_at=utcnow(),
         receipt_number=await receipts.next_number(
             db, club_id=scope.club_id, prefix=receipts.prefix_for([f.kind for f, _a in rows]), year=utcnow().year,
         ),
@@ -1242,9 +1256,13 @@ async def reject_proof(
     reopened = (
         await db.execute(select(ClubFee).where(ClubFee.paid_via_proof_id == proof.id).with_for_update())
     ).scalars().all()
+    from app.domains.club.fee_splits import merge_remainder
+
     for fee in reopened:
         fee.status = "DUE"
         _clear_payment(fee)
+        # La parte pagata di un pagamento parziale riassorbe il suo resto.
+        await merge_remainder(db, fee=fee)
     await audit_service.record(
         db, organization_id=scope.organization_id, actor_user_id=actor_user_id,
         action="club.payment_proof_rejected", entity_type="club_payment_proof", entity_id=str(proof.id),
@@ -1252,8 +1270,6 @@ async def reject_proof(
     )
     if proof.credit_cents:
         await _refund_proof_credit(db, scope=scope, proof=proof, actor_user_id=actor_user_id)
-    for fee in reopened:
-        await referrals.on_fee_unpaid(db, fee=fee, actor_user_id=actor_user_id)
     descriptions = ", ".join(f.description for f in reopened) or "le quote indicate"
     await notifications_service.notify_user(
         db, organization_id=scope.organization_id, user_id=proof.uploaded_by_user_id, type_="CLUB_PROOF_REJECTED",
@@ -1263,6 +1279,11 @@ async def reject_proof(
     )
     await db.commit()
     await db.refresh(proof)
+    # Il credito invito si ritira solo dopo il commit del rifiuto: un errore
+    # lì dentro fa rollback, e prima del commit si porterebbe via il rifiuto
+    # stesso (la prova resterebbe accettata, in silenzio).
+    for fee in reopened:
+        await referrals.on_fee_unpaid(db, fee=fee, actor_user_id=actor_user_id)
     from app.core.email import send_html_email_best_effort
     from app.domains.club.email_brand import club_brand
     from app.domains.email_texts.service import compose

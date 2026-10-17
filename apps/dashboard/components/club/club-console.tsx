@@ -26,6 +26,7 @@ import {
   type StaffHours,
 } from "@/lib/club";
 import { MoveToClubModal, useClubFeatures } from "@/components/club/jav-courses";
+import { SessionChangesLog, ShiftBadges } from "@/components/club/coach-shifts";
 import { AthleteMoneyCard, SUPPORT_CATEGORIES, SUPPORT_ICONS } from "@/components/club/athlete-area-extras";
 import type { MessageKey } from "@/lib/i18n/messages/it";
 import { useI18n } from "@/lib/i18n/provider";
@@ -446,6 +447,7 @@ export function WorkHoursPanel() {
     <div className="space-y-4">
       <p className="text-sm text-ink-500">{t("workHours.intro")}</p>
       <Input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="w-48" aria-label={t("absence.month")} />
+      <SessionChangesLog month={month} />
       {isLoading ? <Skeleton className="h-48" /> : !data?.length ? <EmptyState title={t("workHours.empty")} /> : (
         <div className="space-y-3">
           {paged.items.map((s) => (
@@ -457,8 +459,8 @@ export function WorkHoursPanel() {
               {open === s.user_id && (
                 <ul className="mt-3 divide-y divide-ink-100 text-sm">
                   {s.sessions.map((w) => (
-                    <li key={w.id} className="flex items-center justify-between py-2">
-                      <span>{fmt.shortDate(w.started_at)} · {new Date(w.started_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}–{w.ended_at ? new Date(w.ended_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : t("workHours.open")}{w.note ? ` · ${w.note}` : ""}</span>
+                    <li key={w.id} className="flex items-center justify-between gap-2 py-2">
+                      <span className="flex flex-wrap items-center gap-1">{fmt.shortDate(w.started_at)} · {new Date(w.started_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}–{w.ended_at ? new Date(w.ended_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : t("workHours.open")}{w.note ? ` · ${w.note}` : ""} <ShiftBadges shift={w} /></span>
                       <span className="text-ink-500">{hoursLabel(w.minutes)}</span>
                     </li>
                   ))}

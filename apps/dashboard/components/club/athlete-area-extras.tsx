@@ -1,5 +1,6 @@
 "use client";
 
+import { Countdown, moment } from "@/components/site/countdown";
 import Link from "next/link";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -135,6 +136,9 @@ export function AreaCompetitions({ athlete }: { athlete: AthleteDetail }) {
                 📅 {fmt.shortDate(c.starts_on)}{c.location ? ` · 📍 ${c.location}` : ""}
                 {c.registrations_open && ` · ⏳ ${t("area.compDeadline", { date: fmt.shortDate(c.registration_deadline) })}`}
               </p>
+              {c.registrations_open && !c.entry_status && (
+                <Countdown className="mt-1.5" target={moment(c.registration_deadline, null, "endOfDay")} label={t("countdown.registrations")} />
+              )}
             </div>
             {c.entry_status ? (
               <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">✓ {t("area.compEntered")}</span>

@@ -128,6 +128,7 @@ def post_dict(post: ClubNewsPost, *, authors: dict, clubs: dict | None = None, l
         "video_url": post.video_url, "link_url": post.link_url, "pinned": post.pinned,
         "published": post.published, "published_at": post.published_at, "audience": post.audience,
         "author_name": authors.get(post.author_user_id) if post.author_user_id else None,
+        "author_user_id": post.author_user_id,
         "club": (clubs or {}).get(post.club_id) if post.club_id else _jav_ref(),
         "likes": (likes or {}).get(post.id, 0), "liked": post.id in (liked or set()),
     }
@@ -288,3 +289,56 @@ def upload_image(*, scope: ClubScope | Owner, file_bytes: bytes, content_type: s
                             key_prefix=f"club-news/{owner.club_id or 'jav'}")
     except UploadValidationError as exc:
         raise ClubValidationError("La foto deve essere un'immagine JPG, PNG o WebP di massimo 5 MB.") from exc
+
+
+# --- I post dei treinadores ------------------------------------------------------------------------
+#
+# Un treinador scrive sulla bacheca del suo club come la segreteria, con tre
+# limiti: solo per i soci del club (mai per tutto il circuito), niente post
+# fissati in cima (quello è della segreteria), e corregge o toglie solo i
+# suoi. La segreteria li vede tutti nella sua console e li può correggere,
+# nascondere o togliere come i propri (moderazione).
+
+_STAFF_FIELDS = ("title", "body", "image_url", "video_url", "link_url", "published")
+
+
+async def list_author_posts(db: AsyncSession, *, scope: ClubScope, author_user_id: uuid.UUID) -> list[dict]:
+    """I post di un treinador, bozze comprese."""
+    posts = list((await db.execute(
+        select(ClubNewsPost).where(
+            ClubNewsPost.organization_id == scope.organization_id, ClubNewsPost.club_id == scope.club_id,
+            ClubNewsPost.author_user_id == author_user_id,
+        ).order_by(ClubNewsPost.published_at.desc())
+    )).scalars())
+    return await _dicts(db, posts)
+
+
+async def staff_feed(db: AsyncSession, *, scope: ClubScope, user_id: uuid.UUID, today: date) -> list[dict]:
+    """La bacheca come la vedono i soci, per lo staff."""
+    return await feed(db, scope=scope, user_id=user_id, today=today)
+
+
+async def _own(db: AsyncSession, *, scope: ClubScope, post_id: uuid.UUID, author_user_id: uuid.UUID) -> ClubNewsPost:
+    post = await _get(db, owner=Owner.of(scope), post_id=post_id)
+    if post.author_user_id != author_user_id:
+        raise ClubNotFoundError("Notizia non trovata.")
+    return post
+
+
+async def create_staff_post(db: AsyncSession, *, scope: ClubScope, actor_user_id: uuid.UUID, data: dict) -> dict:
+    values = {k: v for k, v in data.items() if k in _STAFF_FIELDS}
+    return await create_post(db, scope=scope, actor_user_id=actor_user_id,
+                             data={**values, "audience": "CLUB", "pinned": False})
+
+
+async def update_staff_post(
+    db: AsyncSession, *, scope: ClubScope, post_id: uuid.UUID, actor_user_id: uuid.UUID, changes: dict,
+) -> dict:
+    await _own(db, scope=scope, post_id=post_id, author_user_id=actor_user_id)
+    return await update_post(db, scope=scope, post_id=post_id, actor_user_id=actor_user_id,
+                             changes={k: v for k, v in changes.items() if k in _STAFF_FIELDS})
+
+
+async def delete_staff_post(db: AsyncSession, *, scope: ClubScope, post_id: uuid.UUID, actor_user_id: uuid.UUID) -> None:
+    await _own(db, scope=scope, post_id=post_id, author_user_id=actor_user_id)
+    await delete_post(db, scope=scope, post_id=post_id, actor_user_id=actor_user_id)

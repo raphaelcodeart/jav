@@ -6,7 +6,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { JudoCareer } from "@/components/game/career/judo-career";
 import { DojoAcademy } from "@/components/game/dojo-academy";
+import { GameFrame } from "@/components/game/game-frame";
 import { BELT_COLORS, useGameText } from "@/components/game/i18n";
+import { ClubRandori } from "@/components/game/randori/club-randori";
 import { friendlyApiError } from "@/lib/api-error";
 import { cn } from "@/lib/cn";
 
@@ -31,7 +33,7 @@ async function getJson<T>(url: string): Promise<T> {
   return res.json();
 }
 
-type View = "hub" | "academy" | "career";
+type View = "hub" | "academy" | "career" | "randori";
 
 export function GamesHub() {
   const { g } = useGameText();
@@ -40,15 +42,28 @@ export function GamesHub() {
   const me = useQuery({ queryKey: ["game", "me"], queryFn: () => getJson<Me>("/api/proxy/game/me") });
   const refresh = () => void queryClient.invalidateQueries({ queryKey: ["game"] });
 
-  if (view === "academy") return <DojoAcademy onBack={() => setView("hub")} onXpChange={refresh} />;
+  // Ogni gioco nella sua cornice, con lo schermo intero (game-frame.tsx).
+  if (view === "academy") {
+    return (
+      <GameFrame title={g("academyName")} icon="🎓">
+        <DojoAcademy onBack={() => setView("hub")} onXpChange={refresh} />
+      </GameFrame>
+    );
+  }
   if (view === "career") {
     return (
-      <div className="space-y-4">
-        <button type="button" onClick={() => setView("hub")} className="cursor-pointer text-sm font-semibold text-brand-700 hover:underline">← {g("back")}</button>
+      <GameFrame title={g("careerName")} icon="🏆" onBack={() => setView("hub")}>
         {me.data ? (
           <JudoCareer playerName={me.data.display_name} examsPassed={me.data.exams_passed} onGoAcademy={() => setView("academy")} onXpChange={refresh} />
         ) : <Skeleton className="h-96" />}
-      </div>
+      </GameFrame>
+    );
+  }
+  if (view === "randori") {
+    return (
+      <GameFrame title={g("randoriName")} icon="🤼" onBack={() => setView("hub")}>
+        <ClubRandori onGoCareer={() => setView("career")} />
+      </GameFrame>
     );
   }
 
@@ -72,11 +87,11 @@ export function GamesHub() {
               gradient="from-brand-500 via-orange-500 to-accent-400" onPlay={() => setView("career")} delay={0.08}
               art={<TatamiArt />}
             />
-            <motion.li initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }}
-              className="flex min-h-[18rem] flex-col items-center justify-center rounded-[2rem] border-2 border-dashed border-ink-200 bg-ink-50/60 p-6 text-center text-ink-400">
-              <span className="text-5xl grayscale">🕹️</span>
-              <p className="mt-3 font-semibold">{g("soon")}</p>
-            </motion.li>
+            <AppCard
+              icon="🤼" name={g("randoriName")} tag={g("randoriTag")} text={g("randoriText")}
+              gradient="from-sky-500 via-blue-600 to-indigo-700" onPlay={() => setView("randori")} delay={0.16}
+              art={<RandoriArt />}
+            />
           </ul>
         </section>
 
@@ -170,6 +185,19 @@ function TatamiArt() {
       </div>
       <motion.span className="absolute bottom-6 left-14 text-4xl drop-shadow-lg" animate={{ x: [0, 10, 0] }} transition={{ duration: 1.6, repeat: Infinity }}>🥋</motion.span>
       <motion.span className="absolute bottom-6 right-14 text-4xl drop-shadow-lg [transform:scaleX(-1)]" animate={{ x: [0, -10, 0] }} transition={{ duration: 1.6, repeat: Infinity, delay: 0.3 }}>🥋</motion.span>
+    </div>
+  );
+}
+
+/** Due judoka, bianco e blu, che si salutano e si afferrano (rei, kumikata). */
+function RandoriArt() {
+  return (
+    <div className="relative flex h-32 w-56 items-end justify-center gap-1">
+      <motion.span className="text-5xl drop-shadow-lg" animate={{ rotate: [0, 12, 0, 0], x: [0, 0, 8, 0] }} transition={{ duration: 2.4, repeat: Infinity }}>🥋</motion.span>
+      <motion.span className="mb-10 text-3xl" animate={{ scale: [0.8, 1.2, 0.8], opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.2, repeat: Infinity }} aria-hidden="true">⚡</motion.span>
+      <span className="inline-block [transform:scaleX(-1)]">
+        <motion.span className="inline-block text-5xl drop-shadow-lg [filter:hue-rotate(200deg)_saturate(3)]" animate={{ x: [0, 0, 8, 0] }} transition={{ duration: 2.4, repeat: Infinity, delay: 0.2 }}>🥋</motion.span>
+      </span>
     </div>
   );
 }

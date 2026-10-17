@@ -23,6 +23,8 @@ class FiguresRead(BaseModel):
     absence_cents: int
     waived_cents: int
     missed_cents: int
+    #: Mensilità esenti («Isenta este mês»): fuori dall'emesso e dai mancati incassi.
+    exempt_cents: int = 0
     expenses_cents: int
     expenses_by_category: dict[str, int]
     staff_cents: int

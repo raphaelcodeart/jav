@@ -17,17 +17,21 @@ from datetime import date
 from sqlalchemy import extract, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domains.club import fee_splits, seasons
 from app.domains.club import pricing as pricing_rules
-from app.domains.club import seasons
 from app.domains.club import service as club_service
 from app.domains.club.models import ClubAthlete, ClubAttendance, ClubFee, ClubPaymentProof
 from app.domains.club.scope import scope_of
 
 #: Gli stati di una casella. PAID, WAIVED, DUE e OVERDUE hanno una quota;
+#: PARTIAL una quota pagata in parte e il suo resto, MONTH_EXEMPT un mese
+#: esente («Isenta este mês», club/fee_splits.py);
 #: UPCOMING è un mese futuro che si pagherà; NOT_BILLED un mese che il
 #: gruppo non fattura (luglio, agosto); NOT_ENROLLED un mese fuori
 #: dall'iscrizione; NONE un mese passato senza quota.
-MONTH_STATES = ("PAID", "WAIVED", "DUE", "OVERDUE", "UPCOMING", "NOT_BILLED", "NOT_ENROLLED", "NONE")
+MONTH_STATES = (
+    "PAID", "PARTIAL", "WAIVED", "MONTH_EXEMPT", "DUE", "OVERDUE", "UPCOMING", "NOT_BILLED", "NOT_ENROLLED", "NONE",
+)
 
 
 def season_periods(season: int) -> list[tuple[int, int]]:
@@ -59,16 +63,19 @@ async def season_months(db: AsyncSession, *, athlete: ClubAthlete, season: int, 
             )
         )
     ).scalar_one()
-    fees = {
-        f.period: f
-        for f in (
-            await db.execute(
-                select(ClubFee).where(
-                    ClubFee.athlete_id == athlete.id, ClubFee.kind == "MONTHLY", ClubFee.period.in_(keys)
-                )
+    # Ogni mese: la quota e, se pagata in parte, i suoi resti ("2026-10/r1").
+    groups: dict[str, list[ClubFee]] = {}
+    for f in (
+        await db.execute(
+            select(ClubFee).where(
+                ClubFee.athlete_id == athlete.id, ClubFee.kind == "MONTHLY",
+                ClubFee.period >= keys[0], ClubFee.period < f"{keys[-1]}~",
             )
-        ).scalars()
-    }
+        )
+    ).scalars():
+        if fee_splits.base_period(f.period) in keys:
+            groups.setdefault(fee_splits.base_period(f.period), []).append(f)
+    fees = {period: fee_splits.group_main(parts) for period, parts in groups.items()}
     proof_ids = {f.paid_via_proof_id for f in fees.values() if f.paid_via_proof_id}
     proofs = {
         p.id: p
@@ -97,9 +104,10 @@ async def season_months(db: AsyncSession, *, athlete: ClubAthlete, season: int, 
         if not athlete.plan_locked:
             plan = club_service.pick_plan(active_plans, age=seasons.federal_age(athlete.birth_date, year)) or current_plan
         fee = fees.get(period)
+        parts = fee_splits.order_parts(groups.get(period, []))
         expected = None
         if fee is not None:
-            state = fee.status if fee.status != "DUE" else ("OVERDUE" if fee.due_date < today else "DUE")
+            state = fee_splits.group_state(parts, today=today)
         elif plan is None or month not in (plan.billing_months or []) or plan.monthly_fee_cents <= 0:
             state = "NOT_BILLED"
         elif athlete.status != "ACTIVE" or not _enrolled(athlete, year, month):
@@ -127,19 +135,23 @@ async def season_months(db: AsyncSession, *, athlete: ClubAthlete, season: int, 
                 "status": proof.status, "created_at": proof.created_at,
             } if proof is not None else None,
             "attendances": attendance.get((year, month), 0),
+            "parts": [fee_dict(p, today=today) for p in parts] if len(parts) > 1 else [],
+            **fee_splits.group_numbers(parts),
         })
 
     def total(*states: str) -> int:
         return sum(m["fee"]["amount_cents"] for m in months if m["state"] in states and m["fee"])
+
+    partial = [m for m in months if m["state"] == "PARTIAL"]
 
     return {
         "season": season,
         "season_label": seasons.season_label(season),
         "months": months,
         "summary": {
-            "paid_cents": total("PAID"),
-            "due_cents": total("DUE", "OVERDUE"),
-            "overdue_cents": total("OVERDUE"),
+            "paid_cents": sum(m["paid_cents"] for m in months),
+            "due_cents": sum(m["due_cents"] for m in months),
+            "overdue_cents": total("OVERDUE") + sum(m["due_cents"] for m in partial if m["fee"]["overdue"]),
             "upcoming_cents": sum(m["expected_cents"] or 0 for m in months),
             "months_paid": sum(1 for m in months if m["state"] == "PAID"),
             "months_due": sum(1 for m in months if m["state"] == "DUE"),

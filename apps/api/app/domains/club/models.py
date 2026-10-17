@@ -44,6 +44,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base, TimestampMixin, UUIDPKMixin
 from app.domains.club.belts import BELT_CODES
+# Il quaderno del treinador ha un file suo: importato qui, finisce in
+# Base.metadata con il resto del dominio (create_all dei test, autogenerate).
+from app.domains.club import coach_models as _coach_models  # noqa: F401,E402
 
 CLUB_STATUSES = ("ACTIVE", "SUSPENDED")
 #: CLUB è un club ufficiale; JAV_COURSES è l'unità "Cursos JAV": i corsi
@@ -80,6 +83,11 @@ CLUB_FUNCTIONS = ("COACH", "ASSISTANT_COACH", "MONITOR", "ASSISTANT_MONITOR")
 #: metà delle lezioni; FULL: nessuna presenza.
 ABSENCE_ADJUSTMENTS = ("HALF", "FULL")
 FEE_STATUSES = ("DUE", "PAID", "WAIVED")
+#: Perché una quota condonata (WAIVED) non si paga, quando non è un condono
+#: qualunque: EXEMPT = «Isenta este mês», l'atleta quel mese non deve la
+#: mensilità (assente, infortunato). Esce dai conti del mese come il
+#: condono, ma non è un «mancato incasso» (club/fee_splits.py).
+WAIVE_KINDS = ("EXEMPT",)
 PROOF_STATUSES = ("ACCEPTED", "REJECTED")
 #: Come è stata pagata una quota. BANK_TRANSFER e CASH li può dichiarare il
 #: genitore (la ricevuta del bonifico, o a chi ha dato i contanti); CARD
@@ -303,10 +311,13 @@ class ClubPaymentProof(UUIDPKMixin, TimestampMixin, Base):
             unique=True, postgresql_where=text("receipt_number IS NOT NULL"),
         ),
         CheckConstraint(f"method IN ({_in(PROOF_METHODS)})", name="method"),
-        # Senza foto solo se il credito paga tutto, o se sono contanti: lì la
-        # prova è la persona che li ha ricevuti.
+        # Senza foto solo se il credito paga tutto, se sono contanti (lì la
+        # prova è la persona che li ha ricevuti), o se l'ha registrata la
+        # segreteria (reviewed_by: il POS, un MB Way visto sul telefono).
         CheckConstraint(
-            "storage_key IS NOT NULL OR credit_cents = amount_cents OR method = 'CASH'", name="file_or_credit"
+            "storage_key IS NOT NULL OR credit_cents = amount_cents OR method = 'CASH'"
+            " OR reviewed_by_user_id IS NOT NULL",
+            name="file_or_credit",
         ),
         CheckConstraint(
             "method <> 'CASH' OR cash_received_by_user_id IS NOT NULL OR cash_received_by_name IS NOT NULL",
@@ -526,6 +537,7 @@ class ClubFee(UUIDPKMixin, TimestampMixin, Base):
             "(installment_no >= 1 AND installments_total >= 2 AND installment_no <= installments_total)",
             name="installments",
         ),
+        CheckConstraint(f"waive_kind IS NULL OR waive_kind IN ({_in(WAIVE_KINDS)})", name="waive_kind"),
     )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
@@ -591,6 +603,16 @@ class ClubFee(UUIDPKMixin, TimestampMixin, Base):
     )
     waived_at: Mapped[datetime | None] = mapped_column(nullable=True)
     waive_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    #: NULL = condono; EXEMPT = mese esente (WAIVE_KINDS).
+    waive_kind: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    #: Pagamento parziale (club/fee_splits.py): la quota da cui questa è il
+    #: resto. La quota pagata in parte resta PAID con l'importo davvero
+    #: pagato, il resto nasce DUE con lo stesso tipo, scadenza e periodo
+    #: più "/rN"; `split_reason` dice perché non si è pagato tutto.
+    split_from_fee_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("club_fees.id"), nullable=True, index=True
+    )
+    split_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
     # --- Solo nell'unità Cursos JAV (club/kinds.py): a quale corso va la
     # mensilità e quanto ne spetta al treinador. Congelati all'emissione,
     # come il prezzo: se l'atleta cambia corso, o il corso cambia treinador
@@ -843,6 +865,14 @@ class ClubWorkSession(UUIDPKMixin, TimestampMixin, Base):
     corrected_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
+    #: L'ultima modifica fatta dalla persona stessa dalla sua area (orari o
+    #: nota): la segreteria vede che il turno è stato ritoccato, e da chi.
+    edited_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    edited_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    #: Scritto dopo, a mano ("ho dimenticato di timbrare"), non con Entro/Esco.
+    added_later: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
 
 
 class ClubCompetitionEntry(UUIDPKMixin, TimestampMixin, Base):
@@ -1088,3 +1118,66 @@ class ClubAthleteLoginCode(UUIDPKMixin, TimestampMixin, Base):
     expires_at: Mapped[datetime] = mapped_column()
     revoked_at: Mapped[datetime | None] = mapped_column(nullable=True)
     last_used_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+
+#: Le voci di spesa del relatório di un evento (club/event_reports.py).
+EVENT_REPORT_COST_KINDS = ("HOTEL", "TRAVEL", "FUEL", "FOOD", "ENTRY_FEES", "OTHER")
+
+
+class ClubEventReport(UUIDPKMixin, TimestampMixin, Base):
+    """Il relatório di un evento, scritto da un treinador (o dalla
+    segreteria): come è andata, quanto è costato, le foto. I risultati degli
+    atleti non si copiano qui: si leggono dalle iscrizioni, così un
+    piazzamento corretto dopo corregge anche il relatório. Uno per autore e
+    per evento: due clic su «Crea» non fanno due relatórios."""
+
+    __tablename__ = "club_event_reports"
+    __table_args__ = (
+        UniqueConstraint("club_id", "competition_id", "author_user_id", name="uq_club_event_reports_author"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id"), index=True
+    )
+    club_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("clubs.id"), index=True)
+    competition_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("club_competitions.id"), index=True
+    )
+    author_user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+    title: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Il racconto e l'opinione del treinador.
+    narrative: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+
+class ClubEventReportCost(UUIDPKMixin, TimestampMixin, Base):
+    """Una voce di spesa del relatório: una per tipo (EVENT_REPORT_COST_KINDS)."""
+
+    __tablename__ = "club_event_report_costs"
+    __table_args__ = (
+        UniqueConstraint("report_id", "kind", name="uq_club_event_report_costs_report_kind"),
+        CheckConstraint(f"kind IN ({_in(EVENT_REPORT_COST_KINDS)})", name="kind"),
+        CheckConstraint("amount_cents >= 0", name="amount_non_negative"),
+    )
+
+    report_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("club_event_reports.id", ondelete="CASCADE"), index=True
+    )
+    kind: Mapped[str] = mapped_column(String(16))
+    amount_cents: Mapped[int] = mapped_column(BigInteger, default=0)
+    note: Mapped[str | None] = mapped_column(String(300), nullable=True)
+
+
+class ClubEventReportPhoto(UUIDPKMixin, TimestampMixin, Base):
+    """Una foto del relatório, nel bucket **privato** (ci sono minori, e il
+    relatório è un documento interno del club): si apre con un URL presigned
+    di pochi minuti, dopo il controllo di chi la chiede."""
+
+    __tablename__ = "club_event_report_photos"
+
+    report_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("club_event_reports.id", ondelete="CASCADE"), index=True
+    )
+    storage_key: Mapped[str] = mapped_column(String(300))
+    content_type: Mapped[str] = mapped_column(String(50))

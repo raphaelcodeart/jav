@@ -616,7 +616,11 @@ async def staff_unpaid_month(ctx: ToolContext, _args: dict) -> dict:
 
     scope = ctx.require(MANAGE)
     period = ctx.today.strftime("%Y-%m")
-    fees = await club_service.list_fees(ctx.db, scope=scope, status="DUE", kind="MONTHLY", period=period)
+    # Anche il resto di una mensilità pagata in parte ("2026-10/r1", club/fee_splits.py).
+    fees = [
+        f for f in await club_service.list_fees(ctx.db, scope=scope, status="DUE", kind="MONTHLY")
+        if f.period.split("/r", 1)[0] == period
+    ]
     athletes = {
         a.id: a for a in (
             await ctx.db.execute(select(ClubAthlete).where(ClubAthlete.id.in_({f.athlete_id for f in fees})))

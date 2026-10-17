@@ -678,3 +678,92 @@ il telefono, compresa la foto della ricevuta e del certificato.
   pubblica», o da Sito → Judoka; sul sito compaiono nelle schede Foto, Video
   e Biografia.
 
+
+## Gare: risultati dal telefono, scheda dell'evento, relatórios
+
+- **Scheda dell'evento**: tocca il nome di una prova (nel calendário, in
+  «Eventos e provas» o nei risultati) e si apre tutto: descrizione, date,
+  luogo, scadenza, età, quota, circolare e gli atleti del club iscritti. Lo
+  staff vede anche i contatti (del genitore se l'atleta è minorenne) e può
+  chiamare, scrivere o aprire WhatsApp con un tocco. Le famiglie vedono la
+  scheda senza contatti.
+- **Risultati (treinador e segreteria)**: scegli la gara, poi per ogni atleta
+  scrivi alla pesata **peso** e **categoria**, e dopo la gara tocca la
+  medaglia 🥇🥈🥉 (o 5º, 7º, partecipazione) e aggiungi una nota. Si salva da
+  solo. I punti del Jav Ranking si aggiornano subito, come quando li mette
+  la segreteria.
+- **Relatórios**: dopo un evento, «Novo relatório» → scegli l'evento →
+  scrivi titolo, descrizione, come è andata, le spese voce per voce
+  (alloggio, viaggio, carburante, pasti, iscrizioni, altro) e aggiungi le
+  foto. I risultati degli atleti compaiono da soli. Ogni treinador vede i
+  suoi; la segreteria li vede tutti in «Eventos e provas» → «Relatórios de
+  eventos» e scarica il **PDF** di un mese, di un anno o di un periodo.
+
+## L'area del treinador
+
+- **Início**: appena entri vedi le lezioni di oggi e il bottone grande
+  **Marcar presenças**, i registri delle presenze rimasti vuoti (toccane uno
+  per completarlo), il tuo cartellino, le prossime gare, i messaggi da
+  leggere e gli atleti da tenere d'occhio (assenti da tre settimane o con il
+  certificato medico da rinnovare).
+- **Presenze**: puoi tornare ai giorni passati (frecce del mese o
+  calendario) e correggere. 📓 accanto a un atleta apre la sua scheda con le
+  note; «Nota da aula» scrive che cosa avete fatto.
+- **Caderno**: le note delle lezioni (tema, tecniche, osservazioni) come una
+  linea del tempo, con la ricerca e le tecniche più lavorate; e «Os meus
+  atletas», con la scheda di ognuno e le tue note personali. Le note sugli
+  atleti le vedono solo i treinadores dei suoi corsi e la segreteria.
+- **Cartellino**: nei «turnos do mês» tocca ✎ per correggere entrata, uscita
+  o nota, o togliere un turno; «Turno esquecido» aggiunge quello che non hai
+  timbrato. Vale per questo mese e il mese scorso; la segreteria vede che il
+  turno è stato modificato.
+- **Mural**: puoi pubblicare anche tu un post per i soci del club (avviso,
+  foto, video). Correggi e togli i tuoi; la segreteria li vede e li può
+  nascondere.
+
+## Pagamento parziale, mese esente e relatórios
+
+- **Pagamento parziale**: nel riquadro dell'atleta (Quote → 📅 Il mese)
+  tocca **½ Pagamento parcial**, scrivi quanto ti hanno dato, come (e per i
+  contanti a chi) e **perché** non tutto. Vedi subito quanto resta. La parte
+  pagata ha la sua ricevuta; il resto resta da pagare: lo vede la famiglia,
+  arrivano gli avvisi, e lo chiudi con **✓ Segna pagato** quando arriva. Se
+  hai sbagliato, **↶ Anular parcial** rimette la quota com'era.
+- **Mese esente**: **🎗️ Isenta este mês** quando un atleta quel mese non deve
+  pagare (assente, infortunato). Scrivi il motivo: quel mese non conta più né
+  da incassare né come debito. Si annulla con **↶ Anular isenção**. Funziona
+  anche per i mesi futuri (vai avanti con ›).
+- **Relatórios**: in **Contabilità → 📑 Relatórios** scegli la stagione o
+  l'anno e il relatório: la tabella atleti × mesi (chi ha pagato che cosa,
+  mese per mese, con i colori), gli incassi per metodo, i debiti per famiglia,
+  esenzioni e condoni con il motivo, i contanti ricevuti da ogni persona,
+  entrate e uscite mese per mese. **⬇ CSV** o **⬇ Excel** li scaricano, pronti
+  per il commercialista o la direzione.
+
+## JAV Games: Judo Career, combattimenti e Randori del club
+
+Si aprono da **Jogos/Giochi**. Tutto quello che succede nei giochi è finto:
+cinture, club e punti del gioco non sono quelli veri.
+
+- **⛶ Schermo intero**: ogni gioco ha il bottone in alto a destra; si esce
+  con ✕ o con Esc. Sull'iPhone il gioco occupa tutta la pagina.
+- **Judo Career**: in alto resta sempre visibile il banner con la tua
+  cintura e i contatori (tecnica, forza, mental, energia, salute, soldi,
+  fama). Sul computer a sinistra c'è il **piano della settimana** (scegli
+  fino a 2 azioni e premi **Avança**), a destra le schede (Progressi,
+  Calendario, Club, Soldi, Avvisi, Trofei, Diario). Sul telefono tutto è a
+  schede e il bottone della settimana resta in basso.
+- **Le gare**: nella settimana di una gara a cui sei iscritto, **Avança** ti
+  chiede come combattere: **Simulato** (guardi il combattimento animato) o
+  **Passo a passo**: a ogni scambio il gioco ti mostra che cosa succede
+  («Ele ataca com O-goshi!») e tu scegli la risposta entro 20 secondi.
+  Dopo ogni scambio vedi se la scelta era buona e **perché**. Contano anche
+  la tua tecnica, la forza, l'energia e la salute: stanco o infortunato
+  combatti peggio. Un turno perso non si rifà.
+- **Randori del Club**: sfidi i compagni del tuo club che giocano anche
+  loro (non devono essere collegati: combattono con le loro statistiche).
+  Scegli simulato o passo a passo; se vinci prendi punti al tuo amico (di
+  più se è più forte di te), se perdi li prende lui. Al massimo 3 incontri
+  al giorno con lo stesso amico e 10 sfide al giorno; un combattimento
+  lasciato a metà conta come perso. Vedi la classifica del club e gli
+  ultimi incontri.

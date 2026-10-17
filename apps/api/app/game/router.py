@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import get_db
 from app.core.deps import CurrentUser, get_current_user
 from app.core.rate_limit import rate_limit
-from app.game import service
+from app.game import fights, service
 
 router = APIRouter(prefix="/game", tags=["game"])
 
@@ -228,3 +228,81 @@ async def get_leaderboard(
     user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db),
 ) -> LeaderboardRead:
     return LeaderboardRead(**await service.leaderboard(db, user_id=user.user_id, scope=scope))
+
+
+# --- Combattimenti (fights.py): gare della carriera passo a passo e randori del club ---------------------------
+
+class FightAct(BaseModel):
+    seq: int = Field(ge=1, le=1000)
+    #: L'id di una delle opzioni mostrate; null = tempo scaduto.
+    option: str | None = Field(default=None, max_length=20)
+
+
+class CareerFightWrite(BaseModel):
+    comp_id: str = Field(max_length=40)
+    round: int = Field(ge=1, le=10)
+
+
+class ChallengeWrite(BaseModel):
+    opponent_id: uuid.UUID
+    mode: str = Field(pattern="^(SIM|STEP)$")
+
+
+_fight_limit = Depends(rate_limit("game-fight", max_requests=600, window_seconds=600))
+
+
+@router.get("/fights/{fight_id}")
+async def get_fight(fight_id: uuid.UUID, user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> dict:
+    try:
+        return await fights.get_fight(db, user_id=user.user_id, fight_id=fight_id)
+    except service.GameError as exc:
+        _raise(exc)
+
+
+@router.post("/fights/{fight_id}/act", dependencies=[_fight_limit])
+async def fight_act(fight_id: uuid.UUID, payload: FightAct, user: CurrentUser = Depends(get_current_user),
+                    db: AsyncSession = Depends(get_db)) -> dict:
+    try:
+        return await fights.act(db, user_id=user.user_id, fight_id=fight_id, seq=payload.seq, option=payload.option)
+    except service.GameError as exc:
+        _raise(exc)
+
+
+@router.post("/fights/{fight_id}/forfeit")
+async def fight_forfeit(fight_id: uuid.UUID, user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> dict:
+    try:
+        return await fights.forfeit(db, user_id=user.user_id, fight_id=fight_id)
+    except service.GameError as exc:
+        _raise(exc)
+
+
+@router.get("/career/fights/{comp_id}")
+async def career_fights(comp_id: str, user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> dict:
+    return await fights.career_rounds(db, user_id=user.user_id, comp_id=comp_id[:40])
+
+
+@router.post("/career/fights", dependencies=[_fight_limit])
+async def start_career_fight(
+    payload: CareerFightWrite, lang: str = Query(default="pt", max_length=2),
+    user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+) -> dict:
+    try:
+        return await fights.start_career_fight(db, user_id=user.user_id, comp_id=payload.comp_id, round_no=payload.round, lang=lang)
+    except service.GameError as exc:
+        _raise(exc)
+
+
+@router.get("/randori")
+async def get_randori(user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> dict:
+    return await fights.randori_overview(db, user_id=user.user_id)
+
+
+@router.post("/randori/challenge", dependencies=[_fight_limit])
+async def randori_challenge(
+    payload: ChallengeWrite, lang: str = Query(default="pt", max_length=2),
+    user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+) -> dict:
+    try:
+        return await fights.challenge(db, user_id=user.user_id, opponent_id=payload.opponent_id, mode=payload.mode, lang=lang)
+    except service.GameError as exc:
+        _raise(exc)

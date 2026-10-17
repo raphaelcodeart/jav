@@ -13,6 +13,7 @@ import { cn } from "@/lib/cn";
 import { CHART } from "@/lib/club-accounting";
 import { PAYMENT_METHOD_ICONS, clubGet, type Fee, type MonthState, type SeasonMonth, type SeasonMonths } from "@/lib/club";
 import { useI18n } from "@/lib/i18n/provider";
+import { stateLabel } from "@/lib/money2";
 import { usePrefersReducedMotion } from "@/lib/motion";
 
 /** Chi guarda il calendario: il titolare (paga), l'atleta nella sua area
@@ -39,6 +40,8 @@ const CELL: Record<MonthState, { box: string; icon: string; tone: Tone }> = {
   PAID: { box: "bg-emerald-50 ring-emerald-200 text-emerald-900", icon: "✓", tone: "success" },
   OVERDUE: { box: "bg-rose-50 ring-rose-300 text-rose-800", icon: "!", tone: "danger" },
   DUE: { box: "bg-amber-50 ring-amber-200 text-amber-900", icon: "⏳", tone: "warning" },
+  PARTIAL: { box: "bg-amber-50 ring-amber-300 text-amber-900", icon: "½", tone: "warning" },
+  MONTH_EXEMPT: { box: "bg-sky-50 ring-sky-200 text-sky-800", icon: "🎗️", tone: "info" },
   UPCOMING: { box: "bg-white ring-ink-200 ring-dashed text-ink-600", icon: "·", tone: "neutral" },
   WAIVED: { box: "bg-ink-50 ring-ink-200 text-ink-600", icon: "—", tone: "neutral" },
   NOT_BILLED: { box: "bg-ink-50/60 ring-ink-100 text-ink-400", icon: "", tone: "neutral" },
@@ -114,7 +117,7 @@ function MonthGrid({ months, onOpen }: { months: SeasonMonth[]; onOpen: (m: Seas
     <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
       {months.map((m, i) => {
         const style = CELL[m.state];
-        const amount = m.fee?.amount_cents ?? m.expected_cents;
+        const amount = m.state === "PARTIAL" ? m.due_cents ?? null : m.fee?.amount_cents ?? m.expected_cents;
         return (
           <motion.button
             key={m.period}
@@ -128,7 +131,7 @@ function MonthGrid({ months, onOpen }: { months: SeasonMonth[]; onOpen: (m: Seas
               style.box,
               m.current && "ring-2 ring-brand-500",
             )}
-            aria-label={`${monthName(m, fmt.tag, "long")}: ${t.dyn(`months.state.${m.state}`, m.state)}${amount != null ? `, ${fmt.euro(amount)}` : ""}`}
+            aria-label={`${monthName(m, fmt.tag, "long")}: ${stateLabel(m.state, t, "months")}${amount != null ? `, ${fmt.euro(amount)}` : ""}`}
           >
             <span className="flex w-full items-start justify-between gap-1">
               <span>
@@ -139,7 +142,7 @@ function MonthGrid({ months, onOpen }: { months: SeasonMonth[]; onOpen: (m: Seas
             </span>
             <span className="block w-full">
               {amount != null && <span className="block font-display text-base tabular-nums">{fmt.euro(amount)}</span>}
-              <span className="block text-[10px] font-semibold">{t.dyn(`months.state.${m.state}`, m.state)}</span>
+              <span className="block text-[10px] font-semibold">{stateLabel(m.state, t, "months")}</span>
             </span>
             {changed[i] && (
               <span className="absolute -top-2 right-2 rounded-full bg-accent-400 px-2 py-0.5 text-[9px] font-bold uppercase text-ink-900 shadow">
@@ -241,7 +244,7 @@ function MonthDetail({ month: m, mode, onClose, onPay, onMarkPaid }: {
   const { t, fmt } = useI18n();
   const toast = useToast();
   const fee = m.fee;
-  const payable = fee && (m.state === "DUE" || m.state === "OVERDUE");
+  const payable = fee && (m.state === "DUE" || m.state === "OVERDUE" || m.state === "PARTIAL");
   const receipt = RECEIPT[mode];
   const method = fee?.payment_method;
 
@@ -271,7 +274,16 @@ function MonthDetail({ month: m, mode, onClose, onPay, onMarkPaid }: {
     }
     if (fee.cash_received_by_name) rows.push([t("months.cashTo"), fee.cash_received_by_name]);
     if (fee.payment_note) rows.push(["", <span key="n" className="italic">“{fee.payment_note}”</span>]);
-    if (fee.status === "WAIVED" && fee.waive_reason) rows.push(["", t("months.waived", { reason: fee.waive_reason })]);
+    if (fee.status === "WAIVED" && fee.waive_reason) {
+      rows.push(["", fee.waive_kind === "EXEMPT" ? t("money2.exemptReason", { reason: fee.waive_reason }) : t("months.waived", { reason: fee.waive_reason })]);
+    }
+  }
+  // Pagamento parziale: la parte pagata, ciò che resta e perché.
+  if (m.state === "PARTIAL") {
+    rows.push([t("money2.partial.paidNow"), fmt.euro(m.paid_cents ?? 0)]);
+    rows.push([t("money2.partial.remaining"), fmt.euro(m.due_cents ?? 0)]);
+    const why = (m.parts ?? []).find((p) => p.split_reason)?.split_reason;
+    if (why) rows.push(["", <span key="w" className="italic">“{why}”</span>]);
   }
   rows.push([t("months.attendances"), String(m.attendances)]);
 
@@ -299,7 +311,7 @@ function MonthDetail({ month: m, mode, onClose, onPay, onMarkPaid }: {
             </p>
             <p className="font-display text-3xl tabular-nums">{amount != null ? fmt.euro(amount) : "—"}</p>
           </div>
-          <Badge tone={style.tone} dot>{t.dyn(`months.state.${m.state}`, m.state)}</Badge>
+          <Badge tone={style.tone} dot>{stateLabel(m.state, t, "months")}</Badge>
         </div>
         {m.state === "UPCOMING" && <p className="text-xs text-ink-500">{t("months.expectedHint")}</p>}
         {m.state === "NOT_BILLED" && <p className="text-sm text-ink-600">{t("months.notBilledText")}</p>}

@@ -317,6 +317,13 @@ async def save_career(db: AsyncSession, *, user_id: uuid.UUID, state: dict, care
         raise GameError("Per questa cintura devi prima superare l'esame in Dojo Academy.")
     if career_xp < 0 or career_xp - player.career_xp > CAREER_XP_PER_SAVE:
         raise GameError("XP non valida.")
+    # le statistiche del personaggio contano anche nei combattimenti decisi dal server (fights.py)
+    hero = state.get("hero")
+    if isinstance(hero, dict):
+        for key, top in (("tecnica", 100), ("fisico", 100), ("mental", 100), ("energia", 100), ("injury", 10)):
+            v = hero.get(key)
+            if v is not None and (not isinstance(v, int | float) or isinstance(v, bool) or not 0 <= v <= top):
+                raise GameError("Statistiche del personaggio non valide.")
     career = await db.get(GameCareer, player.id)
     if career is None:
         career = GameCareer(player_id=player.id, state=state, week=week, belt=belt, saves=1)

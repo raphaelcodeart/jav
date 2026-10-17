@@ -23,6 +23,7 @@ from app.domains.club import models as _club_models  # noqa: F401
 from app.domains.club import operations_models as _club_operations_models  # noqa: F401
 from app.domains.club import records_models as _club_records_models  # noqa: F401
 from app.domains.club import site_models as _club_site_models  # noqa: F401
+from app.domains.club.money_router import money_router
 from app.domains.club.accounting_router import (
     admin_accounting_router,
     family_accounting_router,
@@ -60,7 +61,11 @@ from app.domains.club.news_router import admin_news_router, board_router, platfo
 from app.domains.club.sponsors_router import admin_sponsors_router, public_sponsors_router
 from app.domains.jav_market.public_router import public_shop_router
 from app.domains.club.staff_work_router import admin_staff_work_router, platform_staff_router, staff_work_router
+from app.domains.club.coach_router import admin_coach_router, coach_router
 from app.domains.club.calendar_router import member_calendar_router, staff_calendar_router
+from app.domains.club.competition_staff_router import (
+    admin_reports_router, member_events_router, staff_competitions_router, staff_reports_router,
+)
 from app.domains.club.shop_router import router as club_shop_router
 from app.game.router import router as game_router
 from app.domains.email_texts.router import router as email_texts_router
@@ -134,6 +139,7 @@ app.include_router(clubs_router, prefix="/api")
 app.include_router(admin_accounting_router, prefix="/api")
 app.include_router(platform_accounting_router, prefix="/api")
 app.include_router(family_accounting_router, prefix="/api")
+app.include_router(money_router, prefix="/api")
 app.include_router(public_site_router, prefix="/api")
 app.include_router(site_admin_router, prefix="/api")
 app.include_router(site_family_router, prefix="/api")
@@ -165,10 +171,16 @@ app.include_router(public_sponsors_router, prefix="/api")
 app.include_router(public_shop_router, prefix="/api")
 app.include_router(staff_work_router, prefix="/api")
 app.include_router(admin_staff_work_router, prefix="/api")
+app.include_router(coach_router, prefix="/api")
+app.include_router(admin_coach_router, prefix="/api")
 app.include_router(platform_staff_router, prefix="/api")
 app.include_router(admin_sponsors_router, prefix="/api")
 app.include_router(staff_calendar_router, prefix="/api")
 app.include_router(member_calendar_router, prefix="/api")
+app.include_router(staff_competitions_router, prefix="/api")
+app.include_router(member_events_router, prefix="/api")
+app.include_router(staff_reports_router, prefix="/api")
+app.include_router(admin_reports_router, prefix="/api")
 app.include_router(club_shop_router, prefix="/api")
 app.include_router(game_router, prefix="/api")
 app.include_router(email_texts_router, prefix="/api")

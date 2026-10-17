@@ -8,6 +8,12 @@ type Fmt = ReturnType<typeof useI18n>["fmt"];
  *  «Iscrizione gara: Torneio…»): qui si ricostruisce da tipo, periodo e
  *  descrizione quando hanno una di queste forme; per il resto resta la sua. */
 export function feeLabel(f: { kind: string; period: string; description: string }, t: T, fmt: Fmt): string {
+  // Il resto di un pagamento parziale («2026-10/r1», «… · resto»): la
+  // quota da cui nasce, più «resto» (club/fee_splits.py).
+  if (/\/r\d+$/.test(f.period)) {
+    const base = { ...f, period: f.period.replace(/\/r\d+$/, ""), description: f.description.replace(/ · resto$/, "") };
+    return `${feeLabel(base, t, fmt)} · ${t("money2.remainder")}`;
+  }
   const kind = t.dyn(`club.feeKind.${f.kind}`, "");
   if (!kind) return f.description;
   const month = /^(\d{4})-(\d{2})$/.exec(f.period);

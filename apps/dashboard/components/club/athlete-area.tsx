@@ -21,6 +21,7 @@ import { AreaEvents } from "@/components/club/area-events";
 import { Tabs } from "@/components/ui/tabs";
 import { AthleteHealthCard } from "@/components/club/athlete-health-card";
 import { AthletePayModal } from "@/components/club/athlete-pay-modal";
+import { Modal } from "@/components/ui/modal";
 import { SeasonMonthsPanel } from "@/components/club/season-months";
 import { ACHIEVEMENT_ICONS, clubGet, clubSend, type AthleteDetail } from "@/lib/club";
 import { cn } from "@/lib/cn";
@@ -123,6 +124,7 @@ function Area({ id, section, onGo }: { id: string; section: AreaSection; onGo: (
   const { data: a, isLoading } = useQuery({ queryKey: key, queryFn: () => clubGet<AthleteArea>(`/athlete-area/${id}`) });
   const [busy, setBusy] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
+  const [payMenu, setPayMenu] = useState(false);
 
   if (isLoading || !a) return <Skeleton className="h-96" />;
   const today = a.lessons.filter((l) => l.date === a.today);
@@ -192,8 +194,23 @@ function Area({ id, section, onGo }: { id: string; section: AreaSection; onGo: (
             )}
           </section>
 
-          <ul className="grid gap-3 sm:grid-cols-3">
-            {([["competitions", "🏆", t("area.nav.competitions")], ["board", "📰", t("area.nav.board")], ["games", "🎮", t("area.nav.games")]] as const).map(([key, icon, label]) => (
+          {/* --- I tre pulsanti grandi: presenza, pagamento, prove --- */}
+          <div className="grid gap-4 lg:grid-cols-3">
+            <BigAction tone="from-brand-500 via-brand-600 to-ink-900" icon="🥋" pulse
+              title={t("athleteArea.markCta")} text={t("athleteArea.markCtaText")} onClick={() => onGo("lessons")} />
+            <BigAction tone="from-emerald-500 via-teal-600 to-ink-900" icon="📸"
+              title={a.can_pay || a.can_manage ? t("athleteHome.payTitle") : t("athleteHome.feesTitle")}
+              text={dueFees.length > 0
+                ? t("athleteHome.payDue", { n: dueFees.length, amount: fmt.euro(dueFees.reduce((sum, f) => sum + f.amount_cents, 0)) })
+                : t("athleteHome.payNone")}
+              onClick={() => (a.can_pay ? setPayMenu(true) : a.can_manage ? (window.location.href = "/customer") : goFees())} />
+            <BigAction tone="from-accent-400 via-amber-500 to-ink-900" icon="🏆"
+              title={t("athleteHome.joinTitle")} text={t("athleteHome.joinText")} onClick={() => onGo("competitions")} />
+          </div>
+
+          {/* --- Le scorciatoie piccole --- */}
+          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {([["fees", "💶", t("area.nav.fees")], ["achievements", "🏅", t("area.nav.achievements")], ["games", "🎮", t("area.nav.games")], ["board", "📰", t("area.nav.board")]] as const).map(([key, icon, label]) => (
               <li key={key}>
                 <button type="button" onClick={() => onGo(key)} className="flex w-full cursor-pointer items-center gap-3 rounded-2xl bg-white p-4 text-left shadow-soft ring-1 ring-ink-900/5 transition hover:-translate-y-0.5">
                   <span className="text-2xl" aria-hidden="true">{icon}</span><span className="font-semibold text-ink-900">{label}</span><span className="ml-auto text-ink-400">→</span>
@@ -202,20 +219,21 @@ function Area({ id, section, onGo }: { id: string; section: AreaSection; onGo: (
             ))}
           </ul>
 
-          {/* --- Segna la tua presenza: porta alle lezioni --- */}
-          <motion.button type="button" onClick={() => onGo("lessons")} whileHover={{ y: -3 }} whileTap={{ scale: 0.98 }}
-            className="relative flex w-full cursor-pointer items-center gap-4 overflow-hidden rounded-[2rem] bg-gradient-to-br from-brand-500 via-brand-600 to-ink-900 p-6 text-left text-white shadow-lift">
-            <span aria-hidden="true" className="pointer-events-none absolute -right-4 -top-6 select-none font-display text-[8rem] leading-none text-white/10">柔</span>
-            <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white/15 text-4xl ring-1 ring-white/25 animate-pulse-ring" aria-hidden="true">🥋</span>
-            <span className="relative min-w-0 flex-1">
-              <span className="block font-display text-2xl leading-tight sm:text-3xl">{t("athleteArea.markCta")}</span>
-              <span className="mt-1 block text-sm text-white/85">{t("athleteArea.markCtaText")}</span>
-            </span>
-            <span className="relative hidden rounded-2xl bg-accent-400 px-4 py-3 font-bold text-ink-900 shadow sm:block">{t("athleteArea.markCtaButton")} →</span>
-          </motion.button>
-
           {/* --- Invita un amico, come nella sua pagina --- */}
           <InviteCard withNetwork={false} />
+          <Modal open={payMenu} onClose={() => setPayMenu(false)} title={t("athleteHome.payTitle")} subtitle={t("athleteHome.payMenuText")}>
+            <div className="grid gap-3">
+              <PayChoice icon="💶" title={t("athleteHome.payFees")} text={dueFees.length > 0
+                ? t("athleteHome.payDue", { n: dueFees.length, amount: fmt.euro(dueFees.reduce((sum, f) => sum + f.amount_cents, 0)) })
+                : t("athleteHome.payNone")}
+                disabled={dueFees.length === 0} onClick={() => { setPayMenu(false); setPaying(true); }} />
+              <PayChoice icon="🏆" title={t("athleteHome.payEvents")} text={t("athleteHome.payEventsText")}
+                disabled={dueFees.length === 0} onClick={() => { setPayMenu(false); setPaying(true); }} />
+              <PayChoice icon="🛍️" title={t("athleteHome.payOrders")} text={t("athleteHome.payOrdersText")}
+                onClick={() => { window.location.href = "/customer?tab=orders"; }} />
+            </div>
+          </Modal>
+          {paying && section === "home" && <AthletePayModal athleteId={a.id} fees={dueFees} onClose={() => setPaying(false)} />}
         </>
       )}
 
@@ -446,5 +464,37 @@ function AreaCompetitionsSection({ athlete }: { athlete: AthleteDetail }) {
       ]} />
       {tab === "events" ? <AreaEvents returnHref={`/atleta?a=${athlete.id}`} /> : <AreaCompetitions athlete={athlete} />}
     </div>
+  );
+}
+
+/** Un pulsante grande della home dell'atleta: icona, titolo, una riga. */
+function BigAction({ tone, icon, title, text, onClick, pulse = false }: {
+  tone: string; icon: string; title: string; text: string; onClick: () => void; pulse?: boolean;
+}) {
+  return (
+    <motion.button type="button" onClick={onClick} whileHover={{ y: -3 }} whileTap={{ scale: 0.98 }}
+      className={cn("relative flex w-full cursor-pointer items-center gap-4 overflow-hidden rounded-[2rem] bg-gradient-to-br p-5 text-left text-white shadow-lift sm:p-6", tone)}>
+      <span aria-hidden="true" className="pointer-events-none absolute -right-4 -top-6 select-none font-display text-[7rem] leading-none text-white/10">柔</span>
+      <span className={cn("flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/15 text-3xl ring-1 ring-white/25", pulse && "animate-pulse-ring")} aria-hidden="true">{icon}</span>
+      <span className="relative min-w-0 flex-1">
+        <span className="block font-display text-xl leading-tight sm:text-2xl">{title}</span>
+        <span className="mt-1 block text-sm text-white/85">{text}</span>
+      </span>
+      <span className="relative text-2xl text-white/80" aria-hidden="true">→</span>
+    </motion.button>
+  );
+}
+
+function PayChoice({ icon, title, text, onClick, disabled = false }: { icon: string; title: string; text: string; onClick: () => void; disabled?: boolean }) {
+  return (
+    <button type="button" onClick={onClick} disabled={disabled}
+      className="flex w-full cursor-pointer items-center gap-4 rounded-2xl bg-ink-50 p-4 text-left ring-1 ring-ink-900/5 transition hover:bg-white hover:shadow-soft disabled:cursor-not-allowed disabled:opacity-50">
+      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white text-2xl shadow-sm" aria-hidden="true">{icon}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-semibold text-ink-900">{title}</span>
+        <span className="block text-xs text-ink-500">{text}</span>
+      </span>
+      <span className="text-ink-400" aria-hidden="true">→</span>
+    </button>
   );
 }

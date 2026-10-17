@@ -37,6 +37,9 @@ class GamePlayer(GameBase):
     #: classifica è la somma.
     quiz_xp: Mapped[int] = mapped_column(BigInteger, default=0)
     career_xp: Mapped[int] = mapped_column(BigInteger, default=0)
+    #: I punti del randori del club (fights.py): si vincono e si perdono
+    #: contro gli amici del club. Si parte da 1000.
+    randori_points: Mapped[int] = mapped_column(Integer, default=1000, server_default="1000")
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
 
@@ -95,3 +98,35 @@ class GameCareer(GameBase):
     saves: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
+
+
+class GameFight(GameBase):
+    """Un incontro deciso dal server (fight.py, fights.py): una gara della
+    carriera combattuta passo a passo, o un randori con un amico del club.
+    `state` è lo stato del motore, con le cose che il browser non vede
+    (la qualità delle risposte); `context_key` rende unico il combattimento
+    di un turno di una gara della carriera: un turno perso non si rifà."""
+
+    __tablename__ = "fights"
+    __table_args__ = (UniqueConstraint("player_id", "context_key", name="uq_fights_player_context"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    player_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("game.players.id", ondelete="CASCADE"), index=True)
+    #: CAREER | RANDORI
+    kind: Mapped[str] = mapped_column(String(10))
+    #: SIM | STEP
+    mode: Mapped[str] = mapped_column(String(4))
+    context_key: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    #: L'amico sfidato nel randori (un altro giocatore del gioco).
+    opponent_player_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("game.players.id", ondelete="CASCADE"), nullable=True, index=True)
+    lang: Mapped[str] = mapped_column(String(2), default="pt")
+    state: Mapped[dict] = mapped_column(JSONB, default=dict)
+    #: ACTIVE | FINISHED
+    status: Mapped[str] = mapped_column(String(10), default="ACTIVE")
+    won: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    #: Randori: i punti passati dal perdente al vincitore.
+    points: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow, index=True)
+    updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
+    finished_at: Mapped[datetime | None] = mapped_column(nullable=True)

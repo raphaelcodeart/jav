@@ -33,6 +33,8 @@ export interface NewsPost {
   published: boolean;
   published_at: string;
   author_name: string | null;
+  /** Chi l'ha scritto: il treinador corregge solo i suoi (coach-board.tsx). */
+  author_user_id?: string | null;
   /** CLUB: solo i soci; NETWORK: tutto il circuito. */
   audience?: "CLUB" | "NETWORK";
   /** Chi firma: il club, o JudoArteVida. */
@@ -41,13 +43,13 @@ export interface NewsPost {
   liked?: boolean;
 }
 
-interface FeedEvent {
+export interface FeedEvent {
   id: string; name: string; kind: string; level: string; status: string; starts_on: string; ends_on: string;
   location: string | null; organizer: string | null; image_url: string | null; registration_deadline: string;
   club_name: string | null; network: boolean;
 }
 
-interface FeedItem { type: "POST" | "EVENT"; date: string; post: NewsPost | null; event: FeedEvent | null }
+export interface FeedItem { type: "POST" | "EVENT"; date: string; post: NewsPost | null; event: FeedEvent | null }
 
 interface BoardDocument {
   id: string;
@@ -251,7 +253,7 @@ const EVENT_STYLE: Record<string, { icon: string; bg: string }> = {
 };
 
 /** Una prova in arrivo come post: locandina o icona, data, luogo, iscrizioni. */
-function EventPost({ event: e }: { event: FeedEvent }) {
+export function EventPost({ event: e }: { event: FeedEvent }) {
   const { t, fmt } = useI18n();
   const style = EVENT_STYLE[e.kind] ?? EVENT_STYLE.OTHER!;
   const start = new Date(`${e.starts_on}T12:00:00`);
@@ -328,9 +330,11 @@ function BoardDocuments({ docs }: { docs: BoardDocument[] }) {
 // --- La segreteria ---------------------------------------------------------------------------------
 
 /** Le notizie del club: scriverle, correggerle, fissarle in cima, toglierle. */
-/** Le chiamate della console: del club (`/club/admin/news`) o di JudoArteVida (`/platform-news`). */
-function newsApi(mode: "club" | "platform") {
-  const base = mode === "club" ? "/api/proxy/club/admin/news" : "/api/proxy/platform-news";
+/** Le chiamate della console: del club (`/club/admin/news`), di JudoArteVida
+ *  (`/platform-news`) o di un treinador (`/club/staff/news`, solo i suoi post). */
+type NewsMode = "club" | "platform" | "staff";
+function newsApi(mode: NewsMode) {
+  const base = mode === "club" ? "/api/proxy/club/admin/news" : mode === "staff" ? "/api/proxy/club/staff/news" : "/api/proxy/platform-news";
   async function call<T>(path: string, method = "GET", body?: unknown): Promise<T> {
     const init: RequestInit = { method };
     if (body instanceof FormData) init.body = body;
@@ -402,7 +406,9 @@ export function NewsAdminPanel({ mode = "club" }: { mode?: "club" | "platform" }
   );
 }
 
-function NewsModal({ post, onClose, mode }: { post: NewsPost | null; onClose: () => void; mode: "club" | "platform" }) {
+/** Scrivere o correggere un post. Il treinador (`staff`) scrive solo per i
+ *  soci del club e non fissa in cima: niente scelte per quelle due cose. */
+export function NewsModal({ post, onClose, mode }: { post: NewsPost | null; onClose: () => void; mode: NewsMode }) {
   const api = newsApi(mode);
   const [audience, setAudience] = useState<"CLUB" | "NETWORK">(post?.audience ?? (mode === "platform" ? "NETWORK" : "CLUB"));
   const { t } = useI18n();
@@ -439,7 +445,8 @@ function NewsModal({ post, onClose, mode }: { post: NewsPost | null; onClose: ()
   async function save() {
     setBusy(true);
     setError(null);
-    const payload = { title, body: body || null, image_url: image, video_url: video.trim() || null, link_url: link.trim() || null, pinned, published, audience };
+    const base = { title, body: body || null, image_url: image, video_url: video.trim() || null, link_url: link.trim() || null, published };
+    const payload = mode === "staff" ? base : { ...base, pinned, audience };
     try {
       if (post) await api(`/${post.id}`, "PATCH", payload);
       else await api("", "POST", payload);
@@ -503,9 +510,11 @@ function NewsModal({ post, onClose, mode }: { post: NewsPost | null; onClose: ()
             </div>
           )}
           <div className="flex flex-wrap gap-5 text-sm text-ink-700">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" className="h-4 w-4 accent-brand-600" checked={pinned} onChange={(e) => setPinned(e.target.checked)} />📌 {t("board.pinLabel")}
-            </label>
+            {mode !== "staff" && (
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" className="h-4 w-4 accent-brand-600" checked={pinned} onChange={(e) => setPinned(e.target.checked)} />📌 {t("board.pinLabel")}
+              </label>
+            )}
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" className="h-4 w-4 accent-brand-600" checked={published} onChange={(e) => setPublished(e.target.checked)} />🚀 {t("board.publishLabel")}
             </label>

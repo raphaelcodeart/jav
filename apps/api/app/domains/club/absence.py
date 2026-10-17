@@ -17,6 +17,7 @@ from datetime import date
 from sqlalchemy import distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.db import utcnow
 from app.domains.audit import service as audit_service
 from app.domains.club import seasons
 from app.domains.club.models import ClubAthlete, ClubAttendance, ClubCourseAthlete, ClubFee
@@ -105,6 +106,10 @@ async def apply(
     if fee.amount_cents == 0:
         fee.status = "WAIVED"
         fee.waive_reason = "Taxa de falta: nessuna presenza nel mese"
+        # Chi e quando, come per ogni condono: il registro delle esenzioni
+        # (club/money_reports.py) lo deve poter dire.
+        fee.waived_at = utcnow()
+        fee.waived_by_user_id = actor_user_id
     await audit_service.record(
         db, organization_id=scope.organization_id, actor_user_id=actor_user_id,
         action="club.absence_adjustment", entity_type="club_fee", entity_id=str(fee.id),

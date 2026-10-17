@@ -84,6 +84,11 @@ export interface Fee {
   proof_status?: "ACCEPTED" | "REJECTED" | string | null;
   /** Corsi JAV: il corso a cui la mensilità è attribuita (null = senza corso). */
   course_id?: string | null;
+  /** null = condono; "EXEMPT" = «Isenta este mês» (club/fee_splits.py). */
+  waive_kind?: string | null;
+  /** Il resto di un pagamento parziale: la quota da cui nasce e perché. */
+  split_from_fee_id?: string | null;
+  split_reason?: string | null;
 }
 
 export type CertificateState = "MISSING" | "VALID" | "EXPIRING" | "EXPIRED";
@@ -243,7 +248,7 @@ export interface Family {
 }
 
 /** Lo stato della mensilità di un atleta nel mese (club/month_board.py). */
-export type MonthBoardState = "PAID" | "DUE" | "OVERDUE" | "WAIVED" | "EXEMPT" | "NONE";
+export type MonthBoardState = "PAID" | "DUE" | "OVERDUE" | "PARTIAL" | "WAIVED" | "MONTH_EXEMPT" | "EXEMPT" | "NONE";
 
 export interface MonthRow {
   athlete_id: string;
@@ -258,6 +263,10 @@ export interface MonthRow {
   /** Le altre quote scadute entro la fine del mese (gare, judogi, iscrizione...). */
   other_due: Fee[];
   guardian_email?: string | null;
+  /** Pagamento parziale: la quota pagata in parte e i suoi resti (vuoto se intera). */
+  parts?: Fee[];
+  paid_cents?: number;
+  due_cents?: number;
 }
 
 export interface MonthBoard {
@@ -269,7 +278,7 @@ export interface MonthBoard {
   totals: {
     athletes: number; expected_cents: number; collected_cents: number; missing_cents: number;
     paid: number; to_pay: number; overdue: number; exempt: number; none: number;
-    arrears_cents: number; other_due_cents: number;
+    arrears_cents: number; other_due_cents: number; partial?: number;
   };
 }
 
@@ -292,7 +301,7 @@ export const PAYMENT_METHOD_ICONS: Record<string, string> = {
 };
 
 /** Lo stato di una casella del calendario (club/months.py). */
-export type MonthState = "PAID" | "WAIVED" | "DUE" | "OVERDUE" | "UPCOMING" | "NOT_BILLED" | "NOT_ENROLLED" | "NONE";
+export type MonthState = "PAID" | "PARTIAL" | "WAIVED" | "MONTH_EXEMPT" | "DUE" | "OVERDUE" | "UPCOMING" | "NOT_BILLED" | "NOT_ENROLLED" | "NONE";
 
 export interface SeasonMonth {
   period: string;
@@ -307,6 +316,10 @@ export interface SeasonMonth {
   fee: Fee | null;
   proof: { id: string; method: string; has_file: boolean; status: string; created_at: string } | null;
   attendances: number;
+  /** Pagamento parziale: tutte le parti della mensilità, e le somme. */
+  parts?: Fee[];
+  paid_cents?: number;
+  due_cents?: number;
 }
 
 export interface SeasonMonths {

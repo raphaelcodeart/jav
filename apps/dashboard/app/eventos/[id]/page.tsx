@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Countdown, moment } from "@/components/site/countdown";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
@@ -99,6 +100,13 @@ export default async function EventPage({ params, searchParams }: Params) {
 
       <Container className="grid gap-10 py-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
         <aside className="space-y-5 lg:sticky lg:top-28 lg:self-start">
+          {/* I conti alla rovescia: chiusura delle iscrizioni e inizio della gara. */}
+          {event.status === "OPEN" && deadlineIn >= 0 && (
+            <Countdown size="lg" target={moment(event.registration_deadline, event.registration_deadline_time, "endOfDay")} label={t("countdown.registrationsClose")} />
+          )}
+          {startsIn >= 0 && (
+            <Countdown size="lg" tone="brand" target={moment(event.starts_on, event.starts_at_time, "morning")} label={t("countdown.eventStarts")} />
+          )}
           <div className="overflow-hidden rounded-3xl bg-white shadow-soft ring-1 ring-ink-900/5">
             <div className="h-1.5 bg-gradient-to-r from-brand-500 via-accent-400 to-ink-800" aria-hidden="true" />
             <dl className="divide-y divide-ink-900/5">

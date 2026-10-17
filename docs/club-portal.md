@@ -1641,3 +1641,299 @@ checkout le rifiuta comunque. Lo shop del club vende sempre.
   giorno con presenze segnate e iscritti.
 - **Pagine larghe**: `AppShell` ha `wide` (main senza `max-w-7xl`), usato
   dalla tabella atleti in segreteria e nella console.
+
+## Risultati dal treinador, scheda dell'evento e relatórios
+
+- **Risultati dal treinador** (`competition_staff.py`, rotte
+  `/club/staff/competitions…`, permesso `club.instruct`): l'elenco degli
+  eventi (prossimi o passati) con quanti atleti del club sono iscritti e
+  quanti hanno già un risultato; per ogni iscrizione si scrivono, un campo
+  alla volta (`PATCH …/entries/{entry_id}`), peso e categoria alla pesata,
+  poi piazzamento, posizione vera (il 9° di un open: `rank`, solo con la
+  partecipazione) e nota. **Il piazzamento passa da
+  `competitions.record_results`**, la funzione della segreteria: il Jav
+  Ranking lo somma allo stesso modo e la gara del club passa a DONE.
+  Peso e categoria non toccano lo stato della gara. Un treinador lavora solo
+  sulle iscrizioni del suo club (`ClubScope`): quelle di un altro club sono
+  «non trovate». Interfaccia: `components/club/coach-results.tsx` (medaglie
+  🥇🥈🥉 da toccare, salvataggio automatico all'uscita da ogni campo); la
+  segreteria la trova in «Eventos e provas» → «Risultati».
+- **Scheda dell'evento** (`components/club/competition-detail-modal.tsx`):
+  toccando il nome di una prova nel calendário, negli elenchi della
+  segreteria e nei risultati si apre la scheda con descrizione, date e ore,
+  luogo, scadenza, livello, età, quota, categorie, circolare e gli atleti del
+  club iscritti. Lo staff (`GET /club/staff/competitions/{id}`) vede nome
+  intero, età, peso, risultato e **i contatti**: dell'encarregado per un
+  minorenne, dell'atleta adulto se ha un account con email o telefono veri
+  (`contacts_for`; gli indirizzi `@atleta.invalid` non contano), con link per
+  chiamare, scrivere e WhatsApp. Atleti e famiglie
+  (`GET /club/calendar/events/{id}`, `club.athlete`) vedono la stessa scheda
+  senza contatti né pesi, gli iscritti come «Nome I.».
+- **Relatórios degli eventi** (`event_reports.py`, tabelle
+  `club_event_reports`, `club_event_report_costs`, `club_event_report_photos`,
+  migrazione 0033): titolo, descrizione, il racconto del treinador, le spese
+  per voce (alloggio, viaggio/voli, carburante, pasti, iscrizioni, altro:
+  importo in centesimi e nota, una riga per voce, UNIQUE (relatório, voce)) e
+  fino a 12 foto. **Uno per autore e per evento** (UNIQUE club, evento,
+  autore). I risultati non si copiano: si leggono dalle iscrizioni ogni
+  volta, quindi un piazzamento corretto dopo corregge anche il relatório. Il
+  treinador vede e modifica solo i suoi (quelli di un collega per lui non
+  esistono: 404); la segreteria (`club.manage`) li vede, crea e modifica
+  tutti. Le foto vanno nel **bucket privato** (documento interno con minori),
+  ottimizzate prima con `optimize_image` come quelle del sito, e si aprono
+  con URL presigned di 15 minuti. Interfaccia: `components/club/event-reports.tsx`
+  (`EventReportsPanel`, e `CoachEventsPanel` per l'area del treinador:
+  risultati + relatórios).
+- **PDF dei relatórios** (`GET /club/admin/event-reports/pdf?from&to`, solo
+  `club.manage`; `event_reports.render_pdf`): un PDF unico per il periodo
+  (un mese, un anno, da… a…, al massimo tre anni), con gli eventi che
+  **cominciano** nel periodo. Copertina con la barra dorata del flyer, il
+  logo JudoArteVida, i numeri (relatórios, atleti, ori, argenti, bronzi,
+  spese) e l'indice; poi un relatório per pagina con l'evento nel colore del
+  suo tipo, i risultati con le medaglie, le spese con il totale, il racconto
+  e le foto. In portoghese, come il calendário. L'intestazione
+  `X-Report-Count` dice quanti relatórios contiene.
+
+## L'area del treinador: Início, quaderno, turni, bacheca
+
+Codice: `club/coach.py` (servizio), `club/coach_router.py` (API),
+`club/coach_models.py` (tabelle), `club/workclock.py` (turni), `club/news.py`
+(post dei treinadores); interfaccia `components/club/coach-home.tsx`,
+`coach-notebook.tsx`, `coach-shifts.tsx`, `coach-board.tsx`. Migrazione 0034.
+Tutte le rotte vogliono `club.instruct`; chi vede che cosa lo decide il
+servizio con `manager` (chi ha anche `club.manage`, la segreteria).
+
+- **Menu** dell'area: Início, Presenças, Calendário, Provas, Caderno,
+  Cartellino, O meu trabalho, Mensagens, Mural, Cintos, Ranking (nei corsi
+  JAV niente Provas, Cintos e Ranking, e al loro posto Ganhos).
+- **Início** (`GET /club/staff/coach/home`): le lezioni di oggi con
+  «Marcar presenças» sulla lezione in corso (apre le presenze su quel giorno
+  e quel corso), i **registri vuoti** (lezioni degli ultimi 14 giorni già
+  finite, con iscritti e nessuna presenza), il cartellino, le prove dei
+  prossimi 60 giorni (il nome apre la scheda dell'evento), i messaggi non
+  letti, gli atleti **da tenere d'occhio** (nessuna presenza da 21 giorni,
+  certificato scaduto, in scadenza o mancante: solo lo stato, il file resta
+  della segreteria) e le ultime note del quaderno.
+- **Presenze**: il treinador vede solo i suoi corsi (titolare o adjunto), la
+  segreteria tutti; i giorni passati si aprono dalla striscia del mese (che
+  segue il mese del giorno scelto) o dal calendario e si correggono. Un
+  giorno futuro si guarda ma non si segna. «Todos presentes» segna in un
+  colpo chi non è ancora segnato; la nota per la segreteria non cambia più
+  la presenza (prima segnava sempre «presente»). 📓 su un atleta apre la sua
+  scheda, «Nota da aula» scrive la nota della lezione.
+- **Turni** (`GET/POST /club/staff/clock/sessions`, `PATCH/DELETE
+  /club/staff/clock/sessions/{id}`): la persona corregge entrata, uscita e
+  nota dei suoi turni, ne toglie uno timbrato per sbaglio, ne aggiunge uno
+  dimenticato (sempre con entrata e uscita). Regole, anche per la correzione
+  della segreteria: niente futuro (5 minuti di tolleranza), uscita dopo
+  l'entrata, al massimo 24 ore, **nessuna sovrapposizione** con un altro
+  turno della stessa persona (uno aperto conta fino ad adesso); un turno
+  chiuso non si riapre. La persona lavora solo su **questo mese e il mese
+  scorso**: prima le ore sono già contate e pagate, e corregge la
+  segreteria. Ogni modifica va nell'audit (`club.work_session_edited`,
+  `_added`, `_deleted`, `_corrected`, con prima e dopo); sul turno restano
+  `edited_at`/`edited_by_user_id` e `added_later`. La segreteria vede i
+  segni nelle ore del mese e l'elenco delle modifiche
+  (`GET /club/admin/work-sessions/changes?month=`).
+- **Quaderno: note delle lezioni** (`club_lesson_notes`, `/club/staff/coach/lesson-notes`):
+  corso + giorno, tema, tecniche (etichette separate da virgole, senza
+  doppioni, al massimo 30), testo. Più note per la stessa lezione (titolare
+  e adjunto). Si sfogliano come linea del tempo per mese, per corso, con la
+  ricerca in tema/tecniche/testo e il filtro per tecnica; accanto le
+  tecniche più lavorate del periodo. Le vedono i treinadores del corso e la
+  segreteria; le corregge solo chi le ha scritte, le toglie anche la
+  segreteria (audit).
+- **Quaderno: note sugli atleti** (`club_athlete_notes`,
+  `/club/staff/coach/athletes/{id}/notes`, `/club/staff/coach/athlete-notes/{id}`):
+  una categoria (tecnica, comportamento, salute, obiettivo, gare, altro) e
+  il testo. Le vedono **solo** i treinadores dei corsi a cui l'atleta è
+  iscritto e la segreteria; mai la famiglia né l'atleta, mai un altro club
+  (404). Correggerle è di chi le ha scritte (il testo di prima resta
+  nell'audit), toglierle anche della segreteria.
+- **Os meus atletas** (`GET /club/staff/coach/athletes`, scheda
+  `GET /club/staff/coach/athletes/{id}`): gli iscritti ai propri corsi (la
+  segreteria: tutti gli attivi) con cintura, presenze degli ultimi 30
+  giorni, ultima presenza, stato del certificato e numero di note; la scheda
+  ha le presenze di 90 giorni giorno per giorno e le note.
+- **Mural** (`GET /club/staff/board`, `POST/PATCH/DELETE /club/staff/news`):
+  la bacheca come la vedono i soci, e i post del treinador. Un treinador
+  scrive solo per i soci del club (mai `NETWORK`), non fissa in cima, e
+  corregge, nasconde o toglie solo i suoi; la segreteria li vede nella sua
+  console («Notícias») con il nome dell'autore e li modera come i propri.
+- **Ranking**: l'area del treinador chiamava `/club/admin/ranking`
+  (`club.manage`) e `/club/config` (`club.family`) e riceveva 403: ora
+  `RankingPanel admin` usa `/club/staff/ranking` e `/club/staff/config`.
+- Non fatto di proposito: i risultati dei giochi (Dojo Academy) per atleta,
+  perché il gestionale non legge i dati del gioco (docs/games.md).
+
+## Pagamento parziale, mese esente e relatórios della segreteria (migrazione 0032)
+
+Tre cose chieste dalla segreteria per il quadro «Mensalidades e quotas», più
+un audit dei conti. Codice: `club/fee_splits.py` (parziale ed esenzione),
+`club/money_reports.py` (relatórios), `club/money_router.py` (rotte, tutte
+`club.manage`: la segreteria o il superadmin entrato nel club); interfaccia
+`components/club/money-actions.tsx` e `components/club/money-reports.tsx`.
+
+### Pagamento parziale
+
+«½ Pagamento parziale» nel riquadro dell'atleta: la segreteria scrive quanto
+è stato pagato davvero (meno del totale), come (contanti e a chi, MB Way,
+bonifico, carta, come «Segna pagato»), una foto facoltativa e **perché** non
+tutto (obbligatorio, con tre motivi pronti). Vede subito quanto resta.
+
+Il modello è quello delle rate (`installment_no`), deciso al momento: la
+quota **si divide in due righe**.
+
+- La quota originale resta `PAID` con `amount_cents` = la parte pagata, e
+  tiene tutto ciò che è congelato (listino, sconti, taxa de falta, corso e
+  parte del treinador). La parte pagata ha la sua ricevuta
+  (`staff_record_payment`, numero progressivo come ogni pagamento).
+- Il resto nasce `DUE` con lo stesso tipo, la stessa scadenza, il periodo
+  della quota più `/rN` (`2026-10/r1`; un resto pagato a sua volta in parte
+  dà `/r2`), `split_from_fee_id` = la quota da cui nasce e `split_reason` =
+  il motivo. La descrizione finisce con « · resto».
+
+Così ogni conto che già esiste torna senza casi speciali: l'**incasso** è la
+parte pagata, nel mese in cui è entrata (principio di cassa); l'**emesso**
+del mese resta la mensilità intera (le due righe hanno la stessa scadenza);
+il resto è un **debito** come gli altri: quadro del mese (stato `PARTIAL`,
+«pagati X di Y», il motivo), «Questo mese» della famiglia (che lo paga con
+una prova), calendario della stagione, scadute, avvisi della mensilità e
+multa del 16 (`payment_reminders._due_monthly` legge anche `periodo/r%`),
+debiti per anzianità, JAVBOT «chi non ha pagato». La taxa de falta mancata
+si calcola dal netto congelato (`accounting.absence_cents`), non più da
+`netto − importo`, che il parziale riduce.
+
+Il credito invito (`referrals.on_fee_paid`) arriva **una volta sola**, con il
+pagamento che chiude il mese (l'ultimo resto): un mese pagato in due volte
+non accredita due volte, e conta un mese solo nella rete di chi ha invitato.
+
+**Annullare**: «↶ Annulla parziale» (`POST /club/admin/fees/{id}/undo-partial`)
+annulla la ricevuta della parte pagata (stato `REJECTED`, senza avvisare la
+famiglia: è la segreteria che corregge se stessa) e la quota **riassorbe il
+resto** (`merge_remainder`): torna una riga sola con l'importo di prima. Lo
+stesso succede se la ricevuta si rifiuta da «Comprovativos» o la quota si
+riapre. Il resto si riassorbe solo se è ancora intero (da pagare, senza resti
+suoi, senza prove collegate): un resto già pagato va annullato prima.
+
+API: `POST /club/admin/fees/{fee_id}/partial-payment` (multipart:
+`amount_cents`, `reason`, `method`, `cash_received_by_user_id` o
+`cash_received_by_name`, `file` facoltativo) → ricevuta e resto.
+
+### Mese esente («Isenta este mês»)
+
+«🎗️ Isenta este mês» nel riquadro: quel mese l'atleta non deve la mensilità
+(assente, infortunato, in viaggio), con un motivo obbligatorio. Nel codice
+c'erano già due cose simili, e nessuna era quella giusta da sola:
+
+- `exempt_monthly` sull'atleta = non paga **mai** la mensilità (non gli si
+  emette nemmeno la quota);
+- `WAIVED` = **condono** di una quota: esce dall'emesso, dai debiti e dagli
+  incassi, ma finisce nei «mancati incassi».
+
+Il mese esente riusa `WAIVED` (così è già fuori da emesso, debiti, incassi,
+avvisi, multa, quadro e calendario) con `waive_kind = EXEMPT`: la
+contabilità lo toglie anche dai **mancati incassi** (sconti e taxa de falta
+di quella quota compresi) e lo mostra a parte (`exempt_cents`, «Mesi esenti
+(fuori dai conti)»). Il quadro mostra lo stato `MONTH_EXEMPT` con il motivo.
+
+Se la mensilità di quel mese non è ancora emessa (un mese futuro, navigando
+con ›), la si emette subito con le regole del job del 1° (gruppo dell'età
+federale di quell'anno, sconti di oggi) e si esenta: il vincolo UNIQUE
+impedisce al job di ricrearla. Non si esenta una mensilità pagata (o pagata
+in parte): prima si annulla il pagamento. **Annullare**: «↶ Annulla
+esenzione» (`POST /club/admin/fees/{id}/unexempt`): un mese già arrivato
+torna da pagare; uno futuro torna senza quota (la emetterà il job, con i
+prezzi di allora; la risposta è `null`).
+
+API: `POST /club/admin/month/exempt` `{athlete_id, period: "AAAA-MM", reason}`.
+
+### Relatórios
+
+Nella Contabilità, scheda **📑 Relatórios**: si sceglie il relatório, la
+**stagione** (settembre → agosto) o l'**anno**, si guarda e si scarica in
+**CSV** (punto e virgola e virgola decimale, si apre bene con Excel in
+portoghese) o **XLSX** (importi come numeri in euro, intestazioni fisse).
+Tutto server-side (`GET /club/admin/reports/{report}?season=|year=&format=json|csv|xlsx&lang=`),
+con poche query raggruppate e nessun totale salvato. Le intestazioni dei file
+sono in portoghese, inglese o italiano (spagnolo → portoghese, francese,
+tedesco e ucraino → inglese, come JAVBOT); a schermo le traduce
+l'interfaccia.
+
+| Relatório | Che cosa | Come si calcola |
+|---|---|---|
+| `matrix` — Atleti × mesi | Una riga per atleta (attivo, o con una mensilità nel periodo): nome, n.º sócio, gruppo; una casella per mese: pagato (importo, data, metodo, chi ha ricevuto i contanti), parziale (pagato / da pagare), da pagare, scaduto, esente con il motivo, condonato, non iscritto, futuro, non emessa; totali di riga e di colonna | Mensilità (`MONTHLY`, quota e resti) del periodo. L'XLSX ha le caselle colorate per stato, la legenda e un secondo foglio «Detalhe» con una riga per atleta e mese (per le tabelle pivot) |
+| `collections` — Incassi per metodo | Mese × bonifico, MB Way, contanti, carta, credito | Le stesse quote pagate dell'incasso della contabilità (`paid_at`): la somma è l'incasso |
+| `debts` — Debiti per famiglia | Famiglia, email, atleti, quote, le cinque fasce di anzianità, scaduto, totale, scadenza più vecchia, giorni di ritardo | Le quote da pagare di oggi (> 0 €), come `accounting.debts` |
+| `adjustments` — Esenzioni e condoni | Ogni decisione di non incassare: mese esente, condono, taxa de falta intera e a metà, pagamento parziale; data, atleta, quota, importo, pagato, motivo, chi | Quote condonate (per data del condono), taxa de falta a metà (per scadenza), resti nati nel periodo |
+| `cash` — Contanti per persona | Chi ha ricevuto contanti, mese per mese | Quote pagate in contanti, per `cash_received_by` |
+| `pnl` — Entrate e uscite | Mese per mese: emesso, incassi (e di cui credito), riscossione, spese, personale, parte dei treinador, commissione, risultato, mancati incassi, mesi esenti | `accounting.monthly_figures`, gli stessi numeri del conto economico |
+
+### Audit della contabilità (ottobre 2026)
+
+Rivisto l'intero giro del denaro: emissione delle quote, pagamenti
+(segreteria e famiglie), prove e rifiuti, condoni, credito del wallet e
+crediti invito, spese e costi fissi, costo dello staff, conto economico,
+libro cassa, debiti, «As minhas contas».
+
+**Solido.** Niente totali salvati: ogni numero si ricalcola dalle righe, con
+query raggruppate. Incasso per cassa (`paid_at`), emesso per scadenza.
+Idempotenza con vincoli UNIQUE ovunque conti (quote, costi fissi,
+percentuale della piattaforma, chiavi dei movimenti del wallet, credito
+invito per quota e momento del pagamento). Il rifiuto di una prova riapre
+esattamente le sue quote e restituisce il credito nella stessa transazione.
+Percentuale della piattaforma e tariffe dello staff con lo storico (un
+cambio non riscrive il passato), solo turni chiusi. Prezzi e sconti
+congelati all'emissione. Ogni query filtra per club.
+
+**Corretto (con test, `tests/test_club_money2.py`).**
+
+1. **«Segna pagato» senza foto finiva in un errore 500.** La segreteria
+   che registrava un pagamento MB Way, bonifico o carta senza allegare la
+   foto (che l'interfaccia dice facoltativa) violava il vincolo
+   `file_or_credit` delle prove, pensato per le prove delle famiglie. Ora
+   una prova registrata dalla segreteria è già controllata
+   (`reviewed_by_user_id`) e il vincolo l'accetta (migrazione 0032).
+2. **Riaprire una mensilità con la taxa de falta intera** (condonata a 0 €)
+   lasciava una quota «da pagare» da 0 €: contava tra chi deve pagare nel
+   quadro, faceva partire gli avvisi e la **multa del 16** su una quota da
+   0 €. Ora riaprirla toglie la taxa de falta e rimette il netto; avvisi,
+   scadute e multa ignorano comunque le quote da 0 €.
+3. La taxa de falta intera condonava la quota **senza dire chi né quando**
+   (`waived_by_user_id`, `waived_at` vuoti): ora li registra, come ogni
+   condono.
+4. **Rifiuto di una prova**: il ritiro del credito invito girava prima del
+   commit del rifiuto; un errore lì dentro fa rollback e si sarebbe portato
+   via il rifiuto stesso (la prova restava accettata mentre la segreteria
+   leggeva «rifiutata»). Ora gira dopo il commit, come il pagamento.
+5. **Taxa de falta nei mancati incassi**: si calcolava come `netto −
+   importo`, giusto solo finché l'importo non cambia per altro; ora si
+   calcola dal netto congelato (stessa formula di `absence.apply`).
+6. Con i pagamenti parziali: credito invito una volta sola per mese, mese
+   contato una volta sola nella rete, resto incluso in avvisi, multa e
+   JAVBOT.
+
+**Raccomandazioni (non fatte, da decidere).**
+
+- **Confine dei mesi in UTC.** La contabilità taglia i mesi in UTC
+  (`accounting._month_of`), l'elenco delle prove in ora di Lisbona: un
+  pagamento fatto tra mezzanotte e l'una del 1° (ora legale) entra nel mese
+  prima. Passare tutta la contabilità all'ora del club cambia anche i mesi
+  chiusi: va deciso, non corretto di nascosto (`docs/open-questions.md`).
+- **Nessuna chiusura dei mesi.** Una correzione riscrive anche un mese già
+  comunicato al commercialista (per scelta: niente totali salvati). A fine
+  mese conviene scaricare e archiviare l'XLSX `pnl` e `collections`, o
+  aggiungere una «chiusura» che congeli il mese.
+- **Libro cassa**: la colonna metodo dice «prova» o «a mano», non il metodo
+  vero (`payment_method`); il relatório `collections` lo dà, ma il libro
+  cassa potrebbe mostrarlo.
+- **«As minhas contas»**: il credito usato per le quote si somma per chi ha
+  caricato la prova; un atleta adulto che carica con il credito del
+  genitore non comparirebbe nel conto del genitore. Meglio sommarlo per
+  famiglia delle quote coperte.
+- **Commissione della piattaforma sul credito invito**: la percentuale si
+  applica all'incasso compresa la parte pagata con il credito del wallet,
+  che il club non ha ricevuto in denaro. È una scelta commerciale da
+  confermare.
+- **Costi fissi**: la spesa del primo mese porta il giorno del costo fisso
+  anche se cade prima della data d'inizio.

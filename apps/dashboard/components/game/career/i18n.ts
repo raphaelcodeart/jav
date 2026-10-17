@@ -3,6 +3,7 @@
 // Dizionario del gioco: pt (principale), it, en. Separato dai messaggi dell'app.
 
 import { useCallback } from "react";
+import { GAME_LANGS, gameLangIndex } from "@/components/game/i18n";
 import { useI18n } from "@/lib/i18n/provider";
 import type { LogKey } from "./engine";
 
@@ -309,6 +310,32 @@ const pt = {
   log_medical: "{name} fez o exame médico",
   log_repair: "Tatamis reparados ({n})",
   log_noShow: "Faltaste à prova",
+  health: "Saúde",
+  injuryWeeks: "{n} sem.",
+  tab_week: "Semana",
+  tab_progress: "Progresso",
+  tab_diary: "Diário",
+  fight_YUKO: "Yuko! {tech}",
+  plannerTitle: "Plano da semana",
+  nextComp: "Próxima prova: {name}",
+  nextCompWhen: "daqui a {n} sem.",
+  goCalendar: "Calendário",
+  statsHint: "Treina técnica e físico e descansa para recuperar energia: tudo conta nos combates.",
+  modeTitle: "Dia de prova!",
+  modeText: "{name}: até {n} combates. Como queres combater?",
+  modeSim: "🎬 Simulado",
+  modeSimText: "Rápido: vês os combates animados, decididos pelas tuas estatísticas.",
+  modeStep: "🧠 Passo a passo",
+  modeStepText: "Tu decides cada ação e cada contra-ataque. Técnica, força, energia e saúde também contam.",
+  tourRound: "Combate {n} de {total}",
+  tourFight: "Combater",
+  tourResume: "Retomar o combate",
+  tourDone: "Ver resumo da semana",
+  tourChampion: "Campeão do torneio! 🥇",
+  tourOut: "Ficaste por aqui: {n} vitórias",
+  tourError: "Não foi possível começar o combate.",
+  tourSimInstead: "Simular em vez disso",
+  tourVs: "vs {name}",
   recentLog: "Diário",
 };
 
@@ -597,6 +624,32 @@ const it: Dict = {
   log_medical: "{name} ha fatto la visita medica",
   log_repair: "Tatami riparati ({n})",
   log_noShow: "Non ti sei presentato alla gara",
+  health: "Salute",
+  injuryWeeks: "{n} sett.",
+  tab_week: "Settimana",
+  tab_progress: "Progressi",
+  tab_diary: "Diario",
+  fight_YUKO: "Yuko! {tech}",
+  plannerTitle: "Piano della settimana",
+  nextComp: "Prossima gara: {name}",
+  nextCompWhen: "tra {n} sett.",
+  goCalendar: "Calendario",
+  statsHint: "Allena tecnica e fisico e riposa per recuperare energia: tutto conta nei combattimenti.",
+  modeTitle: "Giorno di gara!",
+  modeText: "{name}: fino a {n} incontri. Come vuoi combattere?",
+  modeSim: "🎬 Simulato",
+  modeSimText: "Veloce: guardi gli incontri animati, decisi dalle tue statistiche.",
+  modeStep: "🧠 Passo a passo",
+  modeStepText: "Decidi tu ogni azione e ogni contrattacco. Contano anche tecnica, forza, energia e salute.",
+  tourRound: "Incontro {n} di {total}",
+  tourFight: "Combatti",
+  tourResume: "Riprendi l'incontro",
+  tourDone: "Vedi il riepilogo della settimana",
+  tourChampion: "Campione del torneo! 🥇",
+  tourOut: "Ti sei fermato qui: {n} vittorie",
+  tourError: "Non è stato possibile iniziare l'incontro.",
+  tourSimInstead: "Simula invece",
+  tourVs: "vs {name}",
   recentLog: "Diario",
 };
 
@@ -883,6 +936,32 @@ const en: Dict = {
   log_medical: "{name} had the medical check",
   log_repair: "Tatami repaired ({n})",
   log_noShow: "You missed the tournament",
+  health: "Health",
+  injuryWeeks: "{n} wk",
+  tab_week: "Week",
+  tab_progress: "Progress",
+  tab_diary: "Diary",
+  fight_YUKO: "Yuko! {tech}",
+  plannerTitle: "This week's plan",
+  nextComp: "Next tournament: {name}",
+  nextCompWhen: "in {n} wk",
+  goCalendar: "Calendar",
+  statsHint: "Train technique and fitness and rest to recover energy: it all counts in fights.",
+  modeTitle: "Tournament day!",
+  modeText: "{name}: up to {n} fights. How do you want to fight?",
+  modeSim: "🎬 Simulated",
+  modeSimText: "Quick: watch animated fights, decided by your stats.",
+  modeStep: "🧠 Step by step",
+  modeStepText: "You decide every action and counter. Technique, strength, energy and health count too.",
+  tourRound: "Fight {n} of {total}",
+  tourFight: "Fight",
+  tourResume: "Resume the fight",
+  tourDone: "See the week's summary",
+  tourChampion: "Tournament champion! 🥇",
+  tourOut: "You went out here: {n} wins",
+  tourError: "The fight couldn't start.",
+  tourSimInstead: "Simulate instead",
+  tourVs: "vs {name}",
   recentLog: "Diary",
 };
 
@@ -896,7 +975,8 @@ const DICTS: Record<string, Dict> = { pt, it, en };
 export type CareerT = (key: CareerKey, vars?: Record<string, string | number>) => string;
 
 export function useCareerT(): { t: CareerT; locale: string } {
-  const { locale } = useI18n();
+  // `locale` qui è la lingua dei testi del gioco (pt, it, en): es → pt, fr/de/uk → en
+  const locale = GAME_LANGS[gameLangIndex(useI18n().locale)];
   const t = useCallback<CareerT>(
     (key, vars) => {
       const dict = DICTS[locale] ?? pt;

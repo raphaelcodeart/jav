@@ -41,6 +41,9 @@ import { CalendarPanel } from "@/components/club/coach-tools";
 import { BeltAwardPanel } from "@/components/club/staff-tools";
 import { CoursesManager } from "@/components/club/jav-courses";
 import { SeasonMonthsPanel } from "@/components/club/season-months";
+import { EventNameButton } from "@/components/club/competition-detail-modal";
+import { CoachResultsPanel } from "@/components/club/coach-results";
+import { EventReportsPanel } from "@/components/club/event-reports";
 import { useI18n } from "@/lib/i18n/provider";
 import { feeLabel } from "@/lib/fee-label";
 import { shareOrCopyLink } from "@/lib/share-link";
@@ -501,7 +504,22 @@ function Certificates() {
 
 // --- Gare e risultati -------------------------------------------------------------------------
 
+/** «Eventos e provas»: gli eventi, i risultati (lo stesso strumento del
+ *  treinador, components/club/coach-results.tsx) e i relatórios. */
 function Competitions() {
+  const { t } = useI18n();
+  const [view, setView] = useState("events");
+  return (
+    <div className="space-y-4">
+      <Tabs value={view} onChange={setView} items={[{ key: "events", label: t("evrep.admin.events") }, { key: "results", label: t("evrep.admin.results") }, { key: "reports", label: t("evrep.admin.reports") }]} />
+      {view === "events" && <CompetitionsList />}
+      {view === "results" && <CoachResultsPanel />}
+      {view === "reports" && <EventReportsPanel admin />}
+    </div>
+  );
+}
+
+function CompetitionsList() {
   const { t, fmt } = useI18n();
   const [transportFor, setTransportFor] = useState<Competition | null>(null);
   const { data, isLoading } = useQuery({ queryKey: ["club", "admin", "competitions"], queryFn: () => clubGet<Competition[]>(A("/competitions")) });
@@ -523,7 +541,7 @@ function Competitions() {
                   {c.transport_needed && <Badge tone="info">🚌 {t("event.transport")}</Badge>}
                   <Badge tone={c.status === "OPEN" ? "success" : c.status === "DONE" ? "info" : "warning"}>{c.status === "OPEN" ? t("ca.comp.status.OPEN") : c.status === "DONE" ? t("ca.comp.status.DONE") : t("ca.comp.status.CLOSED")}</Badge>
                 </div>
-                <h3 className="text-base text-ink-900">{c.name}</h3>
+                <h3 className="text-base text-ink-900"><EventNameButton id={c.id} name={c.name} mode="staff" /></h3>
                 <p className="text-sm text-ink-500">{fmt.shortDate(c.starts_on)} · {c.location ?? "—"} · {t("ca.comp.deadline", { date: fmt.shortDate(c.registration_deadline) })} · {c.fee_cents ? fmt.euro(c.fee_cents) : t("ca.comp.free")}</p>
               </div>
               <div className="flex flex-wrap gap-2">

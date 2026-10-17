@@ -11,6 +11,7 @@ import { useToast } from "@/components/ui/toast";
 import { clubGet, clubSend, hoursLabel, type Clock, type Lesson } from "@/lib/club";
 import { Tabs } from "@/components/ui/tabs";
 import { JavCalendar } from "@/components/club/jav-calendar";
+import { ShiftHistory } from "@/components/club/coach-shifts";
 import { useI18n } from "@/lib/i18n/provider";
 
 const S = (path: string) => `/staff${path}`;
@@ -87,9 +88,19 @@ function LessonsWeek() {
 }
 
 /** Il cartellino: un pulsante grande, "Entro" o "Esco", e le ore di oggi e
- *  del mese. */
+ *  del mese; accanto i turni del mese, da correggere (coach-shifts.tsx). */
 export function ClockPanel() {
-  const { t, fmt } = useI18n();
+  return (
+    <div className="grid lg:grid-cols-[1fr_1.2fr] gap-6">
+      <ClockCard />
+      <ShiftHistory />
+    </div>
+  );
+}
+
+/** Il pulsante Entro/Esco con le ore di oggi e del mese (anche nell'Início). */
+export function ClockCard({ compact = false }: { compact?: boolean }) {
+  const { t } = useI18n();
   const toast = useToast();
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: ["club", "staff", "clock"], queryFn: () => clubGet<Clock>(S("/clock")) });
@@ -103,6 +114,7 @@ export function ClockPanel() {
     try {
       const next = await clubSend<Clock>(S(open ? "/clock/out" : "/clock/in"), "POST", { note: note || null });
       queryClient.setQueryData(["club", "staff", "clock"], next);
+      void queryClient.invalidateQueries({ queryKey: ["club", "staff", "clock", "sessions"] });
       setNote("");
       toast({ tone: "success", title: open ? t("clock.outDone") : t("clock.inDone") });
     } catch (e) {
@@ -113,33 +125,18 @@ export function ClockPanel() {
   }
 
   return (
-    <div className="grid lg:grid-cols-[1fr_1.2fr] gap-6">
-      <div className="glass-card rounded-3xl p-6 space-y-4 text-center">
-        <p className="text-sm text-ink-500">
-          {open ? t("clock.since", { time: new Date(open.started_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }) : t("clock.notIn")}
-        </p>
-        <motion.button type="button" whileTap={{ scale: 0.95 }} onClick={punch} disabled={busy}
-          className={`mx-auto flex h-40 w-40 items-center justify-center rounded-full text-white font-display text-2xl shadow-brand cursor-pointer disabled:opacity-60 ${open ? "bg-gradient-to-br from-rose-500 to-rose-600" : "bg-gradient-to-br from-emerald-500 to-emerald-600"}`}>
-          {open ? t("clock.out") : t("clock.in")}
-        </motion.button>
-        <Input value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} placeholder={t("clock.notePlaceholder")} />
-        <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-2xl bg-ink-50 p-3"><p className="text-xs text-ink-500">{t("clock.today")}</p><p className="font-display text-xl">{hoursLabel(data.today_minutes)}</p></div>
-          <div className="rounded-2xl bg-ink-50 p-3"><p className="text-xs text-ink-500">{t("clock.month")}</p><p className="font-display text-xl">{hoursLabel(data.month_minutes)}</p></div>
-        </div>
-      </div>
-      <div className="glass-card rounded-3xl p-5">
-        <h3 className="text-base text-ink-900 mb-3">{t("clock.history")}</h3>
-        {data.sessions.length === 0 ? <p className="text-sm text-ink-500">{t("clock.noSessions")}</p> : (
-          <ul className="divide-y divide-ink-100 text-sm">
-            {data.sessions.map((s) => (
-              <li key={s.id} className="flex items-center justify-between py-2">
-                <span>{fmt.shortDate(s.started_at)} · {new Date(s.started_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}–{s.ended_at ? new Date(s.ended_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "…"}{s.note ? ` · ${s.note}` : ""}</span>
-                <span className="text-ink-500">{hoursLabel(s.minutes)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
+    <div className={`glass-card rounded-3xl space-y-4 text-center ${compact ? "p-5" : "p-6"}`}>
+      <p className="text-sm text-ink-500">
+        {open ? t("clock.since", { time: new Date(open.started_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }) : t("clock.notIn")}
+      </p>
+      <motion.button type="button" whileTap={{ scale: 0.95 }} onClick={punch} disabled={busy}
+        className={`mx-auto flex ${compact ? "h-28 w-28 text-xl" : "h-40 w-40 text-2xl"} items-center justify-center rounded-full text-white font-display shadow-brand cursor-pointer disabled:opacity-60 ${open ? "bg-gradient-to-br from-rose-500 to-rose-600" : "bg-gradient-to-br from-emerald-500 to-emerald-600"}`}>
+        {open ? t("clock.out") : t("clock.in")}
+      </motion.button>
+      <Input value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} placeholder={t("clock.notePlaceholder")} />
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-2xl bg-ink-50 p-3"><p className="text-xs text-ink-500">{t("clock.today")}</p><p className="font-display text-xl">{hoursLabel(data.today_minutes)}</p></div>
+        <div className="rounded-2xl bg-ink-50 p-3"><p className="text-xs text-ink-500">{t("clock.month")}</p><p className="font-display text-xl">{hoursLabel(data.month_minutes)}</p></div>
       </div>
     </div>
   );

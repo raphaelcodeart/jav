@@ -76,7 +76,8 @@ async def send_reminders(db: AsyncSession, *, scope: ClubScope, today: date | No
     overdue = (
         await db.execute(
             select(ClubFee).where(
-                ClubFee.club_id == scope.club_id, ClubFee.status == "DUE", ClubFee.due_date < today
+                ClubFee.club_id == scope.club_id, ClubFee.status == "DUE", ClubFee.due_date < today,
+                ClubFee.amount_cents > 0,
             )
         )
     ).scalars().all()

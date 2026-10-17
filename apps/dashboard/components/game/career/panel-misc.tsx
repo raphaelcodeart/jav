@@ -9,7 +9,7 @@ import { Card, MEDAL_EMOJI, SectionTitle, type PanelProps } from "./ui";
 
 // Avvisi (in evidenza, con il rimedio a portata di dito) e bacheca dei trofei.
 
-export type TabId = "me" | "calendar" | "club" | "athletes" | "money" | "alerts" | "trophies";
+export type TabId = "week" | "progress" | "calendar" | "club" | "athletes" | "money" | "alerts" | "trophies" | "diary";
 
 const SEV: Record<GameAlert["severity"], string> = {
   high: "bg-rose-50 ring-rose-300 text-rose-900",

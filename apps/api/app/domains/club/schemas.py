@@ -175,6 +175,11 @@ class FeeRead(BaseModel):
     #: elenchi della segreteria: la si apre dalla quota.
     proof_id: uuid.UUID | None = None
     proof_status: str | None = None
+    #: NULL = condono; EXEMPT = «Isenta este mês» (club/fee_splits.py).
+    waive_kind: str | None = None
+    #: Il resto di un pagamento parziale: la quota da cui nasce e perché.
+    split_from_fee_id: uuid.UUID | None = None
+    split_reason: str | None = None
 
 
 class CertificateStatusRead(BaseModel):
@@ -326,12 +331,16 @@ class MonthRowRead(BaseModel):
     last_name: str
     photo_url: str | None
     group: str | None
-    #: PAID, DUE, OVERDUE, WAIVED, EXEMPT, NONE.
+    #: PAID, DUE, OVERDUE, PARTIAL, WAIVED, MONTH_EXEMPT, EXEMPT, NONE.
     state: str
     fee: "FeeRead | None"
     arrears: list["FeeRead"]
     other_due: list["FeeRead"]
     guardian_email: str | None = None
+    #: La mensilità divisa da un pagamento parziale: la parte pagata e i resti.
+    parts: list["FeeRead"] = []
+    paid_cents: int = 0
+    due_cents: int = 0
 
 
 class MonthTotalsRead(BaseModel):
@@ -346,6 +355,7 @@ class MonthTotalsRead(BaseModel):
     none: int
     arrears_cents: int
     other_due_cents: int
+    partial: int = 0
 
 
 class MonthBoardRead(BaseModel):
@@ -434,6 +444,10 @@ class MonthRead(BaseModel):
     fee: FeeRead | None
     proof: MonthProofRead | None
     attendances: int
+    #: Pagamento parziale: tutte le parti della mensilità, e le somme.
+    parts: list[FeeRead] = []
+    paid_cents: int = 0
+    due_cents: int = 0
 
 
 class MonthsSummaryRead(BaseModel):
@@ -1063,6 +1077,12 @@ class WorkSessionRead(BaseModel):
     ended_at: datetime | None
     note: str | None
     minutes: int = 0
+    #: Ritoccato dalla persona stessa (club/workclock.py, own_update), quando.
+    edited_at: datetime | None = None
+    #: Scritto dopo, a mano, non timbrato.
+    added_later: bool = False
+    #: Corretto dalla segreteria.
+    corrected: bool = False
 
 
 class ClockRead(BaseModel):

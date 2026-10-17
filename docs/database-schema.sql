@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict 0SpUJQhaf9Eln4YEHtGNGYNj1mh9wKTxPsfjmTnRgsKQP9bSRTHnhNrjZww1ag1
+\restrict isineeqZQmUBHfObUU57SIncPeoLzAXfhiJTrlGpfG8ljoIDVqhGrmDDRHQuqn3
 
 -- Dumped from database version 16.15
 -- Dumped by pg_dump version 16.15
@@ -58,6 +58,28 @@ CREATE TABLE game.careers (
 
 
 --
+-- Name: fights; Type: TABLE; Schema: game; Owner: -
+--
+
+CREATE TABLE game.fights (
+    id uuid NOT NULL,
+    player_id uuid NOT NULL,
+    kind character varying(10) NOT NULL,
+    mode character varying(4) NOT NULL,
+    context_key character varying(120),
+    opponent_player_id uuid,
+    lang character varying(2) NOT NULL,
+    state jsonb NOT NULL,
+    status character varying(10) NOT NULL,
+    won boolean,
+    points integer NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    finished_at timestamp with time zone
+);
+
+
+--
 -- Name: players; Type: TABLE; Schema: game; Owner: -
 --
 
@@ -69,7 +91,8 @@ CREATE TABLE game.players (
     quiz_xp bigint NOT NULL,
     career_xp bigint NOT NULL,
     created_at timestamp with time zone NOT NULL,
-    updated_at timestamp with time zone NOT NULL
+    updated_at timestamp with time zone NOT NULL,
+    randori_points integer DEFAULT 1000 NOT NULL
 );
 
 
@@ -317,6 +340,24 @@ CREATE TABLE public.club_athlete_media (
     created_at timestamp with time zone NOT NULL,
     CONSTRAINT ck_club_athlete_media_kind CHECK (((kind)::text = ANY ((ARRAY['PHOTO'::character varying, 'VIDEO'::character varying])::text[]))),
     CONSTRAINT ck_club_athlete_media_kind_payload CHECK (((((kind)::text = 'PHOTO'::text) AND (url IS NOT NULL) AND (youtube_id IS NULL)) OR (((kind)::text = 'VIDEO'::text) AND (youtube_id IS NOT NULL) AND (url IS NULL))))
+);
+
+
+--
+-- Name: club_athlete_notes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.club_athlete_notes (
+    organization_id uuid NOT NULL,
+    club_id uuid NOT NULL,
+    athlete_id uuid NOT NULL,
+    author_user_id uuid NOT NULL,
+    category character varying(16) DEFAULT 'OTHER'::character varying NOT NULL,
+    body text NOT NULL,
+    updated_at timestamp with time zone,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT ck_club_athlete_notes_category CHECK (((category)::text = ANY ((ARRAY['TECHNIQUE'::character varying, 'BEHAVIOUR'::character varying, 'HEALTH'::character varying, 'GOAL'::character varying, 'COMPETITION'::character varying, 'OTHER'::character varying])::text[])))
 );
 
 
@@ -773,6 +814,53 @@ CREATE TABLE public.club_equipment_orders (
 
 
 --
+-- Name: club_event_report_costs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.club_event_report_costs (
+    report_id uuid NOT NULL,
+    kind character varying(16) NOT NULL,
+    amount_cents bigint NOT NULL,
+    note character varying(300),
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT ck_club_event_report_costs_amount_non_negative CHECK ((amount_cents >= 0)),
+    CONSTRAINT ck_club_event_report_costs_kind CHECK (((kind)::text = ANY ((ARRAY['HOTEL'::character varying, 'TRAVEL'::character varying, 'FUEL'::character varying, 'FOOD'::character varying, 'ENTRY_FEES'::character varying, 'OTHER'::character varying])::text[])))
+);
+
+
+--
+-- Name: club_event_report_photos; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.club_event_report_photos (
+    report_id uuid NOT NULL,
+    storage_key character varying(300) NOT NULL,
+    content_type character varying(50) NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: club_event_reports; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.club_event_reports (
+    organization_id uuid NOT NULL,
+    club_id uuid NOT NULL,
+    competition_id uuid NOT NULL,
+    author_user_id uuid NOT NULL,
+    title character varying(200) NOT NULL,
+    description text,
+    narrative text,
+    updated_at timestamp with time zone,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
 -- Name: club_expenses; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -870,6 +958,9 @@ CREATE TABLE public.club_fees (
     cash_received_by_name character varying(120),
     installment_no smallint,
     installments_total smallint,
+    waive_kind character varying(16),
+    split_from_fee_id uuid,
+    split_reason character varying(500),
     CONSTRAINT ck_club_fees_absence_adjustment CHECK (((absence_adjustment IS NULL) OR ((absence_adjustment)::text = ANY ((ARRAY['HALF'::character varying, 'FULL'::character varying])::text[])))),
     CONSTRAINT ck_club_fees_amount_non_negative CHECK ((amount_cents >= 0)),
     CONSTRAINT ck_club_fees_coach_share_pct_range CHECK (((coach_share_pct IS NULL) OR ((coach_share_pct >= (0)::numeric) AND (coach_share_pct <= (100)::numeric)))),
@@ -878,7 +969,8 @@ CREATE TABLE public.club_fees (
     CONSTRAINT ck_club_fees_kind CHECK (((kind)::text = ANY ((ARRAY['MONTHLY'::character varying, 'ENROLLMENT'::character varying, 'COMPETITION'::character varying, 'MEMBERSHIP'::character varying, 'FINE'::character varying, 'EQUIPMENT'::character varying])::text[]))),
     CONSTRAINT ck_club_fees_owner CHECK (((((kind)::text = 'MEMBERSHIP'::text) AND (athlete_id IS NULL) AND (guardian_user_id IS NOT NULL)) OR (((kind)::text <> 'MEMBERSHIP'::text) AND (athlete_id IS NOT NULL)))),
     CONSTRAINT ck_club_fees_payment_method CHECK (((payment_method IS NULL) OR ((payment_method)::text = ANY ((ARRAY['BANK_TRANSFER'::character varying, 'MBWAY'::character varying, 'CASH'::character varying, 'CARD'::character varying, 'WALLET'::character varying])::text[])))),
-    CONSTRAINT ck_club_fees_status CHECK (((status)::text = ANY ((ARRAY['DUE'::character varying, 'PAID'::character varying, 'WAIVED'::character varying])::text[])))
+    CONSTRAINT ck_club_fees_status CHECK (((status)::text = ANY ((ARRAY['DUE'::character varying, 'PAID'::character varying, 'WAIVED'::character varying])::text[]))),
+    CONSTRAINT ck_club_fees_waive_kind CHECK (((waive_kind IS NULL) OR ((waive_kind)::text = 'EXEMPT'::text)))
 );
 
 
@@ -896,6 +988,25 @@ CREATE TABLE public.club_functions (
     created_at timestamp with time zone NOT NULL,
     CONSTRAINT ck_club_functions_function CHECK (((function)::text = ANY ((ARRAY['COACH'::character varying, 'ASSISTANT_COACH'::character varying, 'MONITOR'::character varying, 'ASSISTANT_MONITOR'::character varying])::text[]))),
     CONSTRAINT ck_club_functions_one_person CHECK (((user_id IS NULL) <> (athlete_id IS NULL)))
+);
+
+
+--
+-- Name: club_lesson_notes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.club_lesson_notes (
+    organization_id uuid NOT NULL,
+    club_id uuid NOT NULL,
+    course_id uuid NOT NULL,
+    lesson_date date NOT NULL,
+    author_user_id uuid NOT NULL,
+    title character varying(200),
+    techniques character varying(500),
+    body text,
+    updated_at timestamp with time zone,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
 );
 
 
@@ -994,7 +1105,7 @@ CREATE TABLE public.club_payment_proofs (
     CONSTRAINT ck_club_payment_proofs_amount_non_negative CHECK ((amount_cents >= 0)),
     CONSTRAINT ck_club_payment_proofs_cash_receiver CHECK ((((method)::text <> 'CASH'::text) OR (cash_received_by_user_id IS NOT NULL) OR (cash_received_by_name IS NOT NULL))),
     CONSTRAINT ck_club_payment_proofs_credit_range CHECK (((credit_cents >= 0) AND (credit_cents <= amount_cents))),
-    CONSTRAINT ck_club_payment_proofs_file_or_credit CHECK (((storage_key IS NOT NULL) OR (credit_cents = amount_cents) OR ((method)::text = 'CASH'::text))),
+    CONSTRAINT ck_club_payment_proofs_file_or_credit CHECK (((storage_key IS NOT NULL) OR (credit_cents = amount_cents) OR ((method)::text = 'CASH'::text) OR (reviewed_by_user_id IS NOT NULL))),
     CONSTRAINT ck_club_payment_proofs_method CHECK (((method)::text = ANY ((ARRAY['BANK_TRANSFER'::character varying, 'MBWAY'::character varying, 'CASH'::character varying])::text[]))),
     CONSTRAINT ck_club_payment_proofs_status CHECK (((status)::text = ANY ((ARRAY['ACCEPTED'::character varying, 'REJECTED'::character varying])::text[])))
 );
@@ -1294,6 +1405,9 @@ CREATE TABLE public.club_work_sessions (
     corrected_by_user_id uuid,
     id uuid NOT NULL,
     created_at timestamp with time zone NOT NULL,
+    edited_at timestamp with time zone,
+    edited_by_user_id uuid,
+    added_later boolean DEFAULT false NOT NULL,
     CONSTRAINT ck_club_work_sessions_time_range CHECK (((ended_at IS NULL) OR (ended_at > started_at)))
 );
 
@@ -2745,6 +2859,14 @@ ALTER TABLE ONLY game.careers
 
 
 --
+-- Name: fights pk_fights; Type: CONSTRAINT; Schema: game; Owner: -
+--
+
+ALTER TABLE ONLY game.fights
+    ADD CONSTRAINT pk_fights PRIMARY KEY (id);
+
+
+--
 -- Name: players pk_players; Type: CONSTRAINT; Schema: game; Owner: -
 --
 
@@ -2766,6 +2888,14 @@ ALTER TABLE ONLY game.quiz_attempts
 
 ALTER TABLE ONLY game.belt_exams
     ADD CONSTRAINT uq_belt_exams_player_belt UNIQUE (player_id, belt);
+
+
+--
+-- Name: fights uq_fights_player_context; Type: CONSTRAINT; Schema: game; Owner: -
+--
+
+ALTER TABLE ONLY game.fights
+    ADD CONSTRAINT uq_fights_player_context UNIQUE (player_id, context_key);
 
 
 --
@@ -2862,6 +2992,14 @@ ALTER TABLE ONLY public.club_athlete_login_codes
 
 ALTER TABLE ONLY public.club_athlete_media
     ADD CONSTRAINT pk_club_athlete_media PRIMARY KEY (id);
+
+
+--
+-- Name: club_athlete_notes pk_club_athlete_notes; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_athlete_notes
+    ADD CONSTRAINT pk_club_athlete_notes PRIMARY KEY (id);
 
 
 --
@@ -3001,6 +3139,30 @@ ALTER TABLE ONLY public.club_equipment_orders
 
 
 --
+-- Name: club_event_report_costs pk_club_event_report_costs; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_event_report_costs
+    ADD CONSTRAINT pk_club_event_report_costs PRIMARY KEY (id);
+
+
+--
+-- Name: club_event_report_photos pk_club_event_report_photos; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_event_report_photos
+    ADD CONSTRAINT pk_club_event_report_photos PRIMARY KEY (id);
+
+
+--
+-- Name: club_event_reports pk_club_event_reports; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_event_reports
+    ADD CONSTRAINT pk_club_event_reports PRIMARY KEY (id);
+
+
+--
 -- Name: club_expenses pk_club_expenses; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3030,6 +3192,14 @@ ALTER TABLE ONLY public.club_fees
 
 ALTER TABLE ONLY public.club_functions
     ADD CONSTRAINT pk_club_functions PRIMARY KEY (id);
+
+
+--
+-- Name: club_lesson_notes pk_club_lesson_notes; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_lesson_notes
+    ADD CONSTRAINT pk_club_lesson_notes PRIMARY KEY (id);
 
 
 --
@@ -3913,6 +4083,22 @@ ALTER TABLE ONLY public.club_equipment_orders
 
 
 --
+-- Name: club_event_report_costs uq_club_event_report_costs_report_kind; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_event_report_costs
+    ADD CONSTRAINT uq_club_event_report_costs_report_kind UNIQUE (report_id, kind);
+
+
+--
+-- Name: club_event_reports uq_club_event_reports_author; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_event_reports
+    ADD CONSTRAINT uq_club_event_reports_author UNIQUE (club_id, competition_id, author_user_id);
+
+
+--
 -- Name: club_expenses uq_club_expenses_recurring_period; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4256,6 +4442,27 @@ CREATE INDEX ix_game_belt_exams_player_id ON game.belt_exams USING btree (player
 
 
 --
+-- Name: ix_game_fights_created_at; Type: INDEX; Schema: game; Owner: -
+--
+
+CREATE INDEX ix_game_fights_created_at ON game.fights USING btree (created_at);
+
+
+--
+-- Name: ix_game_fights_opponent_player_id; Type: INDEX; Schema: game; Owner: -
+--
+
+CREATE INDEX ix_game_fights_opponent_player_id ON game.fights USING btree (opponent_player_id);
+
+
+--
+-- Name: ix_game_fights_player_id; Type: INDEX; Schema: game; Owner: -
+--
+
+CREATE INDEX ix_game_fights_player_id ON game.fights USING btree (player_id);
+
+
+--
 -- Name: ix_game_players_user_id; Type: INDEX; Schema: game; Owner: -
 --
 
@@ -4421,6 +4628,27 @@ CREATE INDEX ix_club_athlete_media_club_id ON public.club_athlete_media USING bt
 --
 
 CREATE INDEX ix_club_athlete_media_organization_id ON public.club_athlete_media USING btree (organization_id);
+
+
+--
+-- Name: ix_club_athlete_notes_athlete_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_club_athlete_notes_athlete_id ON public.club_athlete_notes USING btree (athlete_id);
+
+
+--
+-- Name: ix_club_athlete_notes_club_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_club_athlete_notes_club_id ON public.club_athlete_notes USING btree (club_id);
+
+
+--
+-- Name: ix_club_athlete_notes_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_club_athlete_notes_organization_id ON public.club_athlete_notes USING btree (organization_id);
 
 
 --
@@ -4760,6 +4988,41 @@ CREATE INDEX ix_club_equipment_orders_status ON public.club_equipment_orders USI
 
 
 --
+-- Name: ix_club_event_report_costs_report_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_club_event_report_costs_report_id ON public.club_event_report_costs USING btree (report_id);
+
+
+--
+-- Name: ix_club_event_report_photos_report_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_club_event_report_photos_report_id ON public.club_event_report_photos USING btree (report_id);
+
+
+--
+-- Name: ix_club_event_reports_club_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_club_event_reports_club_id ON public.club_event_reports USING btree (club_id);
+
+
+--
+-- Name: ix_club_event_reports_competition_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_club_event_reports_competition_id ON public.club_event_reports USING btree (competition_id);
+
+
+--
+-- Name: ix_club_event_reports_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_club_event_reports_organization_id ON public.club_event_reports USING btree (organization_id);
+
+
+--
 -- Name: ix_club_expenses_club_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4858,6 +5121,13 @@ CREATE INDEX ix_club_fees_paid_via_proof_id ON public.club_fees USING btree (pai
 
 
 --
+-- Name: ix_club_fees_split_from_fee_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_club_fees_split_from_fee_id ON public.club_fees USING btree (split_from_fee_id);
+
+
+--
 -- Name: ix_club_fees_status; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4876,6 +5146,27 @@ CREATE INDEX ix_club_functions_club_id ON public.club_functions USING btree (clu
 --
 
 CREATE INDEX ix_club_functions_organization_id ON public.club_functions USING btree (organization_id);
+
+
+--
+-- Name: ix_club_lesson_notes_club_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_club_lesson_notes_club_id ON public.club_lesson_notes USING btree (club_id);
+
+
+--
+-- Name: ix_club_lesson_notes_course_date; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_club_lesson_notes_course_date ON public.club_lesson_notes USING btree (course_id, lesson_date);
+
+
+--
+-- Name: ix_club_lesson_notes_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_club_lesson_notes_organization_id ON public.club_lesson_notes USING btree (organization_id);
 
 
 --
@@ -6288,6 +6579,22 @@ ALTER TABLE ONLY game.careers
 
 
 --
+-- Name: fights fk_fights_opponent_player_id_players; Type: FK CONSTRAINT; Schema: game; Owner: -
+--
+
+ALTER TABLE ONLY game.fights
+    ADD CONSTRAINT fk_fights_opponent_player_id_players FOREIGN KEY (opponent_player_id) REFERENCES game.players(id) ON DELETE CASCADE;
+
+
+--
+-- Name: fights fk_fights_player_id_players; Type: FK CONSTRAINT; Schema: game; Owner: -
+--
+
+ALTER TABLE ONLY game.fights
+    ADD CONSTRAINT fk_fights_player_id_players FOREIGN KEY (player_id) REFERENCES game.players(id) ON DELETE CASCADE;
+
+
+--
 -- Name: quiz_attempts fk_quiz_attempts_player_id_players; Type: FK CONSTRAINT; Schema: game; Owner: -
 --
 
@@ -6597,6 +6904,38 @@ ALTER TABLE ONLY public.club_athlete_media
 
 ALTER TABLE ONLY public.club_athlete_media
     ADD CONSTRAINT fk_club_athlete_media_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: club_athlete_notes fk_club_athlete_notes_athlete_id_club_athletes; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_athlete_notes
+    ADD CONSTRAINT fk_club_athlete_notes_athlete_id_club_athletes FOREIGN KEY (athlete_id) REFERENCES public.club_athletes(id) ON DELETE CASCADE;
+
+
+--
+-- Name: club_athlete_notes fk_club_athlete_notes_author_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_athlete_notes
+    ADD CONSTRAINT fk_club_athlete_notes_author_user_id_users FOREIGN KEY (author_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: club_athlete_notes fk_club_athlete_notes_club_id_clubs; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_athlete_notes
+    ADD CONSTRAINT fk_club_athlete_notes_club_id_clubs FOREIGN KEY (club_id) REFERENCES public.clubs(id);
+
+
+--
+-- Name: club_athlete_notes fk_club_athlete_notes_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_athlete_notes
+    ADD CONSTRAINT fk_club_athlete_notes_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
 
 
 --
@@ -7112,6 +7451,54 @@ ALTER TABLE ONLY public.club_equipment_orders
 
 
 --
+-- Name: club_event_report_costs fk_club_event_report_costs_report_id_club_event_reports; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_event_report_costs
+    ADD CONSTRAINT fk_club_event_report_costs_report_id_club_event_reports FOREIGN KEY (report_id) REFERENCES public.club_event_reports(id) ON DELETE CASCADE;
+
+
+--
+-- Name: club_event_report_photos fk_club_event_report_photos_report_id_club_event_reports; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_event_report_photos
+    ADD CONSTRAINT fk_club_event_report_photos_report_id_club_event_reports FOREIGN KEY (report_id) REFERENCES public.club_event_reports(id) ON DELETE CASCADE;
+
+
+--
+-- Name: club_event_reports fk_club_event_reports_author_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_event_reports
+    ADD CONSTRAINT fk_club_event_reports_author_user_id_users FOREIGN KEY (author_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: club_event_reports fk_club_event_reports_club_id_clubs; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_event_reports
+    ADD CONSTRAINT fk_club_event_reports_club_id_clubs FOREIGN KEY (club_id) REFERENCES public.clubs(id);
+
+
+--
+-- Name: club_event_reports fk_club_event_reports_competition_id_club_competitions; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_event_reports
+    ADD CONSTRAINT fk_club_event_reports_competition_id_club_competitions FOREIGN KEY (competition_id) REFERENCES public.club_competitions(id);
+
+
+--
+-- Name: club_event_reports fk_club_event_reports_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_event_reports
+    ADD CONSTRAINT fk_club_event_reports_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
 -- Name: club_expenses fk_club_expenses_club_id_clubs; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -7256,6 +7643,14 @@ ALTER TABLE ONLY public.club_fees
 
 
 --
+-- Name: club_fees fk_club_fees_split_from_fee_id_club_fees; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_fees
+    ADD CONSTRAINT fk_club_fees_split_from_fee_id_club_fees FOREIGN KEY (split_from_fee_id) REFERENCES public.club_fees(id);
+
+
+--
 -- Name: club_fees fk_club_fees_waived_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -7293,6 +7688,38 @@ ALTER TABLE ONLY public.club_functions
 
 ALTER TABLE ONLY public.club_functions
     ADD CONSTRAINT fk_club_functions_user_id_users FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: club_lesson_notes fk_club_lesson_notes_author_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_lesson_notes
+    ADD CONSTRAINT fk_club_lesson_notes_author_user_id_users FOREIGN KEY (author_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: club_lesson_notes fk_club_lesson_notes_club_id_clubs; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_lesson_notes
+    ADD CONSTRAINT fk_club_lesson_notes_club_id_clubs FOREIGN KEY (club_id) REFERENCES public.clubs(id);
+
+
+--
+-- Name: club_lesson_notes fk_club_lesson_notes_course_id_club_courses; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_lesson_notes
+    ADD CONSTRAINT fk_club_lesson_notes_course_id_club_courses FOREIGN KEY (course_id) REFERENCES public.club_courses(id) ON DELETE CASCADE;
+
+
+--
+-- Name: club_lesson_notes fk_club_lesson_notes_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_lesson_notes
+    ADD CONSTRAINT fk_club_lesson_notes_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
 
 
 --
@@ -7773,6 +8200,14 @@ ALTER TABLE ONLY public.club_work_sessions
 
 ALTER TABLE ONLY public.club_work_sessions
     ADD CONSTRAINT fk_club_work_sessions_corrected_by_user_id_users FOREIGN KEY (corrected_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: club_work_sessions fk_club_work_sessions_edited_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_work_sessions
+    ADD CONSTRAINT fk_club_work_sessions_edited_by_user_id_users FOREIGN KEY (edited_by_user_id) REFERENCES public.users(id);
 
 
 --
@@ -9435,5 +9870,5 @@ ALTER TABLE ONLY public.wallets
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 0SpUJQhaf9Eln4YEHtGNGYNj1mh9wKTxPsfjmTnRgsKQP9bSRTHnhNrjZww1ag1
+\unrestrict isineeqZQmUBHfObUU57SIncPeoLzAXfhiJTrlGpfG8ljoIDVqhGrmDDRHQuqn3
 

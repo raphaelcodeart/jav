@@ -4,7 +4,8 @@ import { useI18n } from "@/lib/i18n/provider";
 
 // I testi di JAV Games (vetrina, Dojo Academy, classifica): un dizionario
 // suo, separato dai messaggi del gestionale come i dati del gioco sono
-// separati dai suoi (docs/games.md). Portoghese, italiano, inglese.
+// separati dai suoi (docs/games.md). Portoghese, italiano, inglese; le
+// altre lingue ricadono su una di queste (gameLangIndex).
 
 const D = {
   hubEyebrow: ["JAV Games", "JAV Games", "JAV Games"],
@@ -70,6 +71,13 @@ const D = {
   noNewXp: ["Bate o teu recorde para ganhar mais XP.", "Batti il tuo record per guadagnare altri XP.", "Beat your best score to earn more XP."],
   backToAcademy: ["Voltar à Academy", "Torna all'Academy", "Back to the Academy"],
   error: ["Algo correu mal", "Qualcosa è andato storto", "Something went wrong"],
+  randoriName: ["Randori do Clube", "Randori del Club", "Club Randori"],
+  randoriTag: ["Desafia os amigos do teu clube", "Sfida gli amici del tuo club", "Challenge your club mates"],
+  randoriText: ["Combate com os teus colegas de clube, simulado ou passo a passo: se ganhas, ficas com os pontos deles.",
+    "Combatti con i compagni del tuo club, simulato o passo a passo: se vinci, prendi i loro punti.",
+    "Fight your club mates, simulated or step by step: win and you take their points."],
+  fullscreen: ["Ecrã inteiro", "Schermo intero", "Full screen"],
+  exitFullscreen: ["Sair do ecrã inteiro", "Esci dallo schermo intero", "Exit full screen"],
 } as const;
 
 export type GameKey = keyof typeof D;
@@ -83,11 +91,26 @@ export const BELT_COLORS: Record<string, string> = {
   WHITE: "#f8fafc", YELLOW: "#facc15", ORANGE: "#f97316", GREEN: "#16a34a", BLUE: "#2563eb", BROWN: "#78350f", BLACK: "#0a0a0a",
 };
 
+/** La lingua dei testi del gioco (pt, it, en): lo spagnolo legge il
+ *  portoghese, francese, tedesco e ucraino l'inglese, come il backend
+ *  (game/service.py::_lang). 0 = pt, 1 = it, 2 = en. */
+export function gameLangIndex(locale: string): 0 | 1 | 2 {
+  if (locale === "it") return 1;
+  if (locale === "en" || locale === "fr" || locale === "de" || locale === "uk") return 2;
+  return 0;
+}
+
+export const GAME_LANGS = ["pt", "it", "en"] as const;
+export type GameLang = (typeof GAME_LANGS)[number];
+
+/** Il tag Intl della lingua del gioco, per date e importi. */
+export const GAME_INTL: Record<GameLang, string> = { pt: "pt-PT", it: "it-IT", en: "en-GB" };
+
 export function useGameText() {
   const { locale } = useI18n();
-  const i = locale === "it" ? 1 : locale === "en" ? 2 : 0;
+  const i = gameLangIndex(locale);
   const g = (key: GameKey) => D[key][i];
   const belt = (code: string) => BELT_LABELS[code]?.[i] ?? code;
-  const lang = (["pt", "it", "en"] as const)[i];
+  const lang = GAME_LANGS[i];
   return { g, belt, lang };
 }

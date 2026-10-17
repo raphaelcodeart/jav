@@ -10,6 +10,7 @@ import { Pagination, usePaged } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { EVENT_KIND_STYLE, EventIcon } from "@/components/club/event-icon";
+import { EventNameButton } from "@/components/club/competition-detail-modal";
 import { clubGet } from "@/lib/club";
 import { cn } from "@/lib/cn";
 import { useI18n } from "@/lib/i18n/provider";
@@ -202,7 +203,7 @@ export function JavCalendar({ mode }: { mode: "staff" | "member" }) {
                         </div>
                         <div className="flex flex-1 flex-col gap-2 p-4">
                           <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">{kindLabel(e)} · {e.network ? t("jcal.network") : e.club_name}</p>
-                          <h4 className="font-semibold leading-snug text-ink-900">{e.name}</h4>
+                          <h4 className="font-semibold leading-snug text-ink-900"><EventNameButton id={e.id} name={e.name} mode={mode} /></h4>
                           <p className="text-sm text-ink-500">📍 {e.location ?? "—"}</p>
                           <p className="text-xs text-ink-500">👥 {ages(e)}</p>
                           <span className={cn("mt-auto w-fit rounded-full px-3 py-1 text-xs font-semibold ring-1", STATUS_TONE[e.status])}>{status(e)}</span>
@@ -218,7 +219,7 @@ export function JavCalendar({ mode }: { mode: "staff" | "member" }) {
                         <EventIcon kind={e.kind} imageUrl={e.image_url} size="md" />
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-baseline justify-between gap-2">
-                            <p className="font-semibold text-ink-900">{e.name}</p>
+                            <p className="font-semibold text-ink-900"><EventNameButton id={e.id} name={e.name} mode={mode} /></p>
                             <span className="text-sm font-bold text-brand-700">{dates(e)}</span>
                           </div>
                           <p className="text-sm text-ink-600">📍 {e.location ?? "—"} · {kindLabel(e)} · {e.network ? t("jcal.network") : e.club_name}</p>
@@ -244,7 +245,7 @@ export function JavCalendar({ mode }: { mode: "staff" | "member" }) {
                         {m.events.map((e, i) => (
                           <tr key={e.id} className={i % 2 ? "bg-ink-50/60" : ""}>
                             <td className="whitespace-nowrap px-3 py-2 font-semibold text-ink-900">{dates(e)}</td>
-                            <td className="px-3 py-2"><span className="font-semibold text-ink-900">{e.name}</span><span className="block text-xs text-ink-500">{EVENT_KIND_STYLE[e.kind]?.icon} {kindLabel(e)}</span></td>
+                            <td className="px-3 py-2"><EventNameButton id={e.id} name={e.name} mode={mode} className="font-semibold text-ink-900" /><span className="block text-xs text-ink-500">{EVENT_KIND_STYLE[e.kind]?.icon} {kindLabel(e)}</span></td>
                             <td className="px-3 py-2 text-ink-700">{e.location ?? "—"}</td>
                             <td className="px-3 py-2 text-xs">{status(e)}</td>
                             <td className="px-3 py-2 text-xs text-ink-600">{ages(e)}</td>

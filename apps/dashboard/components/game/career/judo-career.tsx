@@ -5,9 +5,10 @@ import { useEffect, useRef, useState, type JSX } from "react";
 import { Button, Spinner } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/cn";
+import { Modal } from "@/components/ui/modal";
 import {
-  advanceWeek, computeAlerts, newCareer, openClub, parseCareer, promote, promotionStatus, resolveEvent,
-  sanitizeActions, type ActionId, type CareerState, type City, type Competition, type Fight,
+  LEVEL_ROUNDS, advanceWeek, compThisWeek, computeAlerts, newCareer, openClub, parseCareer, promote, promotionStatus,
+  resolveEvent, sanitizeActions, type ActionId, type CareerState, type City, type Competition, type Fight,
   type HeroColor, type Result, type WeekPlan, type WeekReport,
 } from "./engine";
 import { FightScene } from "./fight-scene";
@@ -17,12 +18,17 @@ import { EventModal, ReportModal, RestartModal } from "./modals";
 import { NewCareer } from "./new-career";
 import { CalendarPanel } from "./panel-calendar";
 import { AthletesPanel, ClubPanel, MoneyPanel } from "./panel-club";
-import { ACTION_ICON, MePanel, type TeachPlan } from "./panel-me";
+import { ACTION_ICON, DiaryPanel, ProgressPanel, WeekPlanner, type TeachPlan } from "./panel-me";
 import { AlertsPanel, TrophiesPanel, type TabId } from "./panel-misc";
+import { CareerTournament } from "./tournament";
 import { Burst, type PanelProps, type Pose } from "./ui";
 
 // "Judo Career": carica il salvataggio, fa girare le settimane con il motore
 // puro e salva sul server dopo ogni passo (mai più di 1500 XP per salvataggio).
+// Il banner con i contatori resta in alto; sotto, su uno schermo largo, il
+// piano della settimana a sinistra e le schede a destra, sul telefono tutto
+// a schede. Le gare si combattono simulate (il motore, come prima) o passo a
+// passo (il server: tournament.tsx).
 
 const API = "/api/proxy/game/career";
 const MAX_XP_PER_SAVE = 1500;
@@ -58,7 +64,9 @@ async function fetchCareer(): Promise<CareerResponse> {
   return (await res.json()) as CareerResponse;
 }
 
-const TAB_ICON: Record<TabId, string> = { me: "🥋", calendar: "📅", club: "🏯", athletes: "👥", money: "💶", alerts: "🔔", trophies: "🏆" };
+const TAB_ICON: Record<TabId, string> = {
+  week: "🗓️", progress: "🥋", calendar: "📅", club: "🏯", athletes: "👥", money: "💶", alerts: "🔔", trophies: "🏆", diary: "📓",
+};
 
 export function JudoCareer({ playerName, examsPassed, onGoAcademy, onXpChange }: {
   playerName: string; examsPassed: string[]; onGoAcademy: () => void; onXpChange?: () => void;
@@ -70,7 +78,9 @@ export function JudoCareer({ playerName, examsPassed, onGoAcademy, onXpChange }:
   const [game, setGame] = useState<CareerState | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [level, setLevel] = useState<number | null>(null);
-  const [tab, setTab] = useState<TabId>("me");
+  const [tab, setTab] = useState<TabId>("week");
+  // la gara di questa settimana: si sceglie come combatterla, poi (passo a passo) il torneo
+  const [compMode, setCompMode] = useState<{ comp: Competition; step: boolean } | null>(null);
   const [selected, setSelected] = useState<ActionId[]>([]);
   const [teach, setTeach] = useState<TeachPlan>({ technique: "O-soto-gari", ids: null });
   const [pose, setPose] = useState<Pose>("idle");
@@ -172,7 +182,7 @@ export function JudoCareer({ playerName, examsPassed, onGoAcademy, onXpChange }:
           busy={busy}
           onStart={(v) => {
             const s = newCareer({ ...v, seed: Math.floor(Math.random() * 2 ** 31) }, serverXp.current ?? 0);
-            setTab("me");
+            setTab("week");
             commit(s);
           }}
         />
@@ -187,9 +197,11 @@ export function JudoCareer({ playerName, examsPassed, onGoAcademy, onXpChange }:
   const chosen = sanitizeActions(state, selected);
   const hasClub = !!state.club;
   const tabs: TabId[] = hasClub
-    ? ["me", "calendar", "club", "athletes", "money", "alerts", "trophies"]
-    : ["me", "calendar", "money", "alerts", "trophies"];
-  const activeTab: TabId = tabs.includes(tab) ? tab : "me";
+    ? ["week", "progress", "calendar", "club", "athletes", "money", "alerts", "trophies", "diary"]
+    : ["week", "progress", "calendar", "money", "alerts", "trophies", "diary"];
+  const activeTab: TabId = tabs.includes(tab) ? tab : "week";
+  // su uno schermo largo il piano della settimana è sempre a sinistra: a destra le altre schede
+  const sideTab: TabId = activeTab === "week" ? "progress" : activeTab;
   const panel: PanelProps = { state, t, locale, examsPassed: exams, apply };
   const event = state.pendingEvent;
 
@@ -199,7 +211,23 @@ export function JudoCareer({ playerName, examsPassed, onGoAcademy, onXpChange }:
 
   function advance() {
     if (state.pendingEvent) { setEventHidden(false); return; }
-    const plan: WeekPlan = { actions: chosen };
+    const comp = chosen.includes("COMPETE") ? compThisWeek(state) : null;
+    if (comp) {
+      // turni già combattuti passo a passo (per esempio prima di ricaricare la pagina): si riprende quel torneo
+      void (async () => {
+        await chain.current;
+        const r = await fetch(`/api/proxy/game/career/fights/${encodeURIComponent(comp.id)}`, { cache: "no-store" })
+          .then((x) => (x.ok ? (x.json() as Promise<{ rounds: unknown[] }>) : null)).catch(() => null);
+        setCompMode({ comp, step: !!r && r.rounds.length > 0 });
+      })();
+      return;
+    }
+    runWeek();
+  }
+
+  function runWeek(compFights?: Fight[]) {
+    setCompMode(null);
+    const plan: WeekPlan = { actions: chosen, compFights };
     if (chosen.includes("TEACH") && state.club) {
       plan.teach = { technique: teach.technique, athleteIds: teach.ids ?? state.club.athletes.map((a) => a.id) };
     }
@@ -207,7 +235,8 @@ export function JudoCareer({ playerName, examsPassed, onGoAcademy, onXpChange }:
     setPose(chosen.includes("COMPETE") ? "win" : chosen.includes("TRAIN_TECH") || chosen.includes("TEACH") ? "attack" : chosen.includes("TRAIN_PHYS") ? "grip" : "idle");
     setSelected([]);
     setEventHidden(false);
-    if (rep.fights.length > 0 && rep.comp) setFight({ fights: rep.fights, comp: rep.comp });
+    // passo a passo i combattimenti li hai già vissuti: niente film, subito il riepilogo
+    if (rep.fights.length > 0 && rep.comp && !compFights) setFight({ fights: rep.fights, comp: rep.comp });
     else if (rep.medal || rep.clubResults.some((r) => r.medal)) fireBurst();
     setReport(rep);
     commit(next);
@@ -250,16 +279,25 @@ export function JudoCareer({ playerName, examsPassed, onGoAcademy, onXpChange }:
     }
   }
 
+  const advanceLabel = event ? `⚡ ${t("advanceBlocked")}` : `${t("advance")} ▶`;
+  const plannerProps = {
+    ...panel, chosen, onToggle: toggle, teach, setTeach, pose,
+    advanceLabel, advanceAccent: !!event, onAdvance: advance, onGoTab: setTab,
+  };
+  const progressProps = {
+    ...panel, onPromote: doPromote, onGoAcademy, onOpenClub: doOpenClub, onRestart: () => setRestartOpen(true),
+  };
+
   return (
     <MotionConfig reducedMotion="user">
-      <div className="mx-auto max-w-4xl space-y-4">
+      <div className="mx-auto max-w-7xl space-y-3">
         <Hud state={state} t={t} locale={locale} alerts={alerts.length} level={level} saveStatus={saveStatus} onBell={() => setTab("alerts")} />
 
-        {/* schede */}
-        <nav className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none]" aria-label="Judo Career">
-          <div className="flex w-max gap-2" role="tablist">
+        {/* schede (sul largo «Settimana» è sempre a sinistra e la sua scheda non serve) */}
+        <nav className="-mx-3 overflow-x-auto px-3 [scrollbar-width:none]" aria-label="Judo Career">
+          <div className="flex w-max gap-1.5" role="tablist">
             {tabs.map((id) => {
-              const on = activeTab === id;
+              const on = (id === "week" ? activeTab === "week" : sideTab === id && (activeTab !== "week" || id === "progress"));
               const badge = id === "alerts" ? alerts.length : 0;
               return (
                 <button
@@ -269,11 +307,17 @@ export function JudoCareer({ playerName, examsPassed, onGoAcademy, onXpChange }:
                   aria-selected={on}
                   onClick={() => setTab(id)}
                   className={cn(
-                    "relative flex h-11 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full px-4 text-sm font-bold transition",
+                    "relative flex h-10 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 text-sm font-bold transition",
+                    id === "week" && "lg:hidden",
                     on ? "text-white" : "bg-white text-ink-700 ring-1 ring-ink-200 hover:ring-brand-300",
+                    // sul telefono «Progressi» è acceso solo quando lo scegli
+                    id === "progress" && activeTab === "week" && "max-lg:bg-white max-lg:text-ink-700 max-lg:ring-1 max-lg:ring-ink-200",
                   )}
                 >
-                  {on && <motion.span layoutId="career-tab" className="absolute inset-0 rounded-full bg-gradient-to-r from-brand-500 to-brand-700 shadow-brand" transition={{ type: "spring", stiffness: 400, damping: 32 }} />}
+                  {on && (
+                    <motion.span layoutId="career-tab" className={cn("absolute inset-0 rounded-full bg-gradient-to-r from-brand-500 to-brand-700 shadow-brand", id === "progress" && activeTab === "week" && "max-lg:hidden")}
+                      transition={{ type: "spring", stiffness: 400, damping: 32 }} />
+                  )}
                   <span className="relative" aria-hidden="true">{TAB_ICON[id]}</span>
                   <span className="relative">{t(`tab_${id}` as CareerKey)}</span>
                   {badge > 0 && <span className="relative rounded-full bg-accent-400 px-1.5 text-[11px] font-black text-ink-900">{badge}</span>}
@@ -283,46 +327,39 @@ export function JudoCareer({ playerName, examsPassed, onGoAcademy, onXpChange }:
           </div>
         </nav>
 
-        <AnimatePresence mode="wait">
-          <motion.div key={activeTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }} role="tabpanel">
-            {activeTab === "me" && (
-              <MePanel
-                {...panel}
-                chosen={chosen}
-                onToggle={toggle}
-                teach={teach}
-                setTeach={setTeach}
-                pose={pose}
-                onPromote={doPromote}
-                onGoAcademy={onGoAcademy}
-                onOpenClub={doOpenClub}
-                onRestart={() => setRestartOpen(true)}
-              />
-            )}
-            {activeTab === "calendar" && <CalendarPanel {...panel} />}
-            {activeTab === "club" && <ClubPanel {...panel} />}
-            {activeTab === "athletes" && <AthletesPanel {...panel} />}
-            {activeTab === "money" && <MoneyPanel {...panel} />}
-            {activeTab === "alerts" && <AlertsPanel {...panel} alerts={alerts} onGoTab={setTab} onGoAcademy={onGoAcademy} />}
-            {activeTab === "trophies" && <TrophiesPanel {...panel} />}
-          </motion.div>
-        </AnimatePresence>
-
-      {/* barra in basso: il grande pulsante della settimana */}
-      <div className="pointer-events-none sticky bottom-3 z-30 flex justify-center">
-        <div className="pointer-events-auto flex w-full max-w-xl items-center gap-2 rounded-3xl bg-white/80 p-2 shadow-lift ring-1 ring-ink-100 backdrop-blur-xl">
-          <div className="flex shrink-0 gap-1 pl-1" aria-hidden="true">
-            {[0, 1].map((i) => (
-              <span key={i} className={cn("flex h-10 w-10 items-center justify-center rounded-2xl text-lg", chosen[i] ? "bg-brand-100" : "bg-ink-100 text-ink-300")}>
-                {chosen[i] ? ACTION_ICON[chosen[i]!] : "·"}
-              </span>
-            ))}
+        <div className="grid gap-4 lg:grid-cols-12 lg:items-start">
+          <div className={cn("lg:col-span-7", activeTab !== "week" && "hidden lg:block")}>
+            <WeekPlanner {...plannerProps} />
           </div>
-          <Button size="xl" className="flex-1" variant={event ? "accent" : "primary"} onClick={advance}>
-            {event ? `⚡ ${t("advanceBlocked")}` : `${t("advance")} ▶`}
-          </Button>
+          <div className={cn("lg:col-span-5", activeTab === "week" && "hidden lg:block")}>
+            <AnimatePresence mode="wait">
+              <motion.div key={sideTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }} role="tabpanel">
+                {sideTab === "progress" && <ProgressPanel {...progressProps} />}
+                {sideTab === "calendar" && <CalendarPanel {...panel} />}
+                {sideTab === "club" && <ClubPanel {...panel} />}
+                {sideTab === "athletes" && <AthletesPanel {...panel} />}
+                {sideTab === "money" && <MoneyPanel {...panel} />}
+                {sideTab === "alerts" && <AlertsPanel {...panel} alerts={alerts} onGoTab={setTab} onGoAcademy={onGoAcademy} />}
+                {sideTab === "trophies" && <TrophiesPanel {...panel} />}
+                {sideTab === "diary" && <DiaryPanel {...panel} />}
+              </motion.div>
+            </AnimatePresence>
+          </div>
         </div>
-      </div>
+
+        {/* sul telefono e sul tablet: il grande pulsante della settimana resta in basso */}
+        <div className="pointer-events-none sticky bottom-3 z-30 flex justify-center lg:hidden">
+          <div className="pointer-events-auto flex w-full max-w-xl items-center gap-2 rounded-3xl bg-white/85 p-2 shadow-lift ring-1 ring-ink-100 backdrop-blur-xl">
+            <div className="flex shrink-0 gap-1 pl-1" aria-hidden="true">
+              {[0, 1].map((i) => (
+                <span key={i} className={cn("flex h-10 w-10 items-center justify-center rounded-2xl text-lg", chosen[i] ? "bg-brand-100" : "bg-ink-100 text-ink-300")}>
+                  {chosen[i] ? ACTION_ICON[chosen[i]!] : "·"}
+                </span>
+              ))}
+            </div>
+            <Button size="xl" className="flex-1" variant={event ? "accent" : "primary"} onClick={advance}>{advanceLabel}</Button>
+          </div>
+        </div>
       </div>
 
       {fight && (
@@ -348,6 +385,26 @@ export function JudoCareer({ playerName, examsPassed, onGoAcademy, onXpChange }:
           onClose={() => setEventHidden(true)}
           onResolve={(accept) => commit(resolveEvent(state, accept))}
         />
+      )}
+      {compMode && !compMode.step && (
+        <Modal open onClose={() => setCompMode(null)} title={`🏆 ${t("modeTitle")}`} size="md"
+          subtitle={t("modeText", { name: t("compName", { level: t(`level_${compMode.comp.level}`), city: compMode.comp.city }), n: LEVEL_ROUNDS[compMode.comp.level] })}>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <button type="button" onClick={() => runWeek()}
+              className="flex cursor-pointer flex-col gap-1 rounded-2xl bg-gradient-to-br from-sky-500 to-indigo-700 p-4 text-left text-white shadow-soft transition hover:-translate-y-0.5 hover:shadow-lift">
+              <span className="font-display text-lg">{t("modeSim")}</span>
+              <span className="text-sm text-white/85">{t("modeSimText")}</span>
+            </button>
+            <button type="button" onClick={() => setCompMode({ ...compMode, step: true })}
+              className="flex cursor-pointer flex-col gap-1 rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 p-4 text-left text-white shadow-soft transition hover:-translate-y-0.5 hover:shadow-lift">
+              <span className="font-display text-lg">{t("modeStep")}</span>
+              <span className="text-sm text-white/85">{t("modeStepText")}</span>
+            </button>
+          </div>
+        </Modal>
+      )}
+      {compMode?.step && (
+        <CareerTournament comp={compMode.comp} t={t} onDone={(fights) => runWeek(fights)} onSimulate={() => runWeek()} onCancel={() => setCompMode(null)} />
       )}
       <RestartModal open={restartOpen} busy={busy} t={t} onCancel={() => setRestartOpen(false)} onConfirm={doRestart} />
       <AnimatePresence>{burst > 0 && <motion.div key={burst} exit={{ opacity: 0 }}><Burst big /></motion.div>}</AnimatePresence>

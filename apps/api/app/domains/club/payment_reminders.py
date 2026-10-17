@@ -46,8 +46,11 @@ def settings_of(club: Club) -> tuple[bool, int]:
 async def _due_monthly(db: AsyncSession, *, scope: ClubScope, period: str) -> list[tuple[ClubFee, ClubAthlete]]:
     return list((await db.execute(
         select(ClubFee, ClubAthlete).join(ClubAthlete, ClubAthlete.id == ClubFee.athlete_id).where(
-            ClubFee.club_id == scope.club_id, ClubFee.kind == "MONTHLY", ClubFee.period == period,
-            ClubFee.status == "DUE", ClubAthlete.status == "ACTIVE",
+            ClubFee.club_id == scope.club_id, ClubFee.kind == "MONTHLY",
+            # Anche il resto di una mensilità pagata in parte ("2026-10/r1"),
+            # mai una quota da 0 €.
+            (ClubFee.period == period) | ClubFee.period.like(f"{period}/r%"),
+            ClubFee.status == "DUE", ClubFee.amount_cents > 0, ClubAthlete.status == "ACTIVE",
         )
     )).all())
 

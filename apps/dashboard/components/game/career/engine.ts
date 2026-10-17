@@ -162,9 +162,9 @@ export type LogKey =
 
 export interface LogLine { key: LogKey; vars?: Record<string, string | number> }
 
-export type FightEventType = "GRIP" | "ATTACK" | "BLOCK" | "SHIDO" | "WAZA_ARI" | "IPPON";
+export type FightEventType = "GRIP" | "ATTACK" | "BLOCK" | "SHIDO" | "YUKO" | "WAZA_ARI" | "IPPON";
 export interface FightEvent { t: FightEventType; by: "A" | "B"; technique?: string }
-export interface Score { waza: number; ippon: number; shido: number }
+export interface Score { waza: number; ippon: number; shido: number; yuko?: number }
 export interface Fight {
   round: number;
   rounds: number;
@@ -207,6 +207,9 @@ export interface CareerState {
 export interface WeekPlan {
   actions: ActionId[];
   teach?: { technique: string; athleteIds: number[] };
+  /** I turni della gara combattuti passo a passo sul server (fights.py):
+   *  se ci sono, valgono loro e il motore non simula. */
+  compFights?: Fight[];
 }
 
 /* ---------------- RNG con seme (mulberry32), lo stato vive in `rng` ---------------- */
@@ -479,7 +482,7 @@ function athletePower(a: Athlete): number {
 }
 
 const LEVEL_BASE: Record<CompLevel, number> = { REGIONAL: 9, NACIONAL: 24, INTERNACIONAL: 40 };
-const LEVEL_ROUNDS: Record<CompLevel, number> = { REGIONAL: 3, NACIONAL: 4, INTERNACIONAL: 5 };
+export const LEVEL_ROUNDS: Record<CompLevel, number> = { REGIONAL: 3, NACIONAL: 4, INTERNACIONAL: 5 };
 const LEVEL_MULT: Record<CompLevel, number> = { REGIONAL: 1, NACIONAL: 2, INTERNACIONAL: 3.5 };
 
 function winChance(power: number, level: CompLevel, round: number, d: HasRng): number {
@@ -509,8 +512,9 @@ function fightScript(d: HasRng, won: boolean): FightEvent[] {
 
 /** Punteggio dopo i primi `n` eventi (usato anche dalla scena animata). */
 export function scoreAt(events: FightEvent[], n: number): { A: Score; B: Score } {
-  const s = { A: { waza: 0, ippon: 0, shido: 0 }, B: { waza: 0, ippon: 0, shido: 0 } };
+  const s = { A: { waza: 0, ippon: 0, shido: 0, yuko: 0 }, B: { waza: 0, ippon: 0, shido: 0, yuko: 0 } };
   for (const e of events.slice(0, n)) {
+    if (e.t === "YUKO") s[e.by].yuko++;
     if (e.t === "WAZA_ARI") s[e.by].waza++;
     if (e.t === "IPPON") s[e.by].ippon++;
     if (e.t === "SHIDO") s[e.by].shido++;
@@ -589,16 +593,25 @@ export function advanceWeek(s: CareerState, plan: WeekPlan): { state: CareerStat
         report.comp = c;
         const rounds = LEVEL_ROUNDS[c.level];
         let wins = 0;
-        for (let r = 1; r <= rounds; r++) {
-          const won = rand(d) < winChance(heroPower(h), c.level, r, d);
-          report.fights.push({
-            round: r, rounds,
-            opponent: { name: personName(d), city: pick(d, CITIES), belt: BELTS[Math.max(beltRank(c.minBelt), Math.min(6, beltRank(h.belt) + randInt(d, -1, 1)))] ?? h.belt },
-            events: fightScript(d, won),
-            won,
-          });
-          if (!won) break;
-          wins++;
+        const external = plan.compFights?.filter((f) => f.round >= 1 && f.round <= rounds).sort((a, b) => a.round - b.round);
+        if (external && external.length > 0) {
+          for (const f of external) {
+            report.fights.push({ ...f, rounds });
+            if (!f.won) break;
+            wins++;
+          }
+        } else {
+          for (let r = 1; r <= rounds; r++) {
+            const won = rand(d) < winChance(heroPower(h), c.level, r, d);
+            report.fights.push({
+              round: r, rounds,
+              opponent: { name: personName(d), city: pick(d, CITIES), belt: BELTS[Math.max(beltRank(c.minBelt), Math.min(6, beltRank(h.belt) + randInt(d, -1, 1)))] ?? h.belt },
+              events: fightScript(d, won),
+              won,
+            });
+            if (!won) break;
+            wins++;
+          }
         }
         const m = LEVEL_MULT[c.level];
         xp += Math.round(wins * 40 * m);

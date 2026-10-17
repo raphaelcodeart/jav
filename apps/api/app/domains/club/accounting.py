@@ -240,6 +240,8 @@ class Figures:
     discounts_cents: int = 0
     absence_cents: int = 0
     waived_cents: int = 0
+    #: Mensilità esenti («Isenta este mês»): fuori dall'emesso e dai mancati incassi.
+    exempt_cents: int = 0
     expenses_by_category: dict[str, int] = field(default_factory=dict)
     staff_cents: int = 0
     staff_minutes: int = 0
@@ -271,7 +273,7 @@ class Figures:
         for cat, cents in other.expenses_by_category.items():
             self.expenses_by_category[cat] = self.expenses_by_category.get(cat, 0) + cents
         for name in ("credit_cents", "issued_cents", "issued_paid_cents", "discounts_cents", "absence_cents",
-                     "waived_cents", "staff_cents", "staff_minutes", "platform_fee_cents", "coach_share_cents",
+                     "waived_cents", "exempt_cents", "staff_cents", "staff_minutes", "platform_fee_cents", "coach_share_cents",
                      "course_income_cents"):
             setattr(self, name, getattr(self, name) + getattr(other, name))
         return self
@@ -288,6 +290,7 @@ class Figures:
             "absence_cents": self.absence_cents,
             "waived_cents": self.waived_cents,
             "missed_cents": self.discounts_cents + self.absence_cents + self.waived_cents,
+            "exempt_cents": self.exempt_cents,
             "expenses_cents": self.expenses_cents,
             "expenses_by_category": {cat: self.expenses_by_category.get(cat, 0) for cat in EXPENSE_CATEGORIES},
             "staff_cents": self.staff_cents,
@@ -390,17 +393,20 @@ async def monthly_figures(
         at(club_id, month).credit_cents = int(cents or 0)
 
     due_month = _date_month(ClubFee.due_date)
-    net = func.coalesce(ClubFee.gross_amount_cents, ClubFee.amount_cents) - ClubFee.discount_cents
     zero = 0
-    for club_id, month, issued, issued_paid, discounts, absence, waived in (
+    # Un mese esente («Isenta este mês») esce dal mese del tutto: né emesso,
+    # né mancato incasso (i suoi sconti compresi); si conta a parte.
+    exempt = func.coalesce(ClubFee.waive_kind, "") == "EXEMPT"
+    for club_id, month, issued, issued_paid, discounts, absence, waived, exempted in (
         await db.execute(
             select(
                 ClubFee.club_id, due_month,
                 func.sum(_case(ClubFee.status != "WAIVED", ClubFee.amount_cents, zero)),
                 func.sum(_case(ClubFee.status == "PAID", ClubFee.amount_cents, zero)),
-                func.sum(ClubFee.discount_cents),
-                func.sum(_case(ClubFee.absence_adjustment.is_not(None), net - ClubFee.amount_cents, zero)),
-                func.sum(_case(ClubFee.status == "WAIVED", ClubFee.amount_cents, zero)),
+                func.sum(_case(exempt, zero, ClubFee.discount_cents)),
+                func.sum(_case(exempt, zero, absence_cents_sql())),
+                func.sum(_case((ClubFee.status == "WAIVED") & ~exempt, ClubFee.amount_cents, zero)),
+                func.sum(_case(exempt, ClubFee.amount_cents, zero)),
             )
             .where(ClubFee.club_id.in_(club_ids), ClubFee.due_date >= start, ClubFee.due_date < end)
             .group_by(ClubFee.club_id, due_month)
@@ -409,6 +415,7 @@ async def monthly_figures(
         f = at(club_id, month)
         f.issued_cents, f.issued_paid_cents = int(issued or 0), int(issued_paid or 0)
         f.discounts_cents, f.absence_cents, f.waived_cents = int(discounts or 0), int(absence or 0), int(waived or 0)
+        f.exempt_cents = int(exempted or 0)
 
     spent_month = _date_month(ClubExpense.spent_on)
     for club_id, month, category, cents in (
@@ -485,6 +492,23 @@ async def _share_groups(
 
 def _case(condition, then, otherwise):
     return case((condition, then), else_=otherwise)
+
+
+def absence_cents(fee: ClubFee) -> int:
+    """Quanto ha tolto la taxa de falta: si calcola dal netto congelato
+    (absence.py::apply), non da `amount_cents`, che un pagamento parziale
+    riduce alla parte pagata (club/fee_splits.py)."""
+    gross = fee.gross_amount_cents if fee.gross_amount_cents is not None else fee.amount_cents
+    net = gross - (fee.discount_cents or 0)
+    return {"HALF": net - net // 2, "FULL": net}.get(fee.absence_adjustment or "", 0)
+
+
+def absence_cents_sql():
+    """absence_cents() in SQL, per le somme raggruppate."""
+    net = func.coalesce(ClubFee.gross_amount_cents, ClubFee.amount_cents) - ClubFee.discount_cents
+    return case(
+        (ClubFee.absence_adjustment == "HALF", net - net // 2), (ClubFee.absence_adjustment == "FULL", net), else_=0,
+    )
 
 
 async def expected_coach_share(db: AsyncSession, *, club_ids: list[uuid.UUID], start: date, end: date) -> int:
@@ -1446,10 +1470,8 @@ async def personal_account(db: AsyncSession, *, scope: ClubScope, user_id: uuid.
         return fee.paid_at is not None and year_start <= fee.paid_at < year_end
 
     def missed(fee: ClubFee) -> int:
-        net = (fee.gross_amount_cents if fee.gross_amount_cents is not None else fee.amount_cents) - (fee.discount_cents or 0)
-        absence = net - fee.amount_cents if fee.absence_adjustment else 0
         waived = fee.amount_cents if fee.status == "WAIVED" else 0
-        return (fee.discount_cents or 0) + absence + waived
+        return (fee.discount_cents or 0) + absence_cents(fee) + waived
 
     def numbers(rows: list[ClubFee]) -> dict:
         paid = [f for f in rows if f.status == "PAID"]
