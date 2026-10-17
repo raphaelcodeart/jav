@@ -23,6 +23,7 @@ from app.domains.club.models import ClubFee
 from app.domains.notifications.models import Notification
 from app.domains.rbac.models import Role, UserRole
 from app.domains.users.models import User
+from tests.test_club_fees import _no_debts
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 200
 
@@ -234,6 +235,7 @@ async def test_the_school_letter_is_for_registered_athletes_and_stays_private(db
     await _plans(db, scope, admin)
     parent = await _user(db, scope)
     athlete = await _athlete(db, scope, parent, birth_date=date(2014, 4, 4), sex="F", first_name="Ana")
+    await _no_debts(db, athlete)
     comp = await _competition(db, scope, admin)
     entry = await competitions_service.register_entry(
         db, competition=comp, athlete=athlete, actor_user_id=parent.id, category=None, today=date(2026, 10, 20)
@@ -277,6 +279,7 @@ async def test_after_the_deadline_nobody_can_register(db, scope):
     await _plans(db, scope, admin)
     parent = await _user(db, scope)
     athlete = await _athlete(db, scope, parent, birth_date=date(2014, 4, 4))
+    await _no_debts(db, athlete)
     comp = await _competition(db, scope, admin)
     with pytest.raises(club_service.ClubValidationError, match="chiuse"):
         await competitions_service.register_entry(

@@ -6,6 +6,7 @@ import { SiteHeader } from "@/components/site/site-header";
 import { PublicJavbot } from "@/components/javbot/public-bot";
 import { JAV_CONTACTS } from "@/lib/jav-contacts";
 import { getSession } from "@/lib/session";
+import { SignedInProvider } from "@/components/club/participate-button";
 import { CookieSettingsButton } from "@/components/legal/cookie-settings-button";
 import { LEGAL } from "@/lib/legal";
 import { publicSite } from "@/lib/public-site";
@@ -31,7 +32,7 @@ export async function SiteShell({ children }: { children: ReactNode }) {
     // resta sticky.
     <div className="flex min-h-screen flex-col overflow-x-clip">
       <SiteHeader loggedIn={session !== null} />
-      <main id="conteudo" className="flex-1">{children}</main>
+      <main id="conteudo" className="flex-1"><SignedInProvider value={session !== null}>{children}</SignedInProvider></main>
       <footer className="mt-24 bg-ink-950 text-ink-300">
         <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 sm:px-6 md:grid-cols-[1.4fr_1fr_1fr_1.2fr]">
           <div className="space-y-4">

@@ -40,6 +40,7 @@ from app.domains.club.router import clubs_router
 from app.domains.club.router import router as club_router
 from app.domains.club.router import staff_router as club_staff_router
 from app.domains.club.site_router import public_site_router, site_admin_router, site_family_router
+from app.domains.club.participation_router import router as club_participation_router
 from app.domains.commissions import models as _commissions_models  # noqa: F401
 from app.domains.commissions.router import router as commissions_router
 from app.domains.contracts import models as _contracts_models  # noqa: F401
@@ -143,6 +144,7 @@ app.include_router(money_router, prefix="/api")
 app.include_router(public_site_router, prefix="/api")
 app.include_router(site_admin_router, prefix="/api")
 app.include_router(site_family_router, prefix="/api")
+app.include_router(club_participation_router, prefix="/api")
 app.include_router(contact_public_router, prefix="/api")
 app.include_router(contact_club_router, prefix="/api")
 app.include_router(contact_platform_router, prefix="/api")

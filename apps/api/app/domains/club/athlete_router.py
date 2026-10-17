@@ -451,11 +451,8 @@ async def wish_to_compete(
     da solo) dice al titolare del conto che vuole andare a una prova. Parte
     un'email e una notifica al titolare con la scadenza delle iscrizioni.
     Una volta sola per atleta e prova."""
-    from html import escape
-
     from app.domains.club import competitions as competitions_service
-    from app.domains.club.tasks import _claim_reminder
-    from app.domains.notifications import service as notifications_service
+    from app.domains.club import participation
 
     athlete = await _area_athlete(db, current_user, athlete_id)
     try:
@@ -465,33 +462,12 @@ async def wish_to_compete(
     today = (await lessons_service.club_now(db, club_id=current_user.club_id)).date()
     if comp.status != "OPEN" or comp.registration_deadline < today:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Le iscrizioni a questa prova sono chiuse.")
+    if await participation.blocking_debts(db, athlete=athlete, today=today, exclude_competition_id=comp.id):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, participation.DEBTS_REASON)
     if athlete.guardian_user_id == current_user.user_id:
         return {"sent": False, "already": False, "holder": True}
-    fresh = await _claim_reminder(db, organization_id=athlete.organization_id, kind="COMPETITION_WISH",
-                                  entity_id=f"{athlete.id}:{comp.id}", stage="wish")
-    if not fresh:
-        await db.commit()
-        return {"sent": False, "already": True, "holder": False}
-    deadline = comp.registration_deadline.strftime("%d/%m/%Y")
-    title = f"{athlete.first_name} quer participar: {comp.name}"
-    await notifications_service.notify_user(
-        db, organization_id=athlete.organization_id, user_id=athlete.guardian_user_id, type_="CLUB_COMPETITION_WISH",
-        entity_type="club_competition", entity_id=comp.id, title=title,
-        body=f"Inscreva-o até {deadline} na página das provas.",
-    )
-    await db.commit()
-    await club_service.email_guardian(
-        db, user_id=athlete.guardian_user_id, context="competition wish",
-        subject=title, heading=f"{athlete.first_name} quer ir à prova!",
-        lines=[
-            f"<strong>{escape(athlete.first_name)}</strong> carregou em «Quero participar» na prova "
-            f"<strong>{escape(comp.name)}</strong> ({comp.starts_on.strftime('%d/%m/%Y')}"
-            f"{', ' + escape(comp.location) if comp.location else ''}).",
-            f"Lembre-se de o inscrever <strong>até {deadline}</strong> na página das provas do portal.",
-        ],
-        cta_label="Inscrever na prova",
-    )
-    return {"sent": True, "already": False, "holder": False}
+    sent = await participation.send_wish(db, athlete=athlete, competition=comp)
+    return {"sent": sent, "already": not sent, "holder": False}
 
 
 @router.get("/athlete-area/{athlete_id}/money")

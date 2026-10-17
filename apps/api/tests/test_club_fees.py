@@ -58,6 +58,19 @@ async def _athlete(db, scope, guardian, *, birth_date, today=date(2026, 10, 15),
     )
 
 
+async def _no_debts(db, athlete: ClubAthlete, *, days: int = 3650) -> None:
+    """Sposta in avanti le scadenze delle quote dell'atleta e del suo conto:
+    con quote scadute non ci si iscrive alle gare (club/participation.py)."""
+    from datetime import timedelta
+
+    from sqlalchemy import or_, update
+
+    await db.execute(update(ClubFee).where(
+        or_(ClubFee.athlete_id == athlete.id, (ClubFee.athlete_id.is_(None)) & (ClubFee.guardian_user_id == athlete.guardian_user_id))
+    ).values(due_date=date.today() + timedelta(days=days)))
+    await db.commit()
+
+
 async def _fees(db, athlete_id, **filters) -> list[ClubFee]:
     stmt = select(ClubFee).where(ClubFee.athlete_id == athlete_id)
     for key, value in filters.items():

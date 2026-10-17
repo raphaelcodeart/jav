@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict isineeqZQmUBHfObUU57SIncPeoLzAXfhiJTrlGpfG8ljoIDVqhGrmDDRHQuqn3
+\restrict Lcbo2X0fFMyLhP9cU2doXXIdukTMU2HFhDuroldHg3qRvLiNRxA2dKOHWvdF38e
 
 -- Dumped from database version 16.15
 -- Dumped by pg_dump version 16.15
@@ -961,6 +961,7 @@ CREATE TABLE public.club_fees (
     waive_kind character varying(16),
     split_from_fee_id uuid,
     split_reason character varying(500),
+    non_blocking boolean DEFAULT false NOT NULL,
     CONSTRAINT ck_club_fees_absence_adjustment CHECK (((absence_adjustment IS NULL) OR ((absence_adjustment)::text = ANY ((ARRAY['HALF'::character varying, 'FULL'::character varying])::text[])))),
     CONSTRAINT ck_club_fees_amount_non_negative CHECK ((amount_cents >= 0)),
     CONSTRAINT ck_club_fees_coach_share_pct_range CHECK (((coach_share_pct IS NULL) OR ((coach_share_pct >= (0)::numeric) AND (coach_share_pct <= (100)::numeric)))),
@@ -9870,5 +9871,5 @@ ALTER TABLE ONLY public.wallets
 -- PostgreSQL database dump complete
 --
 
-\unrestrict isineeqZQmUBHfObUU57SIncPeoLzAXfhiJTrlGpfG8ljoIDVqhGrmDDRHQuqn3
+\unrestrict Lcbo2X0fFMyLhP9cU2doXXIdukTMU2HFhDuroldHg3qRvLiNRxA2dKOHWvdF38e
 

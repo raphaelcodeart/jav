@@ -1960,3 +1960,46 @@ mostra in alto il logo e il nome del club (JAV se il club non ha un logo). La
 console della piattaforma resta JAV. È dinamico: salvando il sito la segreteria
 vede subito i colori nuovi; le altre aree li rileggono entro un minuto o
 tornando sulla scheda.
+
+## «Quero participar» e i debiti che bloccano
+
+Su ogni evento del calendario (lista del sito e delle aree, pagina dell'evento,
+prove dell'area atleta, pagina delle prove della famiglia) c'è il bottone
+**Quero participar** (`components/club/participate-button.tsx`). Chi non è
+entrato va al login e torna sulla pagina; se qualcuno del conto è già iscritto
+il bottone diventa «Inscrito», spento; sugli eventi di altri club non compare.
+
+Il clic apre una finestra con gli atleti del conto (`GET
+/club/participation/{competition_id}`): già iscritto, può (il titolare iscrive,
+l'atleta con il suo accesso avvisa il titolare), non può (età, atestado…) o
+**ha debiti**. Le regole sono in `club/participation.py`:
+
+- blocca ogni quota `DUE` con scadenza **prima di oggi**, dell'atleta o del
+  conto (quota socio del titolare), escluse la quota della gara stessa e
+  quelle segnate **non bloccanti**;
+- il controllo è dentro `competitions.eligibility`, quindi vale per ogni
+  iscrizione della famiglia (anche `POST /club/competitions/{id}/entries`), e
+  per il «Voglio partecipare» dell'atleta (`/athlete-area/…/wish`);
+- con debiti la finestra li elenca con il totale e il titolare li paga subito
+  (`PayModal` con le quote già scelte); l'atleta che non è titolare legge che
+  deve chiedere a chi lo ha iscritto.
+
+`GET /club/participation/mine` dà le gare con un iscritto del conto e lo slug
+del club; `POST /club/participation/{competition_id}` `{athlete_id}` iscrive o
+manda la richiesta. Le rotte valgono per qualunque utente del club (come
+`/club/branding`).
+
+**Debito non bloccante** (migrazione `0036`, `club_fees.non_blocking`): nella
+lista delle quote della segreteria, sotto lo stato di una quota scaduta, c'è
+«🔓 Não bloquear provas» (`POST /club/admin/fees/{id}/blocking
+{non_blocking}`, registrato nell'audit). La quota resta da pagare, ma non
+impedisce più le iscrizioni; si torna indietro con lo stesso bottone.
+
+### Relatórios di eventi e lezioni
+
+- Segreteria: **Eventos e provas → Relatórios** (eventi, con costi, foto e PDF
+  per periodo) e il nuovo menu **Relatórios das aulas** (`section=lessons`):
+  il quaderno dei treinador in modalità segreteria (`CoachNotebook manager`),
+  tutte le turmas e le note sugli atleti.
+- Treinador: **Eventos** (relatório dell'evento fatto, risultati) e
+  **Caderno** (relatório della lezione e note per atleta).

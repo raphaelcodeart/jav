@@ -89,6 +89,9 @@ export interface Fee {
   /** Il resto di un pagamento parziale: la quota da cui nasce e perché. */
   split_from_fee_id?: string | null;
   split_reason?: string | null;
+  /** La segreteria l'ha segnata «non bloccante»: anche scaduta, non ferma
+   *  l'iscrizione alle gare (club/participation.py). */
+  non_blocking?: boolean;
 }
 
 export type CertificateState = "MISSING" | "VALID" | "EXPIRING" | "EXPIRED";
@@ -426,6 +429,8 @@ export interface AthleteEligibility {
   placement: number | null;
   /** La segreteria ha generato la giustificazione per la scuola. */
   school_letter_ready?: boolean;
+  /** Non può per delle quote scadute: si offre di pagarle (participate-button.tsx). */
+  blocked_by_debts?: boolean;
 }
 
 export interface FamilyCompetition extends Competition {

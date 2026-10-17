@@ -18,7 +18,7 @@ from app.domains.club import event_reports
 from app.domains.club.models import Club
 from app.domains.club.scope import ClubScope
 from app.domains.customers.models import Customer
-from tests.test_club_fees import _athlete, _plans, _user
+from tests.test_club_fees import _athlete, _no_debts, _plans, _user
 
 TODAY = date.today()
 
@@ -59,6 +59,7 @@ async def _setup(db, scope, *, starts_on=TODAY + timedelta(days=10), name="Open 
     await db.commit()
     kid = await _athlete(db, scope, parent, birth_date=date(TODAY.year - 12, 3, 1), first_name="Tiago",
                          last_name="Lopes", today=TODAY)
+    await _no_debts(db, kid)
     comp = await _comp(db, scope, admin, starts_on=starts_on, name=name)
     entry = await competitions_service.register_entry(
         db, competition=comp, athlete=kid, actor_user_id=parent.id, category=None, today=starts_on - timedelta(days=5),

@@ -43,6 +43,7 @@ import { CoursesManager } from "@/components/club/jav-courses";
 import { SeasonMonthsPanel } from "@/components/club/season-months";
 import { EventNameButton } from "@/components/club/competition-detail-modal";
 import { CoachResultsPanel } from "@/components/club/coach-results";
+import { CoachNotebook } from "@/components/club/coach-notebook";
 import { EventReportsPanel } from "@/components/club/event-reports";
 import { useI18n } from "@/lib/i18n/provider";
 import { feeLabel } from "@/lib/fee-label";
@@ -74,7 +75,7 @@ import {
 
 export type ClubSection =
   | "overview" | "people" | "athletes" | "plans" | "accounting" | "fees" | "proofs" | "absence" | "certificates"
-  | "competitions" | "courses" | "calendar" | "attendance" | "daylog" | "belts" | "ranking" | "workhours"
+  | "competitions" | "courses" | "calendar" | "attendance" | "daylog" | "lessons" | "belts" | "ranking" | "workhours"
   | "shop-orders" | "site" | "messages" | "news" | "javbot" | "documents" | "settings";
 type Section = ClubSection;
 
@@ -95,6 +96,7 @@ export const CLUB_SECTIONS: { key: ClubSection; icon: string; group: "people" | 
   { key: "calendar", icon: "📅", group: "activity" },
   { key: "attendance", icon: "✅", group: "activity" },
   { key: "daylog", icon: "📝", group: "activity" },
+  { key: "lessons", icon: "📓", group: "activity" },
   { key: "competitions", icon: "🏆", group: "activity" },
   { key: "belts", icon: "🎖️", group: "activity" },
   { key: "ranking", icon: "📊", group: "activity" },
@@ -179,6 +181,8 @@ export function ClubAdminPanel({ section: controlled, onGo, canInvest = false }:
         {section === "calendar" && <CalendarPanel />}
         {section === "attendance" && <AttendanceTool />}
         {section === "daylog" && <DayLogPanel />}
+        {/* I relatórios delle lezioni scritti dai treinador (coach-notebook.tsx), tutte le turmas. */}
+        {section === "lessons" && <CoachNotebook manager />}
         {section === "belts" && features.belts && <BeltAwardPanel />}
         {section === "ranking" && features.ranking && <RankingPanel admin />}
         {section === "workhours" && <StaffManagementPanel />}
@@ -372,6 +376,14 @@ function FeesList() {
                   <FeeStatusPill status={f.status} overdue={f.overdue} />
                   {f.waive_reason && <p className="text-[11px] text-ink-500 mt-1">{f.waive_reason}</p>}
                   <PaidHow fee={f} />
+                  {/* Una quota scaduta blocca le iscrizioni alle gare; la segreteria può decidere di no. */}
+                  {f.status === "DUE" && (f.overdue || f.non_blocking) && (
+                    <button type="button" title={t("ca.fees.nonBlockingHint")}
+                      onClick={() => run(() => clubSend(A(`/fees/${f.id}/blocking`), "POST", { non_blocking: !f.non_blocking }), t("ca.fees.blockingSaved"))}
+                      className={`mt-1.5 flex cursor-pointer items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ${f.non_blocking ? "bg-amber-50 text-amber-800 ring-amber-200 hover:bg-amber-100" : "bg-white text-ink-600 ring-ink-200 hover:bg-ink-50"}`}>
+                      {f.non_blocking ? <>🔓 {t("ca.fees.nonBlocking")} · <span className="underline">{t("ca.fees.makeBlocking")}</span></> : <>🔓 {t("ca.fees.makeNonBlocking")}</>}
+                    </button>
+                  )}
                   {f.proof_id && (
                     <button type="button" onClick={() => setViewingProof({ id: f.proof_id!, status: f.proof_status })}
                       className={`mt-1.5 inline-flex cursor-pointer items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ${f.proof_status === "REJECTED" ? "bg-rose-50 text-rose-800 ring-rose-200" : "bg-sky-50 text-sky-800 ring-sky-200"}`}>

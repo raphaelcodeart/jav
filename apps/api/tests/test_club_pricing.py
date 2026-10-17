@@ -29,7 +29,7 @@ from app.domains.friend_referrals import service as friend_referrals_service
 from app.domains.notifications.models import Notification
 from app.domains.rbac.models import Role, UserRole
 from app.domains.wallets import service as wallets_service
-from tests.test_club_fees import PNG, _athlete, _fees, _plans, _user
+from tests.test_club_fees import PNG, _athlete, _fees, _no_debts, _plans, _user
 
 
 async def _admin_set(db, athlete, admin, **changes):
@@ -235,6 +235,7 @@ async def test_closing_registrations_prepares_the_transport_letter(db, scope, mo
     await db.commit()
     parent = await _user(db, scope)
     athlete = await _athlete(db, scope, parent, birth_date=date(2014, 4, 4), today=date(2026, 10, 15))
+    await _no_debts(db, athlete)
     comp = await _event(db, scope, admin, transport_needed=True, transport_companions=2,
                         transport_departure="Pavilhão, 7h00")
     assert (comp.transport_entity_name, comp.transport_entity_email) == ("Câmara Municipal de Lagos", "cm@lagos.demo")

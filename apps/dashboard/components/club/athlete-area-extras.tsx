@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { EventIcon } from "@/components/club/event-icon";
+import { ParticipateButton } from "@/components/club/participate-button";
 import { clubGet, clubSend, type AthleteDetail, type Competition } from "@/lib/club";
 import type { MessageKey } from "@/lib/i18n/messages/it";
 import { useI18n } from "@/lib/i18n/provider";
@@ -92,32 +93,14 @@ interface AreaCompetition extends Competition {
 
 /** Le prove in arrivo nell'area dell'atleta. L'atleta non si iscrive da solo
  *  (spesso è minorenne): «Voglio partecipare» avvisa il titolare del conto per
- *  email e notifica, una volta per prova. Il titolare invece va dritto alla
- *  pagina delle prove, dove iscrive. */
+ *  email e notifica, una volta per prova; il titolare iscrive da qui. Con
+ *  delle quote scadute si paga prima (participate-button.tsx). */
 export function AreaCompetitions({ athlete }: { athlete: AthleteDetail }) {
   const { t, fmt } = useI18n();
-  const toast = useToast();
-  const qc = useQueryClient();
-  const [busy, setBusy] = useState<string | null>(null);
-  const [sent, setSent] = useState<Set<string>>(new Set());
   const { data, isLoading } = useQuery({
     queryKey: ["club", "area-competitions", athlete.id],
     queryFn: () => clubGet<AreaCompetition[]>(`/athlete-area/${athlete.id}/competitions`),
   });
-
-  async function wish(c: AreaCompetition) {
-    setBusy(c.id);
-    try {
-      const r = await clubSend<{ sent: boolean; already: boolean }>(`/athlete-area/${athlete.id}/competitions/${c.id}/wish`, "POST");
-      setSent((s) => new Set(s).add(c.id));
-      toast({ tone: "success", title: r.already ? t("area.wishAlready") : t("area.wishSent") });
-      void qc.invalidateQueries({ queryKey: ["club", "area-competitions", athlete.id] });
-    } catch (e) {
-      toast({ tone: "error", title: e instanceof Error ? e.message : t("area.wishFailed") });
-    } finally {
-      setBusy(null);
-    }
-  }
 
   return (
     <section className="rounded-3xl bg-white p-5 shadow-soft ring-1 ring-ink-900/5 sm:p-6">
@@ -144,14 +127,10 @@ export function AreaCompetitions({ athlete }: { athlete: AthleteDetail }) {
               <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">✓ {t("area.compEntered")}</span>
             ) : !c.registrations_open ? (
               <span className="rounded-full bg-ink-100 px-3 py-1 text-xs font-semibold text-ink-500">{t("area.compClosed")}</span>
-            ) : c.viewer_is_holder ? (
-              <Link href="/customer?tab=club-competitions" className="inline-flex h-10 items-center rounded-xl bg-brand-600 px-4 text-sm font-semibold text-white hover:bg-brand-700">
-                {t("area.compEnroll")}
-              </Link>
-            ) : sent.has(c.id) ? (
-              <span className="rounded-full bg-accent-100 px-3 py-1 text-xs font-bold text-accent-800">📨 {t("area.wishSentShort")}</span>
             ) : (
-              <Button size="sm" loading={busy === c.id} onClick={() => wish(c)}>🙋 {t("area.wish")}</Button>
+              // Lo stesso «Quero participar» del sito: controlla i debiti, poi
+              // iscrive (titolare) o avvisa chi iscrive (atleta).
+              <ParticipateButton competitionId={c.id} clubSlug={null} open />
             )}
           </motion.li>
         ))}

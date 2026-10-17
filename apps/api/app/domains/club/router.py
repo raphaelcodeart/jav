@@ -38,6 +38,7 @@ from app.domains.club import achievements as achievements_catalog
 from app.domains.club import belts as belts_catalog
 from app.domains.club import clubs as clubs_service
 from app.domains.club import competitions as competitions_service
+from app.domains.club import participation as participation_service
 from app.domains.club import courses as courses_service
 from app.domains.club import family as family_service
 from app.domains.club import jav_courses as jav_courses_service
@@ -100,6 +101,7 @@ from app.domains.club.schemas import (
     FamilyCompetitionRead,
     FamilyLessonRead,
     FamilyRead,
+    FeeBlockingWrite,
     FeeRead,
     FunctionWrite,
     InvestmentWrite,
@@ -566,6 +568,7 @@ async def list_family_competitions(
                 entry_status=entry.status if entry else None, category=entry.category if entry else None,
                 placement=entry.placement if entry else None,
                 school_letter_ready=entry is not None and entry.status == "REGISTERED" and entry.id in letters,
+                blocked_by_debts=reason == participation_service.DEBTS_REASON,
             ))
         out.append(FamilyCompetitionRead(
             **CompetitionRead.model_validate(comp).model_dump(),
@@ -1050,6 +1053,25 @@ async def admin_waive_fee(
         fee = await club_service.waive_fee(
             db, scope=current_user.scope, fee_id=fee_id, actor_user_id=current_user.user_id,
             reason=payload.reason,
+        )
+    except club_service.ClubError as exc:
+        _raise(exc)
+    return FeeRead(**family_service.fee_dict(fee, today=_today()))
+
+
+@admin_router.post("/fees/{fee_id}/blocking", response_model=FeeRead)
+async def admin_set_fee_blocking(
+    fee_id: uuid.UUID,
+    payload: FeeBlockingWrite,
+    current_user: ClubUser = Depends(require_club_permission(MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> FeeRead:
+    """Una quota scaduta blocca l'iscrizione alle gare; la segreteria può
+    decidere che questa no (es. il judogi pagato a rate)."""
+    try:
+        fee = await club_service.set_fee_blocking(
+            db, scope=current_user.scope, fee_id=fee_id, actor_user_id=current_user.user_id,
+            non_blocking=payload.non_blocking,
         )
     except club_service.ClubError as exc:
         _raise(exc)

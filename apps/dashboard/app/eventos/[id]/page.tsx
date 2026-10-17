@@ -4,6 +4,7 @@ import { moment } from "@/lib/event-time";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
+import { ParticipateButton } from "@/components/club/participate-button";
 import { BackToCalendar } from "@/components/site/back-to-calendar";
 import { Container, EmptyNote, KindBadge } from "@/components/site/blocks";
 import { EventParticipants } from "@/components/site/event-participants";
@@ -40,11 +41,13 @@ export default async function EventPage({ params, searchParams }: Params) {
   if (!event) notFound();
 
   const isCompetition = event.kind === "COMPETITION";
+  const cancelled = /^ANULAD[OA]/i.test(event.name);
   const hasResults = isCompetition && event.participants.some((p) => p.placement !== null);
   const today = new Date().toISOString().slice(0, 10);
   const daysTo = (iso: string) => Math.round((Date.parse(iso) - Date.parse(today)) / 86_400_000);
   const startsIn = daysTo(event.starts_on);
   const deadlineIn = daysTo(event.registration_deadline);
+  const registrationsOpen = event.status === "OPEN" && deadlineIn >= 0 && !cancelled;
   const mapUrl = event.location ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location)}` : null;
   const facts: { icon: string; label: string; value: ReactNode; hint?: string | null }[] = [
     {
@@ -105,8 +108,22 @@ export default async function EventPage({ params, searchParams }: Params) {
           {event.status === "OPEN" && deadlineIn >= 0 && (
             <Countdown size="lg" target={moment(event.registration_deadline, event.registration_deadline_time, "endOfDay")} label={t("countdown.registrationsClose")} />
           )}
-          {startsIn >= 0 && !/^ANULAD[OA]/i.test(event.name) && (
+          {startsIn >= 0 && !cancelled && (
             <Countdown size="lg" tone="brand" target={moment(event.starts_on, event.starts_at_time, "morning")} label={t("countdown.eventStarts")} />
+          )}
+          {registrationsOpen && (
+            <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand-500 to-brand-700 p-6 text-white shadow-brand">
+              <div className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-accent-300/30 blur-2xl" aria-hidden="true" />
+              <p className="relative font-semibold">🥋 {t("site.event.joinTitle")}</p>
+              <p className="relative mt-1 text-sm text-white/90">
+                {event.club ? t("site.event.howToJoin", { club: event.club.name }) : t("site.event.howToJoinNetwork")}
+              </p>
+              <ParticipateButton competitionId={event.id} clubSlug={event.club?.slug ?? null} open size="lg" tone="light" className="mt-4" />
+            </div>
+          )}
+          {/* Già iscritto a una gara chiusa: resta il segno «Inscrito». */}
+          {!registrationsOpen && startsIn >= 0 && !cancelled && (
+            <ParticipateButton competitionId={event.id} clubSlug={event.club?.slug ?? null} open={false} size="lg" />
           )}
           <div className="overflow-hidden rounded-3xl bg-white shadow-soft ring-1 ring-ink-900/5">
             <div className="h-1.5 bg-gradient-to-r from-brand-500 via-accent-400 to-ink-800" aria-hidden="true" />
@@ -141,18 +158,6 @@ export default async function EventPage({ params, searchParams }: Params) {
             </Link>
           )}
 
-          {event.status === "OPEN" && (
-            <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand-500 to-brand-700 p-6 text-white shadow-brand">
-              <div className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-accent-300/30 blur-2xl" aria-hidden="true" />
-              <p className="relative font-semibold">🥋 {t("site.event.joinTitle")}</p>
-              <p className="relative mt-1 text-sm text-white/90">
-                {event.club ? t("site.event.howToJoin", { club: event.club.name }) : t("site.event.howToJoinNetwork")}
-              </p>
-              <Link href="/login" className="relative mt-4 inline-flex h-10 items-center rounded-xl bg-white px-4 text-sm font-semibold text-ink-900 hover:bg-accent-50">
-                {t("site.nav.login")} →
-              </Link>
-            </div>
-          )}
         </aside>
 
         <div className="min-w-0 space-y-10">

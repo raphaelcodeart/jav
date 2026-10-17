@@ -1,5 +1,6 @@
 "use client";
 
+import { ParticipateButton } from "@/components/club/participate-button";
 import { Countdown, moment } from "@/components/site/countdown";
 import Link from "next/link";
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
@@ -360,6 +361,7 @@ function EventRow({ e, todayIso, index }: { e: PublicEvent; todayIso: string; in
             {e.status === "OPEN" && e.registration_deadline >= todayIso
               ? <Countdown target={moment(e.registration_deadline, e.registration_deadline_time, "endOfDay")} label={t("countdown.registrations")} />
               : <Countdown target={moment(e.starts_on, e.starts_at_time, "morning")} label={t("countdown.starts")} tone="brand" />}
+            <ParticipateButton competitionId={e.id} clubSlug={e.club?.slug ?? null} open={e.status === "OPEN" && e.registration_deadline >= todayIso} />
           </div>
         )}
       </div>

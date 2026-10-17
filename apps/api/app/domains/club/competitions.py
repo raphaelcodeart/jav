@@ -355,6 +355,12 @@ async def eligibility(
             f"Serve un certificato medico agonistico valido il {competition.starts_on.strftime('%d/%m/%Y')}: "
             "caricalo nella scheda dell'atleta."
         )
+    # Con dei debiti scaduti non ci si iscrive (participation.py), salvo le
+    # quote che la segreteria ha segnato «non bloccanti».
+    from app.domains.club.participation import DEBTS_REASON, blocking_debts
+
+    if await blocking_debts(db, athlete=athlete, today=today, exclude_competition_id=competition.id):
+        return False, DEBTS_REASON
     return True, None
 
 

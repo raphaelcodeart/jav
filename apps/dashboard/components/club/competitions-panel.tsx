@@ -1,5 +1,6 @@
 "use client";
 
+import { ParticipateButton } from "@/components/club/participate-button";
 import { motion } from "motion/react";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -199,6 +200,8 @@ function AthleteEntryRow({ competition: c, athlete: a }: { competition: FamilyCo
             <Button variant="ghost" size="sm" onClick={withdraw} loading={busy}>{t("comp.withdraw")}</Button>
           ) : a.eligible && !asking ? (
             <Button size="sm" onClick={() => setAsking(true)}>{t("comp.enter")}</Button>
+          ) : a.blocked_by_debts ? (
+            <ParticipateButton competitionId={c.id} clubSlug={null} open />
           ) : null)}
       </div>
       {asking && (

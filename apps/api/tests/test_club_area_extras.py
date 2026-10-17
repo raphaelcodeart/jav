@@ -15,7 +15,7 @@ import httpx
 from app.domains.club import athlete_access
 from app.domains.club import competitions as competitions_service
 from app.domains.rbac.models import Role
-from tests.test_club_fees import PNG, _athlete, _plans, _user
+from tests.test_club_fees import PNG, _athlete, _no_debts, _plans, _user
 
 
 async def _client(db, monkeypatch, *, user, scope, granted: set[str]):
@@ -56,6 +56,7 @@ async def test_area_competitions_wish_money_and_payment(db, scope, monkeypatch):
     kid = await _athlete(db, scope, parent, birth_date=date(2014, 3, 1), first_name="Tiago", today=date.today())
     await athlete_access.set_login(db, athlete=kid, actor_user_id=parent.id, username="tiago.x", email=None, password="segreto1")
     await db.refresh(kid)
+    await _no_debts(db, kid)
     soon = date.today() + timedelta(days=20)
     comp = await competitions_service.create_competition(db, scope=scope, actor_user_id=admin.id, data={
         "name": "Torneio de Lagos", "starts_on": soon, "ends_on": soon, "location": "Lagos",

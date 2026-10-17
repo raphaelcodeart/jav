@@ -605,6 +605,9 @@ class ClubFee(UUIDPKMixin, TimestampMixin, Base):
     waive_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
     #: NULL = condono; EXEMPT = mese esente (WAIVE_KINDS).
     waive_kind: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    #: La segreteria ha deciso che questa quota, anche scaduta, non impedisce
+    #: di iscriversi alle gare (club/participation.py::blocking_debts).
+    non_blocking: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     #: Pagamento parziale (club/fee_splits.py): la quota da cui questa è il
     #: resto. La quota pagata in parte resta PAID con l'importo davvero
     #: pagato, il resto nasce DUE con lo stesso tipo, scadenza e periodo

@@ -767,3 +767,18 @@ cinture, club e punti del gioco non sono quelli veri.
   al giorno con lo stesso amico e 10 sfide al giorno; un combattimento
   lasciato a metà conta come perso. Vedi la classifica del club e gli
   ultimi incontri.
+
+## Quero participar (e le quote da pagare)
+
+- Su ogni evento c'è il bottone **Quero participar**. Se non sei entrato ti
+  porta al login; se sei già iscritto vedi **Inscrito**.
+- Premendolo vedi i tuoi atleti: chi può andare si iscrive con un tocco
+  (l'atleta con il suo accesso invece avvisa il genitore).
+- **Con quote scadute non ci si iscrive agli eventi**: la finestra mostra
+  quali sono e il totale, e puoi pagarle subito con **Pagar agora**.
+- Segreteria: se una quota scaduta non deve impedire le gare (es. un judogi
+  pagato a rate), nella lista delle quote premi **🔓 Não bloquear provas**
+  sotto lo stato. Resta da pagare, ma non blocca più.
+- I relatórios: la segreteria trova quelli degli eventi in **Eventos e provas
+  → Relatórios** e quelli delle lezioni in **Relatórios das aulas**; il
+  treinador li scrive nelle sue schede **Eventos** e **Caderno**.

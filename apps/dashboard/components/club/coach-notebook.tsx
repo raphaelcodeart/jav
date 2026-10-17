@@ -44,7 +44,7 @@ export function CoachNotebook({ manager = false, initialTab = "lessons" }: { man
     <div className="space-y-5">
       <Tabs value={tab} onChange={setTab} items={[
         { key: "lessons", label: `📓 ${t("coach2.nb.tabLessons")}` },
-        { key: "athletes", label: `🥋 ${t("coach2.nb.tabAthletes")}` },
+        { key: "athletes", label: `🥋 ${manager ? t("clubNav.athletes") : t("coach2.nb.tabAthletes")}` },
       ]} />
       {tab === "lessons" ? <LessonTimeline manager={manager} /> : <MyAthletes manager={manager} />}
     </div>

@@ -171,6 +171,9 @@ class FeeRead(BaseModel):
     competition_id: uuid.UUID | None
     #: Nei corsi JAV: il corso a cui la mensilità è attribuita (NULL = senza corso).
     course_id: uuid.UUID | None = None
+    #: La segreteria l'ha segnata «non bloccante»: anche scaduta, non ferma
+    #: l'iscrizione alle gare (club/participation.py).
+    non_blocking: bool = False
     #: L'ultima prova di pagamento collegata (anche rifiutata), solo negli
     #: elenchi della segreteria: la si apre dalla quota.
     proof_id: uuid.UUID | None = None
@@ -569,6 +572,9 @@ class AthleteEligibilityRead(BaseModel):
     #: La segreteria ha generato la giustificazione per la scuola: il
     #: titolare la può scaricare.
     school_letter_ready: bool = False
+    #: Non può per delle quote scadute (club/participation.py): il
+    #: frontend offre di pagarle.
+    blocked_by_debts: bool = False
 
 
 class FamilyCompetitionRead(CompetitionRead):
@@ -1168,3 +1174,8 @@ class MoveResultRead(BaseModel):
     club_id: uuid.UUID
     club_name: str
     athletes: int
+
+
+class FeeBlockingWrite(BaseModel):
+    #: True = la quota non impedisce l'iscrizione alle gare anche se scaduta.
+    non_blocking: bool

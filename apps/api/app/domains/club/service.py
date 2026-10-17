@@ -787,6 +787,24 @@ async def waive_fee(
     return fee
 
 
+async def set_fee_blocking(
+    db: AsyncSession, *, scope: ClubScope, fee_id: uuid.UUID, actor_user_id: uuid.UUID, non_blocking: bool
+) -> ClubFee:
+    """Segna una quota «non bloccante»: resta da pagare, ma anche scaduta non
+    impedisce di iscriversi alle gare (club/participation.py)."""
+    fee = await _get_fee(db, scope=scope, fee_id=fee_id)
+    if fee.non_blocking != non_blocking:
+        fee.non_blocking = non_blocking
+        await audit_service.record(
+            db, organization_id=scope.organization_id, actor_user_id=actor_user_id,
+            action="club.fee_blocking_changed", entity_type="club_fee", entity_id=str(fee.id),
+            new_value={"non_blocking": non_blocking},
+        )
+        await db.commit()
+        await db.refresh(fee)
+    return fee
+
+
 async def cash_receivers(db: AsyncSession, *, scope: ClubScope) -> list[dict]:
     """Chi nel club può ricevere contanti: la segreteria e gli istruttori
     attivi, con il nome da mostrare a un genitore."""

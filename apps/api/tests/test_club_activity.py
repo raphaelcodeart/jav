@@ -25,7 +25,7 @@ from app.domains.club.models import (
     ClubMedicalCertificate,
     ClubReminderSent,
 )
-from tests.test_club_fees import PNG, _athlete, _plans, _user
+from tests.test_club_fees import PNG, _athlete, _no_debts, _plans, _user
 
 TODAY = date(2026, 10, 15)
 
@@ -57,6 +57,7 @@ async def test_competition_entry_needs_a_valid_agonistic_certificate(db, scope):
     await _plans(db, scope, admin)
     parent = await _user(db, scope)
     athlete = await _athlete(db, scope, parent, birth_date=date(2014, 4, 4))
+    await _no_debts(db, athlete)
     comp = await _competition(db, scope, admin)
 
     ok, reason = await competitions_service.eligibility(db, competition=comp, athlete=athlete, today=TODAY)
@@ -87,6 +88,7 @@ async def test_withdrawing_waives_the_unpaid_fee_and_registering_again_reopens_i
     await _plans(db, scope, admin)
     parent = await _user(db, scope)
     athlete = await _athlete(db, scope, parent, birth_date=date(2014, 4, 4))
+    await _no_debts(db, athlete)
     comp = await _competition(db, scope, admin, requires_agonistic_certificate=False)
 
     await competitions_service.register_entry(
@@ -119,8 +121,11 @@ async def test_ranking_sums_the_level_points_table_and_ties(db, scope):
     parent = await _user(db, scope)
     other_parent = await _user(db, scope, "altro")
     a = await _athlete(db, scope, parent, birth_date=date(2014, 4, 4), first_name="Aldo")
+    await _no_debts(db, a)
     b = await _athlete(db, scope, other_parent, birth_date=date(2014, 6, 6), first_name="Bruno")
+    await _no_debts(db, b)
     c = await _athlete(db, scope, other_parent, birth_date=date(2014, 7, 7), first_name="Carlo")
+    await _no_debts(db, c)
     regional = await _competition(db, scope, admin, requires_agonistic_certificate=False, fee_cents=0)
     club = await _competition(
         db, scope, admin, name="Gara sociale", level="CLUB", requires_agonistic_certificate=False,
