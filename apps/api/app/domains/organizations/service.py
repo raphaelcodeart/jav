@@ -9,7 +9,25 @@ from app.domains.organizations.schemas import OrganizationSettingsUpdate
 SETTINGS_KEYS = (
     "bank_iban", "bank_account_holder", "bank_transfer_instructions", "admin_notification_email",
     "contract_instalment_cashback_mode",
+    *(f"social_{kind}_url" for kind in ("facebook", "instagram", "youtube", "tiktok")),
 )
+
+#: I social della rete JudoArteVida (le icone nel piè di pagina del sito):
+#: si scrivono in Impostazioni; finché YouTube è vuoto vale il canale di
+#: sempre (club/videos.py).
+NETWORK_SOCIALS = ("facebook", "instagram", "youtube", "tiktok")
+DEFAULT_NETWORK_SOCIALS = {"youtube": "https://www.youtube.com/@ml8126"}
+
+
+async def network_socials(db: AsyncSession, *, organization_id: uuid.UUID) -> dict[str, str]:
+    org = await db.get(Organization, organization_id)
+    settings = (org.settings or {}) if org is not None else {}
+    out = {}
+    for kind in NETWORK_SOCIALS:
+        url = settings.get(f"social_{kind}_url") or DEFAULT_NETWORK_SOCIALS.get(kind)
+        if url:
+            out[kind] = url
+    return out
 
 # Placeholder until the administrator sets the real mailbox in Impostazioni
 # (Organization.settings["admin_notification_email"]).
@@ -52,6 +70,13 @@ async def update_settings(
         raise ValueError("Organization not found")
 
     updates = payload.model_dump(exclude_unset=True)
+    # Ogni social solo verso il suo sito, come quelli dei club.
+    from app.domains.club.site import check_social_url
+
+    for kind in NETWORK_SOCIALS:
+        key = f"social_{kind}_url"
+        if key in updates:
+            updates[key] = check_social_url(updates[key], field=f"{kind}_url")
     # Mutating the dict in place doesn't get picked up by SQLAlchemy's
     # change-tracking on a JSONB column -- must assign a new dict.
     org.settings = {**org.settings, **updates}

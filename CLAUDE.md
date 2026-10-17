@@ -243,12 +243,12 @@ qui l'essenziale.
 
 ## 6. Interfaccia
 
-- L'interfaccia è in **tre lingue: portoghese (pt-PT, la predefinita),
-  inglese e italiano**, scelte con la bandierina in alto (cookie `jav_lang`,
-  letto dal layout radice). Un testo nuovo non si scrive nel componente: si
-  aggiunge una chiave nei tre file di `apps/dashboard/lib/i18n/messages/`
-  (`it.ts` è la sorgente, `pt.ts` ed `en.ts` non compilano se manca una
-  chiave) e si usa `const { t, fmt } = useI18n()`; importi e date con
+- L'interfaccia è in **sei lingue: portoghese (pt-PT, la predefinita),
+  inglese, italiano, spagnolo, francese e tedesco**, scelte con la
+  bandierina in alto (cookie `jav_lang`, letto dal layout radice). Un testo
+  nuovo non si scrive nel componente: si aggiunge una chiave nei sei file di
+  `apps/dashboard/lib/i18n/messages/` (`it.ts` è la sorgente, gli altri non
+  compilano se manca una chiave; una chiave assente ricade sull'inglese) e si usa `const { t, fmt } = useI18n()`; importi e date con
   `fmt.euro` / `fmt.shortDate`, mai con `"it-IT"` scritto a mano. Per le
   etichette che arrivano come codice dall'API (cinture, livelli, traguardi)
   `t.dyn(\`chiave.${codice}\`, etichettaApi)`.

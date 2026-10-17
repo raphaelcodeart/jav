@@ -147,6 +147,7 @@ export interface SiteContent {
   instagram_url: string | null;
   facebook_url: string | null;
   youtube_url: string | null;
+  tiktok_url?: string | null;
   website_url: string | null;
   brand_primary: string | null;
   brand_secondary: string | null;
@@ -379,6 +380,8 @@ export const HERO_VIDEO_ID = "RIZHYD0y1mw";
 export const publicSite = {
   home: () => get<PortalHome>("/home"),
   videos: () => get<ChannelVideo[]>("/videos"),
+  /** I social della rete (Impostazioni dell'organizzazione), per il piè di pagina. */
+  network: () => get<{ socials: Partial<Record<"facebook" | "instagram" | "youtube" | "tiktok", string>> }>("/network"),
   clubs: () => get<ClubCard[]>("/clubs"),
   courses: () => get<PublicCourses>("/courses"),
   club: (slug: string) => get<ClubPage>(`/clubs/${encodeURIComponent(slug)}`),

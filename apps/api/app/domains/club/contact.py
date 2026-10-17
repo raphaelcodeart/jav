@@ -58,7 +58,7 @@ JAV_ROLES = {"SUPER_ADMIN", "ORGANIZATION_ADMIN", "ADMIN"}
 MAX_PER_HOUR = 5
 MIN_MESSAGE = 10
 MAX_MESSAGE = 4000
-LOCALES = ("pt", "it", "en")
+LOCALES = ("pt", "it", "en", "es", "fr", "de")
 #: Quanti messaggi mostra la casella: i più recenti. Chi ne ha di più li
 #: archivia; un elenco infinito non si legge comunque.
 LIST_LIMIT = 200

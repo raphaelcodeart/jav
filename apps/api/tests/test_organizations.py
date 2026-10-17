@@ -9,6 +9,8 @@ from app.domains.organizations import service as organizations_service
 from app.domains.organizations.models import Organization
 from app.domains.organizations.schemas import OrganizationSettingsUpdate
 
+SOCIALS_UNSET = {f"social_{k}_url": None for k in ("facebook", "instagram", "youtube", "tiktok")}
+
 
 @pytest.mark.asyncio
 async def test_get_settings_defaults_to_none_when_nothing_set(db, organization_id):
@@ -19,6 +21,7 @@ async def test_get_settings_defaults_to_none_when_nothing_set(db, organization_i
         "bank_transfer_instructions": None,
         "admin_notification_email": None,
         "contract_instalment_cashback_mode": None,
+        **SOCIALS_UNSET,
     }
 
 
@@ -40,6 +43,7 @@ async def test_update_settings_merges_and_partial_update_preserves_the_rest(db, 
         "bank_transfer_instructions": None,
         "admin_notification_email": None,
         "contract_instalment_cashback_mode": None,
+        **SOCIALS_UNSET,
     }
 
     # Omitting a field (exclude_unset) leaves it exactly as it was.

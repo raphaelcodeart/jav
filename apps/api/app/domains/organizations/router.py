@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
@@ -28,9 +28,14 @@ async def update_my_organization_settings(
     current_user: CurrentUser = Depends(require_permission("organization.manage")),
     db: AsyncSession = Depends(get_db),
 ) -> OrganizationSettingsRead:
-    settings = await organizations_service.update_settings(
-        db, organization_id=current_user.organization_id, payload=payload
-    )
+    from app.domains.club.service import ClubValidationError
+
+    try:
+        settings = await organizations_service.update_settings(
+            db, organization_id=current_user.organization_id, payload=payload
+        )
+    except ClubValidationError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
     return OrganizationSettingsRead(**settings)
 
 

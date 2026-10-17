@@ -21,11 +21,11 @@ function fold(s: string) {
   return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 }
 
-function initials(name: string) {
+export function initials(name: string) {
   return name.split(/\s+/).map((p) => p[0]).join("").slice(0, 2).toUpperCase();
 }
 
-function ClubLogo({ club, size = "md" }: { club: ClubRef; size?: "md" | "lg" | "xl" }) {
+export function ClubLogo({ club, size = "md" }: { club: ClubRef; size?: "md" | "lg" | "xl" }) {
   const box = { md: "h-9 w-9 text-xs", lg: "h-12 w-12 text-sm", xl: "h-20 w-20 text-xl" }[size];
   return club.logo_url ? (
     // eslint-disable-next-line @next/next/no-img-element -- logo caricato dal club
@@ -37,7 +37,7 @@ function ClubLogo({ club, size = "md" }: { club: ClubRef; size?: "md" | "lg" | "
   );
 }
 
-function Place({ position, big = false }: { position: number; big?: boolean }) {
+export function Place({ position, big = false }: { position: number; big?: boolean }) {
   return position <= 3 ? (
     <span className={cn("flex shrink-0 items-center justify-center rounded-full bg-gradient-to-br font-display shadow ring-2 ring-white", MEDAL[position as 1 | 2 | 3],
       big ? "h-12 w-12 text-xl" : "h-10 w-10 text-lg")}>{position}</span>
@@ -62,9 +62,9 @@ function SearchBox({ value, onChange, placeholder, count }: { value: string; onC
       <span className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 text-xl" aria-hidden="true">🔎</span>
       <input
         type="search" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} aria-label={placeholder}
-        className="h-14 w-full rounded-2xl bg-white pl-14 pr-32 text-base text-ink-900 shadow-soft ring-1 ring-ink-900/10 placeholder:text-ink-400 focus:outline-none focus:ring-4 focus:ring-accent-300/60"
+        className="h-14 w-full rounded-2xl bg-white pl-14 pr-4 text-base sm:pr-32 text-ink-900 shadow-soft ring-1 ring-ink-900/10 placeholder:text-ink-400 focus:outline-none focus:ring-4 focus:ring-accent-300/60"
       />
-      <span className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 text-xs font-semibold uppercase tracking-wider text-ink-400">{count}</span>
+      <span className="pointer-events-none absolute right-5 top-1/2 hidden -translate-y-1/2 text-xs font-semibold uppercase tracking-wider text-ink-400 sm:block">{count}</span>
     </div>
   );
 }

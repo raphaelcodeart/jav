@@ -770,3 +770,14 @@ e `overflow-x: clip` su html e body. Misurato con un browser headless a 390 e
 360 px su una copia del backup (admin con Lagos, una famiglia): tutte le
 sezioni stanno nello schermo. Sistemati anche le caselle dei totali della
 console, l'indirizzo del wallet e le cinture del login.
+
+Poi (migrazione 0030): dettaglio evento rifatto (scheda pratica con icone,
+iscritti nello stile del ranking con il popup del judoca); WhatsApp sotto i
+telefoni; social della rete nel piè di pagina (Impostazioni) e TikTok per i
+club; schede Biografia/Foto/Video sempre presenti nella pagina del judoca e
+biografia fino a 1500 caratteri; categorie dello Shop con le frecce e banner
+nero con il logo di Suplementos24; «Loja» apre le proteine. **Sei lingue**:
+spagnolo, francese e tedesco tradotti interi (es.ts, fr.ts, de.ts); JAVBOT e
+giochi rispondono in portoghese a chi sceglie spagnolo e in inglese a chi
+sceglie francese o tedesco. Test: `tests/test_network_socials.py`.
+

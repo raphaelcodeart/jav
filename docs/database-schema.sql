@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict nkLjJIBhOIv8esJZBOLvL6HqFO3tEP1WbtV3UkWwyMbCgF4bxaRxDkMDejIbTGL
+\restrict faHrNNC3DQUsMcZjhVO30wWGZV4JasY5uPFF2wIXSDvJ8FChcVZuEN1PVWYXAhf
 
 -- Dumped from database version 16.15
 -- Dumped by pg_dump version 16.15
@@ -331,7 +331,7 @@ CREATE TABLE public.club_athlete_public_profiles (
     consent_given_at timestamp with time zone,
     consent_by_user_id uuid,
     show_photo boolean DEFAULT false NOT NULL,
-    bio character varying(280),
+    bio character varying(1500),
     published boolean DEFAULT false NOT NULL,
     id uuid NOT NULL,
     created_at timestamp with time zone NOT NULL,
@@ -1187,6 +1187,7 @@ CREATE TABLE public.club_sites (
     pillars jsonb DEFAULT '[]'::jsonb NOT NULL,
     news jsonb DEFAULT '[]'::jsonb NOT NULL,
     videos jsonb DEFAULT '[]'::jsonb NOT NULL,
+    tiktok_url character varying(500),
     CONSTRAINT ck_club_sites_brand_accent CHECK (((brand_accent IS NULL) OR ((brand_accent)::text ~ '^#[0-9A-F]{6}$'::text))),
     CONSTRAINT ck_club_sites_brand_primary CHECK (((brand_primary IS NULL) OR ((brand_primary)::text ~ '^#[0-9A-F]{6}$'::text))),
     CONSTRAINT ck_club_sites_brand_secondary CHECK (((brand_secondary IS NULL) OR ((brand_secondary)::text ~ '^#[0-9A-F]{6}$'::text))),
@@ -9433,5 +9434,5 @@ ALTER TABLE ONLY public.wallets
 -- PostgreSQL database dump complete
 --
 
-\unrestrict nkLjJIBhOIv8esJZBOLvL6HqFO3tEP1WbtV3UkWwyMbCgF4bxaRxDkMDejIbTGL
+\unrestrict faHrNNC3DQUsMcZjhVO30wWGZV4JasY5uPFF2wIXSDvJ8FChcVZuEN1PVWYXAhf
 

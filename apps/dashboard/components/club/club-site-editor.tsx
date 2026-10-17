@@ -56,6 +56,7 @@ interface SiteAdmin {
   instagram_url: string | null;
   facebook_url: string | null;
   youtube_url: string | null;
+  tiktok_url?: string | null;
   website_url: string | null;
   brand_primary: string | null;
   brand_secondary: string | null;
@@ -87,7 +88,7 @@ interface AthleteStatus {
 
 const TEXT_KEYS = [
   "tagline", "city", "venue", "about", "contact_phone", "contact_email", "address", "map_url",
-  "instagram_url", "facebook_url", "youtube_url", "website_url",
+  "instagram_url", "facebook_url", "youtube_url", "tiktok_url", "website_url",
 ] as const;
 type TextKey = (typeof TEXT_KEYS)[number];
 
@@ -488,6 +489,7 @@ function SiteForm({ site }: { site: SiteAdmin }) {
           <Field label="Instagram" htmlFor="site-ig"><Input id="site-ig" type="url" placeholder="https://instagram.com/..." value={text.instagram_url} onChange={set("instagram_url")} /></Field>
           <Field label="Facebook" htmlFor="site-fb"><Input id="site-fb" type="url" placeholder="https://facebook.com/..." value={text.facebook_url} onChange={set("facebook_url")} /></Field>
           <Field label="YouTube" htmlFor="site-yt"><Input id="site-yt" type="url" placeholder="https://youtube.com/..." value={text.youtube_url} onChange={set("youtube_url")} /></Field>
+          <Field label="TikTok" htmlFor="site-tt"><Input id="site-tt" type="url" placeholder="https://tiktok.com/@..." value={text.tiktok_url} onChange={set("tiktok_url")} /></Field>
           <Field label={t("siteEditor.website")} htmlFor="site-web"><Input id="site-web" type="url" placeholder="https://..." value={text.website_url} onChange={set("website_url")} /></Field>
         </div>
       </Card>

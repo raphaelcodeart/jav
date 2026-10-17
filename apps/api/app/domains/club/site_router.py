@@ -55,6 +55,16 @@ site_admin_router = APIRouter(prefix="/club/admin/site", tags=["club-admin"])
 site_family_router = APIRouter(prefix="/club", tags=["club"])
 
 
+@public_site_router.get("/network")
+async def public_network(db: AsyncSession = Depends(get_db)) -> dict:
+    """I social della rete JudoArteVida, per il piè di pagina del sito
+    (Impostazioni dell'organizzazione)."""
+    from app.domains.organizations import service as organizations_service
+
+    org = await organizations_service.resolve_organization_id(db, None)
+    return {"socials": await organizations_service.network_socials(db, organization_id=org)}
+
+
 @public_site_router.get("/videos")
 async def public_videos(db: AsyncSession = Depends(get_db)) -> list[dict]:
     """Gli ultimi video del canale YouTube di JudoArteVida (club/videos.py)."""

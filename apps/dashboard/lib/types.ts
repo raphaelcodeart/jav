@@ -687,6 +687,11 @@ export type OrganizationSettingsRead = {
   bank_transfer_instructions: string | null;
   /** PER_INSTALMENT (default) / UPFRONT -- Session 59. */
   contract_instalment_cashback_mode: "PER_INSTALMENT" | "UPFRONT" | null;
+  /** I social della rete, nel piè di pagina del sito. */
+  social_facebook_url?: string | null;
+  social_instagram_url?: string | null;
+  social_youtube_url?: string | null;
+  social_tiktok_url?: string | null;
 };
 
 export type OrderRead = {

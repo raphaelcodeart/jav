@@ -148,6 +148,7 @@ def _locked(quiz: content.Quiz, passed: list[str]) -> bool:
 
 
 def _lang(lang: str | None) -> str:
+    lang = {"es": "pt", "fr": "en", "de": "en"}.get(lang or "", lang)
     return lang if lang in content.LANGS else "pt"
 
 

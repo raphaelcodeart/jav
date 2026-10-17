@@ -4,6 +4,8 @@ import { Container, EmptyNote } from "@/components/site/blocks";
 import { HeroStat, PageHero } from "@/components/site/page-hero";
 import { siteI18n } from "@/components/site/i18n";
 import { linkButton } from "@/components/site/link-button";
+import { PartnerBanner } from "@/components/site/partner-banner";
+import { ChipScroller } from "@/components/ui/chip-scroller";
 import { Reveal } from "@/components/site/reveal";
 import { SiteShell } from "@/components/site/site-shell";
 import { cn } from "@/lib/cn";
@@ -46,13 +48,7 @@ export default async function ShopPage({ searchParams }: Search) {
         {shop && shop.shop_total > 0 && <HeroStat value={shop.shop_total} label={t("site.shop.heroProducts")} />}
       </PageHero>
       <Container className="py-8">
-        <div className="mb-6 flex items-start gap-3 rounded-3xl bg-gradient-to-r from-emerald-50 to-accent-50 p-5 ring-1 ring-emerald-200">
-          <span className="text-3xl" aria-hidden="true">🤝</span>
-          <div>
-            <p className="font-display text-lg text-ink-900">{t("site.shop.partnersTitle")}</p>
-            <p className="text-sm text-ink-700">{t("site.shop.partnersText")}</p>
-          </div>
-        </div>
+        <PartnerBanner className="mb-6" title={t("site.shop.partnersTitle")} text={t("site.shop.partnersText")} label={t("site.shop.partnerLabel")} />
         {!shop || shop.shop_total === 0 ? (
           <EmptyNote>{t("site.shop.closed")}</EmptyNote>
         ) : (
@@ -64,14 +60,14 @@ export default async function ShopPage({ searchParams }: Search) {
               <button type="submit" className={linkButton({})}>🔎 {t("site.shop.searchButton")}</button>
             </form>
             {shop.categories.length > 0 && (
-              <nav aria-label={t("site.shop.categories")} className="mt-4 flex gap-2 overflow-x-auto pb-2">
-                <Link href={href({ cat: undefined })} className={chip(!category)}>{t("site.shop.all")}</Link>
+              <ChipScroller label={t("site.shop.categories")} className="mt-3">
+                <Link href={href({ cat: undefined })} aria-current={!category ? "page" : undefined} className={chip(!category)}>{t("site.shop.all")}</Link>
                 {shop.categories.map((c) => (
-                  <Link key={c.id} href={href({ cat: c.id })} className={chip(category === c.id)}>
+                  <Link key={c.id} href={href({ cat: c.id })} aria-current={category === c.id ? "page" : undefined} className={chip(category === c.id)}>
                     {c.name} <span className="opacity-60">{c.count}</span>
                   </Link>
                 ))}
-              </nav>
+              </ChipScroller>
             )}
             {items.length === 0 ? (
               <div className="mt-8"><EmptyNote>{t("site.shop.none")}</EmptyNote></div>

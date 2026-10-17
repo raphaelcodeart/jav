@@ -4,10 +4,13 @@ import { INTL_TAGS, type Locale } from "@/lib/i18n/config";
 import { en } from "@/lib/i18n/messages/en";
 import { it, type MessageKey } from "@/lib/i18n/messages/it";
 import { pt } from "@/lib/i18n/messages/pt";
+import { es } from "@/lib/i18n/messages/es";
+import { fr } from "@/lib/i18n/messages/fr";
+import { de } from "@/lib/i18n/messages/de";
 
 export type { MessageKey };
 
-const MESSAGES: Record<Locale, Record<MessageKey, string>> = { pt, en, it };
+const MESSAGES: Record<Locale, Record<MessageKey, string>> = { pt, en, it, es, fr, de };
 
 export type Vars = Record<string, string | number>;
 
@@ -26,7 +29,8 @@ export interface Translator {
 
 export function makeTranslator(locale: Locale): Translator {
   const dict = MESSAGES[locale];
-  const t = ((key: MessageKey, vars?: Vars) => interpolate(dict[key] ?? it[key] ?? key, vars)) as Translator;
+  // Una chiave che manca in una lingua: prima l'inglese, poi l'italiano.
+  const t = ((key: MessageKey, vars?: Vars) => interpolate(dict[key] ?? en[key] ?? it[key] ?? key, vars)) as Translator;
   t.dyn = (key, fallback, vars) => {
     const text = (dict as Record<string, string>)[key];
     return text === undefined ? fallback : interpolate(text, vars);

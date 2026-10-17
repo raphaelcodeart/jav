@@ -15,7 +15,7 @@ Apri il browser (dal telefono va benissimo) sull'indirizzo del club, per
 esempio `https://jav.ecodo.ai/login`.
 
 **Lingua.** In alto a destra c'è una bandierina: tocca e scegli **portoghese**,
-**inglese** o **italiano**. Si parte in portoghese; la scelta resta salvata sul
+**inglese**, **italiano**, **spagnolo**, **francese** o **tedesco**. Si parte in portoghese; la scelta resta salvata sul
 dispositivo (anche dopo l'uscita). Per ora sono tradotti l'accesso e l'area
 famiglie; il resto e i messaggi che arrivano dal server sono ancora in
 italiano.
@@ -609,3 +609,17 @@ il telefono, compresa la foto della ricevuta e del certificato.
 - **Cookie**: la prima volta il sito chiede se caricare anche i video di
   YouTube e Vimeo; «Gerir cookies» in fondo alla pagina cambia la scelta.
   Privacy, cookie e termini sono linkati in fondo a ogni pagina.
+
+## Social, WhatsApp e pagine del sito
+
+- **Social della rete**: console → Impostazioni → «Social della rete».
+  Incolla gli indirizzi di Facebook, Instagram, YouTube e TikTok: le icone
+  compaiono in fondo a ogni pagina del sito. Vuoto = nessuna icona.
+- **Social del club**: Sito del club → contatti, anche TikTok.
+- **WhatsApp**: sotto ogni numero di telefono del sito c'è il bottone verde
+  che apre la chat con quel numero.
+- **Scheda del judoca**: la segreteria (o il superadmin entrato nel club)
+  carica foto, video e biografia dalla scheda dell'atleta → «Pagina
+  pubblica», o da Sito → Judoka; sul sito compaiono nelle schede Foto, Video
+  e Biografia.
+

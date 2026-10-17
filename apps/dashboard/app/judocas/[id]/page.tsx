@@ -7,6 +7,7 @@ import { Container, EmptyNote, EventCard, MedalCounts, MedalDot } from "@/compon
 import { WaveDivider } from "@/components/site/decor";
 import { Gallery } from "@/components/site/gallery";
 import { ageBandLabel, levelLabel, placementLabel, siteI18n } from "@/components/site/i18n";
+import { JudokaTabs } from "@/components/site/judoka-tabs";
 import { JudokaVideos } from "@/components/site/judoka-videos";
 import { linkButton } from "@/components/site/link-button";
 import { Reveal } from "@/components/site/reveal";
@@ -61,14 +62,6 @@ export default async function JudokaPage({ params }: Params) {
   const initial = parts.length > 1 ? parts.pop() : "";
   const firstName = parts.join(" ");
   const medals = judoka.gold + judoka.silver + judoka.bronze;
-  const sections = [
-    { id: "results", label: t("site.judoka.results"), show: true },
-    { id: "upcoming", label: t("site.judoka.upcoming"), show: true },
-    { id: "photos", label: t("site.judoka.photos"), show: judoka.photos.length > 0 },
-    { id: "videos", label: t("site.judoka.videos"), show: judoka.videos.length > 0 },
-    { id: "path", label: t("site.judoka.path"), show: judoka.belt_history.length > 0 },
-  ].filter((s) => s.show);
-
   return (
     <SiteShell>
       {/* --- Il ritratto --- */}
@@ -103,7 +96,7 @@ export default async function JudokaPage({ params }: Params) {
                 <BeltBadge code={judoka.belt} size="md" />
               </div>
             )}
-            {judoka.bio && <p className="mx-auto mt-5 max-w-xl text-lg text-white/85 lg:mx-0">“{judoka.bio}”</p>}
+            {judoka.bio && <p className="mx-auto mt-5 line-clamp-3 max-w-xl text-lg text-white/85 lg:mx-0">“{judoka.bio}”</p>}
             <div className="mt-8 flex flex-wrap justify-center gap-3 lg:justify-start">
               {judoka.ijf_profile_url && (
                 <a
@@ -164,22 +157,13 @@ export default async function JudokaPage({ params }: Params) {
                 {judoka.dominant_side && <Fact label={t("site.judoka.side")}>{t.dyn(`site.judoka.side.${judoka.dominant_side}`, judoka.dominant_side)}</Fact>}
               </dl>
             </div>
-            {sections.length > 1 && (
-              <nav aria-label={t("site.judoka.sections")} className="mt-4 flex flex-wrap gap-2 lg:flex-col">
-                {sections.map((s) => (
-                  <a key={s.id} href={`#${s.id}`} className="rounded-full bg-white px-3.5 py-1.5 text-sm font-semibold text-ink-600 ring-1 ring-ink-200 hover:text-brand-700 hover:ring-brand-300 lg:rounded-xl">
-                    {s.label}
-                  </a>
-                ))}
-              </nav>
-            )}
           </Reveal>
         </aside>
 
-        <div className="min-w-0 space-y-16">
-          {/* --- Resultados --- */}
-          <section id="results" aria-labelledby="results-title" className="scroll-mt-24">
-            <SectionTitle id="results-title">{t("site.judoka.results")}</SectionTitle>
+        <div className="min-w-0 space-y-10">
+          <JudokaTabs label={t("site.judoka.sections")} tabs={[
+            { id: "resultados", icon: "🏅", label: t("site.judoka.results"), count: judoka.results.length, content: (
+              <>
             {judoka.results.length > 0 ? (
               <ol className="relative space-y-4 border-l-2 border-brand-100 pl-6">
                 {judoka.results.map((r) => (
@@ -208,11 +192,10 @@ export default async function JudokaPage({ params }: Params) {
             ) : (
               <EmptyNote>{t("site.judoka.noResults")}</EmptyNote>
             )}
-          </section>
-
-          {/* --- Próximas provas --- */}
-          <section id="upcoming" aria-labelledby="upcoming-title" className="scroll-mt-24">
-            <SectionTitle id="upcoming-title">{t("site.judoka.upcoming")}</SectionTitle>
+              </>
+            ) },
+            { id: "provas", icon: "🗓️", label: t("site.judoka.upcoming"), count: judoka.upcoming.length, content: (
+              <>
             {judoka.upcoming.length > 0 ? (
               <ul className="grid gap-4 md:grid-cols-2">
                 {judoka.upcoming.map((e) => (
@@ -225,31 +208,24 @@ export default async function JudokaPage({ params }: Params) {
             ) : (
               <EmptyNote>{t("site.judoka.noUpcoming")}</EmptyNote>
             )}
-          </section>
-
-          {/* --- Fotos --- */}
-          {judoka.photos.length > 0 && (
-            <section id="photos" aria-labelledby="photos-title" className="scroll-mt-24">
-              <SectionTitle id="photos-title">{t("site.judoka.photos")}</SectionTitle>
-              <Gallery items={judoka.photos.map((p) => ({ url: p.url, caption: p.caption }))} clubName={judoka.display_name} />
-            </section>
-          )}
-
-          {/* --- Vídeos --- */}
-          {judoka.videos.length > 0 && (
-            <section id="videos" aria-labelledby="videos-title" className="scroll-mt-24">
-              <SectionTitle id="videos-title">{t("site.judoka.videos")}</SectionTitle>
-              <JudokaVideos videos={judoka.videos} name={judoka.display_name} />
-            </section>
-          )}
-
-          {/* --- Percurso --- */}
-          {judoka.belt_history.length > 0 && (
-            <section id="path" aria-labelledby="path-title" className="scroll-mt-24">
-              <SectionTitle id="path-title">{t("site.judoka.path")}</SectionTitle>
+              </>
+            ) },
+            { id: "biografia", icon: "📖", label: t("site.judoka.bio"), content: judoka.bio ? (
+              <div className="relative overflow-hidden rounded-3xl bg-white p-6 shadow-soft ring-1 ring-ink-900/5 sm:p-8">
+                <span className="pointer-events-none absolute -right-2 -top-6 select-none font-display text-[8rem] leading-none text-brand-100" aria-hidden="true">“</span>
+                <p className="relative whitespace-pre-line text-lg leading-relaxed text-ink-800">{judoka.bio}</p>
+              </div>
+            ) : <EmptyNote>{t("site.judoka.noBio")}</EmptyNote> },
+            { id: "fotos", icon: "📸", label: t("site.judoka.photos"), count: judoka.photos.length, content: judoka.photos.length > 0
+              ? <Gallery items={judoka.photos.map((p) => ({ url: p.url, caption: p.caption }))} clubName={judoka.display_name} />
+              : <EmptyNote>{t("site.judoka.noPhotos")}</EmptyNote> },
+            { id: "videos", icon: "🎬", label: t("site.judoka.videos"), count: judoka.videos.length, content: judoka.videos.length > 0
+              ? <JudokaVideos videos={judoka.videos} name={judoka.display_name} />
+              : <EmptyNote>{t("site.judoka.noVideos")}</EmptyNote> },
+            ...(judoka.belt_history.length > 0 ? [{ id: "percurso", icon: "🥋", label: t("site.judoka.path"), content: (
               <BeltPath steps={judoka.belt_history} current={judoka.belt} t={t} date={fmt.shortDate} />
-            </section>
-          )}
+            ) }] : []),
+          ]} />
 
           <div className="flex flex-wrap gap-3">
             <Link href={`/clubes/${judoka.club.slug}`} className={linkButton({ variant: "secondary" })}>{t("site.judoka.backToClub", { club: judoka.club.name })}</Link>
@@ -311,10 +287,6 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
       <dd className="text-right font-semibold text-ink-900">{children}</dd>
     </div>
   );
-}
-
-function SectionTitle({ id, children }: { id: string; children: ReactNode }) {
-  return <h2 id={id} className="mb-6 text-2xl text-ink-900 sm:text-3xl">{children}</h2>;
 }
 
 /** Le cinture una dopo l'altra, dalla prima: il percorso, con la data di

@@ -101,7 +101,7 @@ export function PublicProfileConsent({ athleteId }: { athleteId: string }) {
             <span>{t("site.consent.photo")}</span>
           </label>
           <Field label={t("site.consent.bio")} htmlFor={`bio-${athleteId}`} hint={t("site.consent.bioHint")}>
-            <Textarea id={`bio-${athleteId}`} rows={2} maxLength={280} value={bio} onChange={(e) => setBioDraft(e.target.value)} />
+            <Textarea id={`bio-${athleteId}`} rows={5} maxLength={1500} value={bio} onChange={(e) => setBioDraft(e.target.value)} />
           </Field>
           <div className="flex flex-wrap gap-2">
             {bioDraft !== null && (

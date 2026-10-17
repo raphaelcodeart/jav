@@ -636,6 +636,21 @@ altrove sarebbe un inganno.
   le foto già pubblicate dai club (`/public-site/photos`: copertine e
   gallerie), con animazioni leggere che si fermano con "riduci movimento".
 
+### Il dettaglio di un evento (`/eventos/<id>`)
+
+- **A sinistra la scheda pratica**, una riga con icona per voce: date e ora
+  (con «tra N giorni»), luogo (link a Google Maps, si apre solo al tocco),
+  organizzatore, livello, fasce d'età, quota, scadenza delle iscrizioni (con
+  «mancano N giorni»), iscritti / posti, la circolare ufficiale, il club
+  organizzatore (al suo sito) e «Vuoi partecipare?». Sul computer resta
+  ferma mentre si scorre.
+- **Gli iscritti come il ranking** (`components/site/event-participants.tsx`,
+  con `ClubLogo`, `Place`, `initials` di `ranking-explorer.tsx`): foto o
+  iniziali con il logo del club, fascia, categoria, cintura; a gara finita
+  medaglia, piazzamento e punti con la barra. Chi ha la scheda si apre nel
+  popup del judoca (`JudokaModal`), come nel ranking. Ricerca oltre gli 8
+  iscritti, pagine da 20.
+
 ### La pagina del club
 
 `/clubes/<slug>` è la pagina del club come una pagina Facebook, ma sua:
@@ -769,8 +784,11 @@ nome del club):
 scheda IJF: ritratto sul gradiente del club, nome, club, cintura, Portogallo,
 i numeri chiave (posto nel ranking della sua fascia nella stagione, punti
 della stagione e di sempre, medaglie, gare), la scheda (club, fascia,
-categoria, cintura, tecnica, guardia), e le sezioni Risultati, Prossime
-gare, Foto, Video, Percorso (le cinture con le date). Il ranking (pagina
+categoria, cintura, tecnica, guardia), e le **schede** (`judoka-tabs.tsx`)
+Risultati, Prossime gare, Biografia, Foto, Video e Percorso (le cinture con
+le date). Biografia, Foto e Video ci sono sempre, con un messaggio quando
+sono vuote; `#fotos` nell'indirizzo apre la scheda giusta. La biografia
+arriva fino a 1500 caratteri (`site.BIO_MAX`, migrazione 0030). Il ranking (pagina
 `/ranking`, home, pagina del club) porta ogni nome e il podio alla scheda.
 API: `GET /public-site/judoka/{id}`, la stessa di prima con più campi.
 
@@ -1517,10 +1535,30 @@ sessioni scadute.
 ## I prodotti dei partner
 
 Lo Shop di JudoArteVida si presenta come **«I prodotti dei nostri partner e
-amici»**, sul sito (`/loja`) e nell'area (riquadro sopra la vetrina). La
+amici»**, sul sito (`/loja`) e nell'area: una fascia nera con il logo di
+Suplementos24 come un banner (`components/site/partner-banner.tsx`,
+`public/partners/suplementos24.png`). Le categorie scorrono di lato con le
+frecce ‹ › (`components/ui/chip-scroller.tsx`). Il link «Loja» del menu apre
+la categoria delle proteine. La
 vetrina si vede anche a negozio spento, sul sito e nell'area
 (`/jav-market/products/mine/page` con `showcase`): l'interruttore chiude solo
 gli acquisti. A negozio spento le schede di JudoArteVida hanno
 `purchasable: false` e la pagina `jav_open: false`; l'area mostra «Gli acquisti
 apriranno presto» al posto di «Acquista» e «Aggiungi al carrello», e il
 checkout le rifiuta comunque. Lo shop del club vende sempre.
+
+## Social e WhatsApp
+
+- **I social della rete** (piè di pagina di ogni pagina del sito, icone che
+  si accendono del colore del social): Facebook, Instagram, YouTube, TikTok
+  in console → Impostazioni → «Social della rete»
+  (`organizations.settings.social_*_url`, `GET /public-site/network`).
+  Finché YouTube è vuoto vale il canale @ml8126. Ogni link solo verso il
+  suo sito (`site.check_social_url`).
+- **I social del club**: Instagram, Facebook, YouTube e ora **TikTok**
+  (`club_sites.tiktok_url`, migrazione 0030), dalla segreteria in Sito →
+  contatti; compaiono nella pagina del club.
+- **WhatsApp**: sotto ogni telefono (pagina `/contactos`, piè di pagina,
+  scheda contatti del club) il bottone verde apre la chat con lo stesso
+  numero (`wa.me`, un numero di 9 cifre senza prefisso diventa +351).
+

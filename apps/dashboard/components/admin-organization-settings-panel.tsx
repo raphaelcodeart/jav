@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { friendlyApiError } from "@/lib/api-error";
+import { useI18n } from "@/lib/i18n/provider";
 import type { OrganizationSettingsRead } from "@/lib/types";
 
 async function fetchSettings(): Promise<OrganizationSettingsRead> {
@@ -121,7 +122,76 @@ export function AdminOrganizationSettingsPanel() {
         </form>
       </div>
 
+      {settings && <NetworkSocialsCard settings={settings} />}
+
       <ContractCashbackSettingsCard current={settings?.contract_instalment_cashback_mode ?? null} />
+    </div>
+  );
+}
+
+const SOCIAL_FIELDS = [
+  { key: "social_facebook_url", label: "Facebook", placeholder: "https://facebook.com/..." },
+  { key: "social_instagram_url", label: "Instagram", placeholder: "https://instagram.com/..." },
+  { key: "social_youtube_url", label: "YouTube", placeholder: "https://youtube.com/@..." },
+  { key: "social_tiktok_url", label: "TikTok", placeholder: "https://tiktok.com/@..." },
+] as const;
+type SocialKey = (typeof SOCIAL_FIELDS)[number]["key"];
+
+/** I social di JudoArteVida: le icone nel piè di pagina di ogni pagina del
+ *  sito. Ognuno solo verso il suo sito (l'API lo controlla). */
+function NetworkSocialsCard({ settings }: { settings: OrganizationSettingsRead }) {
+  const { t } = useI18n();
+  const queryClient = useQueryClient();
+  const [values, setValues] = useState<Record<SocialKey, string>>(() =>
+    Object.fromEntries(SOCIAL_FIELDS.map((f) => [f.key, settings[f.key] ?? ""])) as Record<SocialKey, string>);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/proxy/organizations/me/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(Object.fromEntries(SOCIAL_FIELDS.map((f) => [f.key, values[f.key].trim() || null]))),
+      });
+      if (!res.ok) throw new Error(await friendlyApiError(res));
+      const saved: OrganizationSettingsRead = await res.json();
+      setValues(Object.fromEntries(SOCIAL_FIELDS.map((f) => [f.key, saved[f.key] ?? ""])) as Record<SocialKey, string>);
+      await queryClient.invalidateQueries({ queryKey: ["admin", "organization-settings"] });
+      setMessage({ ok: true, text: t("orgSocials.saved") });
+    } catch (err) {
+      setMessage({ ok: false, text: (err as Error).message });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="glass-card rounded-2xl p-6 border-slate-200 bg-white/70">
+      <h3 className="text-sm font-semibold text-slate-900 mb-1">{t("orgSocials.title")}</h3>
+      <p className="text-xs text-slate-500 mb-4">{t("orgSocials.text")}</p>
+      <form onSubmit={save} className="space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {SOCIAL_FIELDS.map((f) => (
+            <div key={f.key} className="space-y-1">
+              <label htmlFor={f.key} className="text-xs font-semibold text-slate-600 uppercase block">{f.label}</label>
+              <input id={f.key} type="url" value={values[f.key]} placeholder={f.placeholder} maxLength={500}
+                onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                className="w-full rounded-xl glass-input px-3 py-2 text-sm focus:border-brand-500" />
+            </div>
+          ))}
+        </div>
+        <button type="submit" disabled={saving}
+          className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50">
+          {saving ? t("orgSocials.saving") : t("orgSocials.save")}
+        </button>
+        {message && (
+          <p className={`p-3 rounded-lg text-xs ${message.ok ? "bg-emerald-500/10 text-emerald-700" : "bg-rose-500/10 text-rose-700"}`}>{message.text}</p>
+        )}
+      </form>
     </div>
   );
 }

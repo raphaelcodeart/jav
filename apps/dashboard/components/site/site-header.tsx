@@ -25,7 +25,8 @@ const NAV = [
   { href: "/clubes", key: "site.nav.clubs" },
   { href: "/eventos", key: "site.nav.events" },
   { href: "/ranking", key: "site.nav.ranking" },
-  { href: "/loja", key: "site.nav.shop" },
+  // La Loja si apre sulle proteine, la categoria più cercata.
+  { href: "/loja?cat=f1f4da9d-45c6-4e6a-a086-721119d62629", key: "site.nav.shop" },
 ] as const;
 
 /** I contatti di JudoArteVida: nel menu "Chi siamo" (e quindi nel menu del
@@ -46,7 +47,7 @@ export function SiteHeader({ loggedIn }: { loggedIn: boolean }) {
   const account = loggedIn
     ? { href: "/area", label: t("site.nav.myArea") }
     : { href: "/login", label: t("site.nav.login") };
-  const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
+  const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href.split("?")[0] ?? href));
   const aboutActive = ABOUT.some((a) => isActive(a.href));
   const itemClass = (active: boolean) => cn(
     "rounded-xl px-3.5 py-2 text-[15px] font-semibold transition-colors",

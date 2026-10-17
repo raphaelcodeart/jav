@@ -12,6 +12,9 @@ import type {
   ShopKey,
 } from "@/lib/types";
 import { JavMarketProductModal } from "@/components/jav-market-product-modal";
+import { PartnerBanner } from "@/components/site/partner-banner";
+import { ChipScroller } from "@/components/ui/chip-scroller";
+import { useI18n } from "@/lib/i18n/provider";
 import { useMarketplaceConfig } from "@/components/marketplace-rules-card";
 import { ContractRequestWizard } from "@/components/contract-request-wizard";
 import { ProductCheckoutModal } from "@/components/product-checkout-modal";
@@ -178,6 +181,7 @@ export function CustomerProductsPanel({
   // Session 78: il prezzo esposto e' l'imponibile, l'IVA si aggiunge al
   // checkout. Il "+ IVA" accanto al prezzo e' cio' che evita al cliente la
   // sorpresa del 22% al momento di pagare.
+  const { t } = useI18n();
   const marketplaceVatPercentage = marketplaceConfig?.vat_percentage ?? 0;
   const marketplaceLabels = marketplaceConfig?.labels ?? { jav_market: "Fai la Spesa con Jav" };
   const [shopTarget, setShopTarget] = useState<JavMarketProductRead | null>(null);
@@ -402,13 +406,7 @@ export function CustomerProductsPanel({
       )}
 
       {showShopTab && activeTab === "JAV_MARKET" && (
-        <div className="flex items-start gap-3 rounded-2xl bg-gradient-to-r from-emerald-50 to-accent-50 p-4 ring-1 ring-emerald-200">
-          <span className="text-2xl" aria-hidden="true">🤝</span>
-          <p className="text-sm text-slate-700">
-            <span className="block font-bold text-slate-900">I prodotti dei nostri partner e amici</span>
-            Integratori, abbigliamento e attrezzatura scelti dai partner e dagli amici della rete JudoArteVida, insieme ai prodotti del tuo club.
-          </p>
-        </div>
+        <PartnerBanner title={t("site.shop.partnersTitle")} text={t("site.shop.partnersText")} label={t("site.shop.partnerLabel")} />
       )}
       {showShopTab && activeTab === "JAV_MARKET" && !javMarketShop.javOpen && (
         <p className="rounded-2xl bg-amber-50 p-3 text-sm text-amber-900 ring-1 ring-amber-200">
@@ -462,12 +460,12 @@ export function CustomerProductsPanel({
           )}
 
           {categoryChips.length > 0 && (
-            <div className="flex flex-wrap gap-2">
+            <ChipScroller label={t("site.shop.categories")}>
               <button
                 type="button"
                 aria-pressed={activeCategoryId === null}
                 onClick={() => setChosenCategoryId(null)}
-                className={`px-3.5 py-2 rounded-full text-xs font-semibold border transition cursor-pointer ${
+                className={`shrink-0 whitespace-nowrap px-3.5 py-2 rounded-full text-xs font-semibold border transition cursor-pointer ${
                   activeCategoryId === null
                     ? "bg-brand-600 border-brand-600 text-white"
                     : " bg-slate-900/5 border-slate-300 text-slate-600 hover:bg-slate-100"
@@ -484,7 +482,7 @@ export function CustomerProductsPanel({
                     aria-pressed={activeCategoryId === c.id}
                     onClick={() => setChosenCategoryId(c.id)}
                     title={empty ? "Nessun prodotto in questa categoria, per ora" : undefined}
-                    className={`px-3.5 py-2 rounded-full text-xs font-semibold border transition cursor-pointer ${
+                    className={`shrink-0 whitespace-nowrap px-3.5 py-2 rounded-full text-xs font-semibold border transition cursor-pointer ${
                       activeCategoryId === c.id
                         ? "bg-brand-600 border-brand-600 text-white"
                         : empty
@@ -496,7 +494,7 @@ export function CustomerProductsPanel({
                   </button>
                 );
               })}
-            </div>
+            </ChipScroller>
           )}
         </div>
       )}

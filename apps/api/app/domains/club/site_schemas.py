@@ -198,6 +198,7 @@ class SiteContent(BaseModel):
     instagram_url: str | None
     facebook_url: str | None
     youtube_url: str | None
+    tiktok_url: str | None = None
     website_url: str | None
     #: I colori scelti dalla segreteria, così come sono ("#RRGGBB" o vuoti).
     brand_primary: str | None = None
@@ -456,6 +457,7 @@ class SiteWrite(BaseModel):
     instagram_url: str | None = Field(default=None, max_length=500)
     facebook_url: str | None = Field(default=None, max_length=500)
     youtube_url: str | None = Field(default=None, max_length=500)
+    tiktok_url: str | None = Field(default=None, max_length=500)
     website_url: str | None = Field(default=None, max_length=500)
     brand_primary: str | None = Field(default=None, max_length=7)
     brand_secondary: str | None = Field(default=None, max_length=7)
@@ -530,7 +532,7 @@ class AthletePageWrite(BaseModel):
     """Tutto facoltativo: si manda solo ciò che cambia; "" cancella."""
 
     ijf_profile_url: str | None = Field(default=None, max_length=300)
-    bio: str | None = Field(default=None, max_length=280)
+    bio: str | None = Field(default=None, max_length=1500)
     favorite_technique: str | None = Field(default=None, max_length=80)
     dominant_side: str | None = Field(default=None, max_length=5)
 
@@ -561,7 +563,7 @@ class PublicProfileConsentRead(BaseModel):
 class PublicProfileConsentWrite(BaseModel):
     consent: bool | None = None
     show_photo: bool | None = None
-    bio: str | None = Field(default=None, max_length=280)
+    bio: str | None = Field(default=None, max_length=1500)
 
 
 # --- Cursos JAV nas escolas -----------------------------------------------------------------------

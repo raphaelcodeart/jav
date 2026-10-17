@@ -39,6 +39,11 @@ class OrganizationSettingsRead(BaseModel):
     #: instalments earns its cashback; see organizations/service.py.
     contract_instalment_cashback_mode: str | None = None
     #: Discount (%) on a contract paid in one go; None = default (32).
+    #: I social della rete, nel piè di pagina del sito.
+    social_facebook_url: str | None = None
+    social_instagram_url: str | None = None
+    social_youtube_url: str | None = None
+    social_tiktok_url: str | None = None
 
 
 class OrganizationSettingsUpdate(BaseModel):
@@ -47,6 +52,10 @@ class OrganizationSettingsUpdate(BaseModel):
     bank_transfer_instructions: str | None = Field(default=None, max_length=2000)
     admin_notification_email: str | None = Field(default=None, max_length=255)
     contract_instalment_cashback_mode: Literal["PER_INSTALMENT", "UPFRONT"] | None = None
+    social_facebook_url: str | None = Field(default=None, max_length=500)
+    social_instagram_url: str | None = Field(default=None, max_length=500)
+    social_youtube_url: str | None = Field(default=None, max_length=500)
+    social_tiktok_url: str | None = Field(default=None, max_length=500)
 
     @field_validator("admin_notification_email", mode="before")
     @classmethod

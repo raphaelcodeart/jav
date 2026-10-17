@@ -63,6 +63,26 @@ async def test_the_routes_answer_with_the_text_or_a_clear_error(monkeypatch):
         return f"{lang}:{content_type}"
 
     monkeypatch.setattr(voice, "transcribe", fake)
+
+    # I contatori dei limiti in memoria: il client Redis condiviso può essere
+    # legato al ciclo asincrono di un test precedente.
+    class FakeRedis:
+        def __init__(self):
+            self.counts: dict[str, int] = {}
+
+        async def incr(self, key):
+            self.counts[key] = self.counts.get(key, 0) + 1
+            return self.counts[key]
+
+        async def expire(self, key, seconds):
+            return True
+
+    from app.core import rate_limit
+    from app.domains.javbot import router as javbot_router
+
+    fake_redis = FakeRedis()
+    monkeypatch.setattr(rate_limit, "_get_redis", lambda: fake_redis)
+    monkeypatch.setattr(javbot_router, "_get_redis", lambda: fake_redis)
     app.dependency_overrides[get_current_user] = lambda: CurrentUser(
         user_id=uuid.uuid4(), organization_id=uuid.uuid4(), roles=[])
     try:

@@ -54,6 +54,7 @@ class ClubSite(UUIDPKMixin, TimestampMixin, Base):
     instagram_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     facebook_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     youtube_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    tiktok_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     website_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     published: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     #: Il club sceglie di far dire i prezzi dei suoi piani (mensilità e
@@ -126,8 +127,9 @@ class ClubAthletePublicProfile(UUIDPKMixin, TimestampMixin, Base):
     opted_out_at: Mapped[datetime | None] = mapped_column(nullable=True)
     #: La foto è un consenso a parte: si può voler comparire senza il volto.
     show_photo: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
-    #: Due righe scritte dalla famiglia ("Judo da quando avevo 5 anni").
-    bio: Mapped[str | None] = mapped_column(String(280), nullable=True)
+    #: La biografia del judoca, scritta dalla famiglia o dal club (fino a
+    #: BIO_MAX caratteri, docs/club-portal.md).
+    bio: Mapped[str | None] = mapped_column(String(1500), nullable=True)
     #: La scelta del club. Vale solo con il consenso.
     published: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     # La scheda del judoca, scritta dalla segreteria. Sono dati sportivi

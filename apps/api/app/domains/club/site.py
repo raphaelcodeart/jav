@@ -81,7 +81,10 @@ SOCIAL_HOSTS = {
     "facebook_url": ("Facebook", ("facebook.com", "www.facebook.com", "m.facebook.com", "fb.com", "www.fb.com")),
     "instagram_url": ("Instagram", ("instagram.com", "www.instagram.com")),
     "youtube_url": ("YouTube", ("youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be")),
+    "tiktok_url": ("TikTok", ("tiktok.com", "www.tiktok.com", "m.tiktok.com", "vm.tiktok.com")),
 }
+#: La biografia della scheda del judoca.
+BIO_MAX = 1500
 IMAGE_SLOTS = ("hero", "logo", "gallery", "coach", "news")
 #: Quante foto e quanti video può avere la scheda di un judoca: una
 #: vetrina, non l'archivio delle gare del club.
@@ -479,6 +482,7 @@ def _site_content(site: ClubSite) -> dict:
         "instagram_url": site.instagram_url,
         "facebook_url": site.facebook_url,
         "youtube_url": site.youtube_url,
+        "tiktok_url": site.tiktok_url,
         "website_url": site.website_url,
         "brand_primary": site.brand_primary,
         "brand_secondary": site.brand_secondary,
@@ -1516,7 +1520,7 @@ async def update_athlete_page(
     if "ijf_profile_url" in changes:
         profile.ijf_profile_url = check_ijf_url(changes["ijf_profile_url"])
     if "bio" in changes:
-        profile.bio = (changes["bio"] or "").strip()[:280] or None
+        profile.bio = (changes["bio"] or "").strip()[:BIO_MAX] or None
     if "favorite_technique" in changes:
         profile.favorite_technique = (changes["favorite_technique"] or "").strip()[:80] or None
     if "dominant_side" in changes:
@@ -1727,7 +1731,7 @@ async def update_consent(
         profile.show_photo = bool(changes["show_photo"])
     if "bio" in changes:
         bio = (changes["bio"] or "").strip()
-        profile.bio = bio[:280] or None
+        profile.bio = bio[:BIO_MAX] or None
     await audit_service.record(
         db, organization_id=athlete.organization_id, actor_user_id=actor_user_id,
         action="club.athlete_public_consent", entity_type="club_athlete", entity_id=str(athlete.id),

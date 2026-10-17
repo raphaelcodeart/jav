@@ -164,7 +164,8 @@ function TextsForm({ page, onSaved }: { page: AthletePage; onSaved: (page: Athle
         <Input id={`ijf-${id}`} type="url" inputMode="url" maxLength={300} placeholder="https://www.ijf.org/judoka/..." value={ijf} onChange={(e) => setIjf(e.target.value)} />
       </Field>
       <Field label={t("athletePage.bio")} htmlFor={`bio-adm-${id}`} hint={t("athletePage.bioHint")}>
-        <Textarea id={`bio-adm-${id}`} rows={2} maxLength={280} value={bio} onChange={(e) => setBio(e.target.value)} />
+        <Textarea id={`bio-adm-${id}`} rows={6} maxLength={1500} value={bio} onChange={(e) => setBio(e.target.value)} />
+        <p className="mt-1 text-right text-[11px] text-ink-400 tabular-nums">{bio.length}/1500</p>
       </Field>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label={t("athletePage.technique")} htmlFor={`tech-${id}`}>

@@ -13,7 +13,7 @@ import { AthleteRanking } from "@/components/site/ranking-explorer";
 import { ageRange, siteI18n } from "@/components/site/i18n";
 import { Reveal } from "@/components/site/reveal";
 import { SiteShell } from "@/components/site/site-shell";
-import { SocialIcons, type SocialLink } from "@/components/site/social-icons";
+import { SocialIcons, WhatsAppButton, type SocialLink } from "@/components/site/social-icons";
 import { themeStyle } from "@/lib/brand";
 import { cn } from "@/lib/cn";
 import type { Formatters, Translator } from "@/lib/i18n/translate";
@@ -65,6 +65,7 @@ export default async function ClubLandingPage({ params }: Params) {
     { kind: "facebook", url: club.facebook_url, label: "Facebook" },
     { kind: "instagram", url: club.instagram_url, label: "Instagram" },
     { kind: "youtube", url: club.youtube_url, label: "YouTube" },
+    { kind: "tiktok", url: club.tiktok_url ?? null, label: "TikTok" },
     { kind: "website", url: club.website_url, label: t("site.club.website") },
   ] as const).filter((s) => Boolean(s.url)).map((s) => ({ ...s, url: s.url as string }));
   // I video: prima quelli scelti dal club, poi gli ultimi del suo canale.
@@ -525,6 +526,7 @@ function InfoCard({ club, socials, t }: { club: ClubPage; socials: SocialLink[];
       {club.contact_phone && (
         <Info icon="📞" label={t("site.club.phone")}>
           <a className="hover:text-club-ink" href={`tel:${club.contact_phone.replace(/\s+/g, "")}`}>{club.contact_phone}</a>
+          <WhatsAppButton phone={club.contact_phone} label={t("site.contacts.whatsapp")} className="mt-2 flex w-fit" />
         </Info>
       )}
       {club.contact_email && (
@@ -548,7 +550,7 @@ function Info({ icon, label, children }: { icon: string; label: string; children
       <span className="mt-0.5 text-lg leading-none" aria-hidden="true">{icon}</span>
       <div className="min-w-0">
         <p className="text-xs font-semibold uppercase tracking-wider text-ink-400">{label}</p>
-        <p className="text-sm text-ink-800">{children}</p>
+        <div className="text-sm text-ink-800">{children}</div>
       </div>
     </div>
   );

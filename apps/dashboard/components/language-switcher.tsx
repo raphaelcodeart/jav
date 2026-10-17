@@ -21,6 +21,32 @@ function Flag({ locale, className }: { locale: Locale; className?: string }) {
       </svg>
     );
   }
+  if (locale === "es") {
+    return (
+      <svg viewBox="0 0 3 2" className={box} aria-hidden="true">
+        <rect width="3" height="2" fill="#c60b1e" />
+        <rect y="0.5" width="3" height="1" fill="#ffc400" />
+      </svg>
+    );
+  }
+  if (locale === "fr") {
+    return (
+      <svg viewBox="0 0 3 2" className={box} aria-hidden="true">
+        <rect width="1" height="2" fill="#002654" />
+        <rect x="1" width="1" height="2" fill="#fff" />
+        <rect x="2" width="1" height="2" fill="#ce1126" />
+      </svg>
+    );
+  }
+  if (locale === "de") {
+    return (
+      <svg viewBox="0 0 5 3" className={box} aria-hidden="true">
+        <rect width="5" height="1" fill="#000" />
+        <rect y="1" width="5" height="1" fill="#dd0000" />
+        <rect y="2" width="5" height="1" fill="#ffce00" />
+      </svg>
+    );
+  }
   if (locale === "it") {
     return (
       <svg viewBox="0 0 3 2" className={box} aria-hidden="true">
@@ -45,7 +71,7 @@ function Flag({ locale, className }: { locale: Locale; className?: string }) {
   );
 }
 
-/** The flag in the top bar: the current language, and the other two one tap
+/** The flag in the top bar: the current language, and the others one tap
  *  away. Portuguese first, as in LOCALES. */
 export function LanguageSwitcher({ className }: { className?: string }) {
   const { locale, setLocale, t } = useI18n();
