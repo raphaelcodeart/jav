@@ -1125,6 +1125,9 @@ class ClubAthleteLoginCode(UUIDPKMixin, TimestampMixin, Base):
 
 #: Le voci di spesa del relatório di un evento (club/event_reports.py).
 EVENT_REPORT_COST_KINDS = ("HOTEL", "TRAVEL", "FUEL", "FOOD", "ENTRY_FEES", "OTHER")
+#: Da dove viene il relatório final: il modello di testo, l'IA, o la mano
+#: di chi l'ha riscritto.
+EVENT_REPORT_ARTICLE_SOURCES = ("TEMPLATE", "AI", "MANUAL")
 
 
 class ClubEventReport(UUIDPKMixin, TimestampMixin, Base):
@@ -1137,6 +1140,10 @@ class ClubEventReport(UUIDPKMixin, TimestampMixin, Base):
     __tablename__ = "club_event_reports"
     __table_args__ = (
         UniqueConstraint("club_id", "competition_id", "author_user_id", name="uq_club_event_reports_author"),
+        CheckConstraint(
+            f"article_source IS NULL OR article_source IN ({_in(EVENT_REPORT_ARTICLE_SOURCES)})",
+            name="article_source",
+        ),
     )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
@@ -1152,6 +1159,14 @@ class ClubEventReport(UUIDPKMixin, TimestampMixin, Base):
     #: Il racconto e l'opinione del treinador.
     narrative: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    #: Il relatório final: un articolo breve, «di giornale», nato dai dati
+    #: del relatório (modello o IA, `article_source`) e poi ritoccabile a
+    #: mano. È ciò che si legge nella scheda «Artigos» e nel PDF degli
+    #: articoli.
+    article_title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    article: Mapped[str | None] = mapped_column(Text, nullable=True)
+    article_source: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    article_generated_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
 
 class ClubEventReportCost(UUIDPKMixin, TimestampMixin, Base):

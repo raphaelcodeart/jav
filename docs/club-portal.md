@@ -1693,6 +1693,39 @@ checkout le rifiuta comunque. Lo shop del club vende sempre.
   suo tipo, i risultati con le medaglie, le spese con il totale, il racconto
   e le foto. In portoghese, come il calendário. L'intestazione
   `X-Report-Count` dice quanti relatórios contiene.
+- **Relatório final** (migrazione 0037, `club/event_articles.py`, colonne
+  `club_event_reports.article_title | article | article_source |
+  article_generated_at`): dal relatório si ricava un articolo breve «di
+  giornale» — dove, quando, quanti atleti, medaglie e piazzamenti, il
+  racconto del treinador, le spese in una frase — da rileggere e correggere.
+  `POST /club/staff/event-reports/{id}/article {source}` lo (ri)scrive dai
+  dati **salvati** (l'editor salva prima di chiederlo):
+  - `TEMPLATE`: frasi fisse in portoghese, ogni frase esiste solo se c'è il
+    suo dato (niente medaglie → niente frase sulle medaglie). Sempre attivo;
+  - `AI`: Claude (`JAVBOT_MODEL`) scrive dagli stessi dati con l'istruzione
+    di non inventare nulla (nomi, golpes, avversari, citazioni). **Spento**
+    finché non si mettono `EVENT_REPORT_AI_ENABLED=true` e
+    `ANTHROPIC_API_KEY`; `GET /club/staff/event-reports/ai` dice al browser
+    se il bottone «Gerar com IA» è attivo. Se l'API non risponde l'errore
+    lo dice e l'articolo resta com'era;
+  - ritoccato a mano (`PATCH` con `article`/`article_title` diversi) diventa
+    `MANUAL`; riscriverlo dai dati chiede conferma. Salvare il relatório
+    senza toccare l'articolo non lo cambia.
+  Stesse regole del relatório per chi lo vede e lo scrive (autore o
+  segreteria).
+- **PDF degli articoli** (`GET /club/staff/event-reports/articles/pdf?q&from&to`,
+  `club.instruct`; `event_articles.render_pdf`): tutti i relatórios finali
+  che chi chiede può vedere (la segreteria tutti, il treinador i suoi),
+  filtrati con la stessa ricerca della scheda, dal più vecchio: copertina
+  «Crónicas das provas» con l'indice, poi un articolo per pagina con
+  occhiello colorato per tipo, titolo, firma, foto d'apertura, testo
+  giustificato, il riquadro «Em números» e le altre foto.
+- **Interfaccia**: le schermate (Eventos — solo segreteria —, Resultados,
+  Relatórios, Relatórios finais) sono pulsanti grandi in una barra con la
+  ricerca (`ProvasBar` in `components/club/event-reports.tsx`, lo stile
+  della barra degli eventi del sito); sotto, filtri (con/senza relatório
+  final, autore) e conteggio. Il popup «Novo relatório» ha la ricerca e il
+  filtro «Só com inscritos e já concluídos» (acceso di default).
 
 ## L'area del treinador: Início, quaderno, turni, bacheca
 

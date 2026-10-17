@@ -42,9 +42,8 @@ import { BeltAwardPanel } from "@/components/club/staff-tools";
 import { CoursesManager } from "@/components/club/jav-courses";
 import { SeasonMonthsPanel } from "@/components/club/season-months";
 import { EventNameButton } from "@/components/club/competition-detail-modal";
-import { CoachResultsPanel } from "@/components/club/coach-results";
 import { CoachNotebook } from "@/components/club/coach-notebook";
-import { EventReportsPanel } from "@/components/club/event-reports";
+import { ProvasBar, ProvasContent, type ProvasView } from "@/components/club/event-reports";
 import { useI18n } from "@/lib/i18n/provider";
 import { feeLabel } from "@/lib/fee-label";
 import { shareOrCopyLink } from "@/lib/share-link";
@@ -519,14 +518,13 @@ function Certificates() {
 /** «Eventos e provas»: gli eventi, i risultati (lo stesso strumento del
  *  treinador, components/club/coach-results.tsx) e i relatórios. */
 function Competitions() {
-  const { t } = useI18n();
-  const [view, setView] = useState("events");
+  const [view, setView] = useState<ProvasView>("events");
+  const [q, setQ] = useState("");
   return (
     <div className="space-y-4">
-      <Tabs value={view} onChange={setView} items={[{ key: "events", label: t("evrep.admin.events") }, { key: "results", label: t("evrep.admin.results") }, { key: "reports", label: t("evrep.admin.reports") }]} />
-      {view === "events" && <CompetitionsList />}
-      {view === "results" && <CoachResultsPanel />}
-      {view === "reports" && <EventReportsPanel admin />}
+      <ProvasBar views={["events", "results", "reports", "articles"]} value={view} onChange={setView}
+        q={q} onQ={view === "events" ? undefined : setQ} />
+      {view === "events" ? <CompetitionsList /> : <ProvasContent view={view} q={q} admin />}
     </div>
   );
 }

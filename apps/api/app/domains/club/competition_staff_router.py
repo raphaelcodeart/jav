@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db, utcnow
-from app.domains.club import competition_staff, event_reports
+from app.domains.club import competition_staff, event_articles, event_reports
 from app.domains.club import service as club_service
 from app.domains.club.models import Club
 from app.domains.club.scope import ClubUser, require_club_permission
@@ -141,6 +141,16 @@ class ReportUpdate(BaseModel):
     description: str | None = Field(default=None, max_length=4000)
     narrative: str | None = Field(default=None, max_length=20000)
     costs: list[CostWrite] | None = None
+    article_title: str | None = Field(default=None, max_length=200)
+    article: str | None = Field(default=None, max_length=20000)
+
+
+class ArticleGenerate(BaseModel):
+    source: str = Field(default="TEMPLATE", pattern="^(TEMPLATE|AI)$")
+
+
+class ArticleAiRead(BaseModel):
+    available: bool
 
 
 class CostRead(BaseModel):
@@ -180,6 +190,10 @@ class ReportRead(BaseModel):
     title: str
     description: str | None
     narrative: str | None
+    article_title: str | None = None
+    article: str | None = None
+    article_source: str | None = None
+    article_generated_at: datetime | None = None
     costs: list[CostRead]
     total_cents: int
     photos: list[PhotoRead]
@@ -272,6 +286,58 @@ async def list_reports(
     return [await _report_read(db, current_user, r, can_manage=manage) for r, _c in pairs]
 
 
+@staff_reports_router.get("/ai", response_model=ArticleAiRead)
+async def article_ai_status(current_user: ClubUser = Depends(require_club_permission(INSTRUCT))) -> ArticleAiRead:
+    """Se il bottone «Gerar com IA» si può usare (event_articles.ai_available)."""
+    return ArticleAiRead(available=event_articles.ai_available())
+
+
+def _photo_loader(key: str) -> bytes | None:
+    from app.core.storage import download_document
+
+    try:
+        return download_document(storage_key=key)
+    except Exception:  # noqa: BLE001 -- una foto sparita dal bucket non ferma il PDF
+        return None
+
+
+@staff_reports_router.get("/articles/pdf")
+async def articles_pdf(
+    q: str | None = Query(default=None, max_length=100),
+    date_from: date | None = Query(default=None, alias="from"), date_to: date | None = Query(default=None, alias="to"),
+    current_user: ClubUser = Depends(require_club_permission(INSTRUCT)), db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Tutti i relatórios finali che chi chiede può vedere (la segreteria
+    tutti, un treinador i suoi), filtrati come la scheda «Artigos», in un
+    PDF solo, dal più vecchio."""
+    from app.domains.club.calendar import LOGO_JAV
+
+    manage = await _can_manage(db, current_user)
+    pairs = await event_reports.list_reports(
+        db, scope=current_user.scope, author_user_id=None if manage else current_user.user_id,
+        date_from=date_from, date_to=date_to,
+    )
+    needle = (q or "").strip().lower()
+    articles = []
+    for report, comp in reversed(pairs):
+        if not report.article:
+            continue
+        data = await event_reports.report_dict(db, scope=current_user.scope, report=report, comp=comp, photo_urls=False)
+        haystack = f"{data['article_title']} {data['article']} {data['competition_name']} {data['author_name']} {data['location'] or ''}"
+        if needle and needle not in haystack.lower():
+            continue
+        articles.append(data)
+    club = await db.get(Club, current_user.club_id)
+    pdf = event_articles.render_pdf(
+        articles=articles, club_name=club.name if club else "JudoArteVida", generated_on=utcnow().date(),
+        photo_loader=_photo_loader, logo=LOGO_JAV.read_bytes() if LOGO_JAV.exists() else None,
+    )
+    return Response(pdf, media_type="application/pdf", headers={
+        "Content-Disposition": f'attachment; filename="relatorios-finais-{utcnow().date().isoformat()}.pdf"',
+        "X-Report-Count": str(len(articles)),
+    })
+
+
 @staff_reports_router.post("", response_model=ReportRead, status_code=status.HTTP_201_CREATED)
 async def create_report(
     payload: ReportWrite,
@@ -312,6 +378,25 @@ async def update_report(
         report = await event_reports.update_report(
             db, scope=current_user.scope, report_id=report_id, actor_user_id=current_user.user_id,
             can_manage=manage, data=data,
+        )
+    except club_service.ClubError as exc:
+        _raise(exc)
+    return await _report_read(db, current_user, report, can_manage=manage)
+
+
+@staff_reports_router.post("/{report_id}/article", response_model=ReportRead)
+async def generate_article(
+    report_id: uuid.UUID, payload: ArticleGenerate,
+    current_user: ClubUser = Depends(require_club_permission(INSTRUCT)), db: AsyncSession = Depends(get_db),
+) -> ReportRead:
+    """Scrive il relatório final dai dati del relatório: con il modello di
+    testo o con l'IA (se attiva). Riscrive quello che c'era."""
+    manage = await _can_manage(db, current_user)
+    club = await db.get(Club, current_user.club_id)
+    try:
+        report = await event_articles.generate(
+            db, scope=current_user.scope, report_id=report_id, actor_user_id=current_user.user_id,
+            can_manage=manage, source=payload.source, club_name=club.name if club else "clube",
         )
     except club_service.ClubError as exc:
         _raise(exc)

@@ -27,7 +27,7 @@ const PLACEMENTS: { value: number; icon: string }[] = [
   { value: 5, icon: "5º" }, { value: 7, icon: "7º" }, { value: 0, icon: "🎽" },
 ];
 
-export function CoachResultsPanel() {
+export function CoachResultsPanel({ q = "" }: { q?: string }) {
   const { t } = useI18n();
   const [when, setWhen] = useState<"upcoming" | "past">("upcoming");
   const [open, setOpen] = useState<string | null>(null);
@@ -36,7 +36,7 @@ export function CoachResultsPanel() {
     <div className="space-y-4">
       <Tabs value={when} onChange={(k) => setWhen(k as "upcoming" | "past")}
         items={[{ key: "upcoming", label: t("evrep.results.upcoming") }, { key: "past", label: t("evrep.results.past") }]} />
-      <EventPicker when={when} onPick={setOpen} />
+      <EventPicker when={when} q={q} onPick={setOpen} />
     </div>
   );
 }
@@ -48,12 +48,14 @@ export function useStaffEvents(when: "upcoming" | "past") {
   });
 }
 
-function EventPicker({ when, onPick }: { when: "upcoming" | "past"; onPick: (id: string) => void }) {
+function EventPicker({ when, q, onPick }: { when: "upcoming" | "past"; q: string; onPick: (id: string) => void }) {
   const { t, fmt } = useI18n();
-  const { data, isLoading, error } = useStaffEvents(when);
+  const { data: all, isLoading, error } = useStaffEvents(when);
+  const needle = q.trim().toLowerCase();
+  const data = needle ? all?.filter((e) => `${e.name} ${e.location ?? ""}`.toLowerCase().includes(needle)) : all;
   if (isLoading) return <Skeleton className="h-48" />;
   if (error) return <EmptyState title={t("evrep.loadError")} text={(error as Error).message} />;
-  if (!data?.length) return <EmptyState icon={<span className="text-3xl">🏟️</span>} title={t("evrep.results.empty")} />;
+  if (!data?.length) return <EmptyState icon={<span className="text-3xl">🏟️</span>} title={needle ? t("evrep.new.noMatch") : t("evrep.results.empty")} />;
   return (
     <MotionConfig reducedMotion="user">
       <ul className="space-y-2">

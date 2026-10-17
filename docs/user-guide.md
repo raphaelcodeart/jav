@@ -698,6 +698,18 @@ il telefono, compresa la foto della ricevuta e del certificato.
   foto. I risultati degli atleti compaiono da soli. Ogni treinador vede i
   suoi; la segreteria li vede tutti in «Eventos e provas» → «Relatórios de
   eventos» e scarica il **PDF** di un mese, di un anno o di un periodo.
+- **Relatório final**: finito il relatório, tocca **📰 Gerar relatório
+  final** (sulla scheda del relatório o in fondo all'editor): esce un breve
+  articolo, come sul giornale, con risultati, racconto, spese e foto.
+  Correggilo come vuoi e salva. Il bottone **✨ Gerar com IA** è pronto ma
+  resta spento finché il club non attiva l'IA. Nella schermata **Relatórios
+  finais** trovi solo gli articoli, da leggere impaginati, e **Descarregar
+  todos (PDF)** li mette tutti in un PDF (solo quelli trovati dalla
+  ricerca, se ne hai scritta una).
+- In alto ci sono i pulsanti grandi delle schermate e la ricerca; nel popup
+  **Novo relatório** cerca l'evento per nome e lascia acceso «Só com
+  inscritos e já concluídos» per vedere solo le gare finite con atleti
+  iscritti.
 
 ## L'area del treinador
 

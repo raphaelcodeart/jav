@@ -124,6 +124,8 @@ async def report_dict(
         "location": comp.location,
         "author_user_id": report.author_user_id, "author_name": author_names.get(report.author_user_id) or "—",
         "title": report.title, "description": report.description, "narrative": report.narrative,
+        "article_title": report.article_title, "article": report.article, "article_source": report.article_source,
+        "article_generated_at": report.article_generated_at,
         "costs": cost_rows, "total_cents": sum(c["amount_cents"] for c in cost_rows),
         "photos": [
             {"id": p.id, "storage_key": p.storage_key,
@@ -239,7 +241,9 @@ async def update_report(
 ) -> ClubEventReport:
     report = await get_report(db, scope=scope, report_id=report_id)
     _check_owner(report, user_id=actor_user_id, can_manage=can_manage)
-    for key, value in _clean(data).items():
+    from app.domains.club.event_articles import clean_article
+
+    for key, value in {**_clean(data), **clean_article(data, report)}.items():
         setattr(report, key, value)
     if data.get("costs") is not None:
         await _set_costs(db, report=report, costs=data["costs"])

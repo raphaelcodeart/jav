@@ -1430,6 +1430,8 @@ club_documents   organization_id, club_id, category (DECLARATION | FEDERATION | 
 ```
 club_event_reports        organization_id, club_id, competition_id, author_user_id, title,
                           description, narrative, updated_at, created_at;
+                          article_title, article, article_source (TEMPLATE | AI | MANUAL),
+                          article_generated_at: il relatório final (migrazione 0037);
                           UNIQUE (club_id, competition_id, author_user_id): uno per autore e evento
 club_event_report_costs   report_id (ON DELETE CASCADE), kind (HOTEL | TRAVEL | FUEL | FOOD |
                           ENTRY_FEES | OTHER), amount_cents >= 0, note; UNIQUE (report_id, kind)

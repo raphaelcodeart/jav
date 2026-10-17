@@ -104,6 +104,11 @@ export interface EventReport {
   title: string;
   description: string | null;
   narrative: string | null;
+  /** Il relatório final: l'articolo breve nato dal relatório. */
+  article_title: string | null;
+  article: string | null;
+  article_source: "TEMPLATE" | "AI" | "MANUAL" | null;
+  article_generated_at: string | null;
   costs: ReportCost[];
   total_cents: number;
   photos: { id: string; url: string | null }[];
