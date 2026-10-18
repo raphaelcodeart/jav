@@ -11,36 +11,13 @@ sapere anche le cose del giallo e dell'arancione).
 
 from dataclasses import dataclass, field
 
-LANGS = ("pt", "it", "en")
+from app.game.qtypes import LANGS, Q, Question, T, Text  # noqa: F401
+
 #: Le cinture del gioco, in ordine. Sono le cinture del personaggio, non
 #: quelle vere del judoca (il gestionale ha le sue, più fini).
 BELTS = ("WHITE", "YELLOW", "ORANGE", "GREEN", "BLUE", "BROWN", "BLACK")
 
-Text = dict[str, str]
-
-
-def T(pt: str, it: str, en: str) -> Text:
-    return {"pt": pt, "it": it, "en": en}
-
-
-@dataclass(frozen=True)
-class Question:
-    id: str
-    topic: str
-    belt: str
-    text: Text
-    #: La giusta è la prima. Una stringa vale in tutte le lingue (un termine giapponese).
-    choices: tuple
-    why: Text
-
-    def choice(self, index: int, lang: str) -> str:
-        c = self.choices[index]
-        return c if isinstance(c, str) else c[lang]
-
-
-Q = Question
-
-QUESTIONS: tuple[Question, ...] = (
+BASE_QUESTIONS: tuple[Question, ...] = (
     # --- Storia ---------------------------------------------------------------------------------------
     Q("h01", "history", "YELLOW", T("Quem criou o judo?", "Chi ha creato il judo?", "Who created judo?"),
       ("Jigoro Kano", "Morihei Ueshiba", "Gichin Funakoshi", "Mitsuyo Maeda"),
@@ -327,24 +304,136 @@ QUESTIONS: tuple[Question, ...] = (
         "Kaeshi: turning the opponent's attack. Renraku-waza are combinations.")),
 )
 
+from app.game.questions import (  # noqa: E402
+    coach_a, coach_b, coach_c, dan_high, dan_low, dan_mid, kata_intro, kyu, portugal, referee,
+)
+
+QUESTIONS: tuple[Question, ...] = BASE_QUESTIONS + tuple(
+    q for bank in (kyu, kata_intro, dan_low, dan_mid, dan_high, portugal, referee, coach_a, coach_b, coach_c) for q in bank.QUESTIONS
+)
 BY_ID = {q.id: q for q in QUESTIONS}
+
+# --- I gradi ------------------------------------------------------------------------------------------------
+#
+# La scala degli esami della Dojo Academy segue il Manuale de Graduações
+# della FPJ: le mezze cinture fino alla marrone, poi i dan fino al 10°.
+# Ogni esame ha 5 domande più del precedente fino alla marrone (bianca-gialla
+# 5 … marrone 50); il 1° dan ne aggiunge 10, il 2° 15, il 3° 20 e così via
+# fino al 10° (375). Le domande portano il grado da cui entrano (`belt`):
+# solo i gradi pieni, una mezza cintura pesca fino alla cintura che prepara.
+
+#: I gradi delle domande, dal più facile.
+LEVELS = ("YELLOW", "ORANGE", "GREEN", "BLUE", "BROWN", "BLACK", "DAN2", "DAN3", "DAN4", "DAN5", "DAN6", "DAN7", "DAN8",
+          "DAN9", "DAN10")
+#: La scala degli esami. BLACK è il 1° dan (il codice resta quello degli esami già superati).
+GRADES = ("WHITE", "WHITE_YELLOW", "YELLOW", "YELLOW_ORANGE", "ORANGE", "ORANGE_GREEN", "GREEN", "GREEN_BLUE", "BLUE",
+          "BLUE_BROWN", "BROWN", "BLACK", "DAN2", "DAN3", "DAN4", "DAN5", "DAN6", "DAN7", "DAN8", "DAN9", "DAN10")
+DANS = GRADES[GRADES.index("BLACK"):]
+
+
+def grade_level(grade: str) -> str:
+    """Fin dove pesca l'esame: una mezza cintura prepara quella dopo."""
+    if grade in LEVELS:
+        return grade
+    return GRADES[GRADES.index(grade) + 1]
+
+
+def career_belt(grade: str) -> str:
+    """La cintura del personaggio di Judo Career per un grado della Academy:
+    una mezza cintura vale quella sotto, ogni dan la nera."""
+    if grade in BELTS:
+        return grade
+    if grade in DANS:
+        return "BLACK"
+    return grade.split("_")[0] if grade in GRADES else "WHITE"
+
+
+def _sizes() -> dict[str, int]:
+    sizes, n, step = {}, 0, 5
+    for grade in GRADES[1:]:
+        if grade in DANS:
+            step = 10 if grade == "BLACK" else step + 5
+        n += step
+        sizes[grade] = n
+    return sizes
+
+
+EXAM_SIZES = _sizes()
+
+GRADE_NAMES = {
+    "WHITE": T("Branco", "Bianca", "White"),
+    "WHITE_YELLOW": T("Branco e amarelo", "Bianca e gialla", "White-yellow"),
+    "YELLOW": T("Amarelo", "Gialla", "Yellow"),
+    "YELLOW_ORANGE": T("Amarelo e laranja", "Gialla e arancione", "Yellow-orange"),
+    "ORANGE": T("Laranja", "Arancione", "Orange"),
+    "ORANGE_GREEN": T("Laranja e verde", "Arancione e verde", "Orange-green"),
+    "GREEN": T("Verde", "Verde", "Green"),
+    "GREEN_BLUE": T("Verde e azul", "Verde e blu", "Green-blue"),
+    "BLUE": T("Azul", "Blu", "Blue"),
+    "BLUE_BROWN": T("Azul e castanho", "Blu e marrone", "Blue-brown"),
+    "BROWN": T("Castanho", "Marrone", "Brown"),
+    **{d: T(f"{i}.º Dan", f"{i}° Dan", f"{i}{'st' if i == 1 else 'nd' if i == 2 else 'rd' if i == 3 else 'th'} Dan")
+       for i, d in enumerate(DANS, start=1)},
+}
+#: Il grado in giapponese (kyu e dan), come nel manuale FPJ.
+GRADE_JP = {"WHITE": "Rokukyu", "YELLOW": "Gokyu", "ORANGE": "Yonkyu", "GREEN": "Sankyu", "BLUE": "Nikyu", "BROWN": "Ikyu",
+            "BLACK": "Shodan", "DAN2": "Nidan", "DAN3": "Sandan", "DAN4": "Yondan", "DAN5": "Godan", "DAN6": "Rokudan",
+            "DAN7": "Shichidan", "DAN8": "Hachidan", "DAN9": "Kudan", "DAN10": "Judan"}
+
+#: Che cosa chiede ogni dan: i kata dalla tabella 6.3 «Exame de Katas» del
+#: regolamento FPJ (via normale; la via competizione ne chiede uno in meno), poi oltre.
+DAN_FOCUS = {
+    "BLACK": T("Nage-no-kata, Gokyo, katame-waza, história do Kodokan", "Nage-no-kata, Gokyo, katame-waza, storia del Kodokan",
+               "Nage-no-kata, Gokyo, katame-waza, Kodokan history"),
+    "DAN2": T("Nage-no-kata e Katame-no-kata, shinmeisho-no-waza, arbitragem", "Nage-no-kata e Katame-no-kata, shinmeisho-no-waza, arbitraggio",
+              "Nage-no-kata and Katame-no-kata, shinmeisho-no-waza, refereeing"),
+    "DAN3": T("Nage, Katame e Kime-no-kata, shime e kansetsu-waza, IJF e EJU", "Nage, Katame e Kime-no-kata, shime e kansetsu-waza, IJF ed EJU",
+              "Nage, Katame and Kime-no-kata, shime and kansetsu-waza, IJF and EJU"),
+    "DAN4": T("Kime-no-kata, Kodokan-goshin-jutsu, Ju-no-kata, atemi-waza", "Kime-no-kata, Kodokan-goshin-jutsu, Ju-no-kata, atemi-waza",
+              "Kime-no-kata, Kodokan-goshin-jutsu, Ju-no-kata, atemi-waza"),
+    "DAN5": T("Goshin-jutsu, Ju-no-kata, Koshiki-no-kata, kyusho", "Goshin-jutsu, Ju-no-kata, Koshiki-no-kata, kyusho",
+              "Goshin-jutsu, Ju-no-kata, Koshiki-no-kata, kyusho"),
+    "DAN6": T("Ju-no-kata, Koshiki-no-kata, Itsutsu-no-kata, altas graduações", "Ju-no-kata, Koshiki-no-kata, Itsutsu-no-kata, alti gradi",
+              "Ju-no-kata, Koshiki-no-kata, Itsutsu-no-kata, high grades"),
+    "DAN7": T("Atemi-waza a fundo, todos os kata do Kodokan", "Atemi-waza a fondo, tutti i kata del Kodokan",
+              "Atemi-waza in depth, every Kodokan kata"),
+    "DAN8": T("Mestres do Kodokan, filosofia de Kano", "Maestri del Kodokan, filosofia di Kano", "Kodokan masters, Kano's philosophy"),
+    "DAN9": T("Detalhe dos kata e da história do judo", "Dettaglio dei kata e della storia del judo", "Kata and judo history in detail"),
+    "DAN10": T("Tudo: o exame do mestre", "Tutto: l'esame del maestro", "Everything: the master's exam"),
+}
+
+
+#: Domande che un esame contiene sempre (una per gruppo, a caso): il judo in Algarve per la
+#: marrone, la nascita dell'ADJA (Lagoa, 14 agosto 1979) per il 1° dan.
+EXAM_FEATURED = {
+    "BROWN": (("p036", "p071", "p086", "p087"),),
+    "BLACK": (("p081", "p089"), ("p052", "p054", "p088", "p090")),
+}
 
 
 @dataclass(frozen=True)
 class Quiz:
     id: str
-    kind: str  # TOPIC o EXAM
+    kind: str  # TOPIC, EXAM o COURSE
     icon: str
     title: Text
     description: Text
-    #: TOPIC: le domande del tema; EXAM: le cinture da cui pescare (fino a `belt`).
+    #: TOPIC: il tema; COURSE: i temi da cui pescare; EXAM: il grado (`belt`).
     topic: str | None = None
+    topics: tuple = ()
     belt: str | None = None
     size: int = 10
     seconds: int = 30
     pass_pct: int = 70
-    #: XP per un esame superato la prima volta.
+    #: XP per un esame o un modulo superato la prima volta.
     pass_xp: int = 0
+    #: COURSE: la qualifica che dà, il percorso a cui appartiene, il grado minimo e le qualifiche che servono prima.
+    qualification: str | None = None
+    group: str | None = None
+    min_grade: str | None = None
+    requires: tuple = ()
+    #: COURSE: fino a quale grado di domanda si pesca (None = tutte).
+    level_cap: str | None = None
     tags: tuple = field(default_factory=tuple)
 
 
@@ -364,40 +453,113 @@ TOPICS = {
     "vocabulary": ("🗾", T("Vocabulário japonês", "Vocabolario giapponese", "Japanese vocabulary"),
                    T("As palavras que ouves todos os dias no tapete.", "Le parole che senti ogni giorno sul tatami.",
                      "The words you hear on the mat every day.")),
+    "kata": ("📜", T("Os kata do Kodokan", "I kata del Kodokan", "The Kodokan kata"),
+             T("Nage, Katame, Kime, Ju, Goshin-jutsu, Itsutsu e Koshiki-no-kata.",
+               "Nage, Katame, Kime, Ju, Goshin-jutsu, Itsutsu e Koshiki-no-kata.",
+               "Nage, Katame, Kime, Ju, Goshin-jutsu, Itsutsu and Koshiki-no-kata.")),
+    "pt_history": ("🇵🇹", T("Judo em Portugal", "Il judo in Portogallo", "Judo in Portugal"),
+                   T("Os pioneiros, a Federação, as associações e os campeões portugueses.",
+                     "I pionieri, la Federazione, le associazioni e i campioni portoghesi.",
+                     "The pioneers, the Federation, the associations and Portugal's champions.")),
+    "fpj_rules": ("📘", T("Regulamento de graduações", "Regolamento dei gradi", "Grading regulations"),
+                  T("O Manual e Regulamento de Graduações da FPJ: idades, tempos, programas.",
+                    "Il Manuale e Regolamento dei gradi della FPJ: età, tempi, programmi.",
+                    "The FPJ grading manual and regulations: ages, times, programmes.")),
+}
+#: I temi degli esami di grado (i corsi hanno i loro).
+GRADE_TOPICS = frozenset(TOPICS)
+
+#: I corsi: chi li supera ha una qualifica. Il corso di treinador è fatto di moduli; la qualifica arriva con l'ultimo.
+COURSE_MODULES = {
+    "physiology": ("🫀", T("Fisiologia do esforço", "Fisiologia dello sforzo", "Exercise physiology"), ("physiology",), None),
+    "methodology": ("📈", T("Metodologia do treino", "Metodologia dell'allenamento", "Training methodology"), ("methodology",), None),
+    "anatomy": ("🦴", T("Anatomia e corpo humano", "Anatomia e corpo umano", "Anatomy and the human body"), ("anatomy",), None),
+    "technique": ("🥋", T("Técnica e kata", "Tecnica e kata", "Technique and kata"), ("techniques", "kata"), "DAN3"),
+    "ethics": ("🤝", T("Ética desportiva", "Etica sportiva", "Sports ethics"), ("ethics",), None),
+    "antidoping": ("🧪", T("Antidopagem", "Antidoping", "Anti-doping"), ("antidoping",), None),
+    "psychology": ("🧠", T("Psicologia do desporto", "Psicologia dello sport", "Sport psychology"), ("psychology",), None),
+    "pt_history": ("🇵🇹", T("História do judo em Portugal", "Storia del judo in Portogallo", "History of judo in Portugal"),
+                   ("pt_history",), None),
+    "adapted": ("♿", T("Judo adaptado", "Judo adattato", "Adapted judo"), ("adapted",), None),
+    "refereeing": ("⚖️", T("Arbitragem", "Arbitraggio", "Refereeing"), ("ref_basic", "ref_adv"), None),
+    "fpj_rules": ("📘", T("Regulamentos da FPJ", "Regolamenti della FPJ", "FPJ regulations"), ("fpj_rules",), None),
+    "first_aid": ("⛑️", T("Primeiros socorros", "Primo soccorso", "First aid"), ("first_aid",), None),
+}
+COACH1_MODULES = tuple(f"coach1-{key}" for key in COURSE_MODULES)
+
+QUALIFICATIONS = {
+    "REF_COURSE": ("🟨", T("Curso de arbitragem", "Corso di arbitraggio", "Refereeing course")),
+    "REFEREE": ("🧑‍⚖️", T("Árbitro", "Arbitro", "Referee")),
+    "COACH1": ("🎓", T("Treinador de Judo Grau I", "Allenatore di Judo 1° livello", "Judo Coach Level 1")),
 }
 
-BELT_NAMES = {
-    "YELLOW": T("amarelo", "gialla", "yellow"), "ORANGE": T("laranja", "arancione", "orange"),
-    "GREEN": T("verde", "verde", "green"), "BLUE": T("azul", "blu", "blue"),
-    "BROWN": T("castanho", "marrone", "brown"), "BLACK": T("preto", "nera", "black"),
-}
+
+def _exam(grade: str) -> Quiz:
+    i = GRADES.index(grade)
+    dan = DANS.index(grade) + 1 if grade in DANS else 0
+    name = GRADE_NAMES[grade]
+    if dan:
+        title = T(f"Exame de {name['pt']}", f"Esame di {name['it']}", f"{name['en']} exam")
+        desc = DAN_FOCUS[grade]
+    else:
+        title = T(f"Exame de cinto {name['pt'].lower()}", f"Esame di cintura {name['it'].lower()}", f"{name['en']} belt exam")
+        desc = T("Passa no exame para subir de graduação e desbloquear o cinto no Judo Career.",
+                 "Supera l'esame per salire di grado e sbloccare la cintura in Judo Career.",
+                 "Pass the exam to move up a grade and unlock the belt in Judo Career.")
+    # Più si sale, meno tempo e soglia più alta.
+    seconds = 30 if i <= GRADES.index("BLUE_BROWN") else 28 if not dan else 26 if dan <= 3 else 24 if dan <= 6 else 22
+    pass_pct = (70 if i <= GRADES.index("BLUE_BROWN") else 75 if not dan else 80 if dan <= 5 else 85 if dan <= 8 else 90)
+    return Quiz(id=f"exam-{grade.lower()}", kind="EXAM", icon="🎖️", title=title, description=desc, belt=grade,
+                size=EXAM_SIZES[grade], seconds=seconds, pass_pct=pass_pct, pass_xp=100 + 40 * i)
+
+
+def _course(qid: str, icon: str, title: Text, desc: Text, topics: tuple, *, size: int, pass_pct: int, pass_xp: int,
+            qualification: str | None, group: str | None, min_grade: str, requires: tuple = (), level_cap: str | None = None,
+            seconds: int = 30) -> Quiz:
+    return Quiz(id=qid, kind="COURSE", icon=icon, title=title, description=desc, topics=topics, size=size, seconds=seconds,
+                pass_pct=pass_pct, pass_xp=pass_xp, qualification=qualification, group=group, min_grade=min_grade,
+                requires=requires, level_cap=level_cap)
+
 
 QUIZZES: dict[str, Quiz] = {
     **{
         f"topic-{key}": Quiz(id=f"topic-{key}", kind="TOPIC", icon=icon, title=title, description=desc, topic=key,
-                             size=min(10, sum(1 for q in QUESTIONS if q.topic == key)), seconds=30, pass_pct=60)
+                             size=10, seconds=30, pass_pct=60)
         for key, (icon, title, desc) in TOPICS.items()
     },
+    **{f"exam-{grade.lower()}": _exam(grade) for grade in GRADES[1:]},
+    "course-ref-basic": _course(
+        "course-ref-basic", "🟨", QUALIFICATIONS["REF_COURSE"][1],
+        T("Gestos, pontuações, penalizações e tempos: o primeiro passo para arbitrar. Desde o cinto verde.",
+          "Gesti, punteggi, penalità e tempi: il primo passo per arbitrare. Dalla cintura verde.",
+          "Signals, scores, penalties and times: the first step to refereeing. From green belt."),
+        ("ref_basic",), size=30, pass_pct=75, pass_xp=300, qualification="REF_COURSE", group="referee", min_grade="GREEN"),
+    "course-referee": _course(
+        "course-referee", "🧑‍⚖️", T("Curso de árbitro", "Corso per arbitro", "Referee course"),
+        T("As regras da IJF a fundo, o CARE system e a mecânica do árbitro. Depois do curso de arbitragem.",
+          "Le regole IJF a fondo, il CARE system e la meccanica dell'arbitro. Dopo il corso di arbitraggio.",
+          "IJF rules in depth, the CARE system and referee mechanics. After the refereeing course."),
+        ("ref_basic", "ref_adv"), size=50, pass_pct=80, pass_xp=600, qualification="REFEREE", group="referee",
+        min_grade="BLUE", requires=("REF_COURSE",), seconds=28),
     **{
-        f"exam-{belt.lower()}": Quiz(
-            id=f"exam-{belt.lower()}", kind="EXAM", icon="🎖️", belt=belt,
-            title=T(f"Exame de cinto {BELT_NAMES[belt]['pt']}", f"Esame di cintura {BELT_NAMES[belt]['it']}",
-                    f"{BELT_NAMES[belt]['en'].capitalize()} belt exam"),
-            description=T("Passa no exame para desbloquear o cinto na tua carreira do Judo Career.",
-                          "Supera l'esame per sbloccare la cintura nella tua carriera di Judo Career.",
-                          "Pass the exam to unlock the belt in your Judo Career."),
-            size=10 if belt != "BLACK" else 15, seconds=30 if belt != "BLACK" else 28,
-            pass_pct=70 if belt != "BLACK" else 80, pass_xp=150 + 50 * BELTS.index(belt),
-        )
-        for belt in BELTS[1:]
+        f"coach1-{key}": _course(
+            f"coach1-{key}", icon, title,
+            T(f"Módulo do curso de Treinador de Judo Grau I. Passa os {len(COURSE_MODULES)} módulos para obter a qualificação.",
+              f"Modulo del corso Allenatore di Judo 1° livello. Supera i {len(COURSE_MODULES)} moduli per la qualifica.",
+              f"Module of the Judo Coach Level 1 course. Pass all {len(COURSE_MODULES)} modules to qualify."),
+            topics, size=30, pass_pct=75, pass_xp=250, qualification=None, group="coach1", min_grade="BLACK", level_cap=cap)
+        for key, (icon, title, topics, cap) in COURSE_MODULES.items()
     },
 }
 
 
 def questions_for(quiz: Quiz) -> list[Question]:
-    """Le domande da cui pescare: quelle del tema, o per un esame quelle fino
-    alla sua cintura (prima quelle proprio della cintura)."""
+    """Le domande da cui pescare: quelle del tema; per un esame quelle dei
+    temi di grado fino al suo livello; per un corso quelle dei suoi temi."""
     if quiz.kind == "TOPIC":
         return [q for q in QUESTIONS if q.topic == quiz.topic]
-    level = BELTS.index(quiz.belt)
-    return [q for q in QUESTIONS if BELTS.index(q.belt) <= level]
+    if quiz.kind == "COURSE":
+        cap = LEVELS.index(quiz.level_cap) if quiz.level_cap else len(LEVELS)
+        return [q for q in QUESTIONS if q.topic in quiz.topics and LEVELS.index(q.belt) <= cap]
+    level = LEVELS.index(grade_level(quiz.belt))
+    return [q for q in QUESTIONS if q.topic in GRADE_TOPICS and LEVELS.index(q.belt) <= level]

@@ -37,17 +37,57 @@ portoghese, francese/tedesco/ucraino → inglese, sia nel browser
 
 ## Dojo Academy
 
-- Contenuti in `app/game/content.py`: una banca di domande (storia, etichetta,
-  tecniche, regole, vocabolario) in portoghese, italiano e inglese, i
-  **percorsi** (un quiz per tema) e gli **esami di cintura** del gioco
-  (giallo → nero, in ordine; passa il 70%, il nero l'80%).
+- Contenuti: `app/game/content.py` (la banca di base, i temi, la scala dei
+  gradi, i corsi, i quiz) e le banche in `app/game/questions/` (un file per
+  blocco: `kyu`, `dan_low` 1°–3° dan, `dan_mid` 4°–6°, `dan_high` 7°–10°,
+  `portugal` storia del judo portoghese e regolamento FPJ, `referee`,
+  `coach_a/b/c` per il corso di treinador). Le classi stanno in
+  `app/game/qtypes.py`. Tutto in portoghese, italiano e inglese; la giusta è
+  sempre la prima scelta (si mescola a ogni tentativo). Fonti: il Manual e
+  Regulamento de Graduações FPJ (dic. 2024), il corso Treinador Grau I ADJA
+  (storia), i testi dei kata del Kodokan, le regole IJF 2025–2028, ERC/INEM
+  per il primo soccorso, WADA/ADoP per l'antidoping.
+- **Gradi** (`GRADES`): mezze cinture FPJ fino alla marrone (bianca-gialla,
+  gialla, gialla-arancione … blu-marrone, marrone), poi 1°–10° dan (`BLACK`
+  è il 1° dan: il codice resta quello degli esami già superati). Domande per
+  esame (`EXAM_SIZES`): +5 a ogni esame fino alla marrone (5 … 50), poi il 1°
+  dan +10 (60), il 2° +15 (75), il 3° +20 (95) … il 10° +55 (375). Più si
+  sale, meno secondi a domanda (30 → 22) e soglia più alta (70% → 90%). Un
+  esame pesca dai temi di grado fino al suo livello (`grade_level`: una
+  mezza cintura prepara la cintura dopo), almeno un terzo proprio del
+  livello. I kata dei dan seguono la tabella 6.3 del regolamento FPJ.
+- Gli esami si fanno in ordine; chi ha già un grado più alto (esami di
+  prima delle mezze cinture) non rifà quelli sotto (`_has_grade`). Un
+  tentativo resta aperto un'ora o il doppio del tempo pieno (`_ttl`: il 10°
+  dan ha 375 domande).
+- **Corsi e qualifiche** (`kind=COURSE`): «Curso de arbitragem» (dal verde,
+  30 domande) → qualifica REF_COURSE; «Curso de árbitro» (dalla blu e dopo
+  il corso, 50 domande) → REFEREE; «Treinador de Judo Grau I» (dal 1° dan):
+  12 moduli da 30 domande (fisiologia, metodologia, anatomia, tecnica e kata,
+  etica, antidoping, psicologia, storia del judo in Portogallo, judo
+  adattato, arbitraggio, regolamenti FPJ, primo soccorso) → COACH1 quando
+  sono tutti superati. Le qualifiche non hanno tabelle: si ricavano dai
+  tentativi superati (`service.qualifications`).
+- **Risultati salvati**: `GET /game/quizzes` dà per ogni quiz gli ultimi 8
+  tentativi (`history`: percentuale, punti, superato, data), la percentuale
+  migliore di sempre e, per gli esami, data e percentuale del superamento.
+  La scheda «Graduações» (`components/game/belt-exams.tsx`) mostra i numeri
+  del judoka, la rastrelliera con tutte le cinture e, per la cintura scelta,
+  programma, risultati, grafico dei tentativi con la soglia e il diploma.
+- **Medagliere e diplomi**: `GET /game/me` dà `grade`, `qualifications` e
+  `diplomas` (grado o qualifica, percentuale, data). Il diploma si disegna
+  nel browser (`components/game/diploma.tsx`) e si scarica in PNG: c'è
+  scritto FAC-SÍMILE e che è un diploma del gioco, non un documento ufficiale
+  né una graduação federativa.
+- Judo Career e il Randori vedono la cintura del personaggio
+  (`content.career_belt`): una mezza cintura vale quella sotto, ogni dan la
+  nera.
 - Il server sceglie domande e ordine delle risposte e corregge ogni
   risposta (`POST /game/attempts/{id}/answer`): il browser non riceve mai la
   risposta giusta prima di aver risposto. Punti: 10 per risposta giusta più
-  fino a 5 di velocità. Il tempo per domanda è di **30 secondi** (28 nell'esame
-  di cintura nera).
+  fino a 5 di velocità.
 - XP: di un percorso solo il **miglioramento** del record (rifarlo non
-  fabbrica XP); un esame superato la prima volta dà il suo premio.
+  fabbrica XP); un esame o un corso superato la prima volta dà il suo premio.
 
 ## Judo Career
 

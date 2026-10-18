@@ -2,9 +2,12 @@
 
 Le promesse: il gioco vive nel suo schema e non tocca il gestionale; il
 browser non riceve mai la risposta giusta prima di rispondere; rifare un
-quiz non fabbrica XP; gli esami si fanno in ordine e sbloccano la cintura
-della carriera, che non può andare oltre; l'XP della carriera ha un tetto
-per salvataggio; la classifica somma quiz e carriera.
+quiz non fabbrica XP; gli esami si fanno in ordine (mezze cinture fino alla
+marrone, poi i dan fino al 10°, ognuno più lungo del precedente) e
+sbloccano la cintura della carriera, che non può andare oltre; i corsi
+chiedono un grado e danno le qualifiche (arbitro, treinador di 1° livello);
+l'XP della carriera ha un tetto per salvataggio; la classifica somma quiz e
+carriera.
 """
 
 import random
@@ -31,9 +34,26 @@ def test_every_question_is_complete():
         assert len(q.choices) == 4 and len(set(q.choice(i, "pt") for i in range(4))) == 4, q.id
         for lang in content.LANGS:
             assert q.text[lang] and q.why[lang] and all(q.choice(i, lang) for i in range(4))
-        assert q.belt in content.BELTS[1:]
+        assert q.belt in content.LEVELS, q.id
+    assert len(content.BY_ID) == len(content.QUESTIONS)
     for quiz in content.QUIZZES.values():
         assert len(content.questions_for(quiz)) >= quiz.size, quiz.id
+
+
+def test_the_ladder_grows_exam_by_exam():
+    sizes = [content.EXAM_SIZES[g] for g in content.GRADES[1:]]
+    assert sizes[:10] == [5, 10, 15, 20, 25, 30, 35, 40, 45, 50]  # fino alla marrone, +5
+    assert sizes[10:] == [60, 75, 95, 120, 150, 185, 225, 270, 320, 375]  # 1° dan +10, 2° +15 …
+    assert content.QUIZZES["exam-yellow"].size == 10 and content.QUIZZES["exam-dan10"].size == 375
+    seconds = [content.QUIZZES[f"exam-{g.lower()}"].seconds for g in content.GRADES[1:]]
+    pass_pct = [content.QUIZZES[f"exam-{g.lower()}"].pass_pct for g in content.GRADES[1:]]
+    assert seconds == sorted(seconds, reverse=True) and pass_pct == sorted(pass_pct)
+    assert content.career_belt("YELLOW_ORANGE") == "YELLOW" and content.career_belt("DAN7") == "BLACK"
+    assert content.grade_level("BLUE_BROWN") == "BROWN"
+    for groups in content.EXAM_FEATURED.values():
+        assert all(i in content.BY_ID for group in groups for i in group)
+    # Il 10° dan ha tempo per finire.
+    assert service._ttl(content.QUIZZES["exam-dan10"]).total_seconds() >= 375 * 22
 
 
 async def _play(db, user, quiz_id, *, right: int):
@@ -65,7 +85,10 @@ async def test_quizzes_exams_career_and_leaderboard(db, scope):
     assert better["xp_earned"] == better["score"] - first["score"]
 
     with pytest.raises(service.GameError):
-        await service.start(db, user_id=kid.id, quiz_id="exam-orange", lang="pt")
+        await service.start(db, user_id=kid.id, quiz_id="exam-yellow", lang="pt")
+    first_exam = await _play(db, kid, "exam-white_yellow", right=5)
+    assert first_exam["new_belt"] == "WHITE_YELLOW"
+    assert (await service.me(db, user_id=kid.id))["belt"] == "WHITE"  # la mezza cintura vale la bianca nella carriera
     failed = await _play(db, kid, "exam-yellow", right=5)
     assert failed["passed"] is False and failed["new_belt"] is None
     yellow = await _play(db, kid, "exam-yellow", right=10)
@@ -79,7 +102,7 @@ async def test_quizzes_exams_career_and_leaderboard(db, scope):
     saved = await service.save_career(db, user_id=kid.id, state=state, career_xp=300, week=3, belt="YELLOW")
     assert saved["career_xp"] == 300
     career = await service.get_career(db, user_id=kid.id)
-    assert career["state"] == state and career["exams_passed"] == ["YELLOW"]
+    assert career["state"] == state and career["exams_passed"] == ["WHITE_YELLOW", "YELLOW"]
     await service.reset_career(db, user_id=kid.id)
     assert (await service.get_career(db, user_id=kid.id))["state"] is None
     assert (await service.me(db, user_id=kid.id))["career_xp"] == 300  # l'XP guadagnata resta
@@ -110,3 +133,57 @@ def test_the_calendar_pdf_is_a_real_pdf_divided_by_month():
     assert pdf.startswith(b"%PDF") and len(pdf) > 2000
     assert calendar.render_pdf(events=[], date_from=date(2026, 1, 1), date_to=date(2026, 1, 31),
                                club_name="X", generated_on=date(2026, 1, 1)).startswith(b"%PDF")
+
+
+async def test_courses_need_a_grade_and_give_qualifications(db, scope):
+    from app.game.models import GameBeltExam
+
+    judoka = await _user(db, scope, "verde")
+    player = await service.get_player(db, user_id=judoka.id)
+    cards = {c["id"]: c for c in await service.list_quizzes(db, user_id=judoka.id, lang="pt")}
+    assert cards["course-ref-basic"]["lock_reason"] == "GRADE:GREEN"
+    # Un verde di prima delle mezze cinture: ha il verde, non le mezze sotto.
+    db.add(GameBeltExam(player_id=player.id, belt="GREEN", score_pct=90, passed_at=service.utcnow()))
+    await db.commit()
+    cards = {c["id"]: c for c in await service.list_quizzes(db, user_id=judoka.id, lang="pt")}
+    assert not cards["exam-green_blue"]["locked"] and not cards["course-ref-basic"]["locked"]
+    assert cards["course-referee"]["lock_reason"] == "GRADE:BLUE" and cards["coach1-ethics"]["lock_reason"] == "GRADE:BLACK"
+    done = await _play(db, judoka, "course-ref-basic", right=30)
+    assert done["passed"] and done["new_qualification"] == "REF_COURSE"
+    assert done["xp_earned"] >= content.QUIZZES["course-ref-basic"].pass_xp
+    again = await _play(db, judoka, "course-ref-basic", right=30)
+    assert again["new_qualification"] is None and again["xp_earned"] == 0
+    assert (await service.me(db, user_id=judoka.id))["qualifications"] == ["REF_COURSE"]
+
+    db.add(GameBeltExam(player_id=player.id, belt="BLACK", score_pct=90, passed_at=service.utcnow()))
+    await db.commit()
+    for i, module in enumerate(content.COACH1_MODULES):
+        res = await _play(db, judoka, module, right=30)
+        last = i == len(content.COACH1_MODULES) - 1
+        assert res["new_qualification"] == ("COACH1" if last else None), module
+    me = await service.me(db, user_id=judoka.id)
+    assert me["grade"] == "BLACK" and "COACH1" in me["qualifications"]
+
+
+async def test_brown_and_first_dan_exams_always_ask_about_the_algarve(db, scope):
+    from app.game.models import GameBeltExam
+
+    judoka = await _user(db, scope, "algarvio")
+    player = await service.get_player(db, user_id=judoka.id)
+    db.add(GameBeltExam(player_id=player.id, belt="BROWN", score_pct=90, passed_at=service.utcnow()))
+    await db.commit()
+    for seed in range(3):
+        for quiz_id, belt in (("exam-brown", "BROWN"), ("exam-black", "BLACK")):
+            started = await service.start(db, user_id=judoka.id, quiz_id=quiz_id, lang="pt", rng=random.Random(seed))
+            ids = {q["id"] for q in started["questions"]}
+            for group in content.EXAM_FEATURED[belt]:
+                assert ids & set(group), (quiz_id, group)
+
+
+async def test_every_exam_keeps_its_results(db, scope):
+    judoka = await _user(db, scope, "storico")
+    await _play(db, judoka, "exam-white_yellow", right=2)
+    await _play(db, judoka, "exam-white_yellow", right=5)
+    card = next(c for c in await service.list_quizzes(db, user_id=judoka.id, lang="pt") if c["id"] == "exam-white_yellow")
+    assert [h["pct"] for h in card["history"]] == [40, 100] and [h["passed"] for h in card["history"]] == [False, True]
+    assert card["best_pct"] == 100 and card["passed_pct"] == 100 and card["passed_on"]

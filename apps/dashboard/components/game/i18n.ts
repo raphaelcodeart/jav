@@ -22,9 +22,9 @@ const D = {
   soon: ["Em breve", "Presto", "Soon"],
   academyName: ["Dojo Academy", "Dojo Academy", "Dojo Academy"],
   academyTag: ["Questionários a tempo e exames de cinto", "Quiz a tempo ed esami di cintura", "Timed quizzes and belt exams"],
-  academyText: ["História, etiqueta, técnicas, regras e vocabulário. Passa os exames para desbloquear os cintos da tua carreira.",
-    "Storia, etichetta, tecniche, regole e vocabolario. Supera gli esami per sbloccare le cinture della tua carriera.",
-    "History, etiquette, techniques, rules and vocabulary. Pass exams to unlock belts in your career."],
+  academyText: ["Do cinto branco e amarelo ao 10.º Dan, com o programa da FPJ, e os cursos de árbitro e de treinador. Cada exame desbloqueia o cinto na tua carreira.",
+    "Dalla cintura bianca e gialla al 10° Dan, con il programma della FPJ, e i corsi per arbitro e allenatore. Ogni esame sblocca la cintura nella tua carriera.",
+    "From white-yellow belt to 10th Dan, following the FPJ programme, plus referee and coach courses. Every exam unlocks the belt in your career."],
   careerName: ["Judo Career", "Judo Career", "Judo Career"],
   careerTag: ["Simula a tua carreira e gere o teu clube", "Simula la tua carriera e gestisci il tuo club", "Simulate your career and run your club"],
   careerText: ["De cinto branco a treinador: treina, compete, torna-te árbitro, abre o teu clube e aprende como é difícil geri-lo.",
@@ -76,6 +76,60 @@ const D = {
   randoriText: ["Combate com os teus colegas de clube, simulado ou passo a passo: se ganhas, ficas com os pontos deles.",
     "Combatti con i compagni del tuo club, simulato o passo a passo: se vinci, prendi i loro punti.",
     "Fight your club mates, simulated or step by step: win and you take their points."],
+  passbook: ["Caderneta do judoca", "Libretto del judoka", "Judoka record book"],
+  currentGrade: ["Graduação atual", "Grado attuale", "Current grade"],
+  gradeOf: ["Grau", "Grado", "Grade"],
+  nextExam: ["Próximo exame", "Prossimo esame", "Next exam"],
+  allGrades: ["Chegaste ao topo: 10.º Dan!", "Sei in cima: 10° Dan!", "You reached the top: 10th Dan!"],
+  qualifications: ["Qualificações", "Qualifiche", "Qualifications"],
+  tabGrades: ["Graduações", "Gradi", "Grades"],
+  tabCourses: ["Cursos e qualificações", "Corsi e qualifiche", "Courses and qualifications"],
+  tabPaths: ["Percursos de estudo", "Percorsi di studio", "Study paths"],
+  kyuTitle: ["Kyu: cintos de cor", "Kyu: cinture colorate", "Kyu: coloured belts"],
+  kyuText: ["Com os cintos intermédios da FPJ: cada exame tem mais 5 perguntas.",
+    "Con le mezze cinture della FPJ: ogni esame ha 5 domande in più.", "With the FPJ half belts: each exam adds 5 questions."],
+  danTitle: ["Dan: cinto preto, vermelho e branco, vermelho", "Dan: cintura nera, bianca e rossa, rossa", "Dan: black, red-and-white, red belt"],
+  danText: ["Programa de kata da FPJ: Nage, Katame, Kime, Goshin-jutsu, Ju, Koshiki-no-kata e mais.",
+    "Programma kata della FPJ: Nage, Katame, Kime, Goshin-jutsu, Ju, Koshiki-no-kata e oltre.",
+    "FPJ kata programme: Nage, Katame, Kime, Goshin-jutsu, Ju, Koshiki-no-kata and more."],
+  available: ["Disponível", "Disponibile", "Available"],
+  nextBadge: ["Próximo", "Prossimo", "Next"],
+  needGrade: ["Precisas de", "Serve", "Requires"],
+  needQual: ["Precisas do", "Serve il", "Requires the"],
+  refPath: ["Arbitragem", "Arbitraggio", "Refereeing"],
+  refPathText: ["Do cinto verde: o curso de arbitragem; depois, com o azul, o curso de árbitro.",
+    "Dalla verde: il corso di arbitraggio; poi, con la blu, il corso per arbitro.",
+    "From green belt: the refereeing course; then, from blue, the referee course."],
+  coachPath: ["Treinador de Judo Grau I", "Allenatore di Judo 1° livello", "Judo Coach Level 1"],
+  coachPathText: ["Do 1.º Dan: 12 módulos de 30 perguntas. Passa todos para obter a qualificação.",
+    "Dal 1° Dan: 12 moduli da 30 domande. Superali tutti per avere la qualifica.",
+    "From 1st Dan: 12 modules of 30 questions. Pass all of them to qualify."],
+  modulesDone: ["módulos aprovados", "moduli superati", "modules passed"],
+  earned: ["Obtida", "Ottenuta", "Earned"],
+  notYet: ["Ainda não", "Non ancora", "Not yet"],
+  newQualification: ["Nova qualificação:", "Nuova qualifica:", "New qualification:"],
+  examProgress: ["Progresso do exame", "Avanzamento dell'esame", "Exam progress"],
+  statPassed: ["Exames aprovados", "Esami superati", "Exams passed"],
+  statAverage: ["Média nos aprovados", "Media negli esami superati", "Average on passed exams"],
+  statAttempts: ["Tentativas", "Tentativi", "Attempts"],
+  statNext: ["Próximo objetivo", "Prossimo obiettivo", "Next goal"],
+  beltRack: ["Os teus cintos", "Le tue cinture", "Your belts"],
+  beltRackText: ["Toca num cinto para ver o programa e os teus resultados.", "Tocca una cintura per vedere il programma e i tuoi risultati.",
+    "Tap a belt to see the programme and your results."],
+  yourResults: ["Os teus resultados", "I tuoi risultati", "Your results"],
+  passedOn: ["Aprovado em", "Superato il", "Passed on"],
+  bestResult: ["Melhor resultado", "Miglior risultato", "Best result"],
+  noAttempts: ["Ainda não tentaste este exame.", "Non hai ancora provato questo esame.", "You haven't tried this exam yet."],
+  history: ["Últimas tentativas", "Ultimi tentativi", "Recent attempts"],
+  passMark: ["mínimo", "minimo", "pass mark"],
+  takeExam: ["Fazer o exame", "Fai l'esame", "Take the exam"],
+  retakeExam: ["Repetir para melhorar", "Rifai per migliorare", "Retake to improve"],
+  programme: ["Programa", "Programma", "Programme"],
+  scrollLeft: ["Cintos anteriores", "Cinture precedenti", "Previous belts"],
+  scrollRight: ["Cintos seguintes", "Cinture successive", "Next belts"],
+  diplomaHint: ["O teu diploma (do jogo) está no Medalheiro da Academy.", "Il tuo diploma (del gioco) è nel Medagliere dell'Academy.",
+    "Your (game) diploma is in the Academy medal case."],
+  certificate: ["Certificado da Dojo Academy", "Attestato della Dojo Academy", "Dojo Academy certificate"],
   fullscreen: ["Ecrã inteiro", "Schermo intero", "Full screen"],
   exitFullscreen: ["Sair do ecrã inteiro", "Esci dallo schermo intero", "Exit full screen"],
 } as const;
@@ -85,6 +139,26 @@ export type GameKey = keyof typeof D;
 export const BELT_LABELS: Record<string, [string, string, string]> = {
   WHITE: ["Branco", "Bianca", "White"], YELLOW: ["Amarelo", "Gialla", "Yellow"], ORANGE: ["Laranja", "Arancione", "Orange"],
   GREEN: ["Verde", "Verde", "Green"], BLUE: ["Azul", "Blu", "Blue"], BROWN: ["Castanho", "Marrone", "Brown"], BLACK: ["Preto", "Nera", "Black"],
+};
+
+/** I gradi della Dojo Academy (app/game/content.py::GRADES): mezze cinture fino alla marrone, poi i dan. */
+export const GRADE_LABELS: Record<string, [string, string, string]> = {
+  ...BELT_LABELS,
+  WHITE_YELLOW: ["Branco e amarelo", "Bianca e gialla", "White-yellow"],
+  YELLOW_ORANGE: ["Amarelo e laranja", "Gialla e arancione", "Yellow-orange"],
+  ORANGE_GREEN: ["Laranja e verde", "Arancione e verde", "Orange-green"],
+  GREEN_BLUE: ["Verde e azul", "Verde e blu", "Green-blue"],
+  BLUE_BROWN: ["Azul e castanho", "Blu e marrone", "Blue-brown"],
+  BLACK: ["1.º Dan", "1° Dan", "1st Dan"],
+  DAN2: ["2.º Dan", "2° Dan", "2nd Dan"], DAN3: ["3.º Dan", "3° Dan", "3rd Dan"], DAN4: ["4.º Dan", "4° Dan", "4th Dan"],
+  DAN5: ["5.º Dan", "5° Dan", "5th Dan"], DAN6: ["6.º Dan", "6° Dan", "6th Dan"], DAN7: ["7.º Dan", "7° Dan", "7th Dan"],
+  DAN8: ["8.º Dan", "8° Dan", "8th Dan"], DAN9: ["9.º Dan", "9° Dan", "9th Dan"], DAN10: ["10.º Dan", "10° Dan", "10th Dan"],
+};
+
+export const QUALIFICATION_LABELS: Record<string, { icon: string; label: [string, string, string] }> = {
+  REF_COURSE: { icon: "🟨", label: ["Curso de arbitragem", "Corso di arbitraggio", "Refereeing course"] },
+  REFEREE: { icon: "🧑‍⚖️", label: ["Árbitro", "Arbitro", "Referee"] },
+  COACH1: { icon: "🎓", label: ["Treinador Grau I", "Allenatore 1° livello", "Coach Level 1"] },
 };
 
 export const BELT_COLORS: Record<string, string> = {
@@ -111,6 +185,8 @@ export function useGameText() {
   const i = gameLangIndex(locale);
   const g = (key: GameKey) => D[key][i];
   const belt = (code: string) => BELT_LABELS[code]?.[i] ?? code;
+  const grade = (code: string) => GRADE_LABELS[code]?.[i] ?? code;
+  const qualification = (code: string) => QUALIFICATION_LABELS[code]?.label[i] ?? code;
   const lang = GAME_LANGS[i];
-  return { g, belt, lang };
+  return { g, belt, grade, qualification, lang };
 }

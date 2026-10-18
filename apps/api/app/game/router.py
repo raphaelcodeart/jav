@@ -21,6 +21,13 @@ def _raise(exc: service.GameError) -> None:
     raise HTTPException(code, str(exc)) from exc
 
 
+class DiplomaRead(BaseModel):
+    code: str
+    kind: str
+    pct: int
+    on: str
+
+
 class MeRead(BaseModel):
     id: uuid.UUID
     display_name: str
@@ -34,6 +41,16 @@ class MeRead(BaseModel):
     position: int
     exams_passed: list[str]
     belt: str
+    grade: str
+    qualifications: list[str]
+    diplomas: list[DiplomaRead]
+
+
+class AttemptRow(BaseModel):
+    pct: int
+    score: int
+    passed: bool
+    on: str
 
 
 class QuizRead(BaseModel):
@@ -53,6 +70,16 @@ class QuizRead(BaseModel):
     best: int
     max: int
     attempts: int
+    lock_reason: str | None
+    group: str | None
+    qualification: str | None
+    min_grade: str | None
+    jp: str | None
+    focus: str | None
+    history: list[AttemptRow]
+    best_pct: int
+    passed_on: str | None
+    passed_pct: int | None
 
 
 class QuestionRead(BaseModel):
@@ -99,6 +126,7 @@ class FinishRead(BaseModel):
     pass_pct: int
     xp_earned: int
     new_belt: str | None
+    new_qualification: str | None
     level: int
     level_up: bool
     previous_best: int
@@ -133,6 +161,7 @@ class LeaderRow(BaseModel):
     xp: int
     level: int
     belt: str
+    grade: str
     career_belt: str | None
     is_me: bool
 

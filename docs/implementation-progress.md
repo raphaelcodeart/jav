@@ -1022,3 +1022,23 @@ di conoscenza il manuale completo del club (PDF).
 Test: `test_ext_courses.py`, `test_javbot_privacy.py`;
 `test_club_athlete_access` aggiornato alla nuova regola. Suite: tutto verde
 tranne `test_organizations` (noto, isolamento).
+
+## 18/10/2026 — Dojo Academy: gradi fino al 10° dan, corsi di arbitro e treinador, diplomi del gioco
+
+- Scala degli esami secondo il Manual e Regulamento de Graduações FPJ:
+  mezze cinture fino alla marrone, poi 1°–10° dan. +5 domande a ogni
+  esame fino alla marrone (5 … 50), poi +10 (1° dan, 60), +15, +20 … fino
+  al 10° dan (375). Meno secondi e soglia più alta salendo. Kata dei dan
+  dalla tabella 6.3 del regolamento (letta con le coordinate del PDF).
+- Banche nuove in `app/game/questions/` (~1.100 domande, pt/it/en, scritte
+  da agenti sulle fonti: manuale FPJ, corso Grau I ADJA, testi Kodokan,
+  regole IJF 2025–2028, ERC/INEM, WADA/ADoP). Le cinture colorate hanno i
+  kata solo «da lontano» (`kata_intro`); il dettaglio arriva al dan che li
+  porta. Marrone e 1° dan hanno sempre una domanda sul judo in Algarve, il
+  1° dan sempre una sulla nascita dell'ADJA (`EXAM_FEATURED`).
+- Corsi (`kind=COURSE`): arbitraggio (dal verde), arbitro (dalla blu, dopo
+  il corso), Treinador Grau I (dal 1° dan, 12 moduli). Qualifiche ricavate
+  dai tentativi superati, senza tabelle nuove (nessuna migrazione).
+- Frontend: caderneta del judoka (grado, prossimo esame, qualifiche), scala
+  kyu/dan, corsi con moduli, medagliere con diploma PNG «fac-simile» del
+  gioco. Judo Career e Randori invariati (`career_belt`).

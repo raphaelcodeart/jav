@@ -796,6 +796,21 @@ cinture, club e punti del gioco non sono quelli veri.
 
 - **⛶ Schermo intero**: ogni gioco ha il bottone in alto a destra; si esce
   con ✕ o con Esc. Sull'iPhone il gioco occupa tutta la pagina.
+- **Dojo Academy**: in alto la **caderneta** con il tuo grado del gioco, il
+  bottone del prossimo esame e le qualifiche (Curso de arbitragem, Árbitro,
+  Treinador Grau I). Tre schede:
+  - **Graduações**: in alto i tuoi numeri (esami superati, media,
+    tentativi, prossimo obiettivo), poi tutte le cinture da scorrere: tocca una
+    cintura per vedere il programma, i tuoi risultati (data e percentuale del
+    superamento, record, grafico degli ultimi tentativi) e scaricare il
+    diploma. La scala va dalle cinture intermedie della FPJ al 10° dan; ogni esame ha più domande del precedente (gialla 10 … 1° dan
+    60 … 10° dan 375). Sopra c'è il **medagliere**: tocca una medaglia per
+    scaricare il diploma del gioco (c'è scritto fac-simile: non vale come
+    graduação federativa).
+  - **Cursos e qualificações**: il corso di arbitraggio (dalla verde), poi
+    il corso per arbitro (dalla blu); il corso Treinador Grau I dal 1° dan,
+    12 moduli da 30 domande.
+  - **Percursos de estudo**: quiz per tema per allenarsi.
 - **Judo Career**: in alto resta sempre visibile il banner con la tua
   cintura e i contatori (tecnica, forza, mental, energia, salute, soldi,
   fama). Sul computer a sinistra c'è il **piano della settimana** (scegli

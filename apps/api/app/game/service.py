@@ -95,12 +95,34 @@ async def get_player(db: AsyncSession, *, user_id: uuid.UUID) -> GamePlayer:
 
 
 async def exams_passed(db: AsyncSession, *, player_id: uuid.UUID) -> list[str]:
+    """I gradi superati nella Academy, in ordine (BLACK è il 1° dan)."""
     rows = (await db.execute(select(GameBeltExam.belt).where(GameBeltExam.player_id == player_id))).scalars().all()
-    return sorted(rows, key=content.BELTS.index)
+    return sorted((r for r in rows if r in content.GRADES), key=content.GRADES.index)
+
+
+def top_grade(passed: list[str]) -> str:
+    return max(passed, key=content.GRADES.index) if passed else "WHITE"
 
 
 def top_belt(passed: list[str]) -> str:
-    return max(passed, key=content.BELTS.index) if passed else "WHITE"
+    """La cintura del personaggio (Judo Career, Randori) per i gradi superati."""
+    return content.career_belt(top_grade([p for p in passed if p in content.GRADES]))
+
+
+def _has_grade(passed: list[str], grade: str) -> bool:
+    """Ha il grado, o uno sopra (chi aveva già l'arancione prima delle mezze
+    cinture non deve rifare la gialla-arancione)."""
+    return grade == "WHITE" or content.GRADES.index(top_grade(passed)) >= content.GRADES.index(grade)
+
+
+def qualifications(best: dict[str, dict]) -> list[str]:
+    """Le qualifiche, dai corsi superati: il corso di arbitraggio, l'arbitro,
+    e il treinador di 1° livello quando tutti i moduli sono superati."""
+    out = [q.qualification for q in content.QUIZZES.values()
+           if q.kind == "COURSE" and q.qualification and best.get(q.id, {}).get("passed")]
+    if all(best.get(m, {}).get("passed") for m in content.COACH1_MODULES):
+        out.append("COACH1")
+    return out
 
 
 async def best_scores(db: AsyncSession, *, player_id: uuid.UUID) -> dict[str, dict]:
@@ -113,9 +135,32 @@ async def best_scores(db: AsyncSession, *, player_id: uuid.UUID) -> dict[str, di
     return {q: {"best": best or 0, "max": mx or 0, "attempts": n, "passed": bool(ok)} for q, best, mx, n, ok in rows}
 
 
+async def history(db: AsyncSession, *, player_id: uuid.UUID, per_quiz: int = 8) -> tuple[dict[str, list[dict]], dict[str, int]]:
+    """Gli ultimi tentativi conclusi di ogni quiz (dal più vecchio), per i
+    risultati salvati di ogni esame: percentuale, punti, superato, quando;
+    e la percentuale migliore di sempre."""
+    rows = (await db.execute(
+        select(GameQuizAttempt.quiz_id, GameQuizAttempt.correct, GameQuizAttempt.max_score, GameQuizAttempt.score,
+               GameQuizAttempt.passed, GameQuizAttempt.finished_at)
+        .where(GameQuizAttempt.player_id == player_id, GameQuizAttempt.finished_at.is_not(None))
+        .order_by(GameQuizAttempt.finished_at.desc())
+    )).all()
+    out: dict[str, list[dict]] = {}
+    best: dict[str, int] = {}
+    for quiz_id, correct, max_score, score, passed, at in rows:
+        total = max_score // 15 if max_score else 0
+        pct = round(100 * correct / total) if total else 0
+        best[quiz_id] = max(best.get(quiz_id, 0), pct)
+        items = out.setdefault(quiz_id, [])
+        if len(items) < per_quiz:
+            items.append({"pct": pct, "score": score, "passed": passed, "on": at.date().isoformat()})
+    return {k: list(reversed(v)) for k, v in out.items()}, best
+
+
 async def me(db: AsyncSession, *, user_id: uuid.UUID) -> dict:
     player = await get_player(db, user_id=user_id)
     passed = await exams_passed(db, player_id=player.id)
+    best = await best_scores(db, player_id=player.id)
     xp = player.quiz_xp + player.career_xp
     level = level_of(xp)
     low, high = level_bounds(level)
@@ -126,11 +171,48 @@ async def me(db: AsyncSession, *, user_id: uuid.UUID) -> dict:
         "id": player.id, "display_name": player.display_name, "club_label": player.club_label,
         "xp": xp, "quiz_xp": player.quiz_xp, "career_xp": player.career_xp,
         "level": level, "level_from": low, "level_to": high, "position": position,
-        "exams_passed": passed, "belt": top_belt(passed),
+        "exams_passed": passed, "belt": top_belt(passed), "grade": top_grade(passed),
+        "qualifications": qualifications(best),
+        "diplomas": await diplomas(db, player_id=player.id, best=best),
     }
 
 
+async def diplomas(db: AsyncSession, *, player_id: uuid.UUID, best: dict[str, dict]) -> list[dict]:
+    """Un attestato per ogni grado e qualifica: quando e con che percentuale.
+    È un attestato del gioco, finto (il frontend lo scrive: fac-simile)."""
+    out = [{"code": e.belt, "kind": "GRADE", "pct": e.score_pct, "on": e.passed_at.date().isoformat()}
+           for e in (await db.execute(select(GameBeltExam).where(GameBeltExam.player_id == player_id))).scalars()
+           if e.belt in content.GRADES]
+    out.sort(key=lambda d: content.GRADES.index(d["code"]))
+    quals = qualifications(best)
+    if quals:
+        # La data e la percentuale del primo tentativo superato del corso (per il treinador, dell'ultimo modulo).
+        rows = (await db.execute(
+            select(GameQuizAttempt.quiz_id, GameQuizAttempt.finished_at, GameQuizAttempt.correct, GameQuizAttempt.questions)
+            .where(GameQuizAttempt.player_id == player_id, GameQuizAttempt.passed.is_(True))
+            .order_by(GameQuizAttempt.finished_at)
+        )).all()
+        first: dict[str, tuple] = {}
+        for quiz_id, at, correct, qs in rows:
+            first.setdefault(quiz_id, (at, round(100 * correct / len(qs)) if qs else 0))
+        sources = {q.qualification: (q.id,) for q in content.QUIZZES.values() if q.kind == "COURSE" and q.qualification}
+        sources["COACH1"] = content.COACH1_MODULES
+        for code in quals:
+            got = [first[i] for i in sources[code] if i in first]
+            if got:
+                at = max(g[0] for g in got)
+                out.append({"code": code, "kind": "QUALIFICATION", "pct": round(sum(g[1] for g in got) / len(got)),
+                            "on": at.date().isoformat()})
+    return out
+
+
 # --- I quiz --------------------------------------------------------------------------------------------------
+
+def _ttl(quiz: content.Quiz) -> timedelta:
+    """Quanto resta aperto un tentativo: un'ora, o il doppio del tempo pieno
+    per gli esami lunghi (il 10° dan ha 375 domande)."""
+    return max(ATTEMPT_TTL, timedelta(seconds=quiz.size * quiz.seconds * 2))
+
 
 def _quiz(quiz_id: str) -> content.Quiz:
     quiz = content.QUIZZES.get(quiz_id)
@@ -139,12 +221,19 @@ def _quiz(quiz_id: str) -> content.Quiz:
     return quiz
 
 
-def _locked(quiz: content.Quiz, passed: list[str]) -> bool:
-    """Un esame si fa in ordine: il giallo, poi l'arancione..."""
-    if quiz.kind != "EXAM":
-        return False
-    need = content.BELTS[content.BELTS.index(quiz.belt) - 1]
-    return need != "WHITE" and need not in passed
+def _lock_reason(quiz: content.Quiz, passed: list[str], quals: list[str]) -> str | None:
+    """Perché un quiz è chiuso (None = aperto). Gli esami si fanno in ordine;
+    un corso vuole un grado minimo e a volte un altro corso prima."""
+    if quiz.kind == "EXAM":
+        need = content.GRADES[content.GRADES.index(quiz.belt) - 1]
+        return None if _has_grade(passed, need) else f"GRADE:{need}"
+    if quiz.kind == "COURSE":
+        if not _has_grade(passed, quiz.min_grade):
+            return f"GRADE:{quiz.min_grade}"
+        for q in quiz.requires:
+            if q not in quals:
+                return f"QUAL:{q}"
+    return None
 
 
 def _lang(lang: str | None) -> str:
@@ -157,15 +246,27 @@ async def list_quizzes(db: AsyncSession, *, user_id: uuid.UUID, lang: str | None
     player = await get_player(db, user_id=user_id)
     passed = await exams_passed(db, player_id=player.id)
     best = await best_scores(db, player_id=player.id)
-    return [
-        {
+    quals = qualifications(best)
+    past, best_pct = await history(db, player_id=player.id)
+    exams = {e.belt: e for e in (await db.execute(select(GameBeltExam).where(GameBeltExam.player_id == player.id))).scalars()}
+    out = []
+    for q in content.QUIZZES.values():
+        reason = _lock_reason(q, passed, quals)
+        out.append({
             "id": q.id, "kind": q.kind, "icon": q.icon, "title": q.title[lang], "description": q.description[lang],
             "topic": q.topic, "belt": q.belt, "questions": q.size, "seconds": q.seconds, "pass_pct": q.pass_pct,
-            "pass_xp": q.pass_xp, "locked": _locked(q, passed), "passed": q.belt in passed if q.belt else best.get(q.id, {}).get("passed", False),
+            "pass_xp": q.pass_xp, "locked": reason is not None, "lock_reason": reason,
+            "passed": q.belt in passed if q.kind == "EXAM" else best.get(q.id, {}).get("passed", False),
             "best": best.get(q.id, {}).get("best", 0), "max": q.size * 15, "attempts": best.get(q.id, {}).get("attempts", 0),
-        }
-        for q in content.QUIZZES.values()
-    ]
+            "group": q.group, "qualification": q.qualification, "min_grade": q.min_grade,
+            "jp": content.GRADE_JP.get(q.belt) if q.belt else None,
+            "focus": q.description[lang] if q.kind == "EXAM" else None,
+            "history": past.get(q.id, []),
+            "best_pct": best_pct.get(q.id, 0),
+            "passed_on": exams[q.belt].passed_at.date().isoformat() if q.kind == "EXAM" and q.belt in exams else None,
+            "passed_pct": exams[q.belt].score_pct if q.kind == "EXAM" and q.belt in exams else None,
+        })
+    return out
 
 
 def _public_question(q: content.Question, order: list[int], lang: str) -> dict:
@@ -176,20 +277,27 @@ async def start(db: AsyncSession, *, user_id: uuid.UUID, quiz_id: str, lang: str
     lang = _lang(lang)
     quiz = _quiz(quiz_id)
     player = await get_player(db, user_id=user_id)
-    if _locked(quiz, await exams_passed(db, player_id=player.id)):
-        raise GameError("Prima supera l'esame della cintura precedente.")
+    reason = _lock_reason(quiz, await exams_passed(db, player_id=player.id),
+                          qualifications(await best_scores(db, player_id=player.id)))
+    if reason is not None:
+        raise GameError("Prima supera l'esame precedente." if reason.startswith("GRADE") and quiz.kind == "EXAM"
+                        else "Questo corso non è ancora aperto per te.")
     rng = rng or random.SystemRandom()
     pool = content.questions_for(quiz)
     if quiz.kind == "EXAM":
         # Prima le domande proprio di questa cintura, poi le altre.
-        own = [q for q in pool if q.belt == quiz.belt]
-        rest = [q for q in pool if q.belt != quiz.belt]
+        level = content.grade_level(quiz.belt)
+        own = [q for q in pool if q.belt == level]
+        rest = [q for q in pool if q.belt != level]
         rng.shuffle(own)
         rng.shuffle(rest)
         # Almeno un terzo proprio della cintura; il resto da quelle prima, e
         # se non bastano ancora da quelle della cintura.
         k = max(3, quiz.size // 3)
-        chosen = (own[:k] + rest + own[k:])[: quiz.size]
+        featured = [content.BY_ID[rng.choice(group)] for group in content.EXAM_FEATURED.get(quiz.belt, ())]
+        own = [q for q in own if q not in featured]
+        rest = [q for q in rest if q not in featured]
+        chosen = (featured + own[:k] + rest + own[k:])[: quiz.size]
         rng.shuffle(chosen)
     else:
         chosen = rng.sample(pool, min(quiz.size, len(pool)))
@@ -225,7 +333,7 @@ async def answer(
     """`choice` è l'indice nell'ordine mostrato; None = tempo scaduto."""
     now = now or utcnow()
     attempt, _player = await _attempt(db, user_id=user_id, attempt_id=attempt_id)
-    if attempt.finished_at is not None or now - attempt.started_at > ATTEMPT_TTL:
+    if attempt.finished_at is not None or now - attempt.started_at > _ttl(_quiz(attempt.quiz_id)):
         raise GameError("Questo tentativo è chiuso: ricomincia il quiz.")
     item = next((p for p in attempt.questions if p["id"] == question_id), None)
     if item is None:
@@ -267,6 +375,8 @@ async def finish(db: AsyncSession, *, user_id: uuid.UUID, attempt_id: uuid.UUID,
             GameQuizAttempt.finished_at.is_not(None),
         )
     )).scalar_one() or 0
+    # Prima di chiudere il tentativo: dopo, la query lo conterebbe già superato.
+    best_before = await best_scores(db, player_id=player.id) if quiz.kind == "COURSE" else {}
     total = len(attempt.questions)
     pct = round(100 * attempt.correct / total) if total else 0
     attempt.passed = pct >= quiz.pass_pct
@@ -281,6 +391,13 @@ async def finish(db: AsyncSession, *, user_id: uuid.UUID, attempt_id: uuid.UUID,
             db.add(GameBeltExam(player_id=player.id, belt=quiz.belt, score_pct=pct, passed_at=now))
             xp += quiz.pass_xp
             new_belt = quiz.belt
+    new_qualification = None
+    if quiz.kind == "COURSE" and attempt.passed:
+        if not best_before.get(quiz.id, {}).get("passed"):
+            xp += quiz.pass_xp
+            before_quals = qualifications(best_before)
+            after_quals = qualifications({**best_before, quiz.id: {"passed": True}})
+            new_qualification = next((q for q in after_quals if q not in before_quals), None)
     before = level_of(player.quiz_xp + player.career_xp)
     attempt.xp_earned = xp
     player.quiz_xp += xp
@@ -289,6 +406,7 @@ async def finish(db: AsyncSession, *, user_id: uuid.UUID, attempt_id: uuid.UUID,
     return {
         "score": attempt.score, "max_score": attempt.max_score, "correct": attempt.correct, "total": total, "pct": pct,
         "passed": attempt.passed, "pass_pct": quiz.pass_pct, "xp_earned": xp, "new_belt": new_belt,
+        "new_qualification": new_qualification,
         "level": after, "level_up": after > before, "previous_best": previous_best,
     }
 
@@ -368,6 +486,7 @@ async def leaderboard(db: AsyncSession, *, user_id: uuid.UUID, scope: str = "all
             position, previous = i, total
         rows.append({"position": position, "display_name": p.display_name, "club_label": p.club_label, "xp": total,
                      "level": level_of(total), "belt": top_belt(belts.get(p.id, [])),
+                     "grade": top_grade([b for b in belts.get(p.id, []) if b in content.GRADES]),
                      "career_belt": careers.get(p.id), "is_me": p.id == player.id})
     # I club: la somma dell'XP dei loro giocatori.
     clubs = (await db.execute(

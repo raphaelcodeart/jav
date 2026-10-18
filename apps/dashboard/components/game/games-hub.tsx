@@ -7,7 +7,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { JudoCareer } from "@/components/game/career/judo-career";
 import { DojoAcademy } from "@/components/game/dojo-academy";
 import { GameFrame } from "@/components/game/game-frame";
-import { BELT_COLORS, useGameText } from "@/components/game/i18n";
+import { BeltSwatch } from "@/components/game/belt";
+import { BELT_COLORS, QUALIFICATION_LABELS, useGameText } from "@/components/game/i18n";
 import { ClubRandori } from "@/components/game/randori/club-randori";
 import { friendlyApiError } from "@/lib/api-error";
 import { cn } from "@/lib/cn";
@@ -20,10 +21,11 @@ import { cn } from "@/lib/cn";
 interface Me {
   id: string; display_name: string; club_label: string | null; xp: number; quiz_xp: number; career_xp: number;
   level: number; level_from: number; level_to: number; position: number; exams_passed: string[]; belt: string;
+  grade: string; qualifications: string[];
 }
 interface Board {
   scope: string;
-  rows: { position: number; display_name: string; club_label: string | null; xp: number; level: number; belt: string; career_belt: string | null; is_me: boolean }[];
+  rows: { position: number; display_name: string; club_label: string | null; xp: number; level: number; belt: string; grade: string; career_belt: string | null; is_me: boolean }[];
   clubs: { club_label: string; xp: number; players: number }[];
 }
 
@@ -103,7 +105,7 @@ export function GamesHub() {
 }
 
 function PlayerHero({ me, loading }: { me?: Me; loading: boolean }) {
-  const { g, belt } = useGameText();
+  const { g, belt, grade, qualification } = useGameText();
   if (loading || !me) return <Skeleton className="h-48" />;
   const span = Math.max(1, me.level_to - me.level_from);
   const pct = Math.min(100, Math.round(((me.xp - me.level_from) / span) * 100));
@@ -137,6 +139,18 @@ function PlayerHero({ me, loading }: { me?: Me; loading: boolean }) {
           <div className="mt-1 h-3 overflow-hidden rounded-full bg-white/15">
             <motion.div className="h-full rounded-full bg-gradient-to-r from-accent-300 to-fuchsia-400" initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 1 }} />
           </div>
+          <p className="mt-3 flex items-center gap-2 text-sm">
+            <BeltSwatch grade={me.grade} /> <span className="text-white/75">{g("currentGrade")}:</span> <strong>{grade(me.grade)}</strong>
+          </p>
+          {me.qualifications.length > 0 && (
+            <p className="mt-2 flex flex-wrap gap-1.5">
+              {me.qualifications.map((q) => (
+                <span key={q} className="rounded-full bg-emerald-400/20 px-2.5 py-0.5 text-xs font-semibold text-emerald-100 ring-1 ring-emerald-300/40">
+                  {QUALIFICATION_LABELS[q]?.icon} {qualification(q)}
+                </span>
+              ))}
+            </p>
+          )}
           <p className="mt-3 text-sm">🏅 {g("rank")} <strong className="font-display text-xl">#{me.position}</strong></p>
         </div>
       </div>
@@ -203,7 +217,7 @@ function RandoriArt() {
 }
 
 function Leaderboard({ hasClub }: { hasClub: boolean }) {
-  const { g, belt } = useGameText();
+  const { g, grade } = useGameText();
   const [scope, setScope] = useState<"all" | "club" | "clubs">("all");
   const board = useQuery({
     queryKey: ["game", "leaderboard", scope === "club" ? "club" : "all"],
@@ -242,7 +256,7 @@ function Leaderboard({ hasClub }: { hasClub: boolean }) {
               className={cn("flex items-center gap-3 rounded-2xl px-4 py-3", r.is_me ? "bg-accent-100 ring-2 ring-accent-300" : "bg-ink-50")}>
               <span className={cn("flex h-9 w-9 items-center justify-center rounded-full font-display",
                 r.position === 1 ? "bg-accent-400 text-ink-900" : r.position === 2 ? "bg-ink-300 text-ink-900" : r.position === 3 ? "bg-amber-700 text-white" : "bg-white text-ink-600")}>{r.position}</span>
-              <span className="h-3 w-8 shrink-0 rounded-full ring-1 ring-black/10" style={{ backgroundColor: BELT_COLORS[r.belt] }} title={belt(r.belt)} />
+              <span title={grade(r.grade ?? r.belt)}><BeltSwatch grade={r.grade ?? r.belt} className="h-3 w-9" /></span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-semibold text-ink-900">{r.display_name}{r.is_me ? ` (${g("you")})` : ""}</span>
                 <span className="block truncate text-xs text-ink-500">{r.club_label ?? "—"} · {g("level")} {r.level}</span>
