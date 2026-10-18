@@ -48,6 +48,7 @@ import { useI18n } from "@/lib/i18n/provider";
 import { feeLabel } from "@/lib/fee-label";
 import { shareOrCopyLink } from "@/lib/share-link";
 import { JudogiAdminPanel } from "@/components/club/judogi-admin-panel";
+import { JudogiWardrobe } from "@/components/club/judogi-wardrobe";
 import {
   CERTIFICATE_LABELS,
   FEE_KIND_LABELS,
@@ -75,7 +76,7 @@ import {
 
 export type ClubSection =
   | "overview" | "people" | "athletes" | "plans" | "accounting" | "fees" | "proofs" | "absence" | "certificates"
-  | "competitions" | "courses" | "calendar" | "attendance" | "daylog" | "lessons" | "belts" | "ranking" | "workhours"
+  | "competitions" | "wardrobe" | "courses" | "calendar" | "attendance" | "daylog" | "lessons" | "belts" | "ranking" | "workhours"
   | "shop-orders" | "judogi" | "site" | "messages" | "news" | "javbot" | "documents" | "settings";
 type Section = ClubSection;
 
@@ -100,6 +101,8 @@ export const CLUB_SECTIONS: { key: ClubSection; icon: string; group: "people" | 
   { key: "daylog", icon: "📝", group: "activity" },
   { key: "lessons", icon: "📓", group: "activity" },
   { key: "competitions", icon: "🏆", group: "activity" },
+  // I judogi di ogni atleta prima di una prova (judogi-wardrobe.tsx), e l'alta competizione.
+  { key: "wardrobe", icon: "🥋", group: "activity" },
   { key: "belts", icon: "🎖️", group: "activity" },
   { key: "ranking", icon: "📊", group: "activity" },
   { key: "workhours", icon: "👥", group: "club" },
@@ -119,7 +122,7 @@ export const CLUB_SECTIONS: { key: ClubSection; icon: string; group: "people" | 
  *  e ranking (club/kinds.py), e le stesse sezioni spariscono dal menu. */
 // Niente "Messaggi": l'unità non ha una pagina di club, chi scrive dal sito
 // scrive a JudoArteVida.
-const COURSES_UNIT_HIDDEN: ClubSection[] = ["competitions", "belts", "ranking", "messages"];
+const COURSES_UNIT_HIDDEN: ClubSection[] = ["competitions", "wardrobe", "belts", "ranking", "messages"];
 export function sectionsFor(kind: string | null | undefined) {
   const { courses } = kindFeatures(kind);
   return courses ? CLUB_SECTIONS.filter((s) => !COURSES_UNIT_HIDDEN.includes(s.key)) : CLUB_SECTIONS;
@@ -190,6 +193,7 @@ export function ClubAdminPanel({ section: controlled, onGo, canInvest = false }:
         {section === "workhours" && <StaffManagementPanel />}
         {section === "shop-orders" && <ClubShopPanel familyOrders={<ShopOrders />} />}
         {section === "judogi" && <JudogiAdminPanel />}
+        {section === "wardrobe" && features.competitions && <JudogiWardrobe />}
         {section === "site" && <ClubSiteEditor />}
         {section === "messages" && <ContactInbox mode="club" />}
         {section === "javbot" && <KnowledgePanel mode="club" />}
@@ -1041,6 +1045,11 @@ interface StaffRow {
   user_id: string;
   email: string;
   role: string;
+  /** Falso per un treinador che viene da un altro club (club/staff_clubs.py). */
+  home?: boolean;
+  /** ACTIVE, o REQUESTED finché il superadmin non approva. */
+  membership_status?: "ACTIVE" | "REQUESTED" | null;
+  name?: string | null;
 }
 
 /** Ciò che la segreteria cura del proprio club: le coordinate su cui le
@@ -1053,7 +1062,21 @@ function ClubSettingsSection() {
   const { data: club } = useCurrentClub();
   const { data: staff } = useQuery({ queryKey: ["club", "admin", "staff"], queryFn: () => clubGet<StaffRow[]>(A("/staff")) });
   const [adding, setAdding] = useState(false);
+  const [requesting, setRequesting] = useState(false);
   if (!club) return <Skeleton className="h-64" />;
+
+  /** Un treinador di un altro club esce da questo club; il suo account resta
+   *  nel club di origine. */
+  async function removeCoach(s: StaffRow) {
+    if (!window.confirm(t("staffClubs.removeConfirm", { name: s.name || s.email }))) return;
+    try {
+      await clubSend(A(`/coaches/${s.user_id}`), "DELETE");
+      await queryClient.invalidateQueries({ queryKey: ["club", "admin", "staff"] });
+      toast({ tone: "success", title: t("staffClubs.removed") });
+    } catch (e) {
+      toast({ tone: "error", title: t("staffClubs.failed"), text: (e as Error).message });
+    }
+  }
 
   async function copyLink() {
     if (!club) return;
@@ -1073,16 +1096,32 @@ function ClubSettingsSection() {
           </div>
         </div>
         <div className="glass-card rounded-3xl p-5 space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-base text-ink-900">{t("clubAdmin.staffTitle")}</h3>
-            <Button size="sm" onClick={() => setAdding(true)}>{t("clubs.addStaff")}</Button>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="secondary" onClick={() => setRequesting(true)}>🤝 {t("staffClubs.requestOpen")}</Button>
+              <Button size="sm" onClick={() => setAdding(true)}>{t("clubs.addStaff")}</Button>
+            </div>
           </div>
           {(staff ?? []).length === 0 ? <p className="text-sm text-ink-500">{t("clubs.noSecretary")}</p> : (
             <ul className="divide-y divide-ink-100">
               {(staff ?? []).map((s) => (
-                <li key={s.user_id} className="flex items-center justify-between py-2 text-sm">
-                  <span className="text-ink-900">{s.email}</span>
-                  <Badge tone={s.role === "SECRETARY" ? "brand" : "neutral"}>{t.dyn(`clubs.role.${s.role}`, s.role)}</Badge>
+                <li key={s.user_id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+                  <span className="min-w-0">
+                    {s.name && s.name !== s.email && <span className="block font-semibold text-ink-900">{s.name}</span>}
+                    <span className={s.name && s.name !== s.email ? "block text-xs text-ink-500" : "text-ink-900"}>{s.email}</span>
+                  </span>
+                  <span className="flex flex-wrap items-center gap-1.5">
+                    {s.membership_status === "REQUESTED"
+                      ? <Badge tone="warning" dot>⏳ {t("staffClubs.requested")}</Badge>
+                      : s.home === false && <Badge tone="info">🤝 {t("staffClubs.fromOtherClub")}</Badge>}
+                    <Badge tone={s.role === "SECRETARY" ? "brand" : "neutral"}>{t.dyn(`clubs.role.${s.role}`, s.role)}</Badge>
+                    {s.home === false && (
+                      <Button size="sm" variant="ghost" onClick={() => removeCoach(s)} aria-label={t("staffClubs.remove")} title={t("staffClubs.remove")}>
+                        ✕ <span className="hidden sm:inline">{t("staffClubs.remove")}</span>
+                      </Button>
+                    )}
+                  </span>
                 </li>
               ))}
             </ul>
@@ -1098,13 +1137,58 @@ function ClubSettingsSection() {
           title={t("clubs.addStaffTo", { name: club.name })}
           onClose={() => setAdding(false)}
           onSubmit={async (email, role) => {
-            const created = await clubSend<{ invite_link: string | null }>(A("/staff"), "POST", { email, role });
+            const created = await clubSend<{ invite_link: string | null; home?: boolean; membership_status?: string | null }>(A("/staff"), "POST", { email, role });
             await queryClient.invalidateQueries({ queryKey: ["club", "admin", "staff"] });
+            // Un istruttore che ha già l'account in un altro club: niente
+            // account nuovo, la richiesta è andata al superadmin.
+            if (created.home === false && created.membership_status === "REQUESTED") return "requested";
             return created.invite_link;
           }}
         />
       )}
+      {requesting && <RequestCoachModal onClose={() => setRequesting(false)} />}
     </div>
+  );
+}
+
+/** Chiedere al superadmin un treinador che ha già l'account in un altro
+ *  club: allenerà anche qui con lo stesso account, quando approva. */
+function RequestCoachModal({ onClose }: { onClose: () => void }) {
+  const { t } = useI18n();
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await clubSend<{ status: string }>(A("/coaches/request"), "POST", { email: email.trim() });
+      await queryClient.invalidateQueries({ queryKey: ["club", "admin", "staff"] });
+      toast(res.status === "ACTIVE"
+        ? { tone: "success", title: t("staffClubs.assigned") }
+        : { tone: "info", title: t("staffClubs.requestSent"), text: t("staffClubs.requestSentText", { email: email.trim() }) });
+      onClose();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose} title={t("staffClubs.requestOpen")} subtitle={t("staffClubs.requestHint")}
+      footer={<><Button variant="ghost" onClick={onClose}>{t("common.cancel")}</Button><Button onClick={submit} loading={busy} disabled={!email.includes("@")}>{t("staffClubs.requestSend")}</Button></>}
+    >
+      <div className="space-y-4">
+        <Field label="Email" htmlFor="coach-request-email">
+          <Input id="coach-request-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
+        </Field>
+        {error && <Badge tone="danger">{error}</Badge>}
+      </div>
+    </Modal>
   );
 }
 

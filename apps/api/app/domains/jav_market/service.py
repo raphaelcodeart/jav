@@ -324,6 +324,10 @@ async def create_product(
         credit_discount_percentage=int(payload.get("credit_discount_percentage") or 0),
         unit_cost_cents=payload.get("unit_cost_cents"),
         producer_id=payload.get("producer_id"),
+        audience_sex=payload.get("audience_sex") or "ALL",
+        high_competition_only=bool(payload.get("high_competition_only")),
+        club_kit=bool(payload.get("club_kit")),
+        needs_name=bool(payload.get("needs_name")),
     )
     db.add(product)
     await db.flush()
@@ -346,6 +350,7 @@ def _add_variant(db: AsyncSession, *, product_id: uuid.UUID, payload: dict) -> N
         price_cents=price,
         inventory=payload.get("inventory"),
         active=payload.get("active", True),
+        max_height_cm=payload.get("max_height_cm"),
     ))
 
 
@@ -365,7 +370,8 @@ async def update_product(
         if producer is None or producer.organization_id != organization_id:
             raise JavMarketNotFoundError("Azienda produttrice non trovata.")
     for field in ("name", "description", "image_url", "images", "status",
-                  "credit_discount_percentage", "unit_cost_cents", "producer_id"):
+                  "credit_discount_percentage", "unit_cost_cents", "producer_id",
+                  "audience_sex", "high_competition_only", "club_kit", "needs_name"):
         if field in payload and payload[field] is not None:
             setattr(product, field, payload[field])
     # La foto si puo' anche togliere: un null esplicito qui vuol dire "senza foto".
@@ -390,9 +396,12 @@ async def update_variant(
         raise JavMarketNotFoundError("Variante non trovata.")
     if "price_cents" in payload and payload["price_cents"] is not None and int(payload["price_cents"]) <= 0:
         raise JavMarketValidationError("Il prezzo deve essere maggiore di zero.")
-    for field in ("label", "sku", "image_url", "price_cents", "inventory", "active"):
+    for field in ("label", "sku", "image_url", "price_cents", "inventory", "active", "max_height_cm"):
         if field in payload and payload[field] is not None:
             setattr(variant, field, payload[field])
+    # Come la scorta, l'altezza si può togliere: null = nessuna taglia suggerita.
+    if "max_height_cm" in payload and payload["max_height_cm"] is None:
+        variant.max_height_cm = None
     await db.commit()
     await db.refresh(variant)
     return variant
@@ -526,12 +535,16 @@ async def product_read_dict(
         "status": product.status,
         "credit_discount_percentage": product.credit_discount_percentage,
         "club_id": product.club_id,
+        "audience_sex": product.audience_sex,
+        "high_competition_only": product.high_competition_only,
+        "club_kit": product.club_kit,
+        "needs_name": product.needs_name,
         "producer": producer_read_dict(producer) if admin else producer_public_dict(producer),
         "variants": [
             {
                 "id": v.id, "label": v.label, "sku": v.sku, "image_url": v.image_url,
                 "price_cents": v.price_cents, "inventory": v.inventory, "active": v.active,
-                "in_stock": variant_sellable(v),
+                "in_stock": variant_sellable(v), "max_height_cm": v.max_height_cm,
             }
             for v in variants
         ],
@@ -966,6 +979,12 @@ async def create_order(
     quote = await get_quote(
         db, organization_id=organization_id, customer_user_id=customer_user_id, lines=order_lines
     )
+    if quote["seller_club_id"] is not None:
+        # Lo shop di un club si compra dalla sua Loja (club/loja.py): ogni
+        # articolo un ordine con la sua quota, pagata con il resto delle
+        # quote. Un ordine dello Shop qui sarebbe un secondo debito, fuori
+        # dalle quote e dalla home.
+        raise JavMarketValidationError("Questo articolo si compra dalla Loja del club.")
     row = await get_settings_row(db, organization_id=organization_id)
     amount = quote["amount_cents"]
     if quote["min_order_missing_cents"] > 0:
@@ -997,8 +1016,6 @@ async def create_order(
         if wallet.balance_cents < credit_applied_cents:
             raise wallets_service.InsufficientBalanceError("Saldo JavCash insufficiente.")
 
-    if quote["seller_club_id"] is not None and credit_applied_cents:
-        raise JavMarketValidationError("Il credito JavCash vale solo nello shop di JudoArteVida.")
     order = JavMarketOrder(
         organization_id=organization_id,
         club_id=quote["seller_club_id"],

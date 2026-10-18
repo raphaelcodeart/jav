@@ -28,6 +28,9 @@ export interface NavItem {
   /** Il titolo del gruppo nel menu laterale ("Club", "Shop", ...): una voce
       che cambia gruppo rispetto alla precedente apre un'intestazione. */
   group?: string;
+  /** L'etichetta corta per la barra in basso del telefono, dove ci stanno
+      una decina di lettere ("Presenças" invece di "Presenças de hoje"). */
+  shortLabel?: string;
 }
 
 interface AppShellProps {
@@ -258,36 +261,45 @@ function NotificationBell({ onOpenNotification }: { onOpenNotification: (n: Noti
 }
 
 /** In alto a sinistra: il logo del club nelle sue aree (se l'ha caricato),
- *  altrimenti JAV. */
-function LogoMark({ compact = false, branding }: { compact?: boolean; branding?: ClubBranding | null }) {
-  if (branding?.logo_url) {
-    return (
-      <div className="flex items-center gap-3 min-w-0">
-        <motion.div whileHover={{ rotate: -6, scale: 1.05 }} className="shrink-0 rounded-2xl bg-white shadow-soft ring-1 ring-ink-100 p-1">
-          {/* eslint-disable-next-line @next/next/no-img-element -- logo caricato dal club */}
-          <img src={branding.logo_url} alt={branding.name} className={compact ? "h-9 w-9 object-contain" : "h-11 w-11 object-contain"} />
-        </motion.div>
-        {!compact && (
-          <div className="min-w-0 leading-tight">
-            <p className="font-display text-base leading-tight text-ink-900 line-clamp-2">{branding.name}</p>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-ink-400 truncate">JAV · Judo Arte e Vida</p>
-          </div>
-        )}
-      </div>
-    );
-  }
-  return (
-    <div className="flex items-center gap-3 min-w-0">
-      <motion.div whileHover={{ rotate: -6, scale: 1.05 }} className="shrink-0 rounded-2xl bg-white shadow-soft ring-1 ring-ink-100 p-1">
-        <Image src="/logo.png" alt="Jav" width={compact ? 36 : 44} height={compact ? 33 : 40} priority className="h-auto w-auto" />
-      </motion.div>
+ *  altrimenti JAV. È anche il bottone per tornare all'inizio dell'area, come
+ *  nelle app: lo stesso della prima voce del menu. Il logo sta intero in un
+ *  cerchio bianco (object-contain), mai ritagliato. */
+function LogoMark({ compact = false, branding, onHome, homeLabel }: {
+  compact?: boolean; branding?: ClubBranding | null; onHome?: () => void; homeLabel?: string;
+}) {
+  const content = branding?.logo_url ? (
+    <>
+      <motion.span whileHover={{ rotate: -6, scale: 1.05 }}
+        className={`flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-white p-1.5 shadow-soft ring-1 ring-ink-100 ${compact ? "h-12 w-12" : "h-14 w-14"}`}>
+        {/* eslint-disable-next-line @next/next/no-img-element -- logo caricato dal club */}
+        <img src={branding.logo_url} alt={branding.name} className="h-full w-full object-contain" />
+      </motion.span>
       {!compact && (
-        <div className="min-w-0 leading-tight">
-          <p className="font-display text-lg text-ink-900">JAV</p>
-          <p className="text-[11px] font-semibold tracking-wide text-ink-500 truncate">Judo Arte e Vida</p>
-        </div>
+        <span className="min-w-0 text-left leading-tight">
+          <span className="block font-display text-base leading-tight text-ink-900 line-clamp-2">{branding.name}</span>
+          <span className="block text-[10px] font-semibold uppercase tracking-wider text-ink-400 truncate">JAV · Judo Arte e Vida</span>
+        </span>
       )}
-    </div>
+    </>
+  ) : (
+    <>
+      <motion.span whileHover={{ rotate: -6, scale: 1.05 }} className="shrink-0 rounded-2xl bg-white shadow-soft ring-1 ring-ink-100 p-1">
+        <Image src="/logo.png" alt="Jav" width={compact ? 36 : 44} height={compact ? 33 : 40} priority className="h-auto w-auto" />
+      </motion.span>
+      {!compact && (
+        <span className="min-w-0 text-left leading-tight">
+          <span className="block font-display text-lg text-ink-900">JAV</span>
+          <span className="block text-[11px] font-semibold tracking-wide text-ink-500 truncate">Judo Arte e Vida</span>
+        </span>
+      )}
+    </>
+  );
+  if (!onHome) return <div className="flex items-center gap-3 min-w-0">{content}</div>;
+  return (
+    <button type="button" onClick={onHome} aria-label={homeLabel} title={homeLabel}
+      className="flex items-center gap-3 min-w-0 cursor-pointer rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
+      {content}
+    </button>
   );
 }
 
@@ -455,6 +467,12 @@ export function AppShell({
     if (targetKey) onNavigate(targetKey);
   }
 
+  // Il logo porta all'inizio dell'area: la prima voce del menu è sempre la
+  // home (Início dell'atleta, Panoramica della segreteria, Início del treinador).
+  const homeKey = navItems[0]?.key;
+  const goHome = homeKey ? () => onNavigate(homeKey) : undefined;
+  const homeLabel = navItems[0] ? t("staffClubs.logoHome", { section: navItems[0].label }) : undefined;
+
   const name = (email ?? "").split("@")[0]?.split(/[._-]/)[0] ?? "";
   const displayName = name ? name.charAt(0).toUpperCase() + name.slice(1) : "";
   const sidebarWidth = collapsed ? "lg:w-[88px]" : "lg:w-72";
@@ -467,7 +485,7 @@ export function AppShell({
       <aside className={`hidden lg:flex fixed inset-y-0 left-0 z-30 p-3 transition-[width] duration-300 ${sidebarWidth}`}>
         <div className="flex h-full w-full flex-col rounded-3xl bg-white/90 backdrop-blur-xl ring-1 ring-ink-200/70 shadow-soft overflow-hidden">
           <div className={`flex items-center ${collapsed ? "justify-center" : "justify-between"} px-4 pt-5 pb-4`}>
-            <LogoMark compact={collapsed} branding={branding} />
+            <LogoMark compact={collapsed} branding={branding} onHome={goHome} homeLabel={homeLabel} />
           </div>
 
           <nav className="flex-1 overflow-y-auto overflow-x-hidden px-3 space-y-1">
@@ -538,7 +556,7 @@ export function AppShell({
         <div className="flex items-center justify-between gap-3 px-4 sm:px-6 lg:px-8 h-[72px] bg-white/75 backdrop-blur-xl border-b border-ink-100/80">
           <div className="flex items-center gap-3 min-w-0">
             <div className="lg:hidden">
-              <LogoMark compact branding={branding} />
+              <LogoMark compact branding={branding} onHome={goHome} homeLabel={homeLabel} />
             </div>
             <div className="min-w-0 hidden sm:block">
               {/* The greeting depends on the user's clock, which the server
@@ -595,7 +613,7 @@ export function AppShell({
 
       {/* Mobile bottom tab bar: a floating pill above the home indicator,
           big touch targets, a bubble that slides to the active tab. */}
-      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 px-3 pb-[max(env(safe-area-inset-bottom),12px)] pointer-events-none">
+      {navItems.length > 0 && <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 px-3 pb-[max(env(safe-area-inset-bottom),12px)] pointer-events-none">
         <div className="pointer-events-auto mx-auto max-w-md flex items-stretch rounded-[28px] bg-white/95 backdrop-blur-xl ring-1 ring-ink-200 shadow-lift p-1.5">
           {navItems.slice(0, MOBILE_TAB_COUNT).map((item) => {
             const active = item.key === activeKey;
@@ -617,7 +635,7 @@ export function AppShell({
                   {item.icon}
                   {hasUnread && <span className="absolute -top-0.5 -right-1 h-2.5 w-2.5 rounded-full bg-accent-400 ring-2 ring-white" />}
                 </span>
-                <span className="relative text-[10px] font-bold truncate max-w-[72px]">{item.label}</span>
+                <span className="relative text-[10px] font-bold truncate max-w-[72px]">{item.shortLabel ?? item.label}</span>
               </button>
             );
           })}
@@ -632,7 +650,7 @@ export function AppShell({
             </button>
           )}
         </div>
-      </nav>
+      </nav>}
 
       {/* Mobile "Altro": every section as a big tile in a bottom sheet. */}
       <AnimatePresence>

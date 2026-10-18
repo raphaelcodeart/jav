@@ -23,7 +23,11 @@ Chi compra:
 
 L'ordine diventa una quota `EQUIPMENT` dell'atleta (period = id
 dell'ordine, quindi una sola per ordine): si paga come ogni altra quota,
-con la prova di pagamento, in contanti o al POS.
+con la prova di pagamento, in contanti o al POS. Dalla Loja (club/loja.py)
+il judogi passa dal carrello insieme all'equipaggiamento, ma resta un
+ordine di judogi a sé: è l'armadio dell'atleta, che segreteria e treinador
+guardano prima delle gare. La permuta può indicare un judogi dell'armadio
+(`owned_order_id`): alla consegna del nuovo esce dall'armadio.
 """
 
 import csv
@@ -44,6 +48,7 @@ from app.domains.club.operations_models import (
     JUDOGI_COLORS,
     KIMONO_TYPES,
     ClubEquipmentOrder,
+    ClubJudogiModel,
     ClubJudogiPrice,
     ClubWishlistItem,
 )
@@ -67,6 +72,8 @@ TYPE_PT = {
 #: ("azul", "rosa", "branco").
 COLOR_PT = {"WHITE": "Branco", "BLUE": "Azul", "PINK": "Rosa", "WHITE_PINK_STRIPES": "Branco Riscas Rosa"}
 STATUS_PT = {"PENDING": "Pendente", "IN_PREPARATION": "Em preparação", "DELIVERED": "Entregue", "CANCELLED": "Cancelado"}
+#: Dal nome del colore di un ordine vecchio (senza `color_code`) al codice.
+COLOR_FROM_PT = {v.lower(): k for k, v in COLOR_PT.items()}
 
 
 # --- Il listino di partenza -----------------------------------------------------------------------
@@ -146,7 +153,32 @@ async def seed_prices(db: AsyncSession, *, club: Club) -> int:
     for kind, brand, color, size, cents in rows:
         db.add(ClubJudogiPrice(organization_id=club.organization_id, club_id=club.id, kimono_type=kind,
                                brand=brand, color=color, size_cm=size, price_cents=cents, active=True))
+    await db.flush()
+    await ensure_models(db, club_id=club.id, organization_id=club.organization_id)
     return len(rows)
+
+
+async def ensure_models(db: AsyncSession, *, club_id: uuid.UUID, organization_id: uuid.UUID) -> int:
+    """Un modello (la scheda con le foto) per ogni tipo + marca + colore del
+    listino che non ce l'ha ancora. Non fa commit."""
+    have = set((await db.execute(select(
+        ClubJudogiModel.kimono_type, ClubJudogiModel.brand, ClubJudogiModel.color,
+    ).where(ClubJudogiModel.club_id == club_id))).all())
+    combos = set((await db.execute(select(
+        ClubJudogiPrice.kimono_type, ClubJudogiPrice.brand, ClubJudogiPrice.color,
+    ).where(ClubJudogiPrice.club_id == club_id).distinct())).all())
+    missing = combos - have
+    for kind, brand, color in sorted(missing):
+        db.add(ClubJudogiModel(organization_id=organization_id, club_id=club_id, kimono_type=kind, brand=brand,
+                               color=color, images=[]))
+    if missing:
+        await db.flush()
+    return len(missing)
+
+
+async def models_of(db: AsyncSession, *, club_id: uuid.UUID) -> dict[tuple[str, str, str], ClubJudogiModel]:
+    rows = (await db.execute(select(ClubJudogiModel).where(ClubJudogiModel.club_id == club_id))).scalars()
+    return {(m.kimono_type, m.brand, m.color): m for m in rows}
 
 
 # --- Impostazioni e listino -----------------------------------------------------------------------
@@ -196,9 +228,14 @@ def pick_size(sizes: list[int], height_cm: int | None) -> int | None:
     return next((s for s in ordered if s >= height_cm), ordered[-1])
 
 
-def price_tree(rows: list[ClubJudogiPrice], *, height_cm: int | None = None) -> list[dict]:
+def price_tree(
+    rows: list[ClubJudogiPrice], *, height_cm: int | None = None,
+    models: dict[tuple[str, str, str], ClubJudogiModel] | None = None,
+) -> list[dict]:
     """Il listino come lo percorre il calcolatore: tipo → colore → marca →
-    taglie con il prezzo, con la taglia consigliata per l'altezza."""
+    taglie con il prezzo, con la taglia consigliata per l'altezza e le foto
+    del modello."""
+    models = models or {}
     tree: dict[str, dict[str, dict[str, dict[int, int]]]] = {}
     for r in rows:
         tree.setdefault(r.kimono_type, {}).setdefault(r.color, {}).setdefault(r.brand, {})[r.size_cm] = r.price_cents
@@ -214,6 +251,10 @@ def price_tree(rows: list[ClubJudogiPrice], *, height_cm: int | None = None) -> 
             colors.append({"code": color, "label": COLOR_PT[color], "brands": [
                 {
                     "name": brand,
+                    "model_id": models[(kind, brand, color)].id if (kind, brand, color) in models else None,
+                    "image_url": models[(kind, brand, color)].image_url if (kind, brand, color) in models else None,
+                    "images": (models[(kind, brand, color)].images or []) if (kind, brand, color) in models else [],
+                    "description": models[(kind, brand, color)].description if (kind, brand, color) in models else None,
                     "sizes": [{"size_cm": s, "price_cents": p} for s, p in sorted(sizes.items())],
                     "min_price_cents": min(sizes.values()),
                     "suggested_size_cm": pick_size(list(sizes), height_cm),
@@ -247,10 +288,33 @@ async def _lookup(db: AsyncSession, *, club_id: uuid.UUID, kind: str, color: str
     return size, prices[size]
 
 
-async def quote(db: AsyncSession, *, club: Club, choice: dict, height_cm: int | None = None) -> dict:
+async def owned_judogi(db: AsyncSession, *, athlete_id: uuid.UUID, order_id) -> ClubEquipmentOrder:
+    """Un judogi dell'armadio dell'atleta (consegnato e non ritirato)."""
+    try:
+        oid = order_id if isinstance(order_id, uuid.UUID) else uuid.UUID(str(order_id))
+    except ValueError as exc:
+        raise ClubValidationError("Judogi restituito non trovato.") from exc
+    order = await db.get(ClubEquipmentOrder, oid)
+    if (order is None or order.athlete_id != athlete_id or order.kind != "JUDOGI" or order.status != "DELIVERED"
+            or order.retired_on is not None):
+        raise ClubValidationError("Questo judogi non è più nell'armadio dell'atleta.")
+    return order
+
+
+def owned_choice(order: ClubEquipmentOrder) -> dict:
+    """Il judogi dell'armadio come scelta del calcolatore (per la permuta)."""
+    color = order.color_code or COLOR_FROM_PT.get((order.color or "").lower())
+    return {"kimono_type": order.kimono_type, "color": color, "brand": order.brand, "size_cm": order.size_cm,
+            "owned_order_id": str(order.id)}
+
+
+async def quote(
+    db: AsyncSession, *, club: Club, choice: dict, height_cm: int | None = None, athlete_id: uuid.UUID | None = None,
+) -> dict:
     """Il conto del calcolatore, sempre sul server: il browser manda le
     scelte (tipo, colore, marca, taglia o altezza, judogi restituito), mai
-    un importo."""
+    un importo. Un judogi restituito dell'armadio (`owned_order_id`, con
+    l'atleta) si legge dall'ordine, non da ciò che manda il browser."""
     cfg = settings_of(club)
     kind, color, brand = choice.get("kimono_type"), choice.get("color"), (choice.get("brand") or "").strip()
     size, base = await _lookup(db, club_id=club.id, kind=kind, color=color, brand=brand,
@@ -258,6 +322,10 @@ async def quote(db: AsyncSession, *, club: Club, choice: dict, height_cm: int | 
     trade = choice.get("trade_in")
     trade_out = None
     discount = 0
+    if trade and trade.get("owned_order_id"):
+        if athlete_id is None:
+            raise ClubValidationError("Per restituire un judogi dell'armadio scegli l'atleta.")
+        trade = owned_choice(await owned_judogi(db, athlete_id=athlete_id, order_id=trade["owned_order_id"]))
     if trade:
         t_brand = (trade.get("brand") or "").strip()
         t_size, value = await _lookup(db, club_id=club.id, kind=trade.get("kimono_type"), color=trade.get("color"),
@@ -268,7 +336,7 @@ async def quote(db: AsyncSession, *, club: Club, choice: dict, height_cm: int | 
         trade_out = {"kimono_type": trade["kimono_type"], "type_label": TYPE_PT[trade["kimono_type"]],
                      "color": trade["color"], "color_label": COLOR_PT[trade["color"]], "brand": t_brand,
                      "size_cm": t_size, "value_cents": value, "percent": cfg["trade_in_percent"],
-                     "discount_cents": discount}
+                     "discount_cents": discount, "owned_order_id": trade.get("owned_order_id")}
     subtotal = base + cfg["customization_cents"]
     return {
         "kimono_type": kind, "type_label": TYPE_PT[kind], "color": color, "color_label": COLOR_PT[color],
@@ -327,46 +395,68 @@ def check_name(name: str, athlete: ClubAthlete, today: date) -> str:
     return clean
 
 
-def athlete_dict(athlete: ClubAthlete, mode: str, today: date) -> dict:
+def athlete_dict(athlete: ClubAthlete, mode: str, today: date, *, high_competition: bool = False) -> dict:
     age = age_on(athlete.birth_date, today)
     return {
         "id": athlete.id, "name": f"{athlete.first_name} {athlete.last_name}", "first_name": athlete.first_name,
         "photo_url": athlete.photo_url, "sex": athlete.sex, "age": age, "height_cm": athlete.height_cm,
         "mode": mode, "kimono_name": name_prefill(athlete, today), "single_name_only": age < NAME_RULE_AGE,
+        "high_competition": high_competition,
     }
 
 
 # --- Ordini ---------------------------------------------------------------------------------------
 
 
+def order_title(order: ClubEquipmentOrder) -> str:
+    """Come si chiama un ordine nelle notifiche, nelle quote e nel CSV."""
+    if order.kind == "PRODUCT":
+        label = f" {order.variant_label}" if order.variant_label and order.variant_label != "Unica" else ""
+        qty = f"{order.quantity} × " if order.quantity > 1 else ""
+        return f"{qty}{order.product_name}{label}"
+    return f"Judogi {order.brand} {order.color} {order.size_cm} cm"
+
+
 def order_dict(order: ClubEquipmentOrder, athlete: ClubAthlete | None = None, fee: ClubFee | None = None) -> dict:
     return {
-        "id": order.id, "athlete_id": order.athlete_id,
+        "id": order.id, "athlete_id": order.athlete_id, "kind": order.kind, "origin": order.origin,
+        "title": order_title(order),
         "athlete_name": f"{athlete.first_name} {athlete.last_name}" if athlete else None,
         "kimono_name": order.kimono_name, "kimono_type": order.kimono_type,
-        "type_label": TYPE_PT.get(order.kimono_type, order.kimono_type),
+        "type_label": TYPE_PT.get(order.kimono_type, order.kimono_type) if order.kimono_type else None,
         "color": order.color_code, "color_label": order.color, "brand": order.brand, "size_cm": order.size_cm,
         "price_cents": order.price_cents, "base_price_cents": order.base_price_cents,
         "customization_cents": order.customization_cents, "trade_in_discount_cents": order.trade_in_discount_cents,
         "trade_in": order.trade_in, "notes": order.notes, "status": order.status,
         "fee_id": order.fee_id, "fee_status": fee.status if fee else None,
         "delivered_on": order.delivered_on, "created_at": order.created_at,
+        "product_id": order.product_id, "variant_id": order.variant_id, "product_name": order.product_name,
+        "variant_label": order.variant_label, "quantity": order.quantity, "unit_price_cents": order.unit_price_cents,
+        "retired_on": order.retired_on, "retired_reason": order.retired_reason,
     }
 
 
-async def create_order(
+async def place_order(
     db: AsyncSession, *, scope: ClubScope, club: Club, athlete: ClubAthlete, actor_user_id: uuid.UUID,
-    data: dict, today: date, wish: ClubWishlistItem | None = None,
-) -> ClubEquipmentOrder:
+    data: dict, today: date, wish: ClubWishlistItem | None = None, check_rules: bool = True,
+) -> tuple[ClubEquipmentOrder, dict]:
     """L'ordine del judogi, con il conto rifatto qui e la quota EQUIPMENT
-    da pagare. Chi può ordinare lo decide il chiamante (athlete_for: BUY, o
-    la segreteria)."""
-    q = await quote(db, club=club, choice=data, height_cm=data.get("height_cm") or athlete.height_cm)
+    da pagare, senza commit né notifiche (il carrello della Loja ne crea
+    più d'uno insieme). Chi può ordinare lo decide il chiamante (athlete_for:
+    BUY, o la segreteria); per chi è il judogi (FIJ solo per l'alta
+    competizione, il rosa solo per le ragazze) lo controlla qui, salvo
+    `check_rules=False` (la segreteria al banco)."""
+    q = await quote(db, club=club, choice=data, height_cm=data.get("height_cm") or athlete.height_cm,
+                    athlete_id=athlete.id)
+    if check_rules:
+        from app.domains.club import loja
+
+        await loja.check_judogi(db, athlete=athlete, kimono_type=q["kimono_type"], color=q["color"])
     name = check_name(data.get("kimono_name") or "", athlete, today)
     order = ClubEquipmentOrder(
-        **scope.columns(), athlete_id=athlete.id, requested_by_user_id=actor_user_id, kimono_name=name,
-        kimono_type=q["kimono_type"], color=q["color_label"], color_code=q["color"], brand=q["brand"],
-        size_cm=q["size_cm"], price_cents=q["total_cents"], base_price_cents=q["base_price_cents"],
+        **scope.columns(), athlete_id=athlete.id, requested_by_user_id=actor_user_id, kind="JUDOGI",
+        kimono_name=name, kimono_type=q["kimono_type"], color=q["color_label"], color_code=q["color"],
+        brand=q["brand"], size_cm=q["size_cm"], price_cents=q["total_cents"], base_price_cents=q["base_price_cents"],
         customization_cents=q["customization_cents"], trade_in_discount_cents=q["trade_in_discount_cents"],
         trade_in=q["trade_in"], notes=(data.get("notes") or "").strip()[:2000] or None, status="PENDING",
     )
@@ -381,7 +471,7 @@ async def create_order(
     if q["total_cents"] > 0:
         fee = ClubFee(
             **scope.columns(), athlete_id=athlete.id, kind="EQUIPMENT", period=str(order.id),
-            description=f"Judogi {q['brand']} {q['color_label']} {q['size_cm']} cm"[:200],
+            description=order_title(order)[:200],
             amount_cents=q["total_cents"], gross_amount_cents=q["subtotal_cents"],
             discount_cents=q["trade_in_discount_cents"],
             discount_note=(f"Devolução de judogi usado −{q['trade_in']['percent']}%" if q["trade_in"] else None),
@@ -399,6 +489,17 @@ async def create_order(
         new_value={"athlete_id": str(athlete.id), "total_cents": q["total_cents"], "brand": q["brand"],
                    "size_cm": q["size_cm"], "wish_id": str(wish.id) if wish else None},
     )
+    return order, q
+
+
+async def create_order(
+    db: AsyncSession, *, scope: ClubScope, club: Club, athlete: ClubAthlete, actor_user_id: uuid.UUID,
+    data: dict, today: date, wish: ClubWishlistItem | None = None, check_rules: bool = True,
+) -> ClubEquipmentOrder:
+    """Un judogi ordinato da solo (fuori dal carrello): l'ordine, il commit e
+    l'avviso alla segreteria."""
+    order, q = await place_order(db, scope=scope, club=club, athlete=athlete, actor_user_id=actor_user_id,
+                                 data=data, today=today, wish=wish, check_rules=check_rules)
     await db.commit()
     await db.refresh(order)
     from app.domains.club.clubs import notify_club_staff
@@ -431,7 +532,7 @@ async def admin_orders(
         select(ClubEquipmentOrder, ClubAthlete, ClubFee)
         .join(ClubAthlete, ClubAthlete.id == ClubEquipmentOrder.athlete_id)
         .outerjoin(ClubFee, ClubFee.id == ClubEquipmentOrder.fee_id)
-        .where(ClubEquipmentOrder.club_id == scope.club_id)
+        .where(ClubEquipmentOrder.club_id == scope.club_id, ClubEquipmentOrder.origin == "ORDER")
     )
     if status:
         stmt = stmt.where(ClubEquipmentOrder.status == status)
@@ -441,6 +542,7 @@ async def admin_orders(
         stmt = stmt.where(or_(
             (ClubAthlete.first_name + " " + ClubAthlete.last_name).ilike(like),
             ClubEquipmentOrder.kimono_name.ilike(like), ClubEquipmentOrder.brand.ilike(like),
+            ClubEquipmentOrder.product_name.ilike(like),
         ))
     rows = (await db.execute(stmt.order_by(ClubEquipmentOrder.created_at.desc()))).all()
     return [order_dict(o, a, f) for o, a, f in rows]
@@ -474,6 +576,19 @@ async def update_order(
             raise ClubValidationError("Prima di far avanzare l'ordine scrivi il prezzo del judogi.")
         order.status = status
         order.delivered_on = today if status == "DELIVERED" else order.delivered_on
+        owned = (order.trade_in or {}).get("owned_order_id")
+        if status == "DELIVERED" and owned:
+            # Il judogi restituito con la permuta esce dall'armadio quando
+            # arriva quello nuovo.
+            returned = await db.get(ClubEquipmentOrder, uuid.UUID(str(owned)))
+            if returned is not None and returned.athlete_id == order.athlete_id and returned.retired_on is None:
+                returned.retired_on, returned.retired_reason = today, "TRADED_IN"
+        if status == "CANCELLED" and order.kind == "PRODUCT" and order.variant_id is not None and old != "DELIVERED":
+            from app.domains.jav_market.models import JavMarketVariant
+
+            variant = await db.get(JavMarketVariant, order.variant_id)
+            if variant is not None and variant.inventory is not None:
+                variant.inventory += order.quantity
         if status == "CANCELLED" and order.fee_id is not None:
             fee = await db.get(ClubFee, order.fee_id)
             in_proof = fee is not None and (await db.execute(
@@ -488,8 +603,10 @@ async def update_order(
             await notifications_service.notify_user(
                 db, organization_id=scope.organization_id, user_id=athlete.guardian_user_id,
                 type_="CLUB_JUDOGI_ORDER_STATUS", entity_type="club_equipment_order", entity_id=order.id,
-                title=f"Judogi de {athlete.first_name}: {STATUS_PT[status].lower()}",
-                body=f"{order.brand} {order.color} {order.size_cm} cm",
+                title=(f"Judogi de {athlete.first_name}: {STATUS_PT[status].lower()}" if order.kind == "JUDOGI"
+                       else f"Encomenda de {athlete.first_name}: {STATUS_PT[status].lower()}"),
+                body=(f"{order.brand} {order.color} {order.size_cm} cm" if order.kind == "JUDOGI"
+                      else order_title(order))[:500],
             )
     if "price_cents" in data and data["price_cents"] is not None:
         # Solo per gli ordini vecchi senza conto e senza quota: un prezzo
@@ -503,7 +620,7 @@ async def update_order(
         if price > 0 and order.status != "CANCELLED":
             fee = ClubFee(
                 **scope.columns(), athlete_id=order.athlete_id, kind="EQUIPMENT", period=str(order.id),
-                description=f"Judogi {order.brand} {order.color} {order.size_cm} cm"[:200], amount_cents=price,
+                description=order_title(order)[:200], amount_cents=price,
                 gross_amount_cents=price, due_date=today + timedelta(days=FEE_DUE_DAYS), status="DUE",
             )
             db.add(fee)
@@ -525,12 +642,16 @@ def orders_csv(rows: list[dict]) -> str:
     """Per il fornitore: chi, che cosa, che taglia, il nome da ricamare."""
     buf = io.StringIO()
     w = csv.writer(buf, delimiter=";")
-    w.writerow(["Data", "Atleta", "Nome a bordar", "Tipo", "Marca", "Cor", "Tamanho (cm)", "Valor (€)", "Estado",
-                "Observações"])
+    w.writerow(["Data", "Atleta", "Nome a bordar", "Tipo", "Marca / Artigo", "Cor / Variante", "Tamanho (cm)",
+                "Quantidade", "Valor (€)", "Estado", "Observações"])
     for r in rows:
+        product = r.get("kind") == "PRODUCT"
         w.writerow([
             r["created_at"].strftime("%d/%m/%Y") if r["created_at"] else "", r["athlete_name"] or "",
-            r["kimono_name"], r["type_label"], r["brand"], r["color_label"], r["size_cm"],
+            r["kimono_name"] or "", "Equipamento" if product else r["type_label"],
+            r["product_name"] if product else r["brand"],
+            (r["variant_label"] or "") if product else r["color_label"],
+            "" if product else r["size_cm"], r.get("quantity") or 1,
             f"{r['price_cents'] / 100:.2f}".replace(".", ",") if r["price_cents"] is not None else "",
             STATUS_PT.get(r["status"], r["status"]), r["notes"] or "",
         ])
@@ -567,6 +688,8 @@ async def upsert_price(db: AsyncSession, *, scope: ClubScope, actor_user_id: uui
         db.add(row)
     else:
         row.price_cents, row.active = cents, data.get("active", True)
+    await db.flush()
+    await ensure_models(db, club_id=scope.club_id, organization_id=scope.organization_id)
     await audit_service.record(
         db, organization_id=scope.organization_id, actor_user_id=actor_user_id, action="club.judogi_price_set",
         entity_type="club", entity_id=str(scope.club_id),
@@ -652,7 +775,8 @@ async def add_wish(
         label = product.name
     elif kind == "JUDOGI":
         choice = data.get("judogi") or {}
-        q = await quote(db, club=club, choice=choice, height_cm=athlete.height_cm)
+        q = await quote(db, club=club, choice=choice, height_cm=choice.get("height_cm") or athlete.height_cm,
+                        athlete_id=athlete.id)
         config = {"choice": {k: choice.get(k) for k in ("kimono_type", "color", "brand", "size_cm", "trade_in")},
                   "kimono_name": (choice.get("kimono_name") or "").strip()[:100] or None, "quote": q}
         existing = (await db.execute(select(ClubWishlistItem).where(
@@ -712,7 +836,7 @@ async def list_wishes(db: AsyncSession, *, scope: ClubScope, user_id: uuid.UUID,
             "athlete_id": athlete.id, "athlete_name": f"{athlete.first_name} {athlete.last_name}",
             "athlete_first_name": athlete.first_name,
             "product": {"id": product.id, "name": product.name, "image_url": product.image_url,
-                        "available": product.status == "ACTIVE"} if product else None,
+                        "available": product.status == "ACTIVE", "club_id": product.club_id} if product else None,
             "variant": {"id": variant.id, "label": variant.label, "price_cents": variant.price_cents} if variant else None,
             "judogi": w.config,
             "equipment_order_id": w.equipment_order_id, "jav_market_order_id": w.jav_market_order_id,
@@ -767,16 +891,17 @@ async def remove_wish(db: AsyncSession, *, scope: ClubScope, user_id: uuid.UUID,
 
 
 async def mark_products_ordered(
-    db: AsyncSession, *, athlete_id: uuid.UUID, product_ids: set[uuid.UUID], order_id: uuid.UUID,
-    actor_user_id: uuid.UUID,
+    db: AsyncSession, *, athlete_id: uuid.UUID, product_ids: set[uuid.UUID], order_id: uuid.UUID | None,
+    actor_user_id: uuid.UUID, equipment_order_id: uuid.UUID | None = None,
 ) -> None:
-    """Un ordine dello Shop per un atleta chiude i suoi desideri di quei
-    prodotti (jav_market/service.create_order). Non fa commit."""
+    """Un ordine per un atleta chiude i suoi desideri di quei prodotti: dello
+    Shop (jav_market/service.create_order, `order_id`) o della Loja del club
+    (loja.place_product_order, `equipment_order_id`). Non fa commit."""
     if not product_ids:
         return
     for wish in (await db.execute(select(ClubWishlistItem).where(
         ClubWishlistItem.athlete_id == athlete_id, ClubWishlistItem.kind == "PRODUCT",
         ClubWishlistItem.status == "OPEN", ClubWishlistItem.product_id.in_(product_ids),
     ))).scalars():
-        wish.status, wish.jav_market_order_id = "ORDERED", order_id
+        wish.status, wish.jav_market_order_id, wish.equipment_order_id = "ORDERED", order_id, equipment_order_id
         wish.decided_by_user_id, wish.decided_at = actor_user_id, utcnow()

@@ -1405,6 +1405,10 @@ solo il periodo: ogni importo nasce sul server.
   altro club. Un ordine è di un venditore solo (un carrello misto si rifiuta
   con la spiegazione) e il bonifico di un ordine del club va all'IBAN del
   club (`payee`).
+- **Dalla migrazione 0040 i prodotti di un club si comprano solo dalla sua
+  Loja** (vedi «La Loja del club»): `jav_market.create_order` rifiuta un
+  ordine dello Shop con un prodotto di un club. Un ordine dello Shop sarebbe
+  un secondo debito, fuori dalle quote e dalla home della famiglia.
 
 
 ## L'area dell'atleta
@@ -2115,3 +2119,120 @@ e l'ordine dello Shop per quell'atleta chiude i desideri di quel prodotto
 comprado» / «Fica para outra vez» (`PATCH /club/wishlist/{id}`): l'atleta
 riceve `CLUB_WISHLIST_DECIDED`. Un prodotto aperto una volta sola per atleta,
 un solo judogi desiderato alla volta (il nuovo sostituisce il vecchio).
+
+
+## La Loja del club (migrazione 0040)
+
+Judogi ed equipaggiamento del club (t-shirt, camisola, calças, calções,
+casaco, saco com o nome…) si comprano dalla **Loja**, in un carrello solo,
+con le regole su per chi è ogni articolo. Codice: `club/loja.py`, rotte in
+`club/loja_router.py`; il judogi passa ancora da `club/judogi.py`.
+
+**Per chi è** (controllato all'ordine, sul server, non solo a schermo):
+- un prodotto del club dice per chi è (`jav_market_products.audience_sex`
+  ALL / F / M): un atleta vede la versione del suo sesso e quelle per tutti,
+  l'altra **non si mostra** (sarebbe la stessa t-shirt due volte);
+- l'**equipaggiamento di alta competizione** (`high_competition_only`) e il
+  **judogi aprovado FIJ** (che riceve il backnumber oficial con PT sulla
+  schiena) li **vedono tutti**, chiusi con il lucchetto, e li compra solo chi
+  è di alta competizione;
+- il judogi **rosa** e **a righe rosa** è solo per le ragazze: si vede, un
+  ragazzo non lo compra.
+
+**Alta competizione**: un segno sull'atleta (`club_athletes.high_competition`,
+con chi l'ha messo e quando) che mettono e tolgono **la segreteria e il
+treinador** che segue l'atleta (`PUT /club/staff/loja/athletes/{id}/high-competition`).
+Si può mettere solo se il piano dell'atleta lo permette
+(`club_plans.allows_high_competition`: il **Grupo 3**; la migrazione l'ha
+acceso sui piani che si chiamano «Grupo 3…», gli altri li apre la segreteria
+da Piani e prezzi). Se l'atleta cambia piano il segno resta ma **non vale più**
+(`loja.high_competition_map`). Al banco la segreteria può ordinare qualunque
+judogi per un atleta (`check_rules=False`).
+
+**La vetrina** (`GET /club/loja/athletes/{id}`): i modelli di judogi con le
+foto (`club_judogi_models`: una scheda per tipo + marca + colore del listino,
+creata da sola; i prezzi restano nel listino) con il prezzo della taglia
+giusta per l'altezza; i prodotti del club per l'atleta, con la **taglia
+suggerita** (la prima variante con `max_height_cm` ≥ altezza, come per i
+judogi); il **kit del club** (judogi bianco + prodotti `club_kit`: «Já tem» se
+consegnato, «Encomendado» se in corso, «Em falta»); l'armadio dell'atleta.
+
+**Il judogi** si sceglie con un percorso a passi (per chi, tipo, colore e
+modello con foto, nome da ricamare, judogi usato, riepilogo). La **permuta**
+può indicare un judogi dell'armadio (`trade_in.owned_order_id`): tipo, marca,
+colore e taglia si leggono dall'ordine, e alla consegna del nuovo quello
+restituito esce dall'armadio (`retired_reason` TRADED_IN). Alla fine:
+«Adicionar ao carrinho» o «Comprar já e pagar», come un prodotto.
+
+**Il carrello** (`club_cart_items`, uno per utente): righe di judogi
+(configurazione, mai prezzi) e di prodotti (variante, quantità, il nome se il
+prodotto `needs_name`), per uno o più atleti. Si ricalcola a ogni lettura; una
+riga che non si può più ordinare dice perché. **All'ordine ogni riga diventa
+un ordine a sé** (`club_equipment_orders`, `kind` JUDOGI o PRODUCT) con la sua
+quota `EQUIPMENT` (14 giorni), **tutti o nessuno**: la segreteria li prepara e
+consegna uno per uno, la famiglia li paga **tutti insieme** con una prova
+(«Encomendar e pagar já» apre il pagamento con le nuove quote già scelte) o
+più tardi dalla home («Encomendar, pago depois»). La scorta delle varianti
+scende all'ordine e torna se l'ordine si annulla prima della consegna. Un
+desiderio dell'atleta si chiude quando parte l'ordine. «Comprar já»
+(`POST /club/loja/buy-now`) fa lo stesso con un articolo solo, senza toccare il
+carrello. Un minorenne non compra: mette nei desideri, come prima.
+
+**La quota dell'attrezzatura** compare tra le cose da pagare del mese **da
+subito**, qualunque sia la scadenza (`month_board.py`): è un acquisto già
+fatto. Gli ordini del club stanno anche in «As minhas encomendas» con lo stato
+e il bottone per pagare.
+
+**La segreteria** (menu Judogi): gli ordini della Loja (judogi ed
+equipaggiamento, stessa lista, stessi stati, stesso CSV per il fornitore),
+le **foto dei modelli** di judogi (`/club/admin/loja/judogi-models`, foto
+caricate come quelle dei prodotti), il listino. Nello shop del club ogni
+prodotto ha «Para quem é» (sesso, alta competizione, kit, nome) e ogni
+variante l'altezza fino a cui va bene.
+
+**L'armadio dei judogi** (`GET /club/staff/loja/judogis`, segreteria e
+treinador, ognuno con gli atleti che vede): i judogi consegnati e non ritirati
+di ogni atleta (più quelli in arrivo), con bianco / azul / FIJ e «pequeno» se
+la taglia è sotto l'altezza attuale. Con una **prova** mostra solo i suoi
+iscritti e che cosa manca (bianco o azul): il treinador porta il judogi del
+club a chi non ce l'ha. Un judogi che l'atleta aveva già si aggiunge a mano
+(`origin` MANUAL, senza prezzo né quota); uno piccolo, rovinato o perso esce
+dall'armadio (`retired_on`, `retired_reason`). Gli obblighi dell'atleta
+(`obligations.py`) contano solo i judogi non ritirati.
+
+
+## Un treinador, più club (migrazione 0041)
+
+Un account solo può allenare in più club (Matias in tutti, un altro in due):
+ogni club in cui è treinador è una riga di `club_staff_memberships` (ACTIVE).
+Codice: `club/staff_clubs.py`, rotte in `club/staff_clubs_router.py`, la
+scelta del club in `club/scope.py`.
+
+- **Entrando** nell'area del treinador vede il saluto con il suo nome e la sua
+  foto (`users.photo_url`, o quella della sua scheda di atleta) e i club in cui
+  allena, con logo, atleti attivi e i suoi corsi (`GET /club/staff/my-clubs`):
+  sceglie dove entrare. La scelta sta nel cookie `jav_staff_club` e arriva
+  all'API come `X-Jav-Staff-Club`.
+- **La scelta vale solo per le rotte del treinador** (`club.instruct`) e per il
+  tema dell'area del treinador (`/club/current` e `/club/branding` con
+  `?area=staff`). Famiglia, atleta e segreteria restano sul club dell'account
+  (`users.club_id`): un treinador che è anche genitore non mescola i dati.
+- **In un club che non è il suo è solo treinador**: `ClubUser.home` è falso e
+  nessun controllo «è segreteria» (`_manager`, `_is_manager`, `_can_manage`,
+  le liste dei corsi) lo fa manager, qualunque ruolo abbia a casa.
+- **Chi assegna**: il superadmin (`POST/DELETE /clubs/{id}/coaches`, elenco
+  `GET /clubs/coaches`, foto `PUT /clubs/coaches/{id}/photo`). La segreteria
+  che aggiunge come istruttore un'email di un altro club manda una richiesta
+  (REQUESTED, notifica `CLUB_COACH_REQUESTED` allo staff della piattaforma)
+  che il superadmin approva; segreteria e superadmin tolgono da un club un
+  treinador che viene da fuori (`DELETE /club/admin/coaches/{id}`,
+  `DELETE /clubs/{id}/coaches/{user}`). Un
+  istruttore nuovo creato dalla segreteria entra ACTIVE nel suo club.
+- **Nelle liste del club** (persone, staff, chi riceve contanti, costi dello
+  staff) il treinador di un altro club compare **solo come treinador** (né
+  genitore né segreteria), con l'icona del treinador. I treinador di un club
+  (`staff_clubs.active_coach_ids`) sono i suoi istruttori (finché hanno il
+  ruolo, anche senza la riga: gli importati) più le appartenenze ACTIVE di chi
+  viene da fuori. Per questo nel club dell'account non si toglie
+  l'appartenenza: si toglie il ruolo di istruttore.
+

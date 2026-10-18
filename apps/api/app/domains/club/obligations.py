@@ -49,6 +49,7 @@ async def obligations(db: AsyncSession, *, athletes: list[ClubAthlete], today: d
     orders: dict[uuid.UUID, list[ClubEquipmentOrder]] = {}
     for o in (await db.execute(select(ClubEquipmentOrder).where(
         ClubEquipmentOrder.athlete_id.in_(ids), ClubEquipmentOrder.status != "CANCELLED",
+        ClubEquipmentOrder.kind == "JUDOGI", ClubEquipmentOrder.retired_on.is_(None),
     ))).scalars():
         orders.setdefault(o.athlete_id, []).append(o)
     year = str(today.year)

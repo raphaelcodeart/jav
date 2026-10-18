@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { usePathname } from "next/navigation";
 import { friendlyApiError } from "@/lib/api-error";
 
 export interface ClubSettings {
@@ -33,10 +34,14 @@ export interface CurrentClub {
  *  staff della piattaforma non ne ha ancora scelto uno: l'API risponde 409,
  *  e il pannello Club mostra l'elenco invece del club. */
 export function useCurrentClub() {
+  // Nell'area del treinador il club è quello scelto entrando (cookie
+  // jav_staff_club): l'API lo considera solo con `?area=staff`, e la chiave
+  // è un'altra perché la stessa scheda può avere anche l'area di famiglia.
+  const staff = usePathname()?.startsWith("/staff") ?? false;
   return useQuery({
-    queryKey: ["club", "current"],
+    queryKey: staff ? ["club", "current", "staff"] : ["club", "current"],
     queryFn: async (): Promise<CurrentClub | null> => {
-      const res = await fetch("/api/proxy/club/current");
+      const res = await fetch(staff ? "/api/proxy/club/current?area=staff" : "/api/proxy/club/current");
       if (res.status === 409) return null;
       if (!res.ok) throw new Error(await friendlyApiError(res));
       return res.json();

@@ -61,3 +61,6 @@ class User(UUIDPKMixin, TimestampMixin, Base):
     residence_province: Mapped[str | None] = mapped_column(String(2), nullable=True)
     residence_postal_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
     residence_country: Mapped[str] = mapped_column(String(2), default="IT")
+    #: La foto del profilo (bucket pubblico dei media): lo staff dei club la
+    #: mostra nel saluto della sua area; gli atleti hanno la loro sulla scheda.
+    photo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)

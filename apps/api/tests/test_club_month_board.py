@@ -60,9 +60,10 @@ async def test_the_month_board_says_who_still_has_to_pay(db, scope):
     assert rows["Tó"]["state"] == "EXEMPT" and rows["Tó"]["fee"] is None
     assert rows["Luca"]["group"] and rows["Luca"]["guardian_email"] == parent.email
     assert [f["period"] for f in rows["Rui"]["arrears"]] == ["2026-09"]
-    # La gara e l'iscrizione dell'anno sì; il judogi scade a dicembre: non è di questo mese.
+    # La gara che scade questo mese sì; il judogi anche se scade a dicembre:
+    # è un acquisto già fatto, chi l'ha ordinato lo trova subito da pagare.
     others = [f["description"] for f in rows["Rui"]["other_due"]]
-    assert "Taça do Algarve" in others and "Judogi" not in others
+    assert "Taça do Algarve" in others and "Judogi" in others
     assert all(f["kind"] != "MONTHLY" for f in rows["Rui"]["other_due"])
 
     t = board["totals"]

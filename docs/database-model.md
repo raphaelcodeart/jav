@@ -1491,6 +1491,34 @@ club_wishlist_items     i desideri dell'atleta minorenne: athlete_id (CASCADE),
 Personalizzazione e permuta del club stanno in `clubs.settings["judogi"]`
 (`customization_cents`, default 3500; `trade_in_percent`, default 50).
 
+**La Loja del club** (migrazione 0040, `club/operations_models.py`, `club/loja.py`):
+
+```
+club_equipment_orders   + kind (JUDOGI | PRODUCT), origin (ORDER | MANUAL: un judogi che
+                          l'atleta aveva già, nell'armadio senza prezzo)
+                        kimono_name, kimono_type, color, brand, size_cm ora NULL-abili:
+                          CHECK judogi_fields (obbligatori se kind = JUDOGI),
+                          CHECK product_fields (product_name se kind = PRODUCT)
+                        + product_id -> jav_market_products, variant_id -> jav_market_variants
+                          (SET NULL), product_name, variant_label, quantity >= 1,
+                          unit_price_cents: il prodotto congelato all'ordine
+                        + retired_on, retired_reason (TRADED_IN | OUTGROWN | WORN_OUT |
+                          LOST): il judogi esce dall'armadio
+club_judogi_models      un modello per tipo + marca + colore del listino: description,
+                        image_url, images JSONB; UNIQUE (club_id, kimono_type, brand, color).
+                        Creato dalla migrazione per i listini esistenti e da
+                        judogi.ensure_models dopo
+club_cart_items         il carrello della Loja: user_id, athlete_id (CASCADE), kind
+                        (JUDOGI | PRODUCT), product_id / variant_id (CASCADE), quantity
+                        1–20, config JSONB (scelte del judogi o il nome da stampare,
+                        mai importi); CHECK target
+club_athletes           + high_competition, high_competition_by_user_id, high_competition_at
+club_plans              + allows_high_competition (acceso dalla migrazione sui «Grupo 3…»)
+jav_market_products     + audience_sex (ALL | F | M), high_competition_only, club_kit,
+                          needs_name: per chi è un prodotto dello shop di un club
+jav_market_variants     + max_height_cm (50–230): la taglia suggerita per altezza
+```
+
 **Che cosa vede un treinador** (migrazione 0038, `club/courses.py::visible_course_filter`):
 
 ```
@@ -1503,3 +1531,14 @@ Di regola ogni treinador del club vede tutti i corsi e i loro atleti: una riga
 qui toglie un corso a una persona. Chi insegna il corso (`club_courses.instructor_user_id`
 o `club_course_staff`) lo vede comunque. Non tocca i soldi: la quota del
 treinador sui corsi JAV resta del titolare.
+
+**Un treinador, più club** (migrazione 0041, `club/models.py`, `club/staff_clubs.py`):
+
+```
+club_staff_memberships  un treinador in un club: user_id, club_id, status (ACTIVE |
+                        REQUESTED), requested_by_user_id, decided_by_user_id, decided_at,
+                        note; UNIQUE (club_id, user_id). La migrazione ne crea una ACTIVE
+                        per ogni istruttore nel suo club di allora
+users                   + photo_url: la foto del profilo (saluto dell'area del treinador)
+```
+

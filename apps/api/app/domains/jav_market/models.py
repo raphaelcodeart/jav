@@ -29,10 +29,12 @@ from sqlalchemy import (
     CheckConstraint,
     ForeignKey,
     Integer,
+    SmallInteger,
     String,
     Text,
     UniqueConstraint,
 )
+from sqlalchemy import text as sql_text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -139,6 +141,7 @@ class JavMarketProduct(UUIDPKMixin, TimestampMixin, Base):
     __tablename__ = "jav_market_products"
     __table_args__ = (
         CheckConstraint("credit_discount_percentage BETWEEN 0 AND 99", name="credit_percentage_range"),
+        CheckConstraint("audience_sex IN ('ALL', 'F', 'M')", name="audience_sex"),
     )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
@@ -165,6 +168,18 @@ class JavMarketProduct(UUIDPKMixin, TimestampMixin, Base):
     unit_cost_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
     updated_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    # --- Per chi è, nello shop di un club (la Loja, club/loja.py). Lo shop
+    # della piattaforma non li usa. ---
+    #: ALL, F (modello femminile) o M (maschile): un atleta vede solo la sua
+    #: versione e quelle per tutti.
+    audience_sex: Mapped[str] = mapped_column(String(3), default="ALL", server_default="ALL")
+    #: Equipaggiamento della selezione: lo vedono tutti, lo compra solo chi è
+    #: di alta competizione.
+    high_competition_only: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sql_text("false"))
+    #: Fa parte del kit del club: «Já tem» / «Em falta» per ogni atleta.
+    club_kit: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sql_text("false"))
+    #: Si personalizza con il nome (la borsa con il nome): l'ordine lo chiede.
+    needs_name: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sql_text("false"))
 
 
 class JavMarketVariant(UUIDPKMixin, TimestampMixin, Base):
@@ -178,6 +193,7 @@ class JavMarketVariant(UUIDPKMixin, TimestampMixin, Base):
     __tablename__ = "jav_market_variants"
     __table_args__ = (
         CheckConstraint("price_cents > 0", name="price_positive"),
+        CheckConstraint("max_height_cm IS NULL OR max_height_cm BETWEEN 50 AND 230", name="max_height_range"),
         UniqueConstraint("product_id", "sku", name="uq_jav_market_variants_sku"),
     )
 
@@ -191,6 +207,9 @@ class JavMarketVariant(UUIDPKMixin, TimestampMixin, Base):
     #: `None` = scorta non gestita, si vende sempre. Zero = esaurito.
     inventory: Mapped[int | None] = mapped_column(Integer, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    #: La taglia giusta fino a questa altezza (cm): la Loja suggerisce la
+    #: prima variante che arriva all'altezza dell'atleta, come per i judogi.
+    max_height_cm: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
 
 
 class JavMarketOrder(UUIDPKMixin, TimestampMixin, Base):

@@ -11,6 +11,7 @@ import { ClockCard } from "@/components/club/coach-tools";
 import { EventNameButton } from "@/components/club/competition-detail-modal";
 import { useClubFeatures } from "@/components/club/jav-courses";
 import { AthleteSheetModal, CERT_TONE, LessonNoteModal } from "@/components/club/coach-notebook";
+import { ClubLogo, CoachAvatar, greetingKey, type MyClubs, type StaffClubOption } from "@/components/club/staff-clubs";
 import { clubGet, type Lesson } from "@/lib/club";
 import { COACH, type AthleteBrief, type CoachHome as Home } from "@/lib/coach";
 import { cn } from "@/lib/cn";
@@ -26,6 +27,9 @@ const hhmm = (v: string) => v.slice(0, 5);
 export interface CoachHomeProps {
   /** Apre una sezione; per le presenze, il giorno e il corso. */
   onNavigate: (tab: string, attendance?: { date: string; courseId: string }) => void;
+  /** Il treinador (nome e foto per il saluto) e il club scelto entrando. */
+  me?: MyClubs["me"];
+  club?: StaffClubOption;
 }
 
 function Card({ title, icon, action, className, children }: { title: ReactNode; icon: string; action?: ReactNode; className?: string; children: ReactNode }) {
@@ -41,7 +45,7 @@ function Card({ title, icon, action, className, children }: { title: ReactNode; 
   );
 }
 
-export function CoachHome({ onNavigate }: CoachHomeProps) {
+export function CoachHome({ onNavigate, me, club }: CoachHomeProps) {
   const { t, fmt } = useI18n();
   const { data, isLoading } = useQuery({
     queryKey: ["club", "staff", "coach-home"],
@@ -53,8 +57,8 @@ export function CoachHome({ onNavigate }: CoachHomeProps) {
   const [noteFor, setNoteFor] = useState<Lesson | "free" | null>(null);
   if (isLoading || !data) return <div className="grid gap-4 lg:grid-cols-2"><Skeleton className="h-56" /><Skeleton className="h-56" /><Skeleton className="h-40" /><Skeleton className="h-40" /></div>;
 
-  const hour = new Date().getHours();
-  const greeting = hour < 13 ? t("coach2.home.morning") : hour < 20 ? t("coach2.home.afternoon") : t("coach2.home.evening");
+  const firstName = me ? me.first_name || me.name.split(" ")[0] : "";
+  const greeting = `${t(greetingKey(new Date().getHours()))}${firstName ? `, ${firstName}` : ""}`;
   const current = data.lessons_today.find((l) => l.current) ?? data.lessons_today[0];
   const unread = data.unread_club + data.unread_jav;
   const open = (l: Lesson) => onNavigate("attendance", { date: l.date, courseId: l.course_id });
@@ -64,10 +68,22 @@ export function CoachHome({ onNavigate }: CoachHomeProps) {
       <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-ink-950 via-brand-800 to-brand-600 p-6 text-white shadow-lift">
         <motion.div aria-hidden="true" className="pointer-events-none absolute -right-12 -top-20 h-64 w-64 rounded-full bg-accent-400/25 blur-3xl"
           animate={{ scale: [1, 1.12, 1] }} transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }} />
-        <p className="relative text-xs font-bold uppercase tracking-[0.22em] text-white/75">
-          {fmt.date(new Date(`${data.today}T12:00:00`), { weekday: "long", day: "numeric", month: "long" })}
-        </p>
-        <h2 className="relative mt-1 text-3xl">{greeting} 👋</h2>
+        {/* Il saluto a sinistra, la foto del treinador a destra (si cambia toccandola). */}
+        <div className="relative flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-xs font-bold uppercase tracking-[0.22em] text-white/75">
+              {fmt.date(new Date(`${data.today}T12:00:00`), { weekday: "long", day: "numeric", month: "long" })}
+            </p>
+            <h2 className="mt-1 text-3xl" suppressHydrationWarning>{greeting} 👋</h2>
+            {club && (
+              <p className="mt-2 inline-flex max-w-full items-center gap-2 rounded-full bg-white/15 py-1 pl-1 pr-3 text-sm font-semibold backdrop-blur">
+                <ClubLogo club={club} className="h-7 w-7 p-0.5 text-[10px]" />
+                <span className="truncate">{t("staffClubs.youAreInClub", { club: club.name })}</span>
+              </p>
+            )}
+          </div>
+          {me && <CoachAvatar me={me} size="md" className="sm:h-20 sm:w-20" />}
+        </div>
         <div className="relative mt-4 flex flex-wrap gap-2 text-sm">
           <span className="rounded-full bg-white/15 px-3 py-1 backdrop-blur">🗓️ {t("coach2.home.lessonsToday", { n: data.lessons_today.length })}</span>
           <span className="rounded-full bg-white/15 px-3 py-1 backdrop-blur">🥋 {t("coach2.home.athletes", { n: data.athletes })}</span>

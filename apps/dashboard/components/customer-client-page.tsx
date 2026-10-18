@@ -26,6 +26,7 @@ import { CompetitionsPanel } from "@/components/club/competitions-panel";
 import { CoursesPanel } from "@/components/club/courses-panel";
 import { FamilyAccounting } from "@/components/club/family-accounting";
 import { FamilyHome } from "@/components/club/family-home";
+import { JudogiOrders } from "@/components/club/judogi-shop";
 import { RankingPanel } from "@/components/club/ranking-panel";
 import { useClubFeatures } from "@/components/club/jav-courses";
 import { useI18n } from "@/lib/i18n/provider";
@@ -522,6 +523,9 @@ export function CustomerClientPage({ email, organizationId }: CustomerClientPage
       {activeTab === "orders" && (
         <div className="space-y-6">
           <SectionBanner image="products" alt={t("nav.orders")} />
+          {/* I judogi del club stanno nelle quote, non negli ordini dello
+              Shop: qui li ritrova chi li cerca fra i suoi acquisti. */}
+          <JudogiOrders payable />
           <CustomerOrdersPanel />
         </div>
       )}

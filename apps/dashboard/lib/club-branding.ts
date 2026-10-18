@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { normalizeHex, paletteVars } from "@/lib/brand";
 
@@ -17,10 +18,13 @@ export interface ClubBranding {
  *  senza club) = niente richiesta, resta JAV. I colori si applicano a
  *  <html>, così valgono anche per le finestre che si aprono in un portale. */
 export function useClubBranding(enabled: boolean): ClubBranding | null {
+  // L'area del treinador prende il tema del club scelto entrando
+  // (club/staff_clubs.py): l'API guarda quel cookie solo con `?area=staff`.
+  const staff = usePathname()?.startsWith("/staff") ?? false;
   const { data } = useQuery({
-    queryKey: ["club", "branding"],
+    queryKey: staff ? ["club", "branding", "staff"] : ["club", "branding"],
     queryFn: async (): Promise<ClubBranding | null> => {
-      const res = await fetch("/api/proxy/club/branding");
+      const res = await fetch(staff ? "/api/proxy/club/branding?area=staff" : "/api/proxy/club/branding");
       return res.ok ? res.json() : null;
     },
     enabled,

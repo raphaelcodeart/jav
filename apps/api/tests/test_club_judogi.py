@@ -150,7 +150,18 @@ async def test_order_wish_and_permissions(db, scope, monkeypatch):
     try:
         async with client:
             mine = (await client.get("/club/judogi/athletes")).json()
-            assert [(a["mode"], a["single_name_only"]) for a in mine] == [("BUY", False)]
+            assert [(a["mode"], a["single_name_only"], a["high_competition"]) for a in mine] == [("BUY", False, False)]
+            # Il FIJ è dell'alta competizione (club/loja.py): prima no...
+            fij = {"kimono_type": "FIJ_APPROVED", "color": "WHITE", "brand": "Mizuno", "height_cm": 168,
+                   "athlete_id": str(big.id), "kimono_name": "Rita Jesus"}
+            no = await client.post("/club/judogi/orders", json=fij)
+            assert no.status_code == 400 and "alta competizione" in no.json()["detail"]
+            # ...poi la segreteria apre il suo piano e la segna.
+            from app.domains.club import loja
+            from app.domains.club.models import ClubPlan
+
+            (await db.get(ClubPlan, big.plan_id)).allows_high_competition = True
+            await loja.set_high_competition(db, scope=scope, athlete=big, actor_user_id=admin.id, value=True)
             ok = await client.post("/club/judogi/orders", json={
                 "kimono_type": "FIJ_APPROVED", "color": "WHITE", "brand": "Mizuno", "height_cm": 168,
                 "athlete_id": str(big.id), "kimono_name": "Rita Jesus",

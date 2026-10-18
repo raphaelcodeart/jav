@@ -7,7 +7,7 @@ import { BeltBadge } from "@/components/ui/belt";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PersonMarks, usePersonKinds } from "@/components/club/person-marks";
+import { CoachMark, PersonMarks, usePersonKinds } from "@/components/club/person-marks";
 import { whatsappUrl } from "@/components/site/social-icons";
 import { clubGet, fullName, type AdminAthlete } from "@/lib/club";
 import { cn } from "@/lib/cn";
@@ -246,7 +246,10 @@ export function AthletesTable({ onOpen }: { onOpen: (a: AdminAthlete) => void })
                             </span>
                           )}
                           <span className="min-w-0 max-w-[9.5rem]">
-                            <span className="block truncate font-semibold text-ink-900 group-hover:text-brand-700">{a.last_name}, {a.first_name}</span>
+                            <span className="flex min-w-0 items-center gap-1.5">
+                              <span className="truncate font-semibold text-ink-900 group-hover:text-brand-700">{a.last_name}, {a.first_name}</span>
+                              <CoachMark kinds={roles} />
+                            </span>
                             {/* Chi l'ha portato nel club. */}
                             <span className="mt-0.5 flex items-center gap-1 text-[11px] text-ink-500">
                               {a.invited_by?.kind === "PERSON" ? (

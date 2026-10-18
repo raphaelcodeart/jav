@@ -44,6 +44,12 @@ from app.domains.club.participation_router import router as club_participation_r
 from app.domains.club.judogi_router import admin_router as club_judogi_admin_router
 from app.domains.club.judogi_router import member_router as club_judogi_router
 from app.domains.club.judogi_router import wishlist_router as club_wishlist_router
+from app.domains.club.loja_router import admin_router as club_loja_admin_router
+from app.domains.club.loja_router import member_router as club_loja_router
+from app.domains.club.loja_router import staff_router as club_loja_staff_router
+from app.domains.club.staff_clubs_router import admin_router as club_coaches_admin_router
+from app.domains.club.staff_clubs_router import platform_router as clubs_coaches_router
+from app.domains.club.staff_clubs_router import staff_router as club_staff_clubs_router
 from app.domains.commissions import models as _commissions_models  # noqa: F401
 from app.domains.commissions.router import router as commissions_router
 from app.domains.contracts import models as _contracts_models  # noqa: F401
@@ -149,6 +155,12 @@ app.include_router(site_admin_router, prefix="/api")
 app.include_router(site_family_router, prefix="/api")
 app.include_router(club_participation_router, prefix="/api")
 app.include_router(club_judogi_router, prefix="/api")
+app.include_router(club_loja_router, prefix="/api")
+app.include_router(club_loja_staff_router, prefix="/api")
+app.include_router(club_loja_admin_router, prefix="/api")
+app.include_router(club_staff_clubs_router, prefix="/api")
+app.include_router(club_coaches_admin_router, prefix="/api")
+app.include_router(clubs_coaches_router, prefix="/api")
 app.include_router(club_wishlist_router, prefix="/api")
 app.include_router(club_judogi_admin_router, prefix="/api")
 app.include_router(contact_public_router, prefix="/api")

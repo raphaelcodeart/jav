@@ -37,6 +37,14 @@ JUDOGI_COLORS = ("WHITE", "BLUE", "PINK", "WHITE_PINK_STRIPES")
 #: La lista dei desideri dell'atleta minorenne: un prodotto dello Shop o un
 #: judogi configurato con il calcolatore.
 WISHLIST_KINDS = ("PRODUCT", "JUDOGI")
+#: Che cosa ordina un ordine del club (e porta una riga del carrello della
+#: Loja): un judogi del listino o un prodotto dello shop del club.
+EQUIPMENT_ORDER_KINDS = ("JUDOGI", "PRODUCT")
+#: Da dove viene: un ordine vero, o un judogi che l'atleta aveva già e che la
+#: segreteria o il treinador hanno messo nel suo armadio.
+EQUIPMENT_ORDER_ORIGINS = ("ORDER", "MANUAL")
+#: Perché un judogi esce dall'armadio dell'atleta.
+JUDOGI_RETIRE_REASONS = ("TRADED_IN", "OUTGROWN", "WORN_OUT", "LOST")
 WISHLIST_STATUSES = ("OPEN", "ORDERED", "DISMISSED")
 EXTERNAL_COACH_FEE_STATUSES = ("PENDING", "PAID", "PARTIAL", "EXEMPT")
 REPORT_KINDS = ("ACTIVITIES",)
@@ -50,16 +58,33 @@ CLUB_DOCUMENT_CATEGORIES = (
 
 
 class ClubEquipmentOrder(UUIDPKMixin, TimestampMixin, Base):
-    """Un "pedido de fato": il judogi che il club ordina al fornitore per un
-    atleta, con il nome da ricamare. Il prezzo, quando la segreteria lo
-    fissa, diventa la quota `EQUIPMENT` dell'atleta (`fee_id`)."""
+    """Un ordine della Loja del club: un judogi (`kind` JUDOGI: tipo, marca,
+    colore, taglia e il nome da ricamare) o un prodotto dello shop del club
+    (`kind` PRODUCT: la variante, il nome se il prodotto lo vuole). Ognuno è
+    un ordine a sé, anche quando nasce dallo stesso carrello: la segreteria
+    lo prepara e lo consegna da solo. Il prezzo diventa la quota `EQUIPMENT`
+    dell'atleta (`fee_id`), una per ordine.
+
+    I judogi consegnati e non ritirati sono l'armadio dell'atleta (i judogi
+    che ha), che la segreteria e il treinador guardano prima delle gare; un
+    judogi che aveva già ci entra come `origin` MANUAL, senza prezzo."""
 
     __tablename__ = "club_equipment_orders"
     __table_args__ = (
+        CheckConstraint(f"kind IN ({_in(EQUIPMENT_ORDER_KINDS)})", name="kind"),
+        CheckConstraint(f"origin IN ({_in(EQUIPMENT_ORDER_ORIGINS)})", name="origin"),
         CheckConstraint(f"kimono_type IN ({_in(KIMONO_TYPES)})", name="kimono_type"),
         CheckConstraint(f"status IN ({_in(EQUIPMENT_ORDER_STATUSES)})", name="status"),
+        CheckConstraint(f"retired_reason IN ({_in(JUDOGI_RETIRE_REASONS)})", name="retired_reason"),
         CheckConstraint("size_cm BETWEEN 80 AND 220", name="size_range"),
         CheckConstraint("price_cents IS NULL OR price_cents >= 0", name="price_non_negative"),
+        CheckConstraint("quantity >= 1", name="quantity_positive"),
+        CheckConstraint(
+            "kind <> 'JUDOGI' OR (kimono_type IS NOT NULL AND color IS NOT NULL AND brand IS NOT NULL"
+            " AND size_cm IS NOT NULL AND kimono_name IS NOT NULL)",
+            name="judogi_fields",
+        ),
+        CheckConstraint("kind <> 'PRODUCT' OR product_name IS NOT NULL", name="product_fields"),
         # Due clic su «Encomendar» non fanno due judogi: lo stesso judogi per
         # lo stesso atleta può essere in attesa una volta sola.
         Index(
@@ -74,16 +99,20 @@ class ClubEquipmentOrder(UUIDPKMixin, TimestampMixin, Base):
     requested_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
-    #: Il nome da ricamare (sotto i 13 anni solo il nome proprio).
-    kimono_name: Mapped[str] = mapped_column(String(100))
-    kimono_type: Mapped[str] = mapped_column(String(24))
-    color: Mapped[str] = mapped_column(String(40))
-    brand: Mapped[str] = mapped_column(String(60))
-    size_cm: Mapped[int] = mapped_column(SmallInteger)
+    kind: Mapped[str] = mapped_column(String(8), default="JUDOGI", server_default="JUDOGI")
+    origin: Mapped[str] = mapped_column(String(8), default="ORDER", server_default="ORDER")
+    #: Il nome da ricamare (sotto i 13 anni solo il nome proprio); per un
+    #: prodotto, il nome da stampare se il prodotto lo chiede.
+    kimono_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    kimono_type: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    color: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    brand: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    size_cm: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     #: Il prezzo fissato dalla segreteria (con la personalizzazione e
     #: l'eventuale permuta); NULL finché non lo fissa.
     price_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    #: Il judogi usato restituito, se c'è (tipo, colore, marca, taglia, valore).
+    #: Il judogi usato restituito, se c'è (tipo, colore, marca, taglia, valore;
+    #: `owned_order_id` se è uno dell'armadio, che esce alla consegna).
     trade_in: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     internal_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -101,6 +130,22 @@ class ClubEquipmentOrder(UUIDPKMixin, TimestampMixin, Base):
     trade_in_discount_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     #: Il codice del colore del listino (JUDOGI_COLORS); `color` ne è il nome.
     color_code: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    # --- Un prodotto dello shop del club, congelato all'ordine come le righe
+    # degli ordini dello Shop: il nome e il prezzo restano quelli di allora. ---
+    product_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("jav_market_products.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    variant_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("jav_market_variants.id", ondelete="SET NULL"), nullable=True
+    )
+    product_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    variant_label: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    quantity: Mapped[int] = mapped_column(SmallInteger, default=1, server_default="1")
+    unit_price_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    # --- L'armadio: quando un judogi non c'è più (restituito con la permuta,
+    # piccolo, rovinato, perso). ---
+    retired_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    retired_reason: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
 
 class ClubJudogiPrice(UUIDPKMixin, TimestampMixin, Base):
@@ -444,3 +489,63 @@ class ClubStaffMessage(UUIDPKMixin, TimestampMixin, Base):
     author_user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
     body: Mapped[str] = mapped_column(Text)
     read_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+
+class ClubJudogiModel(UUIDPKMixin, TimestampMixin, Base):
+    """Un modello di judogi della Loja (tipo + marca + colore), con le foto e
+    la descrizione: la vetrina dei judogi. I prezzi per taglia restano nel
+    listino (`club_judogi_prices`), che è l'unica fonte del conto: qui c'è
+    solo come si presenta. Nasce da solo per ogni combinazione del listino."""
+
+    __tablename__ = "club_judogi_models"
+    __table_args__ = (
+        UniqueConstraint("club_id", "kimono_type", "brand", "color", name="uq_club_judogi_models_item"),
+        CheckConstraint(f"kimono_type IN ({_in(KIMONO_TYPES)})", name="kimono_type"),
+        CheckConstraint(f"color IN ({_in(JUDOGI_COLORS)})", name="color"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id"))
+    club_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("clubs.id"), index=True)
+    kimono_type: Mapped[str] = mapped_column(String(24))
+    brand: Mapped[str] = mapped_column(String(60))
+    color: Mapped[str] = mapped_column(String(24))
+    description: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    image_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    images: Mapped[list] = mapped_column(JSONB, default=list, server_default=sql_text("'[]'::jsonb"))
+    updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
+
+
+class ClubCartItem(UUIDPKMixin, TimestampMixin, Base):
+    """Una riga del carrello della Loja: un judogi configurato (`config`: le
+    scelte del calcolatore e il nome) o una variante di un prodotto del club,
+    per un atleta. Il carrello non tiene prezzi: si ricalcola a ogni lettura
+    e all'ordine (CLAUDE.md §5). All'ordine ogni riga diventa un ordine a sé
+    (`club_equipment_orders`) e il carrello si svuota."""
+
+    __tablename__ = "club_cart_items"
+    __table_args__ = (
+        CheckConstraint(f"kind IN ({_in(EQUIPMENT_ORDER_KINDS)})", name="kind"),
+        CheckConstraint("quantity BETWEEN 1 AND 20", name="quantity_range"),
+        CheckConstraint(
+            "(kind = 'PRODUCT' AND variant_id IS NOT NULL) OR (kind = 'JUDOGI' AND config IS NOT NULL)",
+            name="target",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id"))
+    club_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("clubs.id"), index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), index=True)
+    athlete_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("club_athletes.id", ondelete="CASCADE"), index=True
+    )
+    kind: Mapped[str] = mapped_column(String(8))
+    product_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("jav_market_products.id", ondelete="CASCADE"), nullable=True
+    )
+    variant_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("jav_market_variants.id", ondelete="CASCADE"), nullable=True
+    )
+    quantity: Mapped[int] = mapped_column(SmallInteger, default=1, server_default="1")
+    #: Il judogi (kimono_type, color, brand, size_cm, trade_in) e il nome da
+    #: ricamare o stampare: solo scelte, mai importi.
+    config: Mapped[dict | None] = mapped_column(JSONB, nullable=True)

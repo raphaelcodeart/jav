@@ -145,6 +145,7 @@ from app.domains.club.schemas import (
 from app.domains.club.scope import (
     CLUB_HEADER,
     CLUBS_ENTER,
+    STAFF_CLUB_HEADER,
     CLUBS_MANAGE,
     ClubScope,
     ClubUser,
@@ -1696,7 +1697,7 @@ async def _staff_course(db: AsyncSession, current_user: ClubUser, course_id: uui
         granted = await get_permission_codes_for_user(
             db, user_id=current_user.user_id, organization_id=current_user.organization_id
         )
-        if MANAGE not in granted:
+        if MANAGE not in granted or not current_user.home:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Corso non trovato.")
     return course
 
@@ -1722,7 +1723,7 @@ async def staff_list_courses(
     )
     courses = await courses_service.list_courses(
         db, scope=current_user.scope,
-        visible_to_user_id=None if MANAGE in granted else current_user.user_id,
+        visible_to_user_id=None if MANAGE in granted and current_user.home else current_user.user_id,
     )
     mine = await courses_service.taught_course_ids(db, scope=current_user.scope, user_id=current_user.user_id)
     return await _courses_read(db, courses, mine_ids=mine)
@@ -1828,8 +1829,11 @@ async def get_current_club(
     db: AsyncSession = Depends(get_db),
 ) -> CurrentClubRead:
     """Il nome del club in testata e l'IBAN su cui si pagano le quote. Per
-    lo staff della piattaforma, il club in cui è entrato."""
-    club = await resolve_club(db, current_user=current_user, requested=request.headers.get(CLUB_HEADER))
+    lo staff della piattaforma, il club in cui è entrato; per l'area del
+    treinador (`?area=staff`), il club che il treinador ha scelto."""
+    staff = request.headers.get(STAFF_CLUB_HEADER) if request.query_params.get("area") == "staff" else None
+    club = await resolve_club(db, current_user=current_user, requested=request.headers.get(CLUB_HEADER),
+                              staff_requested=staff)
     user = await db.get(User, current_user.user_id)
     return CurrentClubRead(
         id=club.id, name=club.name, slug=club.slug, entered=user is not None and user.club_id is None,
@@ -1877,7 +1881,24 @@ async def admin_add_staff(
     db: AsyncSession = Depends(get_db),
 ) -> ClubStaffRead:
     """La segreteria aggiunge i suoi istruttori (o un'altra persona in
-    segreteria): account del club, solo del club."""
+    segreteria): account del club, solo del club. Un istruttore che ha già
+    l'account in un altro club si chiede al superadmin (club/staff_clubs.py)."""
+    from app.domains.club import staff_clubs
+
+    if payload.role == "INSTRUCTOR":
+        other = (await db.execute(select(User).where(
+            User.organization_id == current_user.organization_id,
+            func.lower(User.email) == payload.email.strip().lower(),
+        ))).scalar_one_or_none()
+        if other is not None and other.club_id not in (None, current_user.club_id):
+            try:
+                row = await staff_clubs.request(db, organization_id=current_user.organization_id,
+                                                club_id=current_user.club_id, actor_user_id=current_user.user_id,
+                                                email=payload.email)
+            except club_service.ClubError as exc:
+                _raise(exc)
+            return ClubStaffRead(user_id=other.id, email=other.email, role="INSTRUCTOR", home=False,
+                                 membership_status=row.status)
     try:
         user, invite_link = await clubs_service.add_staff(
             db, scope=current_user.scope, actor_user_id=current_user.user_id, email=payload.email, role=payload.role
@@ -2325,6 +2346,9 @@ async def admin_set_course_coach_exclusions(
 
 
 async def _is_manager(db: AsyncSession, current_user: ClubUser) -> bool:
+    # Nel club di un'altra appartenenza si è solo treinador (club/scope.py).
+    if not current_user.home:
+        return False
     granted = await get_permission_codes_for_user(
         db, user_id=current_user.user_id, organization_id=current_user.organization_id
     )

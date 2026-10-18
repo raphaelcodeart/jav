@@ -28,13 +28,15 @@ interface ClubRow {
   created_at: string;
   settings: ClubSettings;
   athletes_active: number;
-  staff: { user_id: string; email: string; role: string }[];
+  /** `home` falso: treinador ospite da un altro club; REQUESTED: chiesto
+   *  dalla segreteria, da approvare (club/staff_clubs.py). */
+  staff: { user_id: string; email: string; role: string; home?: boolean; membership_status?: "ACTIVE" | "REQUESTED" | null }[];
   kind?: string;
 }
 
-async function send<T>(path: string, method: "POST" | "PATCH", body: unknown): Promise<T> {
+async function send<T>(path: string, method: "POST" | "PATCH" | "DELETE", body?: unknown): Promise<T> {
   const res = await fetch(`/api/proxy/clubs${path}`, {
-    method, body: JSON.stringify(body), headers: { "Content-Type": "application/json" },
+    method, body: body === undefined ? undefined : JSON.stringify(body), headers: { "Content-Type": "application/json" },
   });
   if (!res.ok) throw new Error(await friendlyApiError(res));
   return res.json();
@@ -93,6 +95,23 @@ export function ClubList({ onEnter }: { onEnter: (id: string) => void }) {
   const [staffFor, setStaffFor] = useState<ClubRow | null>(null);
   const [access, setAccess] = useState<{ email: string; link: string } | null>(null);
   const [sending, setSending] = useState<string | null>(null);
+  const [coachFor, setCoachFor] = useState<ClubRow | null>(null);
+
+  /** Approvare la richiesta della segreteria, o togliere un treinador ospite. */
+  async function coach(club: ClubRow, person: { user_id: string; email: string }, action: "approve" | "remove") {
+    if (action === "remove" && !window.confirm(t("staffClubs.removeFromClubConfirm", { name: person.email, club: club.name }))) return;
+    setSending(person.user_id);
+    try {
+      if (action === "approve") await send(`/${club.id}/coaches`, "POST", { user_id: person.user_id });
+      else await send(`/${club.id}/coaches/${person.user_id}`, "DELETE");
+      await queryClient.invalidateQueries({ queryKey: ["clubs"] });
+      toast({ tone: "success", title: action === "approve" ? t("staffClubs.approved") : t("staffClubs.removed") });
+    } catch (e) {
+      toast({ tone: "error", title: t("staffClubs.failed"), text: (e as Error).message });
+    } finally {
+      setSending(null);
+    }
+  }
 
   /** Un link nuovo per scegliere la password: per le segreterie importate,
    *  che non hanno mai ricevuto l'invito, o per chi l'ha perso. */
@@ -156,17 +175,35 @@ export function ClubList({ onEnter }: { onEnter: (id: string) => void }) {
                 <TD className="font-semibold">{club.athletes_active}</TD>
                 <TD className="text-xs">
                   {club.staff.length === 0 ? <Badge tone="warning">{t("clubs.noSecretary")}</Badge> : club.staff.map((s) => (
-                    <p key={s.user_id} className="flex flex-wrap items-center gap-x-2">
+                    <p key={s.user_id} className="flex flex-wrap items-center gap-x-2 gap-y-1">
                       <span>{s.email} <span className="text-ink-400">· {t.dyn(`clubs.role.${s.role}`, s.role)}</span></span>
-                      <button
-                        type="button"
-                        onClick={() => accessLink(club, s)}
-                        disabled={sending === s.user_id}
-                        className="cursor-pointer font-semibold text-brand-700 hover:underline disabled:opacity-50"
-                        title={t("clubs.accessLinkHint")}
-                      >
-                        🔑 {t("clubs.accessLink")}
-                      </button>
+                      {s.membership_status === "REQUESTED" ? (
+                        <>
+                          <Badge tone="warning" dot>⏳ {t("staffClubs.requested")}</Badge>
+                          <button type="button" onClick={() => coach(club, s, "approve")} disabled={sending === s.user_id}
+                            className="cursor-pointer font-semibold text-emerald-700 hover:underline disabled:opacity-50">
+                            ✓ {t("staffClubs.approve")}
+                          </button>
+                        </>
+                      ) : s.home === false ? (
+                        <Badge tone="info">🤝 {t("staffClubs.guestCoach")}</Badge>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => accessLink(club, s)}
+                          disabled={sending === s.user_id}
+                          className="cursor-pointer font-semibold text-brand-700 hover:underline disabled:opacity-50"
+                          title={t("clubs.accessLinkHint")}
+                        >
+                          🔑 {t("clubs.accessLink")}
+                        </button>
+                      )}
+                      {s.home === false && (
+                        <button type="button" onClick={() => coach(club, s, "remove")} disabled={sending === s.user_id}
+                          className="cursor-pointer font-semibold text-rose-600 hover:underline disabled:opacity-50">
+                          ✕ {t("staffClubs.remove")}
+                        </button>
+                      )}
                     </p>
                   ))}
                 </TD>
@@ -178,6 +215,7 @@ export function ClubList({ onEnter }: { onEnter: (id: string) => void }) {
                 <TD className="text-right whitespace-nowrap space-x-1">
                   <Button size="sm" onClick={() => onEnter(club.id)}>{t("clubs.enter")}</Button>
                   <Button size="sm" variant="ghost" onClick={() => setStaffFor(club)}>{t("clubs.addStaff")}</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setCoachFor(club)}>🧑‍🏫 {t("staffClubs.assign")}</Button>
                   <Button size="sm" variant="ghost" onClick={() => toggleStatus(club)}>
                     {club.status === "ACTIVE" ? t("clubs.suspend") : t("clubs.reactivate")}
                   </Button>
@@ -189,6 +227,7 @@ export function ClubList({ onEnter }: { onEnter: (id: string) => void }) {
       )}
       {creating && <CreateClubModal onClose={() => setCreating(false)} />}
       {access && <InviteHandoff email={access.email} link={access.link} onClose={() => setAccess(null)} />}
+      {coachFor && <AssignCoachModal club={coachFor} onClose={() => setCoachFor(null)} />}
       {staffFor && (
         <StaffModal
           title={t("clubs.addStaffTo", { name: staffFor.name })}
@@ -201,6 +240,45 @@ export function ClubList({ onEnter }: { onEnter: (id: string) => void }) {
         />
       )}
     </div>
+  );
+}
+
+/** Il superadmin assegna a un club un treinador che ha già l'account (di
+ *  qualunque club): allenerà lì con lo stesso account. */
+function AssignCoachModal({ club, onClose }: { club: ClubRow; onClose: () => void }) {
+  const { t } = useI18n();
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    setBusy(true);
+    setError(null);
+    try {
+      await send(`/${club.id}/coaches`, "POST", { email: email.trim() });
+      await queryClient.invalidateQueries({ queryKey: ["clubs"] });
+      toast({ tone: "success", title: t("staffClubs.assigned") });
+      onClose();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose} title={t("staffClubs.assignTitle", { club: club.name })} subtitle={t("staffClubs.assignHint")}
+      footer={<><Button variant="ghost" onClick={onClose}>{t("common.cancel")}</Button><Button onClick={submit} loading={busy} disabled={!email.includes("@")}>{t("staffClubs.assign")}</Button></>}
+    >
+      <div className="space-y-4">
+        <Field label="Email" htmlFor="coach-assign-email">
+          <Input id="coach-assign-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
+        </Field>
+        {error && <Badge tone="danger">{error}</Badge>}
+      </div>
+    </Modal>
   );
 }
 

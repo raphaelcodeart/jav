@@ -106,6 +106,9 @@ def _raise(exc: club_service.ClubError) -> None:
 
 
 async def _manager(db: AsyncSession, user: ClubUser) -> bool:
+    # Nel club di un'altra appartenenza si è solo treinador (club/scope.py).
+    if not user.home:
+        return False
     granted = await get_permission_codes_for_user(db, user_id=user.user_id, organization_id=user.organization_id)
     return MANAGE in granted
 

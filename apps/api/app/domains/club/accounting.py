@@ -1136,6 +1136,9 @@ async def staff_costs(db: AsyncSession, *, scope: ClubScope, period: Period, tod
             )
         ).scalars()
     )
+    from app.domains.club.staff_clubs import active_coach_ids
+
+    staff |= await active_coach_ids(db, club_id=scope.club_id)
     people = staff | set(minutes) | {uid for (_cid, uid) in rates}
     names = await _names(db, people)
     rows = []

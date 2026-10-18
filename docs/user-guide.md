@@ -518,6 +518,15 @@ Nell'area amministrazione, pagina dello Shop («Fai la Spesa con Jav»):
 
 ## 4. Per i treinador (e gli adjunto)
 
+**Più club con un account solo.** Se alleni in più club, entrando vedi il
+saluto con la tua foto (toccala per cambiarla) e un bottone per ogni club,
+con il logo, gli atleti e i tuoi corsi: scegli dove entrare. «Trocar de
+clube» in alto per passare a un altro. In un club che non è il tuo sei solo
+treinador. Ti assegna ai club il superadmin; la segreteria di un club può
+chiederti (aggiungendo la tua email come istruttore) e il superadmin
+approva. Nell'elenco degli atleti di ogni club chi è treinador ha la sua
+icona.
+
 **Vedi tutte le turmas del club** e tutti i loro atleti, anche se non te ne
 hanno assegnata nessuna: le turmas che insegni vengono per prime, con
 ★ «minha». Se la segreteria ti ha tolto una turma, quella turma e gli atleti
@@ -811,26 +820,41 @@ cinture, club e punti del gioco non sono quelli veri.
   → Relatórios** e quelli delle lezioni in **Relatórios das aulas**; il
   treinador li scrive nelle sue schede **Eventos** e **Caderno**.
 
-## Judogi e lista dei desideri
+## La Loja del club: judogi ed equipaggiamento
 
-- **Il calcolatore** (Shop della famiglia, Loja dell'area dell'atleta): sei
-  passi — atleta, tipo, colore, marca e taglia, judogi restituito, riepilogo.
-  Il prezzo lo calcola il club: judogi + personalizzazione obbligatoria (35 €)
-  − metà del valore del judogi restituito. Sotto i 13 anni sul judogi si
-  ricama solo il nome proprio.
-- **Chi ordina**: il genitore (titolare) per ogni figlio; l'atleta
-  maggiorenne con il suo accesso per sé. L'ordine diventa una quota
-  dell'atleta: si paga dalle quote come le altre. Lo stato (pendente, em
-  preparação, entregue) lo vedi in **Encomendas de judoguis** e ti arriva una
-  notifica quando cambia.
-- **L'atleta minorenne** ha la sua **Loja**: vede tutti i prodotti e il
-  calcolatore, ma invece di comprare mette **♡ Quero**. Il genitore riceve la
-  notifica e trova i desideri in cima allo Shop: **Encomendar** (il judogi si
-  apre già scelto; il prodotto con il figlio già indicato), **Já comprado** o
-  **Fica para outra vez**. Il figlio vede la risposta nella sua lista.
-- **Segreteria → Judogi**: le encomendas per stato, con ricerca, il bottone
-  per farle avanzare (→ Em preparação → Entregue) o annullarle (la quota non
-  pagata sparisce) e il **CSV per il fornitore**; il **listino** (prezzo per
-  marca, colore e taglia, modificabile; ● in vendita, ○ no; aggiungi una
-  taglia o una marca nuova) e le **regole** (personalizzazione, % della
-  permuta).
+- **La Loja** (area della famiglia e area dell'atleta) mostra, per l'atleta
+  scelto in alto, solo quello che è per lui: i modelli femminili a una
+  ragazza, quelli maschili a un ragazzo, le taglie giuste per la sua altezza.
+  L'**equipaggiamento di alta competizione** e il **judogi aprovado FIJ** (con
+  il backnumber ufficiale PT) si vedono con il lucchetto: li compra solo chi
+  la segreteria o il treinador hanno segnato di alta competizione. Il judogi
+  **rosa** si vede ma lo comprano solo le ragazze.
+- **Il kit del club**: che cosa l'atleta ha già, che cosa è in arrivo e che
+  cosa manca.
+- **Il judogi, passo a passo**: atleta (la taglia viene dall'altezza), tipo,
+  colore e modello con le foto, nome da ricamare (sotto i 13 anni solo il nome
+  proprio), judogi usato da restituire (uno di quelli che il club sa che ha,
+  o descritto a mano: vale metà del suo prezzo di listino), riepilogo. Il
+  prezzo lo calcola il club. Alla fine **Adicionar ao carrinho** o **Comprar
+  já e pagar**.
+- **Il carrello** raccoglie judogi ed equipaggiamento, anche di più figli.
+  All'ordine **ogni articolo diventa un'encomenda separata** (la segreteria
+  li prepara e consegna uno per uno) e si paga **tutto insieme**: «Encomendar
+  e pagar já» apre il pagamento con tutte le quote già scelte; «Encomendar,
+  pago depois» le lascia nella home, da pagare quando vuoi. Le trovi anche in
+  **As minhas encomendas**, con lo stato.
+- **L'atleta minorenne** non compra: mette **♡ Quero** e il genitore trova i
+  desideri nella Loja, da mettere nel carrello o rifiutare.
+- **Segreteria → Judogi**: le encomendas della Loja (judogi ed
+  equipaggiamento) per stato, con ricerca, avanzamento (→ Em preparação →
+  Entregue), annullamento e **CSV per il fornitore**; le **foto dei modelli**
+  di judogi; il **listino** e le **regole** (personalizzazione, % della
+  permuta). Nello **shop del club**, per ogni prodotto: **Para quem é**
+  (feminino / masculino / para todos, só alta competição, kit do clube,
+  personalizado com o nome) e per ogni taglia l'altezza fino a cui va bene.
+- **Piani e prezzi**: «Permite alta competição» sul piano del Grupo 3.
+- **Judogis dos atletas** (segreteria e treinador): chi ha il judogi bianco,
+  l'azul, il FIJ, e quali sono piccoli. **Para a próxima prova** mostra solo
+  gli iscritti e chi non ha il bianco o l'azul: il treinador lo porta dal
+  club. Da qui si segna l'**alta competizione** (solo per il Grupo 3), si
+  aggiunge un judogi che l'atleta aveva già e si toglie uno piccolo o perso.

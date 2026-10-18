@@ -6,6 +6,7 @@ l'amministratore a scriverli, cioè nel catalogo.
 """
 
 import uuid
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -78,6 +79,8 @@ class VariantWrite(BaseModel):
     #: `None` = scorta non gestita. Zero = esaurito.
     inventory: int | None = Field(default=None, ge=0)
     active: bool = True
+    #: Shop del club: la taglia giusta fino a questa altezza (cm).
+    max_height_cm: int | None = Field(default=None, ge=50, le=230)
 
 
 class VariantUpdate(BaseModel):
@@ -87,6 +90,7 @@ class VariantUpdate(BaseModel):
     price_cents: int | None = Field(default=None, gt=0, le=10_000_000)
     inventory: int | None = Field(default=None, ge=0)
     active: bool | None = None
+    max_height_cm: int | None = Field(default=None, ge=50, le=230)
 
 
 class ProductWrite(BaseModel):
@@ -101,6 +105,11 @@ class ProductWrite(BaseModel):
     producer_id: uuid.UUID | None = None
     #: Almeno una: un prodotto senza varianti non sarebbe comprabile.
     variants: list[VariantWrite] = Field(min_length=1)
+    # Per chi è, nello shop di un club (club/loja.py).
+    audience_sex: Literal["ALL", "F", "M"] = "ALL"
+    high_competition_only: bool = False
+    club_kit: bool = False
+    needs_name: bool = False
 
 
 class ProductUpdate(BaseModel):
@@ -112,6 +121,10 @@ class ProductUpdate(BaseModel):
     credit_discount_percentage: int | None = Field(default=None, ge=0, le=99)
     unit_cost_cents: int | None = Field(default=None, ge=0)
     producer_id: uuid.UUID | None = None
+    audience_sex: Literal["ALL", "F", "M"] | None = None
+    high_competition_only: bool | None = None
+    club_kit: bool | None = None
+    needs_name: bool | None = None
 
 
 class JavMarketAddress(BaseModel):

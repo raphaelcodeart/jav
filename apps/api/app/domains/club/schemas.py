@@ -65,6 +65,7 @@ class PlanWrite(BaseModel):
     billing_months: list[int] | None = None
     active: bool = True
     color: str | None = Field(default=None, pattern="^#[0-9A-Fa-f]{6}$")
+    allows_high_competition: bool = False
 
 
 class PlanUpdate(BaseModel):
@@ -78,6 +79,7 @@ class PlanUpdate(BaseModel):
     billing_months: list[int] | None = None
     active: bool | None = None
     color: str | None = Field(default=None, pattern="^#[0-9A-Fa-f]{6}$")
+    allows_high_competition: bool | None = None
 
 
 class PlanRead(BaseModel):
@@ -94,6 +96,7 @@ class PlanRead(BaseModel):
     billing_months: list[int]
     active: bool
     color: str | None = None
+    allows_high_competition: bool = False
     #: Gli atleti attivi con questo piano (solo nell'elenco della segreteria).
     athletes_count: int = 0
 
@@ -825,6 +828,11 @@ class ClubStaffRead(BaseModel):
     user_id: uuid.UUID
     email: str
     role: str
+    #: Falso per un treinador che viene da un altro club (club/staff_clubs.py).
+    home: bool = True
+    #: Per i treinador: ACTIVE, o REQUESTED se la segreteria l'ha chiesto e il
+    #: superadmin non ha ancora approvato.
+    membership_status: str | None = None
     #: Nome e cognome dal profilo (l'email per chi non ne ha uno).
     name: str | None = None
     #: Solo appena creato e solo se l'email d'invito non è partita: il link

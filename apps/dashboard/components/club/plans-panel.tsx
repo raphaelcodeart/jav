@@ -18,6 +18,8 @@ import { useI18n } from "@/lib/i18n/provider";
 // mensilità, iscrizione annuale, giorno di scadenza, mesi fatturati), ognuno
 // con il suo colore (`club_plans.color`, migrazione 0031). Senza colore
 // scelto, il gruppo prende quello della tavolozza secondo la sua posizione.
+// `allows_high_competition`: solo negli atleti di questi gruppi la segreteria
+// e il treinador possono segnare l'alta competizione (club/loja.py).
 
 const A = (path: string) => `/admin${path}`;
 export const PLAN_PALETTE = ["#E2552D", "#2563EB", "#16A34A", "#9333EA", "#EA9A0C", "#0891B2", "#DB2777", "#475569"];
@@ -116,7 +118,12 @@ function PlanCard({ plan: p, color, index, fmt, courses, onEdit, onDelete }: {
             👥 {p.athletes_count ?? 0}
           </span>
         </div>
-        {!p.active && <span className="relative mt-2 inline-block rounded-full bg-black/25 px-2 py-0.5 text-[11px] font-semibold text-white">{t("plans.inactive")}</span>}
+        {(!p.active || p.allows_high_competition) && (
+          <div className="relative mt-2 flex flex-wrap gap-1.5">
+            {!p.active && <span className="inline-block rounded-full bg-black/25 px-2 py-0.5 text-[11px] font-semibold text-white">{t("plans.inactive")}</span>}
+            {p.allows_high_competition && <span className="inline-block rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-ink-900">🏅 {t("lojaStaff.plan.highBadge")}</span>}
+          </div>
+        )}
       </header>
 
       <div className="flex flex-1 flex-col gap-4 p-5">
@@ -173,6 +180,7 @@ function PlanModal({ plan, index, onClose }: { plan: Plan | null; index: number;
   const [dueDay, setDueDay] = useState(String(plan?.due_day ?? 10));
   const [months, setMonths] = useState<number[]>(plan?.billing_months ?? [9, 10, 11, 12, 1, 2, 3, 4, 5, 6]);
   const [active, setActive] = useState(plan?.active ?? true);
+  const [highCompetition, setHighCompetition] = useState(plan?.allows_high_competition ?? false);
   const [color, setColor] = useState(plan?.color ?? PLAN_PALETTE[index % PLAN_PALETTE.length]!);
   const [busy, setBusy] = useState(false);
   const cents = (v: string) => Math.round(Number(v.replace(",", ".")) * 100) || 0;
@@ -182,7 +190,7 @@ function PlanModal({ plan, index, onClose }: { plan: Plan | null; index: number;
     const body = {
       name, description: description || null, min_age: Number(minAge), max_age: maxAge ? Number(maxAge) : null,
       monthly_fee_cents: cents(monthly), enrollment_fee_cents: cents(enrollment), due_day: Number(dueDay),
-      billing_months: months, active, color,
+      billing_months: months, active, color, allows_high_competition: highCompetition,
     };
     try {
       await (plan ? clubSend(A(`/plans/${plan.id}`), "PATCH", body) : clubSend(A("/plans"), "POST", body));
@@ -271,6 +279,15 @@ function PlanModal({ plan, index, onClose }: { plan: Plan | null; index: number;
           <span aria-hidden="true" className={cn("relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors", active ? "bg-emerald-500" : "bg-ink-300")}>
             <motion.span layout transition={{ type: "spring", stiffness: 600, damping: 34 }}
               className={cn("absolute h-5 w-5 rounded-full bg-white shadow", active ? "right-0.5" : "left-0.5")} />
+          </span>
+        </button>
+
+        <button type="button" role="switch" aria-checked={highCompetition} onClick={() => setHighCompetition((v) => !v)}
+          className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-2xl bg-ink-50 px-4 py-3 text-left text-sm font-semibold text-ink-800 ring-1 ring-ink-200">
+          <span>{t("lojaStaff.plan.highToggle")}<span className="block text-xs font-normal text-ink-500">{t("lojaStaff.plan.highToggleHint")}</span></span>
+          <span aria-hidden="true" className={cn("relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors", highCompetition ? "bg-emerald-500" : "bg-ink-300")}>
+            <motion.span layout transition={{ type: "spring", stiffness: 600, damping: 34 }}
+              className={cn("absolute h-5 w-5 rounded-full bg-white shadow", highCompetition ? "right-0.5" : "left-0.5")} />
           </span>
         </button>
       </div>

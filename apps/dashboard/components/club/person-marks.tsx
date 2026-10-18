@@ -16,6 +16,10 @@ interface PersonKinds { kind: "ATHLETE" | "USER"; id: string; user_id: string | 
 
 const ORDER: PersonKind[] = ["ATHLETE", "PARENT", "COACH", "ASSISTANT_COACH", "MONITOR", "ASSISTANT_MONITOR", "REFEREE", "SECRETARY"];
 
+// Un treinador deve saltare all'occhio anche in mezzo agli atleti: un
+// account solo può allenare in più club e comparire negli elenchi di tutti.
+const COACHING: PersonKind[] = ["COACH", "ASSISTANT_COACH"];
+
 export function usePersonKinds() {
   const { data } = useQuery({
     queryKey: ["club", "staff", "people-kinds"],
@@ -61,11 +65,25 @@ export function PersonMarks({ kinds, className = "", size = "sm" }: { kinds: Per
           <span key={k} title={label} aria-label={label} role="img"
             className={size === "md"
               ? `inline-flex h-8 w-8 items-center justify-center rounded-xl text-base leading-none shadow-sm ring-1 ${TONE[k]}`
-              : "inline-flex h-5 w-5 items-center justify-center rounded-md bg-ink-50 text-[12px] leading-none ring-1 ring-ink-100"}>
+              : `inline-flex h-5 w-5 items-center justify-center rounded-md text-[12px] leading-none ring-1 ${COACHING.includes(k) ? TONE[k] : "bg-ink-50 ring-ink-100"}`}>
             {PERSON_KIND_ICONS[k]}
           </span>
         );
       })}
+    </span>
+  );
+}
+
+/** Il segno del treinador accanto al nome (elenco atleti della segreteria):
+ *  il simbolo e la parola, perché lì i simboli piccoli si perdono. */
+export function CoachMark({ kinds, className = "" }: { kinds: PersonKind[]; className?: string }) {
+  const { t } = useI18n();
+  const k = COACHING.find((c) => kinds.includes(c));
+  if (!k) return null;
+  const label = t.dyn(`people.kind.${k}`, k);
+  return (
+    <span title={label} className={`inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold text-emerald-800 ring-1 ${TONE[k]} ${className}`}>
+      <span aria-hidden="true" className="text-[12px] leading-none">{PERSON_KIND_ICONS[k]}</span>{label}
     </span>
   );
 }
@@ -80,4 +98,10 @@ export function AthleteMarks({ id, className }: { id?: string | null; className?
 export function UserMarks({ id, className }: { id?: string | null; className?: string }) {
   const kinds = usePersonKinds();
   return <PersonMarks kinds={kinds.user(id)} className={className} />;
+}
+
+/** Il segno del treinador per un atleta, cercato per id (elenchi del treinador). */
+export function AthleteCoachMark({ id, className }: { id?: string | null; className?: string }) {
+  const kinds = usePersonKinds();
+  return <CoachMark kinds={kinds.athlete(id)} className={className} />;
 }

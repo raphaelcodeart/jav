@@ -11,6 +11,7 @@ import { AdminWalletsPanel } from "@/components/admin-wallets-panel";
 import { PlatformMoney } from "@/components/admin/platform-accounting";
 import { SponsorsPanel } from "@/components/admin/sponsors-panel";
 import { EmailTextsPanel } from "@/components/admin/email-texts-panel";
+import { CoachesPanel } from "@/components/admin/coaches-panel";
 import { NewsAdminPanel } from "@/components/club/club-board";
 import { ClubAdminPanel, sectionsFor, type ClubSection } from "@/components/club/club-admin-panel";
 import { ContactInbox } from "@/components/club/contact-inbox";
@@ -28,7 +29,7 @@ import type { PlatformOverview } from "@/lib/club";
 import { enterClub, leaveClub } from "@/lib/club-cookie";
 import { useI18n } from "@/lib/i18n/provider";
 
-type PlatformKey = "hq" | "clubs" | "jav-courses" | "messages" | "staff-messages" | "sponsors" | "emails" | "jav-news" | "javbot" | "shop" | "wallets" | "support" | "settings";
+type PlatformKey = "hq" | "clubs" | "coaches" | "jav-courses" | "messages" | "staff-messages" | "sponsors" | "emails" | "jav-news" | "javbot" | "shop" | "wallets" | "support" | "settings";
 type Key = PlatformKey | `club:${ClubSection}`;
 
 const emoji = (e: string) => <span className="text-base leading-none" aria-hidden="true">{e}</span>;
@@ -55,6 +56,8 @@ export function AdminConsole({ email, isSuperAdmin }: { email?: string; isSuperA
   const navItems: NavItem[] = [
     { key: "hq", label: t("console.hq"), icon: emoji("🌍"), group: "JudoArteVida" },
     { key: "clubs", label: t("console.clubs"), icon: emoji("🏯"), group: "JudoArteVida" },
+    // Chi allena dove: un treinador, un account, più club (club/staff_clubs.py).
+    { key: "coaches", label: t("staffClubs.nav"), icon: emoji("🧑‍🏫"), group: "JudoArteVida" },
     // I corsi nelle scuole non sono un club: un'entrata loro, accanto ai club.
     { key: "jav-courses", label: t("javCourses.navEntry"), icon: emoji("🏫"), group: "JudoArteVida" },
     // I messaggi scritti a JudoArteVida da /contactos.
@@ -90,6 +93,12 @@ export function AdminConsole({ email, isSuperAdmin }: { email?: string; isSuperA
     >
       {active === "hq" && <PlatformOverviewPanel canEdit={isSuperAdmin} onEnter={(id) => choose(id, "club:overview")} />}
       {active === "clubs" && <ClubList onEnter={(id) => choose(id, "club:overview")} />}
+      {active === "coaches" && (
+        <>
+          <PageHeader eyebrow="JudoArteVida" title={t("staffClubs.nav")} subtitle={t("staffClubs.overviewSubtitle")} />
+          <CoachesPanel />
+        </>
+      )}
       {active === "jav-courses" && <CoursesUnitPanel canCreate={isSuperAdmin} onEnter={(id) => choose(id, "jav-courses")} />}
       {active === "messages" && (
         <>

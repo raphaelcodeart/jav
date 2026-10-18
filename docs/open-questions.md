@@ -227,3 +227,20 @@ Scelte fatte senza il titolare, da confermare:
   all'ora del club cambierebbe anche i mesi chiusi. Da decidere, insieme a
   una eventuale «chiusura del mese» (audit di ottobre 2026,
   `docs/club-portal.md`, "Audit della contabilità").
+
+## 18. La Loja del club (migrazione 0040)
+
+- **Backnumber oficial PT sul judogi FIJ.** Oggi la Loja lo dice e basta: non
+  ha un prezzo né un campo per il numero o il nome. Va deciso se è compreso nel
+  prezzo, se è un supplemento del club (`clubs.settings["judogi"]`) e se serve
+  raccogliere il nome come sulla tessera federale.
+- **Foto dei judogi.** Quelle caricate vengono dai siti delle marche e da
+  negozi che le rivendono: vanno bene per un club che vende quei judogi, ma è
+  meglio chiedere al fornitore le foto ufficiali e sostituirle. Mancano: Tochi
+  Gi (tutti i modelli: la marca non si trova sul web con quel nome), Mizuno
+  Hayato azul, Fight Art Keikogi azul, Matsuru a righe rosa (nessuna foto
+  trovata corrisponde davvero). Le cinture (foto pronte, marca Katsudo) non
+  sono nel listino: se il club le vende diventano prodotti dello shop.
+- **Abbigliamento dell'altro sesso.** Non si mostra (la stessa t-shirt due
+  volte); alta competizione e rosa invece si vedono chiusi. Se il club vuole
+  mostrare anche questi chiusi è una riga in `loja.product_visible`.

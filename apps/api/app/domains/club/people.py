@@ -70,7 +70,15 @@ async def list_people(db: AsyncSession, *, scope: ClubScope) -> list[dict]:
     athletes = list(
         (await db.execute(select(ClubAthlete).where(ClubAthlete.club_id == scope.club_id))).scalars()
     )
-    users = list((await db.execute(select(User).where(User.club_id == scope.club_id))).scalars())
+    # I treinador del club sono le appartenenze ACTIVE (club/staff_clubs.py):
+    # anche chi ha l'account in un altro club, che qui è solo treinador.
+    from app.domains.club.staff_clubs import active_coach_ids
+
+    coaches = await active_coach_ids(db, club_id=scope.club_id)
+    users = list((await db.execute(select(User).where(
+        (User.club_id == scope.club_id) | User.id.in_(coaches or [uuid.uuid4()]),
+    ))).scalars())
+    guests = {u.id for u in users if u.club_id != scope.club_id}
     roles = dict(
         (
             await db.execute(
@@ -125,7 +133,7 @@ async def list_people(db: AsyncSession, *, scope: ClubScope) -> list[dict]:
         function = fn_by_athlete.get(a.id) or (fn_by_user.get(a.guardian_user_id) if a.is_self else None)
         if function:
             kinds.append(function)
-        elif "INSTRUCTOR" in holder_roles:
+        elif "INSTRUCTOR" in holder_roles and a.guardian_user_id in coaches:
             kinds.append("COACH")
         if a.id in referee_athletes or (a.is_self and a.guardian_user_id in referee_users):
             kinds.append("REFEREE")
@@ -142,6 +150,9 @@ async def list_people(db: AsyncSession, *, scope: ClubScope) -> list[dict]:
         user_roles = set(roles.get(u.id) or [])
         if u.id in self_athlete_of:
             continue  # già nell'elenco come atleta, con i suoi tipi
+        if u.id in guests:
+            # Treinador da un altro club: qui non è genitore né segreteria.
+            user_roles &= {"INSTRUCTOR"}
         kinds: list[str] = []
         if "CUSTOMER" in user_roles:
             kinds.append("PARENT")
@@ -149,7 +160,7 @@ async def list_people(db: AsyncSession, *, scope: ClubScope) -> list[dict]:
             kinds.append("SECRETARY")
         if fn_by_user.get(u.id):
             kinds.append(fn_by_user[u.id])
-        elif "INSTRUCTOR" in user_roles:
+        elif "INSTRUCTOR" in user_roles and u.id in coaches:
             kinds.append("COACH")
         if u.id in referee_users:
             kinds.append("REFEREE")
@@ -158,7 +169,7 @@ async def list_people(db: AsyncSession, *, scope: ClubScope) -> list[dict]:
         family = children.get(u.id, [])
         rows.append({
             "kind": "USER", "id": u.id, "user_id": u.id, "name": names.get(u.id, u.email), "kinds": kinds,
-            "status": "ACTIVE" if u.status == "ACTIVE" else "SUSPENDED", "photo_url": None, "belt": None,
+            "status": "ACTIVE" if u.status == "ACTIVE" else "SUSPENDED", "photo_url": u.photo_url, "belt": None,
             "age": None, "email": u.email, "guardian_name": None,
             "due_cents": int(member_due.get(u.id) or 0) + sum(int(due.get(a.id) or 0) for a in family),
             "children": [{"id": a.id, "name": f"{a.first_name} {a.last_name}"} for a in family],

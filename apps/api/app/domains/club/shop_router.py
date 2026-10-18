@@ -96,7 +96,8 @@ async def update_variant(variant_id: uuid.UUID, payload: VariantUpdate, user: Cl
                                       payload=payload.model_dump(exclude_unset=True), club_id=user.club_id)
     except shop.ERRORS as exc:
         raise _http(exc) from exc
-    return {"id": v.id, "label": v.label, "price_cents": v.price_cents, "inventory": v.inventory, "active": v.active}
+    return {"id": v.id, "label": v.label, "price_cents": v.price_cents, "inventory": v.inventory, "active": v.active,
+            "max_height_cm": v.max_height_cm}
 
 
 # --- Gli ordini dello shop del club ---------------------------------------------------------------

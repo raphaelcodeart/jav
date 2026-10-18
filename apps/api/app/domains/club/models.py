@@ -193,6 +193,10 @@ class ClubPlan(UUIDPKMixin, TimestampMixin, Base):
     #: Il colore del gruppo (#RRGGBB), scelto dalla segreteria: la fascia della
     #: sua scheda in «Piani e prezzi». NULL = un colore dalla tavolozza.
     color: Mapped[str | None] = mapped_column(String(7), nullable=True)
+    #: Il gruppo da cui si può essere di alta competizione (Grupo 3): solo
+    #: i suoi atleti possono avere il segno `club_athletes.high_competition`
+    #: e comprare l'equipaggiamento che lo richiede (club/loja.py).
+    allows_high_competition: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
 
 
 class ClubAthlete(UUIDPKMixin, TimestampMixin, Base):
@@ -291,6 +295,15 @@ class ClubAthlete(UUIDPKMixin, TimestampMixin, Base):
     #: Ha il judogi bianco per le gare (club/obligations.py): lo dichiara la
     #: famiglia o la segreteria.
     white_judogi: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    #: Atleta di alta competizione: lo decidono la segreteria e il treinador,
+    #: e vale solo finché il suo piano lo permette (`allows_high_competition`).
+    #: Apre il judogi aprovado FIJ (con il backnumber PT) e l'equipaggiamento
+    #: della selezione nella Loja (club/loja.py).
+    high_competition: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    high_competition_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    high_competition_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
 
 class ClubPaymentProof(UUIDPKMixin, TimestampMixin, Base):
@@ -1219,3 +1232,36 @@ class ClubEventReportPhoto(UUIDPKMixin, TimestampMixin, Base):
     )
     storage_key: Mapped[str] = mapped_column(String(300))
     content_type: Mapped[str] = mapped_column(String(50))
+
+
+#: Lo stato di un treinador in un club: attivo, o chiesto dalla segreteria e
+#: in attesa che il superadmin lo approvi.
+STAFF_MEMBERSHIP_STATUSES = ("ACTIVE", "REQUESTED")
+
+
+class ClubStaffMembership(UUIDPKMixin, TimestampMixin, Base):
+    """Un treinador in un club. Un account solo può allenare in più club
+    (Matias in tutti, un altro in due): ogni riga ACTIVE gli apre l'area del
+    treinador di quel club, che sceglie entrando (club/staff_clubs.py). La
+    assegna il superadmin; la segreteria di un club la chiede (REQUESTED) e
+    il superadmin la approva. In un club che non è il suo (`users.club_id`)
+    il treinador è solo treinador, mai segreteria."""
+
+    __tablename__ = "club_staff_memberships"
+    __table_args__ = (
+        UniqueConstraint("club_id", "user_id", name="uq_club_staff_memberships_club_user"),
+        CheckConstraint(f"status IN ({_in(STAFF_MEMBERSHIP_STATUSES)})", name="status"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id"))
+    club_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("clubs.id"), index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), index=True)
+    status: Mapped[str] = mapped_column(String(10), default="ACTIVE", server_default="ACTIVE")
+    requested_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    decided_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    note: Mapped[str | None] = mapped_column(String(300), nullable=True)

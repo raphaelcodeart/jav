@@ -444,10 +444,13 @@ async def club_branding(
     atleta): nome, logo e i tre colori scelti nell'editor del sito. Lo legge
     chiunque appartenga al club, qualunque ruolo abbia; il superadmin quello
     del club in cui è entrato. Senza colori o senza logo il frontend usa JAV."""
-    from app.domains.club.scope import CLUB_HEADER, resolve_club
+    from app.domains.club.scope import CLUB_HEADER, STAFF_CLUB_HEADER, resolve_club
     from app.domains.club.site_models import ClubSite
 
-    club = await resolve_club(db, current_user=current_user, requested=request.headers.get(CLUB_HEADER))
+    # L'area del treinador (`?area=staff`) prende il tema del club che ha scelto.
+    staff = request.headers.get(STAFF_CLUB_HEADER) if request.query_params.get("area") == "staff" else None
+    club = await resolve_club(db, current_user=current_user, requested=request.headers.get(CLUB_HEADER),
+                              staff_requested=staff)
     site = (await db.execute(select(ClubSite).where(ClubSite.club_id == club.id))).scalar_one_or_none()
     return {
         "name": club.name,

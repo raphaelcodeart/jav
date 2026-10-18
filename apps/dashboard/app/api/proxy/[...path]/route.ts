@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { clearSession, getSession, refreshSession, type Session } from "@/lib/session";
-import { CLUB_COOKIE } from "@/lib/club-cookie";
+import { CLUB_COOKIE, STAFF_CLUB_COOKIE } from "@/lib/club-cookie";
 
 const API_INTERNAL_URL = process.env.API_INTERNAL_URL ?? "http://localhost:8000";
 
@@ -9,7 +9,13 @@ const API_INTERNAL_URL = process.env.API_INTERNAL_URL ?? "http://localhost:8000"
  * un club l'API la ignora, quindi inoltrarla sempre non apre niente. */
 function clubHeader(request: NextRequest): Record<string, string> {
   const club = request.cookies.get(CLUB_COOKIE)?.value;
-  return club ? { "X-Jav-Club": club } : {};
+  // Il club scelto dal treinador di più club: l'API lo guarda solo sulle
+  // rotte del treinador e lo controlla contro le sue appartenenze.
+  const staffClub = request.cookies.get(STAFF_CLUB_COOKIE)?.value;
+  return {
+    ...(club ? { "X-Jav-Club": club } : {}),
+    ...(staffClub ? { "X-Jav-Staff-Club": staffClub } : {}),
+  };
 }
 
 /** True only for this app's own "your access token is bad/expired" 401 --

@@ -102,7 +102,23 @@ async def _staff_by_club(db: AsyncSession, *, club_ids: list[uuid.UUID]) -> dict
     ).all()
     out: dict[uuid.UUID, list[dict]] = {}
     for club_id, user_id, email, role in rows:
-        out.setdefault(club_id, []).append({"user_id": user_id, "email": email, "role": role})
+        out.setdefault(club_id, []).append({"user_id": user_id, "email": email, "role": role, "home": True,
+                                            "membership_status": None})
+    # I treinador che vengono da un altro club (club/staff_clubs.py), anche
+    # quelli chiesti dalla segreteria e non ancora approvati.
+    from app.domains.club.staff_clubs import coach_ids_by_club
+
+    members = await coach_ids_by_club(db, club_ids=club_ids)
+    for club_id, by_user in members.items():
+        here = {r["user_id"]: r for r in out.get(club_id, []) if r["role"] == "INSTRUCTOR"}
+        for r in here.values():
+            r["membership_status"] = by_user.get(r["user_id"])
+        guests = [uid for uid in by_user if uid not in here]
+        if not guests:
+            continue
+        for user_id, email in (await db.execute(select(User.id, User.email).where(User.id.in_(guests)))).all():
+            out.setdefault(club_id, []).append({"user_id": user_id, "email": email, "role": "INSTRUCTOR",
+                                                "home": False, "membership_status": by_user[user_id]})
     return out
 
 
@@ -307,6 +323,10 @@ async def add_staff(
         if has is not None:
             raise ClubValidationError(f"{email} fa già parte dello staff con questo ruolo.")
         db.add(UserRole(user_id=existing.id, organization_id=scope.organization_id, role_id=role_row.id))
+        if role == "INSTRUCTOR":
+            from app.domains.club.staff_clubs import ensure_home_membership
+
+            await ensure_home_membership(db, user=existing, actor_user_id=actor_user_id)
         await audit_service.record(
             db, organization_id=scope.organization_id, actor_user_id=actor_user_id,
             action="clubs.staff_added", entity_type="club", entity_id=str(club.id),
@@ -322,6 +342,10 @@ async def add_staff(
     db.add(user)
     await db.flush()
     db.add(UserRole(user_id=user.id, organization_id=scope.organization_id, role_id=role_row.id))
+    if role == "INSTRUCTOR":
+        from app.domains.club.staff_clubs import ensure_home_membership
+
+        await ensure_home_membership(db, user=user, actor_user_id=actor_user_id)
     await audit_service.record(
         db, organization_id=scope.organization_id, actor_user_id=actor_user_id,
         action="clubs.staff_added", entity_type="club", entity_id=str(club.id),

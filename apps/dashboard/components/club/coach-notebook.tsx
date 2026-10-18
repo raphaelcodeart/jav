@@ -12,6 +12,7 @@ import { Modal } from "@/components/ui/modal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toast";
+import { AthleteCoachMark } from "@/components/club/person-marks";
 import { clubGet, clubSend, type Course } from "@/lib/club";
 import {
   COACH, NOTE_CATEGORIES, NOTE_ICONS, initials, isoDay,
@@ -355,7 +356,10 @@ function MyAthletes({ manager }: { manager: boolean }) {
                 className="flex w-full cursor-pointer items-start gap-3 rounded-3xl bg-white p-4 text-left shadow-soft ring-1 ring-ink-900/5 transition hover:-translate-y-0.5 hover:ring-brand-300">
                 <Avatar first={a.first_name} last={a.last_name} photo={a.photo_url} />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate font-semibold text-ink-900">{a.first_name} {a.last_name}</span>
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <span className="truncate font-semibold text-ink-900">{a.first_name} {a.last_name}</span>
+                    <AthleteCoachMark id={a.id} />
+                  </span>
                   <span className="mt-0.5 flex items-center gap-2">
                     <BeltBadge belt={a.belt} size="sm" showLabel={false} />
                     <span className="truncate text-xs text-ink-500">{a.courses.join(" · ") || "—"}</span>

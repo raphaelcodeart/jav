@@ -51,10 +51,13 @@ async def _today(db: AsyncSession, user: ClubUser):
 
 
 class TradeIn(BaseModel):
-    kimono_type: str
-    color: str
-    brand: str = Field(max_length=60)
+    kimono_type: str | None = None
+    color: str | None = None
+    brand: str = Field(default="", max_length=60)
     size_cm: int | None = Field(default=None, ge=80, le=220)
+    #: Un judogi dell'armadio dell'atleta: il server legge tipo, colore,
+    #: marca e taglia dall'ordine, e alla consegna del nuovo lo ritira.
+    owned_order_id: uuid.UUID | None = None
 
 
 class Choice(BaseModel):
@@ -140,7 +143,8 @@ async def catalog(
     consigliata per l'altezza."""
     club = await _club(db, current_user)
     rows = await judogi.price_rows(db, club_id=club.id)
-    return {**judogi.settings_of(club), "types": judogi.price_tree(rows, height_cm=height_cm)}
+    models = await judogi.models_of(db, club_id=club.id)
+    return {**judogi.settings_of(club), "types": judogi.price_tree(rows, height_cm=height_cm, models=models)}
 
 
 @member_router.get("/athletes")
@@ -150,7 +154,10 @@ async def my_athletes(
     """Per chi posso ordinare (BUY) o desiderare (WISH)."""
     today = await _today(db, current_user)
     mine = await judogi.my_athletes(db, scope=current_user.scope, user_id=current_user.user_id, today=today)
-    return [judogi.athlete_dict(a, mode, today) for a, mode in mine]
+    from app.domains.club import loja
+
+    hc = await loja.high_competition_map(db, [a for a, _m in mine])
+    return [judogi.athlete_dict(a, mode, today, high_competition=hc[a.id]) for a, mode in mine]
 
 
 @member_router.post("/quote")
@@ -161,13 +168,15 @@ async def quote(
     club = await _club(db, current_user)
     height = payload.height_cm
     try:
-        if payload.athlete_id is not None and height is None:
+        # L'atleta si verifica sempre: la permuta può leggere il suo armadio.
+        if payload.athlete_id is not None:
             athlete, _mode = await judogi.athlete_for(
                 db, scope=current_user.scope, user_id=current_user.user_id, athlete_id=payload.athlete_id,
                 today=await _today(db, current_user),
             )
-            height = athlete.height_cm
-        result = await judogi.quote(db, club=club, choice=payload.model_dump(), height_cm=height)
+            height = height or athlete.height_cm
+        result = await judogi.quote(db, club=club, choice=payload.model_dump(), height_cm=height,
+                                    athlete_id=payload.athlete_id)
     except club_service.ClubError as exc:
         _raise(exc)
     return result
@@ -312,9 +321,11 @@ async def admin_create_order(
     if athlete is None or athlete.club_id != current_user.club_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Atleta non trovato.")
     try:
+        # Al banco la segreteria sa per chi è: le regole della Loja valgono
+        # per le famiglie.
         order = await judogi.create_order(
             db, scope=current_user.scope, club=club, athlete=athlete, actor_user_id=current_user.user_id,
-            data=payload.model_dump(), today=await _today(db, current_user),
+            data=payload.model_dump(), today=await _today(db, current_user), check_rules=False,
         )
     except club_service.ClubError as exc:
         _raise(exc)

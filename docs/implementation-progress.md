@@ -902,3 +902,37 @@ database di test), uniti qui:
   notifica, poi ordina, compra o rifiuta. Segreteria: ordini, stati, CSV per
   il fornitore, listino. Test: `test_club_judogi.py`.
 Test completi: 647 passati, 1 fallito già noto (`test_organizations`). Con `-e SMTP_HOST=`: senza, i test che mandano email provano a entrare nel server SMTP vero e falliscono (535).
+
+## 18/10/2026 — La Loja del club e il treinador di più club (migrazioni 0040–0041)
+
+- **Quote dell'attrezzatura visibili subito**: un judogi ordinato non
+  compariva in home (la quota scade a 14 giorni, il quadro del mese guardava
+  solo il mese) né in «As minhas encomendas» (che leggeva solo lo Shop). Ora
+  la quota `EQUIPMENT` conta da subito (`month_board.py`) e gli ordini del
+  club stanno anche tra le encomendas, con «Pagar».
+- **La Loja del club** (0040, `club/loja.py`): judogi ed equipaggiamento in un
+  carrello solo; ogni riga diventa un ordine a sé con la sua quota, tutti o
+  nessuno, pagati insieme subito o dopo. Il judogi resta un ordine di judogi:
+  è l'armadio dell'atleta. Per chi è un articolo lo decide il server
+  all'ordine: l'abbigliamento dell'altro sesso non si vede; alta competizione
+  (anche il judogi FIJ con il backnumber PT) e rosa si vedono chiusi.
+  L'alta competizione la segnano segreteria e treinador, solo nei piani che la
+  permettono (Grupo 3). Il calcolatore diventa un percorso a passi con le foto
+  dei modelli (`club_judogi_models`, 23 foto caricate dai siti delle marche) e
+  la permuta da un judogi dell'armadio, che esce alla consegna del nuovo.
+  L'armadio dei judogi (segreteria e treinador) dice per la prossima prova a
+  chi manca il bianco o l'azul. I prodotti di un club non si comprano più
+  dallo Shop: sarebbe un secondo debito fuori dalle quote. Test:
+  `test_club_loja.py`.
+- **Un treinador, più club** (0041, `club/staff_clubs.py`): un account allena
+  in più club (`club_staff_memberships`), sceglie entrando (saluto con la sua
+  foto, `users.photo_url`, e un bottone per club) e la scelta vale solo per le
+  rotte del treinador (`X-Jav-Staff-Club`): famiglia e segreteria restano nel
+  club dell'account, e fuori dal suo club non è mai segreteria. Il superadmin
+  assegna, la segreteria chiede. Matias in Albufeira, Lagos e JTML; Marco in
+  Lagos e JTML; la foto di Matias da judotv. Icona del treinador negli elenchi
+  degli atleti, «Presenças» corto nella barra del telefono, logo del club più
+  grande e cliccabile verso la home. Test: `test_club_staff_clubs.py`.
+Test completi: 655 passati, 1 fallito già noto (`test_organizations`, il
+database di test condiviso tra i test: con più organizzazioni non ce n'è
+«una sola»).

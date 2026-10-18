@@ -17,7 +17,9 @@ attivo, con il suo gruppo (il piano), l'importo e lo stato:
 
 Accanto, ciò che la stessa persona deve ancora pagare oltre alla mensilità:
 i mesi passati non pagati (arretrati) e le altre quote scadute entro la fine
-del mese (gare, judogi, iscrizione, multe). Gli ordini dello Shop restano
+del mese (gare, iscrizione, multe). L'attrezzatura ordinata (judogi, Loja)
+conta da subito, qualunque sia la scadenza: è un acquisto già fatto, e chi
+l'ha appena ordinata deve trovarla fra le cose da pagare, non a fine mese. Gli ordini dello Shop restano
 dello Shop: la segreteria li vede a parte. Tutto si calcola dalle quote, mai
 da un totale salvato.
 
@@ -83,7 +85,7 @@ async def _rows(
             continue
         elif month is not None and month < period:
             arrears.setdefault(f.athlete_id, []).append(f)
-        elif f.kind != "MONTHLY" and f.due_date <= last_day:
+        elif f.kind == "EQUIPMENT" or (f.kind != "MONTHLY" and f.due_date <= last_day):
             others.setdefault(f.athlete_id, []).append(f)
     by_id = {a.id: a for a in athletes}
     rows = []

@@ -15,8 +15,10 @@ export function clubSignupUrl(slug: string): string {
 }
 
 /** Aggiunge un account di staff a un club: segreteria o istruttore. La
- *  persona riceve l'email per scegliersi la password. */
-export function StaffModal({ title, onClose, onSubmit }: { title: string; onClose: () => void; onSubmit: (email: string, role: string) => Promise<string | null> }) {
+ *  persona riceve l'email per scegliersi la password. `onSubmit` risponde
+ *  "requested" quando l'istruttore ha già l'account in un altro club: allora
+ *  non si crea niente, parte la richiesta al superadmin (club/staff_clubs.py). */
+export function StaffModal({ title, onClose, onSubmit }: { title: string; onClose: () => void; onSubmit: (email: string, role: string) => Promise<string | null | "requested"> }) {
   const { t } = useI18n();
   const toast = useToast();
   const [email, setEmail] = useState("");
@@ -30,6 +32,11 @@ export function StaffModal({ title, onClose, onSubmit }: { title: string; onClos
     setError(null);
     try {
       const link = await onSubmit(email.trim(), role);
+      if (link === "requested") {
+        toast({ tone: "info", title: t("staffClubs.requestSent"), text: t("staffClubs.requestSentText", { email: email.trim() }) });
+        onClose();
+        return;
+      }
       if (link) {
         setHandoff(link);
         return;

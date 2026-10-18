@@ -51,6 +51,8 @@ export interface Plan extends PlanSummary {
   color?: string | null;
   /** Gli atleti attivi con questo piano (elenco della segreteria). */
   athletes_count?: number;
+  /** Il piano permette di segnare un atleta di alta competizione (club/loja.py). */
+  allows_high_competition?: boolean;
 }
 
 export interface Fee {

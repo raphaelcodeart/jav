@@ -822,6 +822,10 @@ async def cash_receivers(db: AsyncSession, *, scope: ClubScope) -> list[dict]:
             )
         ).scalars()
     )
+    # Anche i treinador che vengono da un altro club (club/staff_clubs.py).
+    from app.domains.club.staff_clubs import active_coach_ids
+
+    ids |= await active_coach_ids(db, club_id=scope.club_id)
     names = await _names(db, ids)
     return sorted(({"user_id": uid, "name": names.get(uid, "")} for uid in ids), key=lambda r: r["name"].lower())
 
