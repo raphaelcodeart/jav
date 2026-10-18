@@ -1008,6 +1008,7 @@ def _course_card(course: ClubCourse, slots: list[ClubCourseSlot], *, unit: Club)
         "venue_name": course.venue_name,
         "venue_address": course.venue_address,
         "venue_city": course.venue_city,
+        "venue_logo_url": course.venue_logo_url,
         "description": course.public_description,
         "coach_name": course.public_coach_name,
         "slots": [

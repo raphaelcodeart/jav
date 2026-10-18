@@ -9,12 +9,14 @@ import { CalendarPanel, ClockPanel } from "@/components/club/coach-tools";
 import { CoachHome } from "@/components/club/coach-home";
 import { CoachNotebook } from "@/components/club/coach-notebook";
 import { CoachBoard } from "@/components/club/coach-board";
+import { CoachCv } from "@/components/club/coach-cv";
 import { CoachEventsPanel } from "@/components/club/event-reports";
 import { BeltAwardPanel } from "@/components/club/staff-tools";
 import { RankingPanel } from "@/components/club/ranking-panel";
 import { JudogiWardrobe } from "@/components/club/judogi-wardrobe";
 import { StaffMessagesPanel, StaffWorkPanel } from "@/components/club/staff-management";
 import { CoachEarningsPanel, useClubFeatures } from "@/components/club/jav-courses";
+import { useStaffExtCourses } from "@/components/ext-courses/staff-course-links";
 import { StaffClubBar, StaffClubPicker, switchStaffClub, useMyClubs, useStaffClubCookie } from "@/components/club/staff-clubs";
 import { useI18n } from "@/lib/i18n/provider";
 
@@ -28,7 +30,8 @@ const icon = (d: string) => (
  *  le presenze, il calendario delle sue lezioni, il quaderno (note delle
  *  lezioni e degli atleti), il cartellino, la bacheca, le cinture.
  *  Nei corsi JAV niente cinture e ranking, e al loro posto "I miei
- *  guadagni": il treinador lì è pagato a percentuale del suo corso. */
+ *  guadagni": il treinador lì è pagato a percentuale del suo corso.
+ *  «O meu currículo» è suo e non del club: c'è in ogni club. */
 export function StaffClientPage({ email }: { email?: string }) {
   const { t } = useI18n();
   const [tab, setTab] = useState("home");
@@ -47,6 +50,9 @@ export function StaffClientPage({ email }: { email?: string }) {
   const chosenId = useStaffClubCookie();
   const myClubs = useMyClubs();
   const club = myClubs.data?.clubs.find((c) => c.id === chosenId) ?? null;
+  // Con un club solo ma anche un corso esterno, la scelta resta raggiungibile.
+  const { data: extCourses } = useStaffExtCourses();
+  const canSwitch = (myClubs.data?.clubs.length ?? 0) > 1 || (extCourses ?? []).some((c) => c.roles.includes("COACH") && !c.roles.includes("ADMIN"));
   async function chooseClub(id: string | null) {
     await switchStaffClub(queryClient, id);
     setTab("home");
@@ -67,6 +73,8 @@ export function StaffClientPage({ email }: { email?: string }) {
     { key: "notebook", label: t("coach2.nav.notebook"), icon: icon("M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253") },
     { key: "clock", label: t("coach.navClock"), icon: icon("M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z") },
     { key: "work", label: t("staffMgmt.navWork"), icon: icon("M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"), notificationTypes: ["CLUB_STAFF_TASK_PAID"] },
+    // Il curriculum personale (club/coach_cv.py): diplomi, CV, carriera.
+    { key: "cv", label: t("cv.nav"), icon: icon("M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2zM12 3v5a1 1 0 001 1h5") },
     { key: "messages", label: t("staffMsg.nav"), icon: icon("M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"), notificationTypes: ["CLUB_STAFF_MESSAGE"] },
     { key: "board", label: t("coach2.nav.board"), icon: icon("M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z") },
     // Chi ha il judogi bianco e l'azul prima di una prova (il treinador porta quelli del club).
@@ -79,7 +87,7 @@ export function StaffClientPage({ email }: { email?: string }) {
   const navItems = all.filter((n) => !hidden.includes(n.key));
   return (
     <AppShell clubBranding roleLabel={`${t("coach.role")} · ${club.name}`} email={email} navItems={navItems} activeKey={tab} onNavigate={(k) => go(k)}
-      headerActions={<StaffClubBar club={club} canSwitch={(myClubs.data?.clubs.length ?? 0) > 1} onSwitch={() => void chooseClub(null)} />}>
+      headerActions={<StaffClubBar club={club} canSwitch={canSwitch} onSwitch={() => void chooseClub(null)} />}>
       {tab === "home" && <CoachHome onNavigate={go} me={myClubs.data?.me} club={club} />}
       {tab === "attendance" && (
         <>
@@ -100,6 +108,12 @@ export function StaffClientPage({ email }: { email?: string }) {
         </>
       )}
       {tab === "board" && <CoachBoard />}
+      {tab === "cv" && (
+        <>
+          <PageHeader eyebrow={t("coach.eyebrow")} title={t("cv.nav")} subtitle={t("cv.subtitle")} />
+          <CoachCv />
+        </>
+      )}
       {tab === "calendar" && (
         <>
           <PageHeader eyebrow={t("coach.eyebrow")} title={t("coach.navCalendar")} subtitle={t("coach.calendarSubtitle")} />

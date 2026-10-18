@@ -25,6 +25,10 @@ SYSTEM_ROLES = [
     # L'accesso di un atleta alla sua area (club/athlete_access.py): un figlio
     # con il suo nome utente, o un adulto prima di diventare titolare.
     "ATHLETE",
+    # I corsi esterni nelle scuole (domains/extcourses): il genitore che vi ha
+    # iscritto i figli, e la segreteria della scuola che ospita un corso.
+    "EXT_FAMILY",
+    "EXT_SCHOOL",
 ]
 
 # Granular permission codes. Kept as a flat list (not an enum) so new permissions can
@@ -51,6 +55,9 @@ PERMISSIONS = [
     # gestisce solo la propria famiglia, e lo verifica il servizio, non il
     # permesso. `club.manage` è la segreteria, `club.instruct` gli istruttori.
     "club.family", "club.manage", "club.instruct", "club.athlete",
+    # Corsi esterni: che cosa è di chi lo decidono le righe (ext_participants,
+    # ext_staff), non il permesso, che apre solo l'area.
+    "ext.family", "ext.school",
     # Più club sulla stessa piattaforma: `clubs.manage` li crea e li modifica,
     # `clubs.enter` lavora dentro un club qualsiasi scegliendolo (club/scope.py).
     "clubs.manage", "clubs.enter",
@@ -124,6 +131,8 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, list[str]] = {
     # vedi club/scope.py.
     "SECRETARY": ["club.manage", "club.instruct", "tickets.create"],
     "ATHLETE": ["club.athlete"],
+    "EXT_FAMILY": ["ext.family"],
+    "EXT_SCHOOL": ["ext.school"],
 }
 
 

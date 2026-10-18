@@ -7,6 +7,7 @@ sicurezza, e public.py (sito). Qui si decide chi è l'utente per gli strumenti
 le battute e si tiene pulito lo storico (conservazione in models.py).
 """
 
+import re
 import uuid
 from datetime import timedelta
 
@@ -18,12 +19,12 @@ from app.core.db import utcnow
 from app.core.deps import CurrentUser
 from app.domains.club.lessons import club_now
 from app.domains.club.scope import resolve_club
-from app.domains.javbot import assistant
+from app.domains.javbot import actions, agent, assistant, intents, knowledge, llm, rag
 from app.domains.javbot import planner as planner_module
 from app.domains.javbot.models import RETENTION_DAYS, JavbotConversation, JavbotMessage, JavbotTask
 from app.domains.javbot.planner import Planner, Reply
 from app.domains.javbot.texts import lang_of, say
-from app.domains.javbot.tools import ToolContext
+from app.domains.javbot.tools import ToolContext, ToolDenied
 from app.domains.rbac.service import get_permission_codes_for_user
 
 #: Quante battute rimanda la chat quando si riapre.
@@ -33,6 +34,7 @@ MAX_TEXT = 1000
 
 async def build_context(
     db: AsyncSession, *, current_user: CurrentUser, requested_club: str | None, lang: str | None,
+    staff_club: str | None = None,
 ) -> ToolContext:
     """L'utente come lo vedono gli strumenti. Il club lo decide
     club/scope.py (per lo staff della piattaforma, quello in cui è
@@ -48,9 +50,20 @@ async def build_context(
         await get_permission_codes_for_user(db, user_id=current_user.user_id, organization_id=current_user.organization_id)
     )
     today = (await club_now(db, club_id=scope.club_id)).date() if scope else utcnow().date()
+    # Il treinador di più club: le sue azioni da treinador nel club che ha
+    # scelto entrando (club/staff_clubs.py); il resto nel club dell'account.
+    staff_scope, staff_home = scope, True
+    if staff_club and scope is not None:
+        from app.domains.club.scope import staff_club as staff_club_of
+        from app.domains.users.models import User
+
+        user = await db.get(User, current_user.user_id)
+        other = await staff_club_of(db, user=user, requested=staff_club) if user else None
+        if other is not None:
+            staff_scope, staff_home = ClubScope(organization_id=other.organization_id, club_id=other.id), False
     return ToolContext(
         db=db, user_id=current_user.user_id, organization_id=current_user.organization_id, scope=scope,
-        permissions=permissions, lang=lang_of(lang), today=today,
+        permissions=permissions, lang=lang_of(lang), today=today, staff_scope=staff_scope, staff_home=staff_home,
     )
 
 
@@ -106,7 +119,7 @@ def _add_message(
     message = JavbotMessage(
         conversation_id=conversation_id, user_id=ctx.user_id, club_id=ctx.scope.club_id if ctx.scope else None,
         role=role, text=reply.text if reply else (text or ""), actions=reply.actions if reply else [],
-        quick_replies=reply.quick_replies if reply else [], intent=intent,
+        quick_replies=reply.quick_replies if reply else [], intent=intent, cards=reply.cards if reply else [],
     )
     db.add(message)
     return message
@@ -127,15 +140,98 @@ async def _save_exchange(
     return [asked, answered]
 
 
+#: Le domande a cui il pianificatore risponde con gli strumenti e le sue
+#: frasi, senza modello, quando l'intenzione è chiara: i dati dell'utente.
+RULE_INTENTS = frozenset({
+    "staff_unpaid", "payments_made", "overview", "my_profile", "belts", "ranking", "certificates", "competitions",
+    "attendance_stats", "lessons_today", "invite", "wallet", "fees_due", "greet", "thanks", "help",
+    "judogi", "secretary", "mark_attendance", "upload_proof", "shop",
+})
+
+
+#: Le domande sui dati di chi scrive: rispondono le regole anche quando i
+#: documenti ne parlano (la scheda degli eventi non sa chi può iscriversi).
+DATA_FIRST = frozenset({
+    "fees_due", "payments_made", "overview", "competitions", "lessons_today", "wallet", "staff_unpaid",
+    "attendance_stats", "my_profile", "ranking", "invite",
+})
+
+
+#: Queste sono «sue» solo se la frase lo dice: «quanto devo pagare?» sì,
+#: «quanto costa la mensilità?» è una domanda sui prezzi (documenti).
+PERSONAL_ONLY = frozenset({"fees_due", "payments_made", "wallet", "my_profile"})
+PERSONAL_WORDS = re.compile(
+    r"\b(tenho|devo|devemos|meu|minha|meus|minhas|paguei|pagamos|temos|ho|devo|dobbiamo|mio|mia|miei|mie|"
+    r"pagato|abbiamo|my|mine|i|we|our|owe|paid)\b"
+)
+
+
+async def _answer(ctx: ToolContext, conversation: JavbotConversation, text: str, spend: llm.Spend) -> tuple[Reply, str]:
+    """La risposta e la strada che ha fatto, dalla più economica:
+
+    1. un percorso guidato in corso (judogi, messaggio, conferma): il pianificatore;
+    2. un'azione capita dal codice (iscrizione, presenze): actions.py;
+    3. una domanda sui dati dell'utente con l'intenzione chiara: il
+       pianificatore con gli strumenti (zero token);
+    4. i documenti e le schede del club: rag.py (una chiamata breve, o la cache);
+    5. il modello con gli strumenti: agent.py (OpenAI) o assistant.py (Anthropic);
+    6. se il modello non c'è o non risponde: il pianificatore."""
+    planner = Planner(ctx, conversation)
+    state = conversation.state or {}
+    if state.get("flow") or state.get("pending_task"):
+        return await planner.reply(text), "RULES"
+    try:
+        reply = await actions.try_handle(ctx, conversation, text, spend, planner.new_task)
+    except ToolDenied:
+        reply = None
+    if reply is not None:
+        return reply, "EXTRACT" if spend.calls else "ACTION"
+    if llm.enabled():
+        organization_id = ctx.scope.organization_id if ctx.scope else ctx.organization_id
+        club_id = ctx.scope.club_id if ctx.scope else None
+        await rag.ensure_fresh(ctx.db, club_id=club_id)
+        intent, score = intents.detect(text, lang=ctx.lang)
+        personal = intent not in PERSONAL_ONLY or PERSONAL_WORDS.search(intents.normalize(text)) is not None
+        if intent in DATA_FIRST and score >= 1 and ctx.scope is not None and personal:
+            # I dati dell'utente (che cosa deve, le sue gare con «Iscrivi»):
+            # le regole li hanno tutti, a costo zero, senza passare dagli
+            # estratti dei documenti.
+            try:
+                return await planner.dispatch(intent, text, score), "RULES"
+            except ToolDenied:
+                pass
+        if intent in RULE_INTENTS and (score >= 2 or len(text.split()) <= 4):
+            # "Cosa serve per l'esame di cintura?" ha le parole delle cinture
+            # ma è una domanda di regolamento: le regole rispondono solo se i
+            # documenti non rispondono meglio (una query, zero token).
+            strong = await knowledge.passages(ctx.db, organization_id=organization_id, club_id=club_id,
+                                              query=text, limit=1, strict=True)
+            if not strong:
+                return await planner.reply(text), "RULES"
+        found = await rag.answer(ctx.db, organization_id=organization_id, club_id=club_id, lang=ctx.lang,
+                                 question=text, spend=spend)
+        if found is not None:
+            answer, cards, cached = found
+            return Reply(answer, cards=cards, intent="rag"), "CACHE" if cached else "RAG"
+        reply = await agent.reply(ctx, conversation, text, spend)
+        if reply is not None:
+            return reply, "AGENT"
+    elif assistant.enabled() and assistant.should_handle(conversation, text, lang=ctx.lang):
+        reply = await assistant.reply(ctx, conversation, text)
+        if reply is not None:
+            return reply, "AGENT"
+    return await planner.reply(text), "RULES"
+
+
 async def post_message(db: AsyncSession, *, ctx: ToolContext, text: str) -> list[JavbotMessage]:
     text = (text or "").strip()[:MAX_TEXT]
     conversation = await open_conversation(db, ctx=ctx)
     conversation_id = conversation.id
-    reply = None
-    if assistant.enabled() and assistant.should_handle(conversation, text, lang=ctx.lang):
-        reply = await assistant.reply(ctx, conversation, text)
-    if reply is None:
-        reply = await Planner(ctx, conversation).reply(text)
+    spend = llm.Spend()
+    reply, route = await _answer(ctx, conversation, text, spend)
+    await llm.record(db, organization_id=ctx.scope.organization_id if ctx.scope else ctx.organization_id,
+                     club_id=ctx.scope.club_id if ctx.scope else None, user_id=ctx.user_id, route=route,
+                     spend=spend, intent=reply.intent)
     return await _save_exchange(db, ctx=ctx, conversation_id=conversation_id, user_text=text, reply=reply)
 
 
@@ -190,6 +286,30 @@ async def message_dicts(db: AsyncSession, messages: list[JavbotMessage]) -> list
             actions.append(action)
         out.append({
             "id": m.id, "role": m.role, "text": m.text, "actions": actions,
-            "quick_replies": m.quick_replies or [], "created_at": m.created_at,
+            "quick_replies": m.quick_replies or [], "cards": m.cards or [], "created_at": m.created_at,
         })
     return out
+
+
+#: I ruoli che usano JAVBOT a qualunque età: chi paga e chi lavora.
+ADULT_ROLES = frozenset({"CUSTOMER", "SECRETARY", "INSTRUCTOR", "SUPER_ADMIN", "ORGANIZATION_ADMIN", "ADMIN",
+                         "BACK_OFFICE_OPERATOR", "ACCOUNTING_OPERATOR", "SALES_MANAGER", "AGENT"})
+
+
+async def available(db: AsyncSession, *, current_user: CurrentUser) -> bool:
+    """JAVBOT non è per i bambini: un atleta con il solo accesso da atleta e
+    meno di 18 anni di età federale (`seasons.federal_age`) non lo vede.
+    Così niente pasticci e niente token spesi in giochi. Un genitore, lo
+    staff e l'atleta adulto sì."""
+    from app.domains.club import seasons
+    from app.domains.club.models import ClubAthlete
+    from app.domains.rbac.service import get_roles_for_user
+
+    roles = set(await get_roles_for_user(db, user_id=current_user.user_id, organization_id=current_user.organization_id))
+    if roles & ADULT_ROLES:
+        return True
+    birth = (await db.execute(select(ClubAthlete.birth_date).where(ClubAthlete.user_id == current_user.user_id)
+                              .limit(1))).scalar_one_or_none()
+    if birth is None:
+        return True
+    return seasons.federal_age(birth, utcnow().year) >= 18

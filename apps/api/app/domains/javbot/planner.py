@@ -59,6 +59,9 @@ class Reply:
     #: La memoria corta dopo questa risposta: {} chiude ogni percorso.
     state: dict = field(default_factory=dict)
     intent: str | None = None
+    #: Schede sotto il testo (una gara con i suoi bottoni, una fonte): dati,
+    #: non frasi; il browser le disegna.
+    cards: list[dict] = field(default_factory=list)
 
 
 # --- I bottoni che l'interfaccia sa mostrare ------------------------------------------------------
@@ -700,16 +703,29 @@ class Planner:
         data = await self.tool("open_competitions")
         if not data["competitions"]:
             return Reply(say(lang, "competitions.none"), quick_replies=self.suggestions(), intent="competitions")
+        # Il testo dice quante; le schede mostrano ognuna con «Iscrivi X»,
+        # che rimanda la frase all'azione (actions.signup): zero token.
         lines = [say(lang, "competitions.intro")]
+        cards = []
         for c in data["competitions"]:
             lines.append(say(lang, "competitions.line", name=c["name"], date=texts.day(c["starts_on"], lang),
                              location=f", {c['location']}" if c["location"] else "",
                              deadline=texts.day(c["registration_deadline"], lang)))
             lines.append(say(lang, "competitions.eligible", names=", ".join(c["eligible"])) if c["eligible"]
                          else say(lang, "competitions.nobody"))
+            cards.append({
+                "type": "event", "competition_id": c.get("id"), "title": c["name"], "kind": c["kind"],
+                "date": c["starts_on"].isoformat(), "end_date": c["ends_on"].isoformat(), "location": c["location"],
+                "deadline": c["registration_deadline"].isoformat(),
+                "fee_cents": c.get("fee_cents"), "has_regulation": c.get("has_regulation", False),
+                "actions": [{"type": "say", "label": say(lang, "act.signup.short", athlete=name),
+                             "value": say(lang, "act.signup.say", athlete=name, name=c["name"])}
+                            for name in c["eligible"][:3]],
+            })
         if data["more"]:
             lines.append(say(lang, "competitions.more", n=data["more"]))
-        return Reply("\n".join(lines), actions=[nav(lang, "competitions", "act.competitions")],
+        return Reply("\n".join(lines[:1]) if cards else "\n".join(lines),
+                     actions=[nav(lang, "competitions", "act.competitions")], cards=cards,
                      quick_replies=self.suggestions(), intent="competitions")
 
     async def lessons(self) -> Reply:
@@ -875,6 +891,14 @@ async def execute_task(ctx: ToolContext, task_id: uuid.UUID) -> Reply:
             await REGISTRY.call("mark_attendance", ctx, payload, allow_writes=True)
             return Reply(say(lang, "task.attendanceDone", name=payload.get("athlete_name") or "",
                              course=payload.get("course_name") or ""), intent="mark_attendance")
+        if kind in ("COMPETITION_ENTRY", "STAFF_ATTENDANCE"):
+            from app.domains.javbot import actions
+
+            if kind == "COMPETITION_ENTRY":
+                return await actions.execute_signup(ctx, payload)
+            reply = await actions.execute_staff_attendance(ctx, payload)
+            await db.commit()
+            return reply
         raise ToolDenied("task.notFound")
     except ToolDenied as denied:
         await db.rollback()

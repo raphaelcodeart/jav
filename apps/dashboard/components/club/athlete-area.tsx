@@ -40,6 +40,8 @@ interface AthleteArea extends AthleteDetail {
   /** Il titolare, o l'atleta stesso dai 18 anni federali: può caricare la prova. */
   can_pay?: boolean;
   can_become_holder: boolean;
+  /** Il titolare che guarda un figlio già maggiorenne: può invitarlo a prendersi il conto. */
+  can_invite_holder?: boolean;
   today: string;
   lessons: AreaLesson[];
   month_present: number;
@@ -156,6 +158,9 @@ function Area({ id, section, onGo }: { id: string; section: AreaSection; onGo: (
     <div className="space-y-6">
       {section === "home" && (
         <>
+          {/* --- Il conto suo: in cima, perché a 18 anni è la cosa nuova --- */}
+          {a.can_become_holder && <BecomeHolder id={id} />}
+          {a.can_invite_holder && <InviteHolder id={id} firstName={a.first_name} />}
           {/* --- Il judoca: la scheda «salute sportiva» con gli obblighi --- */}
           <AthleteHealthCard athlete={a} mode="area" onAction={(code) => {
             if (code === "CERTIFICATE") goCert();
@@ -168,7 +173,6 @@ function Area({ id, section, onGo }: { id: string; section: AreaSection; onGo: (
             </div>
             <ProgressBar value={a.xp - a.level_xp_floor} max={Math.max(1, a.next_level_xp - a.level_xp_floor)} tone="accent" />
           </div>
-          {a.can_become_holder && <BecomeHolder id={id} />}
           {/* --- Oggi --- */}
           <section className="rounded-3xl bg-white p-5 shadow-soft ring-1 ring-ink-900/5 sm:p-6">
             <h2 className="text-xl text-ink-900">{t("athleteArea.todayTitle")}</h2>
@@ -421,16 +425,19 @@ function Stat({ value, label }: { value: string; label: string }) {
   );
 }
 
-/** A 18 anni: "diventa titolare del tuo conto". Serve la sua email. */
+/** A 18 anni: "diventa titolare del tuo conto". Serve la sua email. La
+ *  famiglia resta legata a lui (club_athlete_links): lo dice il testo, così
+ *  nessuno ha paura di "staccarsi" dai genitori. */
 function BecomeHolder({ id }: { id: string }) {
   const { t } = useI18n();
   const toast = useToast();
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   return (
-    <section className="rounded-3xl bg-gradient-to-br from-accent-100 to-white p-5 ring-1 ring-accent-300 sm:p-6">
-      <h2 className="text-xl text-ink-900">🎉 {t("athleteArea.holderTitle")}</h2>
-      <p className="mt-1 max-w-2xl text-sm text-ink-700">{t("athleteArea.holderText")}</p>
+    <section className="rounded-3xl bg-gradient-to-br from-accent-100 to-white p-5 shadow-soft ring-2 ring-accent-300 sm:p-6">
+      <h2 className="text-xl text-ink-900">🎉 {t("hold.selfTitle")}</h2>
+      <p className="mt-1 max-w-2xl text-sm text-ink-700">{t("hold.selfText")}</p>
+      <p className="mt-2 max-w-2xl text-sm font-semibold text-ink-800">👨‍👩‍👧 {t("hold.selfFamily")}</p>
       <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
         <div className="flex-1">
           <Field label={t("athleteArea.holderEmail")} htmlFor="holder-email">
@@ -450,8 +457,76 @@ function BecomeHolder({ id }: { id: string }) {
           } finally {
             setBusy(false);
           }
-        }}>{t("athleteArea.holderButton")}</Button>
+        }}>{t("hold.selfButton")}</Button>
       </div>
+    </section>
+  );
+}
+
+/** Il genitore guarda il figlio maggiorenne: lo invita a prendersi il conto.
+ *  Il server manda l'email; se non può (niente SMTP, indirizzo rifiutato)
+ *  restituisce il link, da copiare e consegnare a mano. */
+function InviteHolder({ id, firstName }: { id: string; firstName: string }) {
+  const { t } = useI18n();
+  const toast = useToast();
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ sent: boolean; link: string | null } | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  async function send() {
+    setBusy(true);
+    try {
+      const res = await clubSend<{ sent: boolean; link: string | null }>(`/athlete-area/${id}/invite-holder`, "POST", { email: email.trim() });
+      setResult(res);
+      if (res.sent) toast({ tone: "success", title: t("hold.inviteSent", { email: email.trim() }) });
+    } catch (e) {
+      toast({ tone: "error", title: t("hold.inviteFailed"), text: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copy(link: string) {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+    } catch {
+      // Senza permesso agli appunti il link resta a video: si copia a mano.
+    }
+  }
+
+  // L'email non è partita: il link si consegna a mano.
+  const handLink = result && !result.sent ? result.link : null;
+
+  return (
+    <section className="rounded-3xl bg-gradient-to-br from-sky-50 to-white p-5 shadow-soft ring-2 ring-sky-200 sm:p-6">
+      <h2 className="text-xl text-ink-900">🎓 {t("hold.inviteTitle", { name: firstName })}</h2>
+      <p className="mt-1 max-w-2xl text-sm text-ink-700">{t("hold.inviteText", { name: firstName })}</p>
+      <p className="mt-2 max-w-2xl text-xs text-ink-500">{t("hold.inviteNext")}</p>
+      <form className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end" onSubmit={(e) => { e.preventDefault(); void send(); }}>
+        <div className="flex-1">
+          <Field label={t("hold.inviteEmail", { name: firstName })} htmlFor="invite-holder-email">
+            <Input id="invite-holder-email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+          </Field>
+        </div>
+        <Button type="submit" loading={busy} disabled={!email.trim()}>{t("hold.inviteButton")}</Button>
+      </form>
+      {result?.sent && (
+        <p className="mt-3 rounded-2xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-800 ring-1 ring-emerald-200">✓ {t("hold.inviteSent", { email: email.trim() })}</p>
+      )}
+      {result && !result.sent && !handLink && (
+        <p className="mt-3 rounded-2xl bg-amber-50 p-3 text-sm text-amber-900 ring-1 ring-amber-200">{t("hold.inviteNotSent")}</p>
+      )}
+      {handLink && (
+        <div className="mt-3 space-y-2 rounded-2xl bg-amber-50 p-3 ring-1 ring-amber-200">
+          <p className="text-sm text-amber-900">{t("hold.inviteLinkText", { name: firstName })}</p>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <code className="min-w-0 flex-1 break-all rounded-xl bg-white px-3 py-2 text-xs text-ink-800 ring-1 ring-ink-900/10">{handLink}</code>
+            <Button variant="secondary" size="sm" onClick={() => void copy(handLink)}>{copied ? t("hold.copied") : t("hold.copy")}</Button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

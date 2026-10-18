@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EVENT_KIND_STYLE } from "@/components/club/event-icon";
+import { RegulationButton } from "@/components/club/regulation-link";
 import { clubGet } from "@/lib/club";
 import { cn } from "@/lib/cn";
 import { MEDALS, whatsappNumber, type EventDetail, type EventEntry } from "@/lib/competition-staff";
@@ -43,9 +44,22 @@ export function EventNameButton({ id, name, mode, className }: { id: string; nam
   );
 }
 
+/** Se l'evento ha un regolamento PDF. La scheda (EventDetail) non lo dice,
+ *  quindi si chiede il link: 404 = niente regolamento, e anche un evento
+ *  della rete di un altro club o un permesso che manca qui valgono «no». */
+function useRegulation(id: string, mode: Mode) {
+  return useQuery({
+    queryKey: ["club", "event-regulation", mode, id],
+    queryFn: () => clubGet<{ url: string; filename: string | null }>(`${mode === "staff" ? "/staff" : ""}/competitions/${id}/regulation`).catch(() => null),
+    retry: false,
+    staleTime: 60_000,
+  });
+}
+
 export function CompetitionDetailModal({ competitionId, mode, onClose }: { competitionId: string; mode: Mode; onClose: () => void }) {
   const { t, fmt } = useI18n();
   const { data: e, isLoading, error } = useEventDetail(competitionId, mode);
+  const { data: regulation } = useRegulation(competitionId, mode);
   const day = (iso: string) => fmt.date(new Date(`${iso}T12:00:00`), { weekday: "short", day: "numeric", month: "long", year: "numeric" });
   const time = (hhmm: string | null) => (hhmm ? hhmm.slice(0, 5) : null);
 
@@ -112,6 +126,17 @@ export function CompetitionDetailModal({ competitionId, mode, onClose }: { compe
             </span>
             <span className="text-sm font-semibold text-brand-700">{t("evrep.detail.openCircular")} ↗</span>
           </a>
+        )}
+
+        {regulation && (
+          <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-white p-3 ring-1 ring-ink-200">
+            <span className="text-2xl" aria-hidden="true">📘</span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold text-ink-900">{t("jbx.reg.title")}</span>
+              {regulation.filename && <span className="block truncate text-xs text-ink-500">{regulation.filename}</span>}
+            </span>
+            <RegulationButton competitionId={competitionId} area={mode === "staff" ? "staff" : "member"} filename={regulation.filename} />
+          </div>
         )}
 
         <section>

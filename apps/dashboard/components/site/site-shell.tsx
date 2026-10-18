@@ -19,7 +19,11 @@ const NETWORK_SOCIALS = [
 /** La cornice di ogni pagina del sito pubblico: barra, contenuto, piè di
  *  pagina. La sessione si legge solo per decidere tra "Entrar" e "A minha
  *  área": nessuna pagina del sito la richiede. */
-export async function SiteShell({ children }: { children: ReactNode }) {
+export async function SiteShell({ children, bot = true }: {
+  children: ReactNode;
+  /** false: niente JAVBOT (i corsi esterni, che non hanno l'assistente). */
+  bot?: boolean;
+}) {
   const [session, { t }, network] = await Promise.all([getSession(), siteI18n(), publicSite.network().catch(() => null)]);
   const socials: SocialLink[] = NETWORK_SOCIALS
     .filter(([kind]) => network?.socials[kind])
@@ -95,7 +99,7 @@ export async function SiteShell({ children }: { children: ReactNode }) {
       </footer>
       {/* JAVBOT per chi non è ancora cliente: club, orari, iscrizione. Solo
           dati pubblici; quote e pagamenti stanno nell'area privata. */}
-      <PublicJavbot />
+      {bot && <PublicJavbot />}
     </div>
   );
 }

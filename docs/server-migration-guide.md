@@ -160,6 +160,13 @@ Variabili che vanno adattate al nuovo server (non generate a caso):
   (predefinito `low`) la regolano. Dopo averla cambiata vanno ricreati
   `api` e i due worker (`up -d --force-recreate api celery-worker
   celery-beat`): il `.env` si legge all'avvio.
+- `OPENAI_API_KEY` — opzionale: con la chiave, OpenAI è il modello di JAVBOT
+  e degli articoli dei relatórios (`javbot/llm.py`, ha la precedenza su
+  Anthropic). `OPENAI_MODEL` (predefinito `gpt-4.1-mini`) e
+  `JAVBOT_DAILY_TOKEN_BUDGET` (predefinito 2.000.000 token al giorno per tutta
+  la piattaforma; oltre, JAVBOT risponde senza modello) la regolano.
+  `EVENT_REPORT_AI_ENABLED=true` accende la scrittura degli articoli. Come
+  per Anthropic, dopo un cambio si ricreano `api` e i due worker.
 - `STT_URL` — opzionale, predefinito `http://stt:8001`: il servizio Whisper
   del microfono di JAVBOT (container `stt`, fino a 1,2 GB di RAM). Il
   microfono oggi è **nascosto** nell'interfaccia e il container sta dietro il

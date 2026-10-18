@@ -34,6 +34,11 @@ function safeNext(next: string | null, roles: string[], adminRoles: string[]): s
   if (next.startsWith("/staff")) return roles.includes("INSTRUCTOR") ? next : null;
   if (next.startsWith("/club")) return roles.includes("SECRETARY") ? next : null;
   if (next.startsWith("/atleta")) return roles.includes("ATHLETE") || roles.includes("CUSTOMER") ? next : null;
+  // I corsi esterni: l'iscrizione e l'area del genitore sono di ogni account
+  // (anche una famiglia di un club iscrive i figli da dentro); l'area della
+  // scuola la decide l'API dalle righe di ext_staff, qui basta un ruolo plausibile.
+  if (next.startsWith("/cursos")) return next;
+  if (next.startsWith("/escola")) return roles.some((r) => r === "EXT_SCHOOL" || r === "INSTRUCTOR" || adminRoles.includes(r)) ? next : null;
   return null;
 }
 
@@ -78,12 +83,17 @@ export default function LoginPage() {
         router.push("/admin");
       } else if (roles.includes("SECRETARY")) {
         router.push("/club");
+      } else if (roles.includes("EXT_SCHOOL")) {
+        router.push("/escola");
       } else if (roles.includes("CUSTOMER")) {
         router.push("/customer");
       } else if (roles.includes("INSTRUCTOR")) {
         router.push("/staff");
       } else if (roles.includes("ATHLETE")) {
         router.push("/atleta");
+      } else if (roles.includes("EXT_FAMILY")) {
+        // Solo i corsi esterni, nessun ruolo di un club: la sua area è /cursos.
+        router.push("/cursos");
       } else {
         router.push("/promoter");
       }

@@ -518,6 +518,18 @@ Nell'area amministrazione, pagina dello Shop («Fai la Spesa con Jav»):
 
 ## 4. Per i treinador (e gli adjunto)
 
+**Il tuo currículo** (voce «Currículo»): è tuo, non del club, e lo vedi solo
+tu. In **Documentos** carichi diplomi di treinador, certificazioni, attestati
+e primo soccorso, con ente, date e scadenza (ti avvisa quando sta per
+scadere). In **Curriculum Vitae** scrivi presentazione, esperienze,
+formazione, competenze, lingue e specializzazioni: nome, foto, club in cui
+alleni, cintura e certificazioni arrivano da soli. Il **Currículo
+Desportivo** si costruisce dalle gare, dai risultati, dalle cinture e dalle
+prove a cui hai accompagnato gli atleti; quello che manca (gare di anni fa,
+stage) lo aggiungi a mano: resta solo nel tuo curriculum, segnato come
+«declarado», e non entra nel calendario né nel ranking del club. Per tutti e
+due: anteprima, PDF da scaricare o stampare, e versioni salvate.
+
 **Più club con un account solo.** Se alleni in più club, entrando vedi il
 saluto con la tua foto (toccala per cambiarla) e un bottone per ogni club,
 con il logo, gli atleti e i tuoi corsi: scegli dove entrare. «Trocar de
@@ -858,3 +870,60 @@ cinture, club e punti del gioco non sono quelli veri.
   gli iscritti e chi non ha il bianco o l'azul: il treinador lo porta dal
   club. Da qui si segna l'**alta competizione** (solo per il Grupo 3), si
   aggiunge un judogi che l'atleta aveva già e si toglie uno piccolo o perso.
+
+## Corsi esterni nelle scuole
+
+I corsi esterni (oggi: Torraltinha, Externato Jardim Infantil da Torraltinha,
+Lagos) sono un **sistema a parte dai club**: anagrafica, mensilità, prove,
+presenze e conti propri. Niente Shop, judogi, gare, cinture, giochi, wallet,
+promoter né JAVBOT. Chi vuole anche un club si iscrive al club normalmente.
+
+- **Il genitore** si iscrive dalla scheda del corso sul sito
+  (`/cursos-externos/<corso>`, «Inscrever»): nome, telefono, email,
+  password e i figli (fino a 6), ognuno va nel gruppo della sua età.
+  Entra in **/cursos**: gli avvisi della scuola (es. «lunedì niente
+  lezione»), il bottone **Carregar comprovativo** (sceglie le mensilità,
+  bonifico / MB WAY / contanti, vede l'IBAN), poi una scheda per figlio con
+  scuola, gruppo, orario e presenze. Le schede «Mensalidades» (storico e
+  prove, con il motivo se rifiutate) e «Inscrever» (un altro figlio o un
+  altro corso).
+- **Una famiglia già in un club** che vuole un corso esterno deve
+  **reiscrivere i figli**: dal sito con la stessa email chiede di entrare,
+  poi da dentro «Inscrever os meus filhos». L'anagrafica del corso è
+  separata da quella del club, una per ogni corso.
+- **La segreteria della scuola** entra in **/escola**: Participantes (con i
+  contatti del genitore), Presenças, Pagamentos (mensilità per mese, segna
+  pagato, apre o rifiuta una prova) e Avisos. Il superadmin la aggiunge al
+  corso con la sua email e le manda il link d'invito.
+- **Il treinador** del corso trova il corso tra i bottoni dei suoi club
+  («Curso externo») e in /escola ha Participantes, Presenças, Avisos,
+  **Entrada/Saída** e **Os meus ganhos** (la sua quota, 50% per Marco, delle
+  mensilità pagate). Non vede i contatti né i pagamenti.
+- **Il superadmin** dalla console, «Cursos externos»: crea e modifica i
+  corsi (mesi di pagamento, quota, scadenza, logo, gruppi per età e orario),
+  aggiunge treinador (con la percentuale) e segreteria, apre il corso «come
+  scuola», e vede i conti per anno: incassato, parte del treinador, parte di
+  JudoArteVida. Le mensilità nascono da sole ogni mese (03:20).
+
+## L'atleta maggiorenne prende il suo conto, il genitore resta
+
+Quando un figlio compie 18 anni (età federale), nell'area dell'atleta il
+genitore vede il riquadro **«… pode ter a sua própria conta»** («… è già
+maggiorenne»): scrive l'email del figlio, che riceve l'invito (se l'email
+non parte, il link compare da copiare). Il figlio, entrato, vede in alto il
+bottone **«Ficar com a minha conta»** («Tengo il mio conto»). Dopo, il
+conto è suo, ma il genitore **resta collegato**: lo vede ancora nella
+famiglia e può continuare ad amministrarlo.
+
+## JAVBOT: solo per gli adulti, e che cosa sa
+
+- Un atleta **minore di 18 anni (età federale)** che entra con il suo conto
+  non ha JAVBOT. Il genitore sì.
+- Un genitore può chiedere tutto di sé e dei suoi figli (anche altezza,
+  peso, categoria, licenza); un atleta solo di sé; nessuno di un altro.
+- I dati sensibili (telefono, indirizzo, NIF, documenti, IBAN, importi
+  pagati o da pagare) **non escono dal server**: JAVBOT li mostra a chi ne
+  ha diritto, ma al modello AI arrivano solo come segnaposto. Escono solo
+  dati pubblici: nome, licenza federale, altezza, risultati.
+- Il manuale completo del club è nella base di conoscenza: JAVBOT risponde
+  sulle regole citando il manuale.

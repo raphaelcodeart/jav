@@ -1542,3 +1542,63 @@ club_staff_memberships  un treinador in un club: user_id, club_id, status (ACTIV
 users                   + photo_url: la foto del profilo (saluto dell'area del treinador)
 ```
 
+**Il curriculum del treinador** (migrazione 0042, `club/cv_models.py`, `club/coach_cv.py`):
+
+```
+coach_documents     l'archivio: user_id, title, category (COACH_DIPLOMA | FEDERATION |
+                    COURSE | FIRST_AID | ACADEMIC | PROFESSIONAL | PERSONAL | OTHER), issuer,
+                    issued_on, expires_on (CHECK >= issued_on), description, storage_key
+                    (bucket privato), original_filename, content_type, size_bytes,
+                    show_in_cv, updated_at
+coach_profiles      il CV: user_id UNIQUE, data JSONB (presentazione, contatti, esperienze,
+                    formazione, competenze, lingue, specializzazioni, sezioni libere, show)
+coach_sport_events  gli eventi dichiarati: user_id, title, event_type, role, starts_on,
+                    ends_on, location, organization_name, level (COMPETITION_LEVELS),
+                    category, placement (0,1,2,3,5,7), result, description, document_id ->
+                    coach_documents (SET NULL). Mai collegati a club_competitions
+coach_cv_exports    le versioni PDF salvate: user_id, kind (CV | SPORT), storage_key,
+                    filename, size_bytes, note
+```
+
+**JAVBOT che spende poco** (migrazione 0043, `javbot/models.py`, `javbot/rag.py`, `javbot/llm.py`):
+
+```
+javbot_knowledge_documents  + source (UPLOAD | EVENT | DATA), source_ref (UNIQUE se c'è:
+                              "event:<id>", "data:<club>:courses|plans|events|contacts");
+                              storage_key ora NULL-abile (le schede DATA non hanno file)
+javbot_messages             + cards JSONB: le schede sotto una risposta (event, source)
+javbot_tasks.kind           + COMPETITION_ENTRY, STAFF_ATTENDANCE
+club_competitions           + regulation_storage_key, regulation_filename, regulation_size:
+                              il regolamento PDF dell'evento (bucket privato)
+javbot_usage                una riga per risposta: organization_id, club_id, user_id, route
+                            (RULES | ACTION | CACHE | RAG | AGENT | EXTRACT | ARTICLE),
+                            provider, model, calls, input/output/cached_tokens, intent, ok
+```
+
+**Il genitore collegato** (migrazione 0045): `club_athlete_links` (athlete_id CASCADE,
+user_id; UNIQUE): l'adulto che resta collegato a un atleta diventato titolare di sé.
+
+**Corsi esterni** (migrazione 0046, `domains/extcourses/models.py`), nessuna FK verso i club:
+
+```
+ext_courses        name, school_name/address/city, school_logo_url, description,
+                   monthly_fee_cents, billing_months smallint[], due_day, starts_on, ends_on,
+                   active, published, public_coach_name
+ext_groups         course_id, name, min_age, max_age, weekday, starts_at, ends_at, active
+ext_staff          course_id, user_id, role (COACH | SCHOOL), share_pct (COACH), active;
+                   UNIQUE (course_id, user_id, role)
+ext_participants   course_id, group_id, parent_user_id, first_name, last_name, birth_date, sex,
+                   notes, guardian_name, guardian_phone, status (ACTIVE | LEFT), joined_on, left_on
+ext_fees           participant_id, course_id, period "AAAA-MM", amount_cents, due_date, status
+                   (DUE | PAID | WAIVED), paid_at, method, proof_id, recorded_by_user_id,
+                   coach_user_id + coach_share_pct congelati; UNIQUE (participant_id, period)
+ext_proofs         course_id, parent_user_id, storage_key (privato), filename, amount_cents,
+                   method, note, status (ACCEPTED | REJECTED), reviewed_by/at, rejection_reason
+ext_attendances    participant_id, course_id, date, present; UNIQUE (participant_id, date)
+ext_work_sessions  course_id, user_id, started_at, ended_at
+ext_notices        course_id, author_user_id, title, body
+```
+
+Ruoli nuovi: EXT_FAMILY (`ext.family`), EXT_SCHOOL (`ext.school`): aprono le aree, i
+dati li decidono le righe. Dopo il deploy: `python -m app.seed.bootstrap` li allinea.
+

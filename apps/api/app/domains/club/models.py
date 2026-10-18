@@ -47,6 +47,7 @@ from app.domains.club.belts import BELT_CODES
 # Il quaderno del treinador ha un file suo: importato qui, finisce in
 # Base.metadata con il resto del dominio (create_all dei test, autogenerate).
 from app.domains.club import coach_models as _coach_models  # noqa: F401,E402
+from app.domains.club import cv_models as _cv_models  # noqa: F401,E402
 
 CLUB_STATUSES = ("ACTIVE", "SUSPENDED")
 #: CLUB è un club ufficiale; JAV_COURSES è l'unità "Cursos JAV": i corsi
@@ -464,6 +465,11 @@ class ClubCompetition(UUIDPKMixin, TimestampMixin, Base):
     registration_deadline_time: Mapped[time | None] = mapped_column(Time, nullable=True)
     #: Posti disponibili, se l'organizzatore li limita.
     places: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: Il regolamento della gara o dell'evento (PDF nel bucket privato): lo
+    #: scaricano famiglie e staff, e JAVBOT lo legge (javbot/rag.py, fonte EVENT).
+    regulation_storage_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    regulation_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    regulation_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
     #: Le fasce federali ammesse (benj_inf_inic, juvenis, cadetes, juniores,
     #: sub23, seniores, veteranos, adaptado, katas, formacao); vuoto = tutte.
     age_groups: Mapped[list[str]] = mapped_column(
@@ -727,6 +733,9 @@ class ClubCourse(UUIDPKMixin, TimestampMixin, Base):
     venue_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     venue_address: Mapped[str | None] = mapped_column(String(300), nullable=True)
     venue_city: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    #: Il logo della scuola (bucket pubblico): sulla scheda del corso nel
+    #: sito, nell'area della famiglia e del treinador. Solo nei corsi JAV.
+    venue_logo_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     #: Il testo per le famiglie nella pagina pubblica dei corsi.
     public_description: Mapped[str | None] = mapped_column(Text, nullable=True)
     #: Il nome del treinador come compare sul sito, scritto a mano: un
@@ -1265,3 +1274,20 @@ class ClubStaffMembership(UUIDPKMixin, TimestampMixin, Base):
     )
     decided_at: Mapped[datetime | None] = mapped_column(nullable=True)
     note: Mapped[str | None] = mapped_column(String(300), nullable=True)
+
+
+class ClubAthleteLink(UUIDPKMixin, TimestampMixin, Base):
+    """Un adulto che resta collegato a un atleta di cui non è più titolare:
+    il genitore di un figlio maggiorenne che ha preso il suo conto
+    (athlete_access.become_holder). Lo vede ancora nella sua famiglia, ne
+    paga le quote e lo segue; il titolare ora è l'atleta stesso, che può
+    togliere il collegamento."""
+
+    __tablename__ = "club_athlete_links"
+    __table_args__ = (UniqueConstraint("athlete_id", "user_id", name="uq_club_athlete_links_athlete_user"),)
+
+    athlete_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("club_athletes.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), index=True)
+

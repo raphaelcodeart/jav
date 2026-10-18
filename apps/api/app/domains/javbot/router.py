@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import get_db, utcnow
 from app.core.deps import CurrentUser, get_current_user
 from app.core.rate_limit import _get_redis, rate_limit
-from app.domains.club.scope import CLUB_HEADER
+from app.domains.club.scope import CLUB_HEADER, STAFF_CLUB_HEADER
 from app.domains.javbot import public as public_bot
 from app.domains.javbot import service, voice
 from app.domains.javbot.schemas import (
@@ -92,13 +92,24 @@ async def transcribe_voice(
 
 
 async def _context(request: Request, db: AsyncSession, current_user: CurrentUser, lang: str | None) -> ToolContext:
+    if not await service.available(db, current_user=current_user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "O JAVBOT é para os adultos: pede ajuda à tua família ou ao clube.")
     return await service.build_context(
         db, current_user=current_user, requested_club=request.headers.get(CLUB_HEADER), lang=lang,
+        staff_club=request.headers.get(STAFF_CLUB_HEADER),
     )
 
 
 async def _exchange(db: AsyncSession, messages) -> ExchangeRead:
     return ExchangeRead(messages=[BotMessageRead(**m) for m in await service.message_dicts(db, messages)])
+
+
+@router.get("/available")
+async def javbot_available(
+    current_user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Se chi guarda può usare JAVBOT (il bottone si mostra solo allora)."""
+    return {"available": await service.available(db, current_user=current_user)}
 
 
 @router.get("/conversation", response_model=ConversationRead)

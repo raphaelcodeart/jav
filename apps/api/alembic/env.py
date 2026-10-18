@@ -26,6 +26,7 @@ from app.domains.email_texts import models as _email_texts_models  # noqa: F401
 from app.domains.friend_referrals import models as _friend_referrals_models  # noqa: F401
 from app.domains.jav_market import models as _jav_market_models  # noqa: F401
 from app.domains.javbot import models as _javbot_models  # noqa: F401
+from app.domains.extcourses import models as _extcourses_models  # noqa: F401
 from app.domains.marketplaces import models as _marketplaces_models  # noqa: F401
 from app.domains.network import models as _network_models  # noqa: F401
 from app.domains.notifications import models as _notifications_models  # noqa: F401

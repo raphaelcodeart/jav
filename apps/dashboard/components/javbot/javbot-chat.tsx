@@ -7,6 +7,9 @@ import { cn } from "@/lib/cn";
 import { useI18n } from "@/lib/i18n/provider";
 import type { BotAction, BotMessage } from "@/lib/javbot";
 import { usePrefersReducedMotion } from "@/lib/motion";
+import type { RegulationArea } from "@/components/club/regulation-link";
+import { BotCards } from "@/components/javbot/bot-cards";
+import { BotText } from "@/components/javbot/bot-text";
 import { MAX_SECONDS, useVoiceInput } from "@/components/javbot/use-voice-input";
 
 /** La chat di JAVBOT: il bottone che galleggia e il pannello. Non sa da dove
@@ -17,7 +20,11 @@ import { MAX_SECONDS, useVoiceInput } from "@/components/javbot/use-voice-input"
  *  Sul telefono il pannello è un foglio a tutto schermo; sul computer una
  *  finestrella in basso a destra. Escape chiude e il fuoco torna al bottone;
  *  le risposte nuove si annunciano a chi usa un lettore di schermo
- *  (aria-live); con "riduci movimento" niente animazioni. */
+ *  (aria-live); con "riduci movimento" niente animazioni.
+ *
+ *  Il testo del bot ha un Markdown minimo (bot-text.tsx) e sotto può avere
+ *  delle schede (bot-cards.tsx). I bottoni `say` e gli esempi della chat
+ *  vuota passano dalla stessa strada di un messaggio scritto. */
 export interface JavbotChatProps {
   subtitle: string;
   disclaimer: string;
@@ -34,6 +41,10 @@ export interface JavbotChatProps {
   /** Se un bottone si può mostrare (una sezione che in quest'area non c'è, no). */
   actionAvailable?: (action: BotAction) => boolean;
   onReset?: () => void;
+  /** Da dove aprire il regolamento di un evento (schede e fonti). Senza, non si apre. */
+  regulationArea?: RegulationArea;
+  /** «JAVBOT faz por ti»: frasi d'esempio finché non si è scritto niente. */
+  examples?: string[];
   /** Dove mandare la voce da trascrivere (il microfono). Senza, niente microfono. */
   transcribeUrl?: string;
   open: boolean;
@@ -169,6 +180,12 @@ function ChatPanel(props: JavbotChatProps & { reduced: boolean; onClose: () => v
 
   const lastBot = [...messages].reverse().find((m) => m.role === "bot");
   const quickReplies = !busy && lastBot && messages[messages.length - 1]?.id === lastBot.id ? lastBot.quick_replies : [];
+  // Gli esempi si vedono finché la conversazione non è davvero cominciata.
+  const examples = !busy && !messages.some((m) => m.role === "user") ? (props.examples ?? []) : [];
+
+  function say(text: string) {
+    if (!busy) onSend(text);
+  }
 
   return (
     <motion.div
@@ -211,12 +228,14 @@ function ChatPanel(props: JavbotChatProps & { reduced: boolean; onClose: () => v
         aria-live="polite"
         aria-relevant="additions"
         aria-busy={busy}
-        className="flex-1 space-y-3 overflow-y-auto overscroll-contain bg-ink-50/60 px-3 py-4"
+        className="flex-1 space-y-4 overflow-y-auto overscroll-contain bg-ink-50/60 px-3 py-4"
       >
         <p className="mx-auto max-w-[18rem] text-center text-[11px] leading-snug text-ink-400">{props.disclaimer}</p>
         {messages.map((m) => (
-          <MessageBubble key={m.id} message={m} reduced={reduced} onAction={onAction} actionAvailable={actionAvailable} busy={busy} />
+          <MessageBubble key={m.id} message={m} reduced={reduced} onAction={onAction} actionAvailable={actionAvailable}
+            busy={busy} onSay={say} regulationArea={props.regulationArea} />
         ))}
+        {examples.length > 0 && <Examples examples={examples} reduced={reduced} onPick={say} />}
         {busy && <Typing reduced={reduced} />}
         {error && (
           <p role="alert" className="mx-2 rounded-2xl bg-rose-50 px-3 py-2 text-sm text-rose-700 ring-1 ring-rose-200">
@@ -234,8 +253,8 @@ function ChatPanel(props: JavbotChatProps & { reduced: boolean; onClose: () => v
               initial={reduced ? false : { opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: reduced ? 0 : i * 0.04 }}
-              onClick={() => onSend(q)}
-              className="shrink-0 cursor-pointer rounded-full bg-white px-3.5 py-1.5 text-xs font-semibold text-brand-700 ring-1 ring-brand-200 transition-colors hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+              onClick={() => say(q)}
+              className="min-h-10 shrink-0 cursor-pointer rounded-full bg-white px-4 text-[13px] font-semibold text-brand-700 ring-1 ring-brand-200 transition-colors hover:bg-brand-50 active:bg-brand-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
             >
               {q}
             </motion.button>
@@ -336,46 +355,82 @@ function HeaderButton({ label, onClick, disabled, children }: { label: string; o
   );
 }
 
-function MessageBubble({ message, reduced, onAction, actionAvailable, busy }: {
+function MessageBubble({ message, reduced, onAction, actionAvailable, busy, onSay, regulationArea }: {
   message: BotMessage; reduced: boolean; onAction: (a: BotAction) => void;
-  actionAvailable?: (a: BotAction) => boolean; busy: boolean;
+  actionAvailable?: (a: BotAction) => boolean; busy: boolean; onSay: (text: string) => void;
+  regulationArea?: RegulationArea;
 }) {
-  const { t } = useI18n();
+  const { t, fmt } = useI18n();
   const mine = message.role === "user";
   const actions = message.actions.filter((a) => actionAvailable?.(a) ?? true);
+  const cards = mine ? [] : (message.cards ?? []);
+  // L'ora, discreta: i messaggi appena scritti (id locale) non ce l'hanno ancora.
+  const time = message.created_at ? new Date(message.created_at).toLocaleTimeString(fmt.tag, { hour: "2-digit", minute: "2-digit" }) : null;
   return (
     <motion.div
       initial={reduced ? false : { opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-      className={cn("flex flex-col gap-1.5", mine ? "items-end" : "items-start")}
+      className={cn("flex flex-col gap-2", mine ? "items-end" : "items-start")}
     >
       <span className="sr-only">{mine ? t("javbot.you") : "JAVBOT"}:</span>
       <div
         className={cn(
-          "max-w-[88%] whitespace-pre-line break-words rounded-3xl px-4 py-2.5 text-[15px] leading-relaxed",
+          "max-w-[88%] break-words rounded-[22px] px-4 py-2.5 text-[15px] leading-relaxed",
           mine
-            ? "rounded-br-lg bg-gradient-to-b from-brand-500 to-brand-600 text-white shadow-brand"
-            : "rounded-bl-lg bg-white text-ink-800 shadow-soft ring-1 ring-ink-100",
+            ? "whitespace-pre-line rounded-br-md bg-gradient-to-b from-brand-500 to-brand-600 text-white shadow-brand"
+            : "rounded-bl-md bg-white text-ink-800 shadow-soft ring-1 ring-ink-100",
         )}
       >
-        {message.text}
+        {mine ? message.text : <BotText text={message.text} />}
       </div>
+      {cards.length > 0 && <BotCards cards={cards} regulationArea={regulationArea} busy={busy} onSay={onSay} />}
       {actions.length > 0 && (
         <div className="flex max-w-[92%] flex-wrap gap-2">
           {actions.map((a, i) => (
-            <ActionButton key={`${a.type}-${a.task_id ?? a.target ?? a.href ?? i}`} action={a} onAction={onAction} busy={busy} />
+            <ActionButton key={`${a.type}-${a.task_id ?? a.target ?? a.href ?? a.value ?? i}`} action={a} onAction={onAction} onSay={onSay} busy={busy} />
           ))}
         </div>
       )}
+      {time && <time dateTime={message.created_at} className="px-2 text-[10px] tabular-nums text-ink-400">{time}</time>}
     </motion.div>
   );
 }
 
-function ActionButton({ action, onAction, busy }: { action: BotAction; onAction: (a: BotAction) => void; busy: boolean }) {
+/** «JAVBOT faz por ti»: tre frasi che si toccano invece di scriverle. */
+function Examples({ examples, reduced, onPick }: { examples: string[]; reduced: boolean; onPick: (text: string) => void }) {
+  const { t } = useI18n();
+  return (
+    <motion.section
+      initial={reduced ? false : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, delay: reduced ? 0 : 0.1 }}
+      aria-label={t("jbx.examples.title")}
+      className="mx-auto w-full max-w-[22rem] rounded-3xl bg-white p-4 shadow-soft ring-1 ring-ink-100"
+    >
+      <p className="font-display text-sm tracking-wide text-ink-900">✨ {t("jbx.examples.title")}</p>
+      <p className="mt-0.5 text-xs leading-snug text-ink-500">{t("jbx.examples.text")}</p>
+      <ul className="mt-3 space-y-2">
+        {examples.map((e) => (
+          <li key={e}>
+            <button type="button" onClick={() => onPick(e)}
+              className="flex min-h-11 w-full cursor-pointer items-center gap-2 rounded-2xl bg-ink-50 px-3.5 py-2 text-left text-[14px] font-medium text-ink-800 ring-1 ring-ink-100 transition-colors hover:bg-brand-50 hover:text-brand-700 hover:ring-brand-200 active:bg-brand-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
+              <span className="min-w-0 flex-1">«{e}»</span>
+              <span aria-hidden="true" className="text-brand-500">→</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </motion.section>
+  );
+}
+
+function ActionButton({ action, onAction, onSay, busy }: {
+  action: BotAction; onAction: (a: BotAction) => void; onSay: (text: string) => void; busy: boolean;
+}) {
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
-  const base = "inline-flex min-h-9 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 disabled:cursor-not-allowed disabled:opacity-50";
+  const base = "inline-flex min-h-10 items-center gap-1.5 rounded-full px-4 py-2 text-[13px] font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 disabled:cursor-not-allowed disabled:opacity-50";
 
   // Una proposta già decisa: si dice com'è finita, non si ripropone.
   if ((action.type === "confirm_task" || action.type === "cancel_task") && action.task_status && action.task_status !== "PENDING") {
@@ -412,14 +467,25 @@ function ActionButton({ action, onAction, busy }: { action: BotAction; onAction:
       </button>
     );
   }
+  if (action.type === "say" && action.value) {
+    const value = action.value;
+    return (
+      <button type="button" disabled={busy} onClick={() => onSay(value)}
+        className={cn(base, "bg-white text-brand-700 ring-1 ring-brand-200 hover:bg-brand-50")}>
+        {action.label}
+      </button>
+    );
+  }
+  // Conferma e annulla: due bottoni grandi e diversi, perché qui si decide davvero.
   const tone =
     action.type === "confirm_task"
-      ? "bg-gradient-to-b from-brand-500 to-brand-600 text-white shadow-brand hover:from-brand-400"
+      ? "min-h-11 px-5 text-sm bg-gradient-to-b from-brand-500 to-brand-600 text-white shadow-brand hover:from-brand-400"
       : action.type === "cancel_task"
-        ? "text-ink-600 hover:bg-ink-100"
+        ? "min-h-11 px-5 text-sm bg-white text-ink-700 ring-1 ring-ink-200 hover:bg-ink-50"
         : "bg-white text-ink-800 ring-1 ring-ink-200 hover:ring-brand-300 hover:text-brand-700";
   return (
     <button type="button" disabled={busy} onClick={() => onAction(action)} className={cn(base, tone)}>
+      {action.type === "confirm_task" && <span aria-hidden="true">✓</span>}
       {action.label}
     </button>
   );

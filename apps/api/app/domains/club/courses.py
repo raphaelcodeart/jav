@@ -43,7 +43,7 @@ async def get_course(db: AsyncSession, *, scope: ClubScope, course_id: uuid.UUID
 #: percentuale del treinador): in un club ufficiale restano vuoti.
 COURSES_UNIT_FIELDS = (
     "venue_name", "venue_address", "venue_city", "public_description", "public_coach_name", "coach_share_pct",
-    "published",
+    "published", "venue_logo_url",
 )
 
 
@@ -73,9 +73,15 @@ async def _validate_instructor(db: AsyncSession, *, scope: ClubScope, user_id: u
         return
     user = await db.get(User, user_id)
     # L'istruttore è del club (o dello staff della piattaforma, che insegna
-    # dove serve): mai di un altro club.
-    if user is None or user.organization_id != scope.organization_id or user.club_id not in (None, scope.club_id):
+    # dove serve), o un treinador di un altro club che allena anche qui
+    # (club/staff_clubs.py): mai uno che qui non c'entra.
+    if user is None or user.organization_id != scope.organization_id:
         raise ClubValidationError("Istruttore non trovato.")
+    if user.club_id not in (None, scope.club_id):
+        from app.domains.club.staff_clubs import active_coach_ids
+
+        if user.id not in await active_coach_ids(db, club_id=scope.club_id):
+            raise ClubValidationError("Istruttore non trovato.")
 
 
 async def create_course(db: AsyncSession, *, scope: ClubScope, actor_user_id: uuid.UUID, data: dict) -> ClubCourse:

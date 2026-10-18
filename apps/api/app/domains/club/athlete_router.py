@@ -101,6 +101,8 @@ class AthleteAreaRead(AthleteDetailRead):
     #: Può caricare la prova delle quote: il titolare, o l'atleta dai 18 anni federali.
     can_pay: bool = False
     can_become_holder: bool
+    #: Il titolare guarda un figlio maggiorenne: può invitarlo a prendere il suo conto.
+    can_invite_holder: bool = False
     #: Oggi all'ora del club (le lezioni di oggi si segnano solo oggi).
     today: date
     lessons: list[AreaLessonRead]
@@ -229,6 +231,28 @@ async def get_area(
     return AthleteAreaRead(**await athlete_access.area(
         db, athlete=athlete, viewer_user_id=current_user.user_id, today=today,
     ))
+
+
+class InviteHolderWrite(BaseModel):
+    email: str = Field(min_length=3, max_length=255)
+
+
+@router.post("/athlete-area/{athlete_id}/invite-holder")
+async def invite_holder(
+    athlete_id: uuid.UUID, payload: InviteHolderWrite,
+    current_user: ClubUser = Depends(require_club_permission(ATHLETE)), db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Il titolare invita il figlio maggiorenne a prendere il suo conto
+    (athlete_access.invite_holder): l'email all'atleta, il genitore resta collegato."""
+    athlete = await _area_athlete(db, current_user, athlete_id)
+    try:
+        link = await athlete_access.invite_holder(
+            db, athlete=athlete, guardian_user_id=current_user.user_id, email=payload.email,
+            today=(await lessons_service.club_now(db, club_id=current_user.club_id)).date(),
+        )
+    except club_service.ClubError as exc:
+        _raise(exc)
+    return {"sent": link is None, "link": link}
 
 
 @router.get("/athlete-area/{athlete_id}/months", response_model=SeasonMonthsRead)

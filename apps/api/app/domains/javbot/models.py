@@ -26,7 +26,7 @@ non accumula niente che qualcuno legga.
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Index, Integer, String, Text
 from sqlalchemy import text as sql_text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -41,7 +41,7 @@ TASK_TTL_MINUTES = 30
 MESSAGE_ROLES = ("user", "bot")
 TASK_STATUSES = ("PENDING", "DONE", "CANCELLED")
 #: Che cosa JAVBOT sa fare, una volta confermato.
-TASK_KINDS = ("SHOP_ORDER", "CLUB_MESSAGE", "MARK_ATTENDANCE")
+TASK_KINDS = ("SHOP_ORDER", "CLUB_MESSAGE", "MARK_ATTENDANCE", "COMPETITION_ENTRY", "STAFF_ATTENDANCE")
 
 
 class JavbotConversation(UUIDPKMixin, TimestampMixin, Base):
@@ -85,6 +85,9 @@ class JavbotMessage(UUIDPKMixin, TimestampMixin, Base):
     #: [{"type": "navigate", "target": "club", "label": "..."}, ...]
     actions: Mapped[list] = mapped_column(JSONB, default=list, server_default=sql_text("'[]'::jsonb"))
     quick_replies: Mapped[list] = mapped_column(JSONB, default=list, server_default=sql_text("'[]'::jsonb"))
+    #: Le schede sotto la risposta (una gara con «Inscrever», una fonte con il
+    #: suo documento): dati strutturati che il browser disegna (planner.card).
+    cards: Mapped[list] = mapped_column(JSONB, default=list, server_default=sql_text("'[]'::jsonb"))
     #: L'intenzione riconosciuta (solo per le battute dell'utente): serve a
     #: capire che cosa chiedono le famiglie e che cosa JAVBOT non capisce.
     intent: Mapped[str | None] = mapped_column(String(40), nullable=True)
@@ -133,6 +136,11 @@ class JavbotKnowledgeDocument(UUIDPKMixin, TimestampMixin, Base):
     testo estratto vive nei pezzi (`javbot_knowledge_chunks`)."""
 
     __tablename__ = "javbot_knowledge_documents"
+    __table_args__ = (
+        CheckConstraint("source IN ('UPLOAD', 'EVENT', 'DATA')", name="source"),
+        Index("uq_javbot_knowledge_documents_source_ref", "source_ref", unique=True,
+              postgresql_where=sql_text("source_ref IS NOT NULL")),
+    )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("organizations.id"), index=True
@@ -142,7 +150,17 @@ class JavbotKnowledgeDocument(UUIDPKMixin, TimestampMixin, Base):
     )
     title: Mapped[str] = mapped_column(String(200))
     filename: Mapped[str] = mapped_column(String(255))
-    storage_key: Mapped[str] = mapped_column(String(512))
+    #: Il PDF nel bucket privato; NULL per le schede scritte dal gestionale
+    #: (`source` DATA), che non hanno un file.
+    storage_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    #: Da dove viene: UPLOAD (caricato da chi amministra), EVENT (il
+    #: regolamento di una gara o di un evento), DATA (una scheda che il
+    #: gestionale scrive dai suoi dati: orari, piani e prezzi, eventi,
+    #: contatti; rag.py la riscrive quando invecchia).
+    source: Mapped[str] = mapped_column(String(8), default="UPLOAD", server_default="UPLOAD")
+    #: Che cosa rappresenta, per ritrovarla e riscriverla: "event:<id>",
+    #: "data:<club>:courses". UNIQUE quando c'è.
+    source_ref: Mapped[str | None] = mapped_column(String(80), nullable=True)
     size_bytes: Mapped[int] = mapped_column(Integer)
     page_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     char_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
@@ -203,3 +221,42 @@ class JavbotInstructions(UUIDPKMixin, TimestampMixin, Base):
     updated_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
+
+
+#: Come è nata una risposta di JAVBOT (o un articolo): RULES (pianificatore,
+#: zero token), ACTION (un'azione capita senza modello), CACHE (una risposta
+#: già data, ripresa), RAG (documenti + una chiamata breve), AGENT (modello
+#: con gli strumenti), EXTRACT (il modello capisce solo i dettagli di
+#: un'azione), ARTICLE (un relatório final).
+USAGE_ROUTES = ("RULES", "ACTION", "CACHE", "RAG", "AGENT", "EXTRACT", "ARTICLE")
+
+
+class JavbotUsage(UUIDPKMixin, TimestampMixin, Base):
+    """Una riga per risposta (o articolo): per dove è passata e quanti token
+    ha speso. È il contatore dei costi: la console mostra quante risposte
+    sono costate zero e quanto è costato il resto, per giorno e per club."""
+
+    __tablename__ = "javbot_usage"
+    __table_args__ = (
+        CheckConstraint(f"route IN ({', '.join(repr(r) for r in USAGE_ROUTES)})", name="route"),
+        Index("ix_javbot_usage_org_created", "organization_id", "created_at"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id"))
+    club_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("clubs.id", ondelete="SET NULL"), nullable=True
+    )
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    route: Mapped[str] = mapped_column(String(8))
+    provider: Mapped[str | None] = mapped_column(String(12), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    calls: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    cached_tokens: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    #: L'intenzione o l'azione (fees_due, competition_entry…): per sapere che
+    #: cosa si chiede di più.
+    intent: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    ok: Mapped[bool] = mapped_column(Boolean, default=True, server_default=sql_text("true"))

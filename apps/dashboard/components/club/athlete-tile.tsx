@@ -27,13 +27,13 @@ export function AthleteTile({ athlete, onOpen }: { athlete: AthleteCardData; onO
         <AthleteCard
           name={`${athlete.first_name} ${athlete.last_name}`}
           photoUrl={athlete.photo_url}
-          level={athlete.level}
-          points={athlete.ranking_points}
+          level={features.achievements ? athlete.level : undefined}
+          points={features.ranking ? athlete.ranking_points : undefined}
           subtitle={`${t("club.yearsOld", { n: athlete.age })} · ${athlete.plan?.name ?? t("club.noPlan")}`}
           belt={features.belts ? <BeltBadge belt={athlete.belt} /> : undefined}
           footer={
             <div className="space-y-3">
-              <div>
+              {features.achievements && <div>
                 <div className="flex items-center justify-between text-[11px] font-semibold text-ink-500 mb-1.5">
                   <span>{t("club.level", { n: athlete.level })}</span>
                   <span className="tabular-nums">
@@ -41,11 +41,13 @@ export function AthleteTile({ athlete, onOpen }: { athlete: AthleteCardData; onO
                   </span>
                 </div>
                 <ProgressBar value={xpInLevel} max={xpForLevel} tone="accent" label={t("athlete.xpToNext")} />
-              </div>
+              </div>}
               <div className="flex flex-wrap justify-center gap-1.5">
-                <Badge tone={cert.tone} dot>
-                  {t.dyn(`club.cert.${certCode}`, cert.label)}
-                </Badge>
+                {features.certificates && (
+                  <Badge tone={cert.tone} dot>
+                    {t.dyn(`club.cert.${certCode}`, cert.label)}
+                  </Badge>
+                )}
                 {athlete.due_cents > 0 ? (
                   <Badge tone={athlete.overdue_count > 0 ? "danger" : "warning"} dot>
                     {athlete.overdue_count > 0 ? t("athlete.overdueFees") : t("family.statDue")} {euro(athlete.due_cents)}
@@ -56,10 +58,10 @@ export function AthleteTile({ athlete, onOpen }: { athlete: AthleteCardData; onO
                   </Badge>
                 )}
               </div>
-              <div className={`grid ${features.competitions ? "grid-cols-3" : "grid-cols-2"} gap-2 text-center`}>
+              <div className={`grid ${features.courses ? "grid-cols-1" : features.competitions ? "grid-cols-3" : "grid-cols-2"} gap-2 text-center`}>
                 <Stat label={t("athlete.attendances")} value={athlete.attendances} />
                 {features.competitions && <Stat label={t("athlete.medals")} value={athlete.medals.gold + athlete.medals.silver + athlete.medals.bronze} />}
-                <Stat label={t("athlete.achievements")} value={athlete.achievements_earned} />
+                {features.achievements && <Stat label={t("athlete.achievements")} value={athlete.achievements_earned} />}
               </div>
               {athlete.next_competition && (
                 <p className="rounded-xl bg-brand-50 px-3 py-2 text-xs text-brand-800 text-center">

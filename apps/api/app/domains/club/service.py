@@ -178,8 +178,14 @@ async def get_owned_athlete(
 ) -> ClubAthlete:
     """L'atleta, se è di questa famiglia. Un atleta di un'altra famiglia è
     "non trovato", non "vietato": non si conferma che esista."""
+    from app.domains.club.models import ClubAthleteLink
+
     athlete = await db.get(ClubAthlete, athlete_id)
-    if athlete is None or athlete.club_id != scope.club_id or athlete.guardian_user_id != guardian_user_id:
+    if athlete is None or athlete.club_id != scope.club_id:
+        raise ClubNotFoundError("Atleta non trovato.")
+    if athlete.guardian_user_id != guardian_user_id and (await db.execute(select(ClubAthleteLink.id).where(
+        ClubAthleteLink.athlete_id == athlete.id, ClubAthleteLink.user_id == guardian_user_id,
+    ))).first() is None:
         raise ClubNotFoundError("Atleta non trovato.")
     return athlete
 
@@ -194,8 +200,13 @@ async def get_athlete(db: AsyncSession, *, scope: ClubScope, athlete_id: uuid.UU
 async def list_family_athletes(
     db: AsyncSession, *, scope: ClubScope, guardian_user_id: uuid.UUID, include_left: bool = False
 ) -> list[ClubAthlete]:
+    from app.domains.club.models import ClubAthleteLink
+
+    # Anche gli atleti diventati titolari di sé a cui l'adulto resta collegato.
+    linked = select(ClubAthleteLink.athlete_id).where(ClubAthleteLink.user_id == guardian_user_id)
     stmt = select(ClubAthlete).where(
-        ClubAthlete.club_id == scope.club_id, ClubAthlete.guardian_user_id == guardian_user_id
+        ClubAthlete.club_id == scope.club_id,
+        (ClubAthlete.guardian_user_id == guardian_user_id) | ClubAthlete.id.in_(linked),
     )
     if not include_left:
         stmt = stmt.where(ClubAthlete.status != "LEFT")

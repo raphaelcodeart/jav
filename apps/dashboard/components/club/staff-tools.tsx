@@ -11,6 +11,7 @@ import { Field, Input, Select } from "@/components/ui/field";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { AthleteMarks } from "@/components/club/person-marks";
+import { SchoolLogo } from "@/components/club/jav-courses";
 import { BELTS, beltFor } from "@/lib/belts";
 import { clubGet, clubSend, fullName, shortDate, type AthleteCard, type BeltHistory, type Course, type Roster } from "@/lib/club";
 import { celebrate } from "@/lib/motion";
@@ -50,12 +51,15 @@ export function AttendanceBoard() {
   if (!courses?.length) return <EmptyState icon={<span className="text-3xl">📅</span>} title={t("clubx.staff.noCourses")} text={t("clubx.staff.noCoursesText")} />;
   const rows = roster?.rows ?? [];
   const present = rows.filter((r) => r.present).length;
+  const current = courses.find((c) => c.id === selected);
 
   return (
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row gap-3">
+        {/* Corsi JAV: la scuola del corso, con il suo logo se c'è. */}
+        {current?.venue_logo_url && <SchoolLogo url={current.venue_logo_url} className="h-11 w-11" />}
         <Select value={selected} onChange={(e) => setCourseId(e.target.value)} aria-label={t("clubx.staff.course")}>
-          {courses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          {courses.map((c) => <option key={c.id} value={c.id}>{[c.name, c.venue_name].filter(Boolean).join(" · ")}</option>)}
         </Select>
         <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="sm:w-52" aria-label={t("attendance.day")} />
         <div className="sm:ml-auto rounded-2xl bg-ink-900 text-white px-5 flex items-center gap-2 h-11">

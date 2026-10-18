@@ -70,6 +70,15 @@ class Settings(BaseSettings):
     # finché il club non decide di usarlo, anche se la chiave c'è già per
     # JAVBOT. Acceso = EVENT_REPORT_AI_ENABLED=true più la chiave.
     event_report_ai_enabled: bool = False
+    # OpenAI (javbot/llm.py): se c'è la chiave, è il modello di JAVBOT e
+    # degli articoli. Il modello si sceglie da qui: uno piccolo e senza
+    # ragionamento nascosto spende poco, e a JAVBOT basta (i dati li
+    # trovano il codice e il RAG, il modello capisce e scrive).
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4.1-mini"
+    # Il tetto di token al giorno di tutta la piattaforma per JAVBOT: oltre,
+    # risponde senza modello (regole e documenti) fino a domani. 0 = nessun tetto.
+    javbot_daily_token_budget: int = 2_000_000
     # Il microfono di JAVBOT: il servizio Whisper interno (apps/stt). Vuoto
     # = niente microfono (il bottone non compare).
     stt_url: str = "http://stt:8001"

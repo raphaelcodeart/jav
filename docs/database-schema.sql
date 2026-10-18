@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict Sxg4Ddq4YUHjJJMyVT1sTJeKDK2A9uOtpdVciUsZQVHJMeTcHtPukftz9wzLr6I
+\restrict HnTOnuR40mhoHfr0pKkNUvuzfwr4hM9mIFCxBpqP7hoOSoaoRQdLO7VSvllhEap
 
 -- Dumped from database version 16.15
 -- Dumped by pg_dump version 16.15
@@ -302,6 +302,18 @@ CREATE TABLE public.club_athlete_documents (
     id uuid NOT NULL,
     created_at timestamp with time zone NOT NULL,
     CONSTRAINT ck_club_athlete_documents_kind CHECK (((kind)::text = ANY ((ARRAY['SOCIAL_SECURITY'::character varying, 'MEDICAL_JUSTIFICATION'::character varying, 'SCHOOL_JUSTIFICATION'::character varying, 'CLUB_DECLARATION'::character varying, 'PARENTAL_AUTHORIZATION'::character varying, 'ID_DOCUMENT'::character varying, 'OTHER'::character varying])::text[])))
+);
+
+
+--
+-- Name: club_athlete_links; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.club_athlete_links (
+    athlete_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
 );
 
 
@@ -676,6 +688,9 @@ CREATE TABLE public.club_competitions (
     circular_url character varying(500),
     circular_filename character varying(255),
     image_url character varying(500),
+    regulation_storage_key character varying(512),
+    regulation_filename character varying(255),
+    regulation_size integer,
     CONSTRAINT ck_club_competitions_age_range CHECK (((max_age IS NULL) OR (min_age IS NULL) OR (max_age >= min_age))),
     CONSTRAINT ck_club_competitions_date_range CHECK ((ends_on >= starts_on)),
     CONSTRAINT ck_club_competitions_deadline_before_start CHECK ((registration_deadline <= starts_on)),
@@ -791,6 +806,7 @@ CREATE TABLE public.club_courses (
     public_coach_name character varying(80),
     coach_share_pct numeric(5,2),
     published boolean DEFAULT false NOT NULL,
+    venue_logo_url character varying(1000),
     CONSTRAINT ck_club_courses_age_range CHECK (((max_age IS NULL) OR (min_age IS NULL) OR (max_age >= min_age))),
     CONSTRAINT ck_club_courses_coach_share_pct_range CHECK (((coach_share_pct IS NULL) OR ((coach_share_pct >= (0)::numeric) AND (coach_share_pct <= (100)::numeric))))
 );
@@ -1587,6 +1603,94 @@ CREATE TABLE public.clubs (
 
 
 --
+-- Name: coach_cv_exports; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.coach_cv_exports (
+    organization_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    kind character varying(8) NOT NULL,
+    storage_key character varying(500) NOT NULL,
+    filename character varying(255) NOT NULL,
+    size_bytes bigint NOT NULL,
+    note character varying(200),
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT ck_coach_cv_exports_kind CHECK (((kind)::text = ANY ((ARRAY['CV'::character varying, 'SPORT'::character varying])::text[])))
+);
+
+
+--
+-- Name: coach_documents; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.coach_documents (
+    organization_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    title character varying(200) NOT NULL,
+    category character varying(16) NOT NULL,
+    issuer character varying(200),
+    issued_on date,
+    expires_on date,
+    description character varying(2000),
+    storage_key character varying(500),
+    original_filename character varying(255),
+    content_type character varying(100),
+    size_bytes bigint,
+    show_in_cv boolean DEFAULT true NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT ck_coach_documents_category CHECK (((category)::text = ANY ((ARRAY['COACH_DIPLOMA'::character varying, 'FEDERATION'::character varying, 'COURSE'::character varying, 'FIRST_AID'::character varying, 'ACADEMIC'::character varying, 'PROFESSIONAL'::character varying, 'PERSONAL'::character varying, 'OTHER'::character varying])::text[]))),
+    CONSTRAINT ck_coach_documents_dates CHECK (((expires_on IS NULL) OR (issued_on IS NULL) OR (expires_on >= issued_on)))
+);
+
+
+--
+-- Name: coach_profiles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.coach_profiles (
+    organization_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    data jsonb DEFAULT '{}'::jsonb NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: coach_sport_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.coach_sport_events (
+    organization_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    title character varying(200) NOT NULL,
+    event_type character varying(16) NOT NULL,
+    role character varying(16) NOT NULL,
+    starts_on date NOT NULL,
+    ends_on date,
+    location character varying(200),
+    organization_name character varying(200),
+    level character varying(24),
+    category character varying(120),
+    placement smallint,
+    result character varying(300),
+    description text,
+    document_id uuid,
+    updated_at timestamp with time zone NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT ck_coach_sport_events_dates CHECK (((ends_on IS NULL) OR (ends_on >= starts_on))),
+    CONSTRAINT ck_coach_sport_events_event_type CHECK (((event_type)::text = ANY ((ARRAY['COMPETITION'::character varying, 'STAGE'::character varying, 'SEMINAR'::character varying, 'COURSE'::character varying, 'GRADING'::character varying, 'REFEREEING'::character varying, 'OTHER'::character varying])::text[]))),
+    CONSTRAINT ck_coach_sport_events_placement CHECK (((placement IS NULL) OR (placement = ANY (ARRAY[0, 1, 2, 3, 5, 7])))),
+    CONSTRAINT ck_coach_sport_events_role CHECK (((role)::text = ANY ((ARRAY['ATHLETE'::character varying, 'COACH'::character varying, 'ASSISTANT_COACH'::character varying, 'REFEREE'::character varying, 'ORGANIZER'::character varying, 'OTHER'::character varying])::text[])))
+);
+
+
+--
 -- Name: commission_adjustments; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2076,6 +2180,190 @@ CREATE TABLE public.email_verification_tokens (
 
 
 --
+-- Name: ext_attendances; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.ext_attendances (
+    course_id uuid NOT NULL,
+    participant_id uuid NOT NULL,
+    date date NOT NULL,
+    present boolean NOT NULL,
+    recorded_by_user_id uuid,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: ext_courses; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.ext_courses (
+    organization_id uuid NOT NULL,
+    name character varying(150) NOT NULL,
+    school_name character varying(200) NOT NULL,
+    school_address character varying(300),
+    school_city character varying(120),
+    school_logo_url character varying(1000),
+    description text,
+    monthly_fee_cents bigint NOT NULL,
+    billing_months smallint[] NOT NULL,
+    due_day smallint NOT NULL,
+    starts_on date NOT NULL,
+    ends_on date NOT NULL,
+    active boolean DEFAULT true NOT NULL,
+    published boolean DEFAULT false NOT NULL,
+    public_coach_name character varying(80),
+    created_by_user_id uuid,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT ck_ext_courses_due_day_range CHECK (((due_day >= 1) AND (due_day <= 28))),
+    CONSTRAINT ck_ext_courses_fee_non_negative CHECK ((monthly_fee_cents >= 0))
+);
+
+
+--
+-- Name: ext_fees; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.ext_fees (
+    organization_id uuid NOT NULL,
+    course_id uuid NOT NULL,
+    participant_id uuid NOT NULL,
+    period character varying(7) NOT NULL,
+    amount_cents bigint NOT NULL,
+    due_date date NOT NULL,
+    status character varying(8) DEFAULT 'DUE'::character varying NOT NULL,
+    paid_at timestamp with time zone,
+    method character varying(16),
+    proof_id uuid,
+    recorded_by_user_id uuid,
+    coach_user_id uuid,
+    coach_share_pct numeric(5,2),
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT ck_ext_fees_amount_non_negative CHECK ((amount_cents >= 0)),
+    CONSTRAINT ck_ext_fees_method CHECK (((method IS NULL) OR ((method)::text = ANY ((ARRAY['BANK_TRANSFER'::character varying, 'MBWAY'::character varying, 'CASH'::character varying, 'POS'::character varying])::text[])))),
+    CONSTRAINT ck_ext_fees_status CHECK (((status)::text = ANY ((ARRAY['DUE'::character varying, 'PAID'::character varying, 'WAIVED'::character varying])::text[])))
+);
+
+
+--
+-- Name: ext_groups; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.ext_groups (
+    course_id uuid NOT NULL,
+    name character varying(120) NOT NULL,
+    min_age smallint,
+    max_age smallint,
+    weekday smallint NOT NULL,
+    starts_at time without time zone NOT NULL,
+    ends_at time without time zone NOT NULL,
+    active boolean DEFAULT true NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT ck_ext_groups_times CHECK ((ends_at > starts_at)),
+    CONSTRAINT ck_ext_groups_weekday_range CHECK (((weekday >= 0) AND (weekday <= 6)))
+);
+
+
+--
+-- Name: ext_notices; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.ext_notices (
+    course_id uuid NOT NULL,
+    author_user_id uuid,
+    title character varying(200) NOT NULL,
+    body text,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: ext_participants; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.ext_participants (
+    organization_id uuid NOT NULL,
+    course_id uuid NOT NULL,
+    group_id uuid,
+    parent_user_id uuid NOT NULL,
+    first_name character varying(80) NOT NULL,
+    last_name character varying(80) NOT NULL,
+    birth_date date NOT NULL,
+    sex character varying(1),
+    notes character varying(500),
+    guardian_name character varying(160),
+    guardian_phone character varying(40),
+    status character varying(8) DEFAULT 'ACTIVE'::character varying NOT NULL,
+    joined_on date NOT NULL,
+    left_on date,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT ck_ext_participants_status CHECK (((status)::text = ANY ((ARRAY['ACTIVE'::character varying, 'LEFT'::character varying])::text[])))
+);
+
+
+--
+-- Name: ext_proofs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.ext_proofs (
+    organization_id uuid NOT NULL,
+    course_id uuid NOT NULL,
+    parent_user_id uuid NOT NULL,
+    storage_key character varying(500),
+    filename character varying(255),
+    amount_cents bigint NOT NULL,
+    method character varying(16) NOT NULL,
+    note character varying(500),
+    status character varying(8) DEFAULT 'ACCEPTED'::character varying NOT NULL,
+    reviewed_by_user_id uuid,
+    reviewed_at timestamp with time zone,
+    rejection_reason character varying(500),
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT ck_ext_proofs_method CHECK (((method)::text = ANY ((ARRAY['BANK_TRANSFER'::character varying, 'MBWAY'::character varying, 'CASH'::character varying, 'POS'::character varying])::text[]))),
+    CONSTRAINT ck_ext_proofs_status CHECK (((status)::text = ANY ((ARRAY['ACCEPTED'::character varying, 'REJECTED'::character varying])::text[])))
+);
+
+
+--
+-- Name: ext_staff; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.ext_staff (
+    course_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    role character varying(8) NOT NULL,
+    share_pct numeric(5,2),
+    active boolean DEFAULT true NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT ck_ext_staff_role CHECK (((role)::text = ANY ((ARRAY['COACH'::character varying, 'SCHOOL'::character varying])::text[]))),
+    CONSTRAINT ck_ext_staff_share_range CHECK (((share_pct IS NULL) OR ((share_pct >= (0)::numeric) AND (share_pct <= (100)::numeric))))
+);
+
+
+--
+-- Name: ext_work_sessions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.ext_work_sessions (
+    course_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    started_at timestamp with time zone NOT NULL,
+    ended_at timestamp with time zone,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT ck_ext_work_sessions_times CHECK (((ended_at IS NULL) OR (ended_at > started_at)))
+);
+
+
+--
 -- Name: friend_referral_codes; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2378,14 +2666,17 @@ CREATE TABLE public.javbot_knowledge_documents (
     club_id uuid,
     title character varying(200) NOT NULL,
     filename character varying(255) NOT NULL,
-    storage_key character varying(512) NOT NULL,
+    storage_key character varying(512),
     size_bytes integer NOT NULL,
     page_count integer DEFAULT 0 NOT NULL,
     char_count integer DEFAULT 0 NOT NULL,
     status character varying(16) NOT NULL,
     uploaded_by_user_id uuid,
     id uuid NOT NULL,
-    created_at timestamp with time zone NOT NULL
+    created_at timestamp with time zone NOT NULL,
+    source character varying(8) DEFAULT 'UPLOAD'::character varying NOT NULL,
+    source_ref character varying(80),
+    CONSTRAINT ck_javbot_knowledge_documents_source CHECK (((source)::text = ANY ((ARRAY['UPLOAD'::character varying, 'EVENT'::character varying, 'DATA'::character varying])::text[])))
 );
 
 
@@ -2403,7 +2694,8 @@ CREATE TABLE public.javbot_messages (
     quick_replies jsonb DEFAULT '[]'::jsonb NOT NULL,
     intent character varying(40),
     id uuid NOT NULL,
-    created_at timestamp with time zone NOT NULL
+    created_at timestamp with time zone NOT NULL,
+    cards jsonb DEFAULT '[]'::jsonb NOT NULL
 );
 
 
@@ -2423,6 +2715,29 @@ CREATE TABLE public.javbot_tasks (
     done_at timestamp with time zone,
     id uuid NOT NULL,
     created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: javbot_usage; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.javbot_usage (
+    organization_id uuid NOT NULL,
+    club_id uuid,
+    user_id uuid,
+    route character varying(8) NOT NULL,
+    provider character varying(12),
+    model character varying(60),
+    calls integer DEFAULT 0 NOT NULL,
+    input_tokens integer DEFAULT 0 NOT NULL,
+    output_tokens integer DEFAULT 0 NOT NULL,
+    cached_tokens integer DEFAULT 0 NOT NULL,
+    intent character varying(40),
+    ok boolean DEFAULT true NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT ck_javbot_usage_route CHECK (((route)::text = ANY ((ARRAY['RULES'::character varying, 'ACTION'::character varying, 'CACHE'::character varying, 'RAG'::character varying, 'AGENT'::character varying, 'EXTRACT'::character varying, 'ARTICLE'::character varying])::text[])))
 );
 
 
@@ -3142,6 +3457,14 @@ ALTER TABLE ONLY public.club_athlete_documents
 
 
 --
+-- Name: club_athlete_links pk_club_athlete_links; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_athlete_links
+    ADD CONSTRAINT pk_club_athlete_links PRIMARY KEY (id);
+
+
+--
 -- Name: club_athlete_login_codes pk_club_athlete_login_codes; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3574,6 +3897,38 @@ ALTER TABLE ONLY public.clubs
 
 
 --
+-- Name: coach_cv_exports pk_coach_cv_exports; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.coach_cv_exports
+    ADD CONSTRAINT pk_coach_cv_exports PRIMARY KEY (id);
+
+
+--
+-- Name: coach_documents pk_coach_documents; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.coach_documents
+    ADD CONSTRAINT pk_coach_documents PRIMARY KEY (id);
+
+
+--
+-- Name: coach_profiles pk_coach_profiles; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.coach_profiles
+    ADD CONSTRAINT pk_coach_profiles PRIMARY KEY (id);
+
+
+--
+-- Name: coach_sport_events pk_coach_sport_events; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.coach_sport_events
+    ADD CONSTRAINT pk_coach_sport_events PRIMARY KEY (id);
+
+
+--
 -- Name: commission_adjustments pk_commission_adjustments; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3774,6 +4129,78 @@ ALTER TABLE ONLY public.email_verification_tokens
 
 
 --
+-- Name: ext_attendances pk_ext_attendances; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_attendances
+    ADD CONSTRAINT pk_ext_attendances PRIMARY KEY (id);
+
+
+--
+-- Name: ext_courses pk_ext_courses; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_courses
+    ADD CONSTRAINT pk_ext_courses PRIMARY KEY (id);
+
+
+--
+-- Name: ext_fees pk_ext_fees; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_fees
+    ADD CONSTRAINT pk_ext_fees PRIMARY KEY (id);
+
+
+--
+-- Name: ext_groups pk_ext_groups; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_groups
+    ADD CONSTRAINT pk_ext_groups PRIMARY KEY (id);
+
+
+--
+-- Name: ext_notices pk_ext_notices; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_notices
+    ADD CONSTRAINT pk_ext_notices PRIMARY KEY (id);
+
+
+--
+-- Name: ext_participants pk_ext_participants; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_participants
+    ADD CONSTRAINT pk_ext_participants PRIMARY KEY (id);
+
+
+--
+-- Name: ext_proofs pk_ext_proofs; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_proofs
+    ADD CONSTRAINT pk_ext_proofs PRIMARY KEY (id);
+
+
+--
+-- Name: ext_staff pk_ext_staff; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_staff
+    ADD CONSTRAINT pk_ext_staff PRIMARY KEY (id);
+
+
+--
+-- Name: ext_work_sessions pk_ext_work_sessions; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_work_sessions
+    ADD CONSTRAINT pk_ext_work_sessions PRIMARY KEY (id);
+
+
+--
 -- Name: friend_referral_codes pk_friend_referral_codes; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3899,6 +4326,14 @@ ALTER TABLE ONLY public.javbot_messages
 
 ALTER TABLE ONLY public.javbot_tasks
     ADD CONSTRAINT pk_javbot_tasks PRIMARY KEY (id);
+
+
+--
+-- Name: javbot_usage pk_javbot_usage; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.javbot_usage
+    ADD CONSTRAINT pk_javbot_usage PRIMARY KEY (id);
 
 
 --
@@ -4206,6 +4641,14 @@ ALTER TABLE ONLY public.carts
 
 
 --
+-- Name: club_athlete_links uq_club_athlete_links_athlete_user; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_athlete_links
+    ADD CONSTRAINT uq_club_athlete_links_athlete_user UNIQUE (athlete_id, user_id);
+
+
+--
 -- Name: club_athlete_login_codes uq_club_athlete_login_codes_token_hash; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4462,6 +4905,14 @@ ALTER TABLE ONLY public.clubs
 
 
 --
+-- Name: coach_profiles uq_coach_profiles_user_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.coach_profiles
+    ADD CONSTRAINT uq_coach_profiles_user_id UNIQUE (user_id);
+
+
+--
 -- Name: commission_calculations uq_commission_calculations_contract_trigger; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4507,6 +4958,30 @@ ALTER TABLE ONLY public.customers
 
 ALTER TABLE ONLY public.documents
     ADD CONSTRAINT uq_documents_storage_key UNIQUE (storage_key);
+
+
+--
+-- Name: ext_attendances uq_ext_attendances_participant_date; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_attendances
+    ADD CONSTRAINT uq_ext_attendances_participant_date UNIQUE (participant_id, date);
+
+
+--
+-- Name: ext_fees uq_ext_fees_participant_period; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_fees
+    ADD CONSTRAINT uq_ext_fees_participant_period UNIQUE (participant_id, period);
+
+
+--
+-- Name: ext_staff uq_ext_staff_course_user_role; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_staff
+    ADD CONSTRAINT uq_ext_staff_course_user_role UNIQUE (course_id, user_id, role);
 
 
 --
@@ -4836,6 +5311,20 @@ CREATE INDEX ix_club_athlete_documents_athlete_id ON public.club_athlete_documen
 --
 
 CREATE INDEX ix_club_athlete_documents_club_id ON public.club_athlete_documents USING btree (club_id);
+
+
+--
+-- Name: ix_club_athlete_links_athlete_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_club_athlete_links_athlete_id ON public.club_athlete_links USING btree (athlete_id);
+
+
+--
+-- Name: ix_club_athlete_links_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_club_athlete_links_user_id ON public.club_athlete_links USING btree (user_id);
 
 
 --
@@ -5798,6 +6287,27 @@ CREATE INDEX ix_clubs_organization_id ON public.clubs USING btree (organization_
 
 
 --
+-- Name: ix_coach_cv_exports_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_coach_cv_exports_user_id ON public.coach_cv_exports USING btree (user_id);
+
+
+--
+-- Name: ix_coach_documents_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_coach_documents_user_id ON public.coach_documents USING btree (user_id);
+
+
+--
+-- Name: ix_coach_sport_events_user_date; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_coach_sport_events_user_date ON public.coach_sport_events USING btree (user_id, starts_on);
+
+
+--
 -- Name: ix_commission_adjustments_organization_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -6099,6 +6609,118 @@ CREATE INDEX ix_email_verification_tokens_user_id ON public.email_verification_t
 
 
 --
+-- Name: ix_ext_attendances_course_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_ext_attendances_course_id ON public.ext_attendances USING btree (course_id);
+
+
+--
+-- Name: ix_ext_attendances_participant_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_ext_attendances_participant_id ON public.ext_attendances USING btree (participant_id);
+
+
+--
+-- Name: ix_ext_courses_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_ext_courses_organization_id ON public.ext_courses USING btree (organization_id);
+
+
+--
+-- Name: ix_ext_fees_course_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_ext_fees_course_status ON public.ext_fees USING btree (course_id, status);
+
+
+--
+-- Name: ix_ext_fees_participant_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_ext_fees_participant_id ON public.ext_fees USING btree (participant_id);
+
+
+--
+-- Name: ix_ext_groups_course_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_ext_groups_course_id ON public.ext_groups USING btree (course_id);
+
+
+--
+-- Name: ix_ext_notices_course_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_ext_notices_course_id ON public.ext_notices USING btree (course_id);
+
+
+--
+-- Name: ix_ext_participants_course_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_ext_participants_course_id ON public.ext_participants USING btree (course_id);
+
+
+--
+-- Name: ix_ext_participants_group_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_ext_participants_group_id ON public.ext_participants USING btree (group_id);
+
+
+--
+-- Name: ix_ext_participants_parent_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_ext_participants_parent_user_id ON public.ext_participants USING btree (parent_user_id);
+
+
+--
+-- Name: ix_ext_proofs_course_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_ext_proofs_course_id ON public.ext_proofs USING btree (course_id);
+
+
+--
+-- Name: ix_ext_proofs_parent_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_ext_proofs_parent_user_id ON public.ext_proofs USING btree (parent_user_id);
+
+
+--
+-- Name: ix_ext_staff_course_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_ext_staff_course_id ON public.ext_staff USING btree (course_id);
+
+
+--
+-- Name: ix_ext_staff_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_ext_staff_user_id ON public.ext_staff USING btree (user_id);
+
+
+--
+-- Name: ix_ext_work_sessions_course_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_ext_work_sessions_course_id ON public.ext_work_sessions USING btree (course_id);
+
+
+--
+-- Name: ix_ext_work_sessions_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_ext_work_sessions_user_id ON public.ext_work_sessions USING btree (user_id);
+
+
+--
 -- Name: ix_friend_referral_codes_organization_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -6355,6 +6977,13 @@ CREATE INDEX ix_javbot_tasks_organization_id ON public.javbot_tasks USING btree 
 --
 
 CREATE INDEX ix_javbot_tasks_user_id ON public.javbot_tasks USING btree (user_id);
+
+
+--
+-- Name: ix_javbot_usage_org_created; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_javbot_usage_org_created ON public.javbot_usage USING btree (organization_id, created_at);
 
 
 --
@@ -6904,6 +7533,13 @@ CREATE UNIQUE INDEX uq_javbot_instructions_common ON public.javbot_instructions 
 
 
 --
+-- Name: uq_javbot_knowledge_documents_source_ref; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uq_javbot_knowledge_documents_source_ref ON public.javbot_knowledge_documents USING btree (source_ref) WHERE (source_ref IS NOT NULL);
+
+
+--
 -- Name: uq_network_nodes_active_agent; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -7210,6 +7846,22 @@ ALTER TABLE ONLY public.club_athlete_documents
 
 ALTER TABLE ONLY public.club_athlete_documents
     ADD CONSTRAINT fk_club_athlete_documents_uploaded_by_user_id_users FOREIGN KEY (uploaded_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: club_athlete_links fk_club_athlete_links_athlete_id_club_athletes; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_athlete_links
+    ADD CONSTRAINT fk_club_athlete_links_athlete_id_club_athletes FOREIGN KEY (athlete_id) REFERENCES public.club_athletes(id) ON DELETE CASCADE;
+
+
+--
+-- Name: club_athlete_links fk_club_athlete_links_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_athlete_links
+    ADD CONSTRAINT fk_club_athlete_links_user_id_users FOREIGN KEY (user_id) REFERENCES public.users(id);
 
 
 --
@@ -8845,6 +9497,78 @@ ALTER TABLE ONLY public.clubs
 
 
 --
+-- Name: coach_cv_exports fk_coach_cv_exports_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.coach_cv_exports
+    ADD CONSTRAINT fk_coach_cv_exports_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: coach_cv_exports fk_coach_cv_exports_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.coach_cv_exports
+    ADD CONSTRAINT fk_coach_cv_exports_user_id_users FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: coach_documents fk_coach_documents_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.coach_documents
+    ADD CONSTRAINT fk_coach_documents_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: coach_documents fk_coach_documents_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.coach_documents
+    ADD CONSTRAINT fk_coach_documents_user_id_users FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: coach_profiles fk_coach_profiles_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.coach_profiles
+    ADD CONSTRAINT fk_coach_profiles_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: coach_profiles fk_coach_profiles_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.coach_profiles
+    ADD CONSTRAINT fk_coach_profiles_user_id_users FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: coach_sport_events fk_coach_sport_events_document_id_coach_documents; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.coach_sport_events
+    ADD CONSTRAINT fk_coach_sport_events_document_id_coach_documents FOREIGN KEY (document_id) REFERENCES public.coach_documents(id) ON DELETE SET NULL;
+
+
+--
+-- Name: coach_sport_events fk_coach_sport_events_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.coach_sport_events
+    ADD CONSTRAINT fk_coach_sport_events_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: coach_sport_events fk_coach_sport_events_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.coach_sport_events
+    ADD CONSTRAINT fk_coach_sport_events_user_id_users FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
 -- Name: commission_adjustments fk_commission_adjustments_approved_by_users; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -9445,6 +10169,214 @@ ALTER TABLE ONLY public.email_verification_tokens
 
 
 --
+-- Name: ext_attendances fk_ext_attendances_course_id_ext_courses; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_attendances
+    ADD CONSTRAINT fk_ext_attendances_course_id_ext_courses FOREIGN KEY (course_id) REFERENCES public.ext_courses(id);
+
+
+--
+-- Name: ext_attendances fk_ext_attendances_participant_id_ext_participants; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_attendances
+    ADD CONSTRAINT fk_ext_attendances_participant_id_ext_participants FOREIGN KEY (participant_id) REFERENCES public.ext_participants(id) ON DELETE CASCADE;
+
+
+--
+-- Name: ext_attendances fk_ext_attendances_recorded_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_attendances
+    ADD CONSTRAINT fk_ext_attendances_recorded_by_user_id_users FOREIGN KEY (recorded_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: ext_courses fk_ext_courses_created_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_courses
+    ADD CONSTRAINT fk_ext_courses_created_by_user_id_users FOREIGN KEY (created_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: ext_courses fk_ext_courses_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_courses
+    ADD CONSTRAINT fk_ext_courses_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: ext_fees fk_ext_fees_coach_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_fees
+    ADD CONSTRAINT fk_ext_fees_coach_user_id_users FOREIGN KEY (coach_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: ext_fees fk_ext_fees_course_id_ext_courses; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_fees
+    ADD CONSTRAINT fk_ext_fees_course_id_ext_courses FOREIGN KEY (course_id) REFERENCES public.ext_courses(id);
+
+
+--
+-- Name: ext_fees fk_ext_fees_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_fees
+    ADD CONSTRAINT fk_ext_fees_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: ext_fees fk_ext_fees_participant_id_ext_participants; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_fees
+    ADD CONSTRAINT fk_ext_fees_participant_id_ext_participants FOREIGN KEY (participant_id) REFERENCES public.ext_participants(id) ON DELETE CASCADE;
+
+
+--
+-- Name: ext_fees fk_ext_fees_proof_id_ext_proofs; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_fees
+    ADD CONSTRAINT fk_ext_fees_proof_id_ext_proofs FOREIGN KEY (proof_id) REFERENCES public.ext_proofs(id) ON DELETE SET NULL;
+
+
+--
+-- Name: ext_fees fk_ext_fees_recorded_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_fees
+    ADD CONSTRAINT fk_ext_fees_recorded_by_user_id_users FOREIGN KEY (recorded_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: ext_groups fk_ext_groups_course_id_ext_courses; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_groups
+    ADD CONSTRAINT fk_ext_groups_course_id_ext_courses FOREIGN KEY (course_id) REFERENCES public.ext_courses(id) ON DELETE CASCADE;
+
+
+--
+-- Name: ext_notices fk_ext_notices_author_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_notices
+    ADD CONSTRAINT fk_ext_notices_author_user_id_users FOREIGN KEY (author_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: ext_notices fk_ext_notices_course_id_ext_courses; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_notices
+    ADD CONSTRAINT fk_ext_notices_course_id_ext_courses FOREIGN KEY (course_id) REFERENCES public.ext_courses(id) ON DELETE CASCADE;
+
+
+--
+-- Name: ext_participants fk_ext_participants_course_id_ext_courses; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_participants
+    ADD CONSTRAINT fk_ext_participants_course_id_ext_courses FOREIGN KEY (course_id) REFERENCES public.ext_courses(id);
+
+
+--
+-- Name: ext_participants fk_ext_participants_group_id_ext_groups; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_participants
+    ADD CONSTRAINT fk_ext_participants_group_id_ext_groups FOREIGN KEY (group_id) REFERENCES public.ext_groups(id) ON DELETE SET NULL;
+
+
+--
+-- Name: ext_participants fk_ext_participants_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_participants
+    ADD CONSTRAINT fk_ext_participants_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: ext_participants fk_ext_participants_parent_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_participants
+    ADD CONSTRAINT fk_ext_participants_parent_user_id_users FOREIGN KEY (parent_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: ext_proofs fk_ext_proofs_course_id_ext_courses; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_proofs
+    ADD CONSTRAINT fk_ext_proofs_course_id_ext_courses FOREIGN KEY (course_id) REFERENCES public.ext_courses(id);
+
+
+--
+-- Name: ext_proofs fk_ext_proofs_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_proofs
+    ADD CONSTRAINT fk_ext_proofs_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: ext_proofs fk_ext_proofs_parent_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_proofs
+    ADD CONSTRAINT fk_ext_proofs_parent_user_id_users FOREIGN KEY (parent_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: ext_proofs fk_ext_proofs_reviewed_by_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_proofs
+    ADD CONSTRAINT fk_ext_proofs_reviewed_by_user_id_users FOREIGN KEY (reviewed_by_user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: ext_staff fk_ext_staff_course_id_ext_courses; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_staff
+    ADD CONSTRAINT fk_ext_staff_course_id_ext_courses FOREIGN KEY (course_id) REFERENCES public.ext_courses(id) ON DELETE CASCADE;
+
+
+--
+-- Name: ext_staff fk_ext_staff_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_staff
+    ADD CONSTRAINT fk_ext_staff_user_id_users FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: ext_work_sessions fk_ext_work_sessions_course_id_ext_courses; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_work_sessions
+    ADD CONSTRAINT fk_ext_work_sessions_course_id_ext_courses FOREIGN KEY (course_id) REFERENCES public.ext_courses(id);
+
+
+--
+-- Name: ext_work_sessions fk_ext_work_sessions_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ext_work_sessions
+    ADD CONSTRAINT fk_ext_work_sessions_user_id_users FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
 -- Name: friend_referral_codes fk_friend_referral_codes_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -9858,6 +10790,30 @@ ALTER TABLE ONLY public.javbot_tasks
 
 ALTER TABLE ONLY public.javbot_tasks
     ADD CONSTRAINT fk_javbot_tasks_user_id_users FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: javbot_usage fk_javbot_usage_club_id_clubs; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.javbot_usage
+    ADD CONSTRAINT fk_javbot_usage_club_id_clubs FOREIGN KEY (club_id) REFERENCES public.clubs(id) ON DELETE SET NULL;
+
+
+--
+-- Name: javbot_usage fk_javbot_usage_organization_id_organizations; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.javbot_usage
+    ADD CONSTRAINT fk_javbot_usage_organization_id_organizations FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: javbot_usage fk_javbot_usage_user_id_users; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.javbot_usage
+    ADD CONSTRAINT fk_javbot_usage_user_id_users FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE SET NULL;
 
 
 --
@@ -10480,5 +11436,5 @@ ALTER TABLE ONLY public.wallets
 -- PostgreSQL database dump complete
 --
 
-\unrestrict Sxg4Ddq4YUHjJJMyVT1sTJeKDK2A9uOtpdVciUsZQVHJMeTcHtPukftz9wzLr6I
+\unrestrict HnTOnuR40mhoHfr0pKkNUvuzfwr4hM9mIFCxBpqP7hoOSoaoRQdLO7VSvllhEap
 

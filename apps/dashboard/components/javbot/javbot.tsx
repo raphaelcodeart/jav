@@ -1,13 +1,32 @@
 "use client";
 
 import { VOICE_INPUT_ENABLED } from "@/components/javbot/use-voice-input";
+import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { JavbotChat } from "@/components/javbot/javbot-chat";
 import { friendlyApiError } from "@/lib/api-error";
+import type { MessageKey } from "@/lib/i18n/messages/it";
 import { useI18n } from "@/lib/i18n/provider";
 import { NAV_TARGETS, requestJavbotPay, type BotAction, type BotMessage, type PayKind } from "@/lib/javbot";
 
 const BASE = "/api/proxy/javbot";
+const AVAILABLE_KEY = ["javbot", "available"];
+
+// Gli esempi della chat vuota, per area: quello che JAVBOT sa fare davvero
+// lì (le azioni di javbot/actions.py), non domande generiche. La segreteria
+// (/club) lavora come lo staff.
+const EXAMPLES: Record<"family" | "staff" | "athlete", MessageKey[]> = {
+  family: ["jbx.ex.family1", "jbx.ex.family2", "jbx.ex.family3"],
+  staff: ["jbx.ex.staff1", "jbx.ex.staff2", "jbx.ex.staff3"],
+  athlete: ["jbx.ex.athlete1", "jbx.ex.athlete2", "jbx.ex.athlete3"],
+};
+
+function areaOf(pathname: string | null): "family" | "staff" | "athlete" {
+  if (/^\/(staff|club)(\/|$)/.test(pathname ?? "")) return "staff";
+  if (/^\/atleta(\/|$)/.test(pathname ?? "")) return "athlete";
+  return "family";
+}
 
 /** JAVBOT nell'area privata: montato una volta in AppShell, quindi presente
  *  in ogni pagina di ogni ruolo. Le risposte le scrive il backend
@@ -18,14 +37,31 @@ const BASE = "/api/proxy/javbot";
  *  - `open_pay` va alla scheda del club e chiede a family-home di aprire
  *    "Carica un pagamento" (lib/javbot.ts::requestJavbotPay);
  *  - `confirm_task` / `cancel_task` mandano al server solo l'id del compito:
- *    che cosa si esegue (l'ordine, il messaggio) è già scritto lì. */
+ *    che cosa si esegue (l'ordine, il messaggio) è già scritto lì;
+ *  - `say` lo gestisce la chat: è un messaggio come un altro.
+ *  JAVBOT è solo per gli adulti: al minorenne con il solo accesso da atleta
+ *  il server risponde `available: false` (o 403), e la bolla non c'è. */
 export function Javbot({ navKeys, onNavigate }: { navKeys: string[]; onNavigate: (key: string) => void }) {
   const { t, locale } = useI18n();
+  const area = areaOf(usePathname());
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<BotMessage[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  // Una volta per sessione: l'età non cambia da una pagina all'altra.
+  // Se la verifica fallisce si nasconde: meglio niente bolla che una bolla muta.
+  const { data: availability } = useQuery({
+    queryKey: AVAILABLE_KEY,
+    queryFn: async () => {
+      const res = await fetch(`${BASE}/available`);
+      if (!res.ok) return { available: false };
+      return (await res.json()) as { available: boolean };
+    },
+    staleTime: 30 * 60_000,
+    retry: false,
+  });
 
   function navKeyFor(target: string | null | undefined): string | null {
     return (NAV_TARGETS[target ?? ""] ?? []).find((key) => navKeys.includes(key)) ?? null;
@@ -39,6 +75,12 @@ export function Javbot({ navKeys, onNavigate }: { navKeys: string[]; onNavigate:
         ...init,
         headers: init?.body ? { "Content-Type": "application/json" } : undefined,
       });
+      if (res.status === 403) {
+        // Il server dice che JAVBOT non è per questo conto: via la bolla.
+        queryClient.setQueryData(AVAILABLE_KEY, { available: false });
+        setOpen(false);
+        return null;
+      }
       if (!res.ok) {
         setError(res.status === 429 ? await friendlyApiError(res) : t("javbot.error"));
         return null;
@@ -121,6 +163,8 @@ export function Javbot({ navKeys, onNavigate }: { navKeys: string[]; onNavigate:
     return true;
   }
 
+  if (!availability?.available) return null;
+
   return (
     <JavbotChat
       transcribeUrl={VOICE_INPUT_ENABLED ? "/api/proxy/javbot/transcribe" : undefined}
@@ -140,6 +184,8 @@ export function Javbot({ navKeys, onNavigate }: { navKeys: string[]; onNavigate:
       onAction={onAction}
       actionAvailable={actionAvailable}
       onReset={() => void reset()}
+      regulationArea={area === "staff" ? "staff" : "member"}
+      examples={EXAMPLES[area].map((key) => t(key))}
     />
   );
 }

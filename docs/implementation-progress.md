@@ -936,3 +936,89 @@ Test completi: 647 passati, 1 fallito già noto (`test_organizations`). Con `-e 
 Test completi: 655 passati, 1 fallito già noto (`test_organizations`, il
 database di test condiviso tra i test: con più organizzazioni non ce n'è
 «una sola»).
+
+## 18/10/2026 — Il curriculum del treinador (migrazione 0042)
+
+Nell'area del treinador, «O meu currículo» (`club/coach_cv.py`): l'archivio
+dei documenti (diplomi, certificazioni, attestati, primo soccorso, con
+scadenze; file nel bucket privato, aperti solo dal proprietario), il
+Curriculum Vitae da scrivere (con nome, foto, club, cintura e certificazioni
+che arrivano dal gestionale senza riscriverli) e il Curriculum Desportivo
+ricostruito dallo storico: le gare e le medaglie delle sue schede di atleta
+in qualunque club, le cinture e i Dan, le prove a cui è andato da treinador,
+i club e i corsi. Il treinador può essere ancora atleta: le due carriere
+sono separate. Ciò che manca si aggiunge a mano (`coach_sport_events`) e
+resta una dichiarazione personale, segnata «declarado», mai nelle gare, nel
+calendario o nel ranking del club: è il motivo della tabella a parte invece
+di gare «finte». PDF A4 per entrambi (reportlab), con anteprima e versioni
+salvate. Tutto della persona, non del club. Test: `test_club_coach_cv.py`.
+Test completi: 657 passati, 1 fallito già noto (`test_organizations`).
+
+## 18/10/2026 — JAVBOT che spende poco: RAG, azioni da segretario, OpenAI (migrazione 0043)
+
+JAVBOT risponde prima con il codice e chiama il modello solo per capire o
+scrivere (`service._answer`: azioni → regole → documenti → modello →
+regole). Nuovi `javbot/llm.py` (OpenAI via httpx, `gpt-4.1-mini`, tetto di
+token al giorno), `rag.py` (fonti EVENT e DATA nella stessa base full-text,
+risposta breve con le fonti, cache Redis invalidata al cambio della base),
+`actions.py` (iscrizione a una gara e presenze del treinador capite dal
+codice, con una chiamata piccola solo per le frasi ambigue, sempre con
+conferma), `agent.py` (il modello con gli strumenti, piccolo). Il
+regolamento PDF di ogni evento si carica, si scarica e JAVBOT lo legge. Le
+risposte hanno un Markdown minimo e schede (gare con «Iscrivi», fonti). Il
+contatore `javbot_usage` misura quante risposte costano zero. Gli articoli
+dei relatórios passano a OpenAI con una sola chiamata. Provato dal vivo:
+«quanto devo pagare?» e «le prossime gare» 0 token; una domanda sui
+documenti ~650 token; una che serve all'agente ~3.000. I test non chiamano
+mai un modello vero (conftest spegne le chiavi). Test:
+`test_javbot_actions.py`. Test completi: 662 passati, 1 fallito già noto.
+
+## 18/10/2026 — Il primo corso JAV nelle scuole: Externato da Torraltinha (migrazione 0044)
+
+L'unità «Cursos JAV» esisteva nel codice ma non sul server: creata
+(`ensure_courses_unit`), con il piano da 25 € ottobre–luglio. Due corsi
+all'Externato Jardim Infantil da Torraltinha (Lagos), lunedì 15:30–16:00
+(fino a 6 anni) e 16:00–16:30 (dai 7 anni), Marco responsabile al 50%,
+pubblicati sul sito con il logo della scuola (`club_courses.venue_logo_url`,
+nuovo). Marco e Matias sono treinador dell'unità con l'appartenenza (il
+«club JAV che mancava»); `_validate_instructor` ora accetta un treinador
+di un altro club con l'appartenenza. Si è scelto di **riusare l'unità e non
+tabelle nuove**: è già separata dai club (né totali, né ranking, né sito,
+né commissione) e ha quote, prove, presenze e conti corso per corso; tabelle
+a parte avrebbero duplicato tutto. L'area della famiglia di un'unità corsi
+è ora semplice (`kindFeatures`): figli, corso, presenze, mensilità e prova
+di pagamento.
+
+
+## 18/10/2026 — Corsi esterni come sistema a parte, genitore collegato, JAVBOT privato (migrazioni 0045–0046)
+
+Il proprietario ha corretto la scelta del giorno prima: i corsi nelle
+scuole **non** riusano l'unità «Cursos JAV», sono un sistema indipendente.
+Nuovo dominio `domains/extcourses` con tabelle `ext_*` (0046): corsi,
+gruppi per età, staff (COACH con percentuale / SCHOOL), partecipanti (anagrafica
+del corso, anche per chi è già atleta di un club), mensilità con quota del
+treinador congelata, prove, presenze, timbrature, avvisi. Ruoli
+EXT_FAMILY / EXT_SCHOOL, ma l'accesso si decide sulle righe
+(`parent_user_id`, `ext_staff`). Aree: `/cursos-externos/<id>` (iscrizione),
+`/cursos` (genitore), `/escola` (scuola e treinador), console «Cursos
+externos» (superadmin, conti per anno). Mensilità create ogni giorno alle
+03:20 (`ext-courses-monthly-fees`, idempotente con ON CONFLICT). La
+Torraltinha è stata creata qui; i due corsi provvisori nell'unità sono
+stati spenti (nessun iscritto). Bacheca accesa anche per le unità corsi.
+
+Genitore collegato (0045, `club_athlete_links`): quando il figlio
+maggiorenne prende il conto, il genitore resta e lo amministra. Il genitore
+può invitarlo con l'email (`POST /club/athlete-area/{id}/invite-holder`).
+
+JAVBOT: niente JAVBOT per chi è solo atleta e minore (età federale,
+`GET /javbot/available`). Privacy (`javbot/privacy.py`): ciò che le tool
+restituiscono passa da `mask` prima di andare a OpenAI (telefono, email,
+indirizzo, NIF, data di nascita, IBAN, importi diventano ⟦Vn⟧) e da
+`unmask` sul server prima di arrivare all'utente; la storia passa da
+`redact_text`. Nuova tool `my_athlete` e altezza/peso/categoria nelle tool
+della famiglia (la domanda «quanto è alta Valentina»). Caricato nella base
+di conoscenza il manuale completo del club (PDF).
+
+Test: `test_ext_courses.py`, `test_javbot_privacy.py`;
+`test_club_athlete_access` aggiornato alla nuova regola. Suite: tutto verde
+tranne `test_organizations` (noto, isolamento).

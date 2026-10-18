@@ -7,6 +7,7 @@ import "server-only";
 // I tipi rispecchiano apps/api/app/domains/club/site_schemas.py.
 
 import type { BrandTheme } from "@/lib/brand";
+import type { ExtCourse } from "@/lib/ext-courses";
 
 const API_INTERNAL_URL = process.env.API_INTERNAL_URL ?? "http://localhost:8000";
 
@@ -349,6 +350,8 @@ export interface PublicCourse {
   venue_name: string | null;
   venue_address: string | null;
   venue_city: string | null;
+  /** Il logo della scuola, se la segreteria l'ha caricato. */
+  venue_logo_url?: string | null;
   description: string | null;
   coach_name: string | null;
   slots: { weekday: number; starts_at: string; ends_at: string }[];
@@ -376,6 +379,14 @@ export interface ChannelVideo {
  *  Non l'ultimo del canale, perché un video qualsiasi (una riunione, un
  *  messaggio) non è uno sfondo. */
 export const HERO_VIDEO_ID = "RIZHYD0y1mw";
+
+/** I corsi esterni pubblicati (extcourses, separati dai club): scuola,
+ *  gruppi, mensilità, il nome del treinador scritto per il sito. */
+export async function publicExtCourses(): Promise<ExtCourse[]> {
+  const res = await fetch(`${API_INTERNAL_URL}/api/public/ext-courses`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`public ext-courses: ${res.status}`);
+  return (await res.json()) as ExtCourse[];
+}
 
 export const publicSite = {
   home: () => get<PortalHome>("/home"),

@@ -14,6 +14,7 @@ import { AthleteDetailModal } from "@/components/club/athlete-detail-modal";
 import { AthleteFormModal } from "@/components/club/athlete-form-modal";
 import { AthleteHealthCard } from "@/components/club/athlete-health-card";
 import { FamilyAccountingCard } from "@/components/club/family-accounting";
+import { FamilyCoursesHome } from "@/components/club/family-courses-home";
 import { FamilyToday } from "@/components/club/family-today";
 import { InviteCard } from "@/components/club/invite-card";
 import { useClubFeatures } from "@/components/club/jav-courses";
@@ -68,6 +69,89 @@ export function FamilyHome({ onNavigate, familyOverride }: { onNavigate: (key: s
   if (!family) return null;
 
   const noAthletes = family.athletes.length === 0;
+
+  const feesSection = (
+    <section className="grid lg:grid-cols-2 gap-6">
+      <div className="glass-card rounded-3xl p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base text-ink-900">{t("family.dueFees")}</h3>
+          {family.due_fees.length > 0 && <Button size="sm" onClick={() => setPay("fees")}>{t("family.payNow")}</Button>}
+        </div>
+        {family.due_fees.length === 0 ? (
+          <p className="text-sm text-ink-500 py-6 text-center">{t("family.noDueFees")}</p>
+        ) : (
+          <div className="space-y-2">
+            {family.due_fees.slice(0, 6).map((f, i) => (
+              <motion.div key={f.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }} className="flex items-center justify-between gap-3 rounded-2xl bg-white ring-1 ring-ink-100 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-ink-900 truncate">{feeLabel(f, t, fmt)}</p>
+                  <p className="text-xs text-ink-500">{f.athlete_name} · {t("club.dueOn", { date: shortDate(f.due_date) })}</p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="font-display text-ink-900">{euro(f.amount_cents)}</p>
+                  <FeeStatusPill status={f.status} overdue={f.overdue} />
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="glass-card rounded-3xl p-5">
+        <h3 className="text-base text-ink-900 mb-4">{t("family.proofsTitle")}</h3>
+        {family.recent_proofs.length === 0 ? (
+          <p className="text-sm text-ink-500 py-6 text-center">{t("family.proofsEmpty")}</p>
+        ) : (
+          <div className="space-y-2">
+            {family.recent_proofs.slice(0, 6).map((p) => (
+              <div key={p.id} className="flex items-center justify-between gap-3 rounded-2xl bg-white ring-1 ring-ink-100 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-ink-900">{euro(p.amount_cents)} · {t(p.fees.length === 1 ? "club.feeCountOne" : "club.feeCountMany", { n: p.fees.length })}</p>
+                  <p className="text-xs text-ink-500 truncate">{shortDate(p.created_at)} · {p.original_filename}</p>
+                  {p.rejection_reason && <p className="text-xs text-rose-600 mt-0.5">{t("family.rejectionReason", { reason: p.rejection_reason })}</p>}
+                </div>
+                <Badge tone={p.status === "REJECTED" ? "danger" : "success"} dot>
+                  {p.status === "REJECTED" ? t("family.proofRejected") : t("family.proofAccepted")}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+
+  const modals = (
+    <>
+      {pay && (
+        <PayModal
+          open
+          onClose={() => { setPay(null); setPayIds(null); }}
+          fees={family.due_fees}
+          preselect={pay === "fees" ? (payIds ?? family.due_fees.map((f) => f.id)) : undefined}
+        />
+      )}
+      {addOpen && <AthleteFormModal open={addOpen} onClose={() => setAddOpen(false)} />}
+      <AthleteDetailModal key={`${openAthlete}-${openOnFees}`} athleteId={openAthlete} initialTab={openOnFees ? "fees" : "path"} onClose={() => setOpenAthlete(null)} />
+    </>
+  );
+
+  // Corsi JAV nelle scuole: una home semplice (figli, corso, mensilità,
+  // presenze), con le stesse finestre per pagare e aggiungere un figlio.
+  if (features.courses) {
+    return (
+      <>
+        <FamilyCoursesHome
+          family={family}
+          onPay={(ids) => { setPayIds(ids ?? null); setPay("fees"); }}
+          onAdd={() => setAddOpen(true)}
+          onOpenFees={(id) => { setOpenOnFees(true); setOpenAthlete(id); }}
+          onOpenCourses={() => onNavigate("club-courses")}
+          fees={feesSection}
+        />
+        {modals}
+      </>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -200,68 +284,11 @@ export function FamilyHome({ onNavigate, familyOverride }: { onNavigate: (key: s
       </section>
 
       {/* Due fees and recent payments */}
-      {!noAthletes && (
-        <section className="grid lg:grid-cols-2 gap-6">
-          <div className="glass-card rounded-3xl p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base text-ink-900">{t("family.dueFees")}</h3>
-              {family.due_fees.length > 0 && <Button size="sm" onClick={() => setPay("fees")}>{t("family.payNow")}</Button>}
-            </div>
-            {family.due_fees.length === 0 ? (
-              <p className="text-sm text-ink-500 py-6 text-center">{t("family.noDueFees")}</p>
-            ) : (
-              <div className="space-y-2">
-                {family.due_fees.slice(0, 6).map((f, i) => (
-                  <motion.div key={f.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }} className="flex items-center justify-between gap-3 rounded-2xl bg-white ring-1 ring-ink-100 px-4 py-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-ink-900 truncate">{feeLabel(f, t, fmt)}</p>
-                      <p className="text-xs text-ink-500">{f.athlete_name} · {t("club.dueOn", { date: shortDate(f.due_date) })}</p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="font-display text-ink-900">{euro(f.amount_cents)}</p>
-                      <FeeStatusPill status={f.status} overdue={f.overdue} />
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="glass-card rounded-3xl p-5">
-            <h3 className="text-base text-ink-900 mb-4">{t("family.proofsTitle")}</h3>
-            {family.recent_proofs.length === 0 ? (
-              <p className="text-sm text-ink-500 py-6 text-center">{t("family.proofsEmpty")}</p>
-            ) : (
-              <div className="space-y-2">
-                {family.recent_proofs.slice(0, 6).map((p) => (
-                  <div key={p.id} className="flex items-center justify-between gap-3 rounded-2xl bg-white ring-1 ring-ink-100 px-4 py-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-ink-900">{euro(p.amount_cents)} · {t(p.fees.length === 1 ? "club.feeCountOne" : "club.feeCountMany", { n: p.fees.length })}</p>
-                      <p className="text-xs text-ink-500 truncate">{shortDate(p.created_at)} · {p.original_filename}</p>
-                      {p.rejection_reason && <p className="text-xs text-rose-600 mt-0.5">{t("family.rejectionReason", { reason: p.rejection_reason })}</p>}
-                    </div>
-                    <Badge tone={p.status === "REJECTED" ? "danger" : "success"} dot>
-                      {p.status === "REJECTED" ? t("family.proofRejected") : t("family.proofAccepted")}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </section>
-      )}
+      {!noAthletes && feesSection}
 
       {!noAthletes && <InviteCard />}
 
-      {pay && (
-        <PayModal
-          open
-          onClose={() => { setPay(null); setPayIds(null); }}
-          fees={family.due_fees}
-          preselect={pay === "fees" ? (payIds ?? family.due_fees.map((f) => f.id)) : undefined}
-        />
-      )}
-      {addOpen && <AthleteFormModal open={addOpen} onClose={() => setAddOpen(false)} />}
-      <AthleteDetailModal key={`${openAthlete}-${openOnFees}`} athleteId={openAthlete} initialTab={openOnFees ? "fees" : "path"} onClose={() => setOpenAthlete(null)} />
+      {modals}
     </div>
   );
 }

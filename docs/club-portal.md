@@ -853,6 +853,60 @@ apposta:
   (`javbot/planner.py`) resta per i percorsi guidati che scrivono e come
   rete di sicurezza.
 
+### JAVBOT che spende poco (migrazione 0043)
+
+Dalla migrazione 0043 il modello dell'area riservata è **OpenAI**
+(`javbot/llm.py`, `OPENAI_API_KEY`, `OPENAI_MODEL`, di default `gpt-4.1-mini`:
+piccolo e senza ragionamento nascosto); Claude (`assistant.py`) resta se c'è
+solo la sua chiave. La regola è **prima i dati, poi il modello**: ogni
+messaggio (`service._answer`) prova le strade dalla più economica.
+
+1. **Un percorso guidato in corso** (judogi, messaggio, conferma): il pianificatore.
+2. **Un'azione** capita dal codice (`javbot/actions.py`), con conferma:
+   - **iscrivere a una gara** («iscrivi Marco alla gara di Lisbona del 28
+     ottobre»): verbo, gara (data, città, parole del nome tra quelle aperte),
+     atleta (nome, «me», l'unico); controllo `competitions.eligibility`;
+     compito COMPETITION_ENTRY; confermato, `register_entry` crea la quota e
+     la risposta apre il pagamento;
+   - **segnare presenze** (treinador e segreteria, «segna presenti Marco,
+     Ariel e Nur il 17 ottobre»): data (anche «ieri»/«ontem»), nomi tra gli
+     atleti che chi scrive vede, la loro turma di quel giorno; compito
+     STAFF_ATTENDANCE; confermato, `courses.mark_attendance` con le regole
+     della rotta dello staff, nel club scelto dal treinador.
+   Se il verbo c'è ma gara o nomi no, una chiamata piccola
+   (`llm.chat_json`) sceglie **tra le opzioni vere** trovate nel database;
+   poi decide di nuovo il codice. Il modello non esegue mai niente.
+3. **I dati dell'utente** con l'intenzione chiara (quote, pagamenti, gare,
+   lezioni, certificati…): il pianificatore con gli strumenti, **zero
+   token**, a meno che i documenti rispondano meglio (`passages(strict)`).
+4. **I documenti** (`javbot/rag.py`): i passaggi migliori (al più 3, tagliati)
+   e la domanda in una chiamata breve, con le fonti come schede; la stessa
+   domanda nello stesso club si serve dalla **cache** (Redis, 7 giorni,
+   invalidata quando la base cambia: `knowledge.bump_version`).
+5. **Il modello con gli strumenti** (`javbot/agent.py`): poco storico, risultati
+   tagliati, al più 3 giri, tetto in uscita; per le azioni suggerisce la frase.
+6. Senza modello (chiave assente, tetto giornaliero `JAVBOT_DAILY_TOKEN_BUDGET`
+   superato, API giù): il pianificatore.
+
+**La base** (knowledge.py) tiene tre fonti, tutte cercate con il full-text di
+Postgres (zero token): i PDF caricati (UPLOAD), il **regolamento PDF di ogni
+evento** (EVENT: `club_competitions.regulation_*`, caricato dalla segreteria
+nella scheda dell'evento, scaricabile da famiglie e staff con un URL
+presigned) e le **schede del gestionale** (DATA: orari e turmas, gruppi e
+prezzi, prossimi eventi del club e della rete, contatti), riscritte ogni 6 ore
+al bisogno e di notte (`javbot_data_sources_task`), o da «Atualizar fichas».
+
+**Il contatore** (`javbot_usage`): una riga per risposta con la strada
+(RULES, ACTION, CACHE, RAG, AGENT, EXTRACT, ARTICLE) e i token; la console
+della base mostra quante risposte sono costate zero e i token per giorno.
+Gli articoli dei relatórios con OpenAI sono **una chiamata** con i dati in
+JSON compatto (le foto le impagina la pagina, non il modello).
+
+Le risposte usano un Markdown minimo (**grassetto**, elenchi «- », link) che
+la chat disegna, e possono portare **schede** (`javbot_messages.cards`): una
+gara con «Iscrivi X» (un bottone `say` che manda la frase all'azione), le
+fonti di una risposta.
+
 ### Il microfono
 
 > **Oggi è nascosto** (`VOICE_INPUT_ENABLED = false` in
@@ -1104,6 +1158,19 @@ un club ufficiale.
 - Le differenze per tipo stanno **in un posto solo**, `club/kinds.py`
   (`KindRules`): chi deve sapere se un'unità ha cinture, gare, ranking,
   iscrizioni, commissione, chiede a `rules_for`, non confronta stringhe.
+
+- **Il logo della scuola** (`club_courses.venue_logo_url`, migrazione 0044,
+  `POST /club/admin/courses/{id}/logo`): sulla scheda del corso nel sito, e
+  nell'area della famiglia e del treinador.
+- **Il treinador responsabile** può essere un treinador di un club che allena
+  anche nei corsi (un'appartenenza ACTIVE all'unità, «Un treinador, più
+  club»): entra nell'unità dal suo bottone, segna presenze e turni, vede «I
+  miei guadagni». Fuori dall'unità resta del suo club.
+- **La famiglia vede un'area semplice**: i figli, il corso (scuola, giorno,
+  ora), le presenze, la mensilità e il caricamento della prova di
+  pagamento. Niente Loja, judogi, prodotti, wallet, inviti, giochi,
+  cinture, gare, certificati, né area dell'atleta per i bambini
+  (`kindFeatures` nel frontend).
 
 ### Regole dell'unità
 
@@ -2235,4 +2302,109 @@ scelta del club in `club/scope.py`.
   ruolo, anche senza la riga: gli importati) più le appartenenze ACTIVE di chi
   viene da fuori. Per questo nel club dell'account non si toglie
   l'appartenenza: si toglie il ruolo di istruttore.
+
+
+## Il curriculum del treinador (migrazione 0042)
+
+Nell'area del treinador, «Currículo»: l'archivio professionale di ogni
+treinador, della **persona** e non del club (lo porta con sé in ogni club, e
+nessun club lo legge). Codice: `club/coach_cv.py`, rotte in
+`club/coach_cv_router.py` (`/club/staff/cv/...`, `club.instruct`, ognuno
+solo il suo), tabelle in `club/cv_models.py`.
+
+- **Documentos** (`coach_documents`): diplomi di treinador (Grau I, II, III…),
+  qualifiche federali, attestati di corsi e stage, primo soccorso, titoli di
+  studio, qualifiche professionali, documenti personali. Titolo, categoria,
+  ente, data di conseguimento, scadenza (a 60 giorni «a expirar»), nota; il
+  file (PDF, JPG, PNG fino a 15 MB) nel **bucket privato**, aperto solo dal
+  proprietario con un URL presigned di pochi minuti.
+- **Curriculum Vitae** (`coach_profiles.data`): presentazione, contatti,
+  esperienze, formazione, competenze tecniche/pedagogiche/organizzative,
+  lingue, specializzazioni (Judo Adaptado, crianças, competição…), sezioni
+  libere, e che cosa mostrare nel PDF. Quello che il gestionale sa già non si
+  riscrive: nome, email, foto (`users.photo_url`), i club in cui allena o ha
+  allenato (appartenenze e turni di lavoro, con i suoi corsi), la cintura, le
+  certificazioni dell'archivio (`show_in_cv`).
+- **Curriculum Desportivo**, ricostruito dallo storico: le gare con
+  piazzamenti e medaglie delle sue schede di atleta (anche più club: un
+  treinador può gareggiare ancora), le cinture e i Dan (senza la bianca
+  dell'iscrizione), le prove a cui è andato da treinador (i relatórios che ha
+  scritto), i club e i corsi. Carriera agonistica e tecnica separate.
+- **Eventi aggiunti a mano** (`coach_sport_events`): ciò che il gestionale non
+  sa (gare di vent'anni fa, stage, esami). **Restano dichiarazioni personali**:
+  non entrano in `club_competitions`, nel calendario, nel ranking né nelle
+  statistiche; nel curriculum e nel PDF hanno il segno «declarado». Niente
+  date future.
+- **PDF A4** (reportlab, in portoghese): testata con nome, titolo, contatti e
+  foto, poi le sezioni. Anteprima al volo (`GET /cv/pdf?kind=CV|SPORT`) o
+  versione salvata nel bucket privato (`coach_cv_exports`), che resta com'era
+  anche se il profilo cambia.
+
+
+## Corsi esterni (migrazione 0046)
+
+I corsi di judo nelle scuole pubbliche e private, per diffondere il judo come
+arte di vita, sono **un sistema a parte**, con tabelle sue (`ext_*`,
+`domains/extcourses/`): nessuna riga tocca i club. Niente atleti, cinture,
+gare, ranking, Shop, wallet, promoter né JAVBOT. Sostituisce, per le scuole,
+l'unità «Cursos JAV» (che resta nel codice ma senza corsi attivi).
+
+- **Anagrafica del corso**: un bambino è un *partecipante* (`ext_participants`)
+  del corso. Chi è già famiglia o atleta di un club e vuole fare anche il
+  corso **si iscrive di nuovo**, e così per ogni corso. Se un partecipante
+  vuole entrare in un club, si iscrive al club come chiunque.
+- **Iscrizione**: dal sito (`/cursos-externos/<id>`, `POST
+  /public/ext-courses/{id}/signup`): l'account del genitore (con la sua
+  password) e uno o più figli, ognuno nel gruppo della sua età. Un'email che
+  ha già un account entra e iscrive da dentro (`/ext/family/courses/{id}/enroll`).
+- **Mensilità**: una per partecipante e per mese (`ext_fees`, UNIQUE), nei
+  mesi del corso (default ottobre–luglio), dal lavoro giornaliero
+  `ext_courses_fees_task` (idempotente) e all'iscrizione per il mese in corso.
+  Porta congelati il treinador e la sua percentuale (default 50%).
+- **Pagamento**: il genitore carica la prova (`ext_proofs`, bucket privato) e le
+  mensilità scelte risultano pagate subito; la scuola o il superadmin la può
+  rifiutare (tornano da pagare, il genitore è avvisato) o segnare un pagamento
+  in contanti, MB WAY o POS. Si paga sull'IBAN di JudoArteVida.
+- **Chi vede che cosa** (lo decidono le righe, non i ruoli):
+  - il **genitore** (`/cursos`, ruolo EXT_FAMILY): i suoi figli, corso,
+    gruppo e orario, presenze del mese, mensilità, prove, avvisi;
+  - la **segreteria della scuola** (`/escola`, `ext_staff` SCHOOL, ruolo
+    EXT_SCHOOL, invitata dal superadmin per email): iscritti con i contatti,
+    pagamenti, prove, presenze, avvisi del suo corso;
+  - il **treinador** (`ext_staff` COACH; dal suo bottone nell'area del
+    treinador o da `/escola`): bambini, gruppi, presenze, entrata/uscita
+    (`ext_work_sessions`), avvisi, «I miei guadagni» (la sua parte delle
+    mensilità pagate). Niente contatti né pagamenti;
+  - il **superadmin** (console «Cursos externos»): corsi, gruppi, logo della
+    scuola, staff, e la **contabilità separata** (`GET /ext/admin/accounts`):
+    incassato per mese di pagamento, parte del treinador, parte di
+    JudoArteVida, da incassare, corso per corso.
+- **Avvisi** (`ext_notices`): «lunedì niente lezione», scritti dalla scuola,
+  dal treinador o dal superadmin; arrivano anche come notifica ai genitori.
+
+## Il titolare maggiorenne e il genitore collegato (migrazione 0045)
+
+Un atleta che diventa maggiorenne può prendere il suo conto
+(`athlete_access.become_holder`): da lì paga, carica le prove e si iscrive da
+sé. Il genitore **resta collegato** (`club_athlete_links`): lo vede ancora
+nella sua famiglia e nella sua area, e può pagare per lui. Il genitore che
+guarda l'area del figlio maggiorenne trova «Convidar a ficar com a conta»
+(`POST /club/athlete-area/{id}/invite-holder`): l'email dell'accesso del
+figlio e l'invito a scegliersi la password; entrando, il figlio trova «Ficar
+com a minha conta».
+
+## JAVBOT: chi lo usa e che cosa esce (migrazione 0045)
+
+- **Solo gli adulti**: un atleta con il solo accesso da atleta e meno di 18
+  anni di età federale non ha JAVBOT (`service.available`, 403 sulle rotte,
+  il bottone non compare). Nemmeno nelle aree dei corsi esterni.
+- **I dati personali non escono dal server** (`javbot/privacy.py`): ciò che va
+  a OpenAI non contiene mai importi, IBAN, telefoni, email, indirizzi,
+  codice fiscale/NIF, documenti o date di nascita. Gli strumenti li trovano,
+  `mask` li sostituisce con segnaposto (⟦V1⟧…), il modello scrive con i
+  segnaposto e `unmask` rimette i valori sul server. Lo storico rimandato al
+  modello è ripulito (`redact_text`). Nomi, età, altezza, peso, cintura,
+  tessera federale e risultati possono uscire.
+- **Ognuno chiede di sé**: il genitore di sé e dei suoi figli (strumenti
+  FAMILY sulla sua famiglia), l'atleta adulto solo di sé (`my_athlete`).
 

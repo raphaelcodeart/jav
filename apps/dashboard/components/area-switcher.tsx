@@ -3,6 +3,9 @@
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { fetchCurrentClub } from "@/components/club/current-club";
+import { fetchStaffCourses, STAFF_COURSES_KEY } from "@/lib/ext-courses";
+import type { MessageKey } from "@/lib/i18n/messages/it";
 import { useI18n } from "@/lib/i18n/provider";
 
 async function fetchMyRoles(): Promise<string[]> {
@@ -26,24 +29,54 @@ export function useDualRoleAreas() {
     refetchOnWindowFocus: true,
   });
 
+  // Il club della famiglia (non quello del treinador): nei corsi JAV i
+  // bambini non hanno un'area dell'atleta, e la voce non si offre.
+  const { data: familyClub } = useQuery({
+    queryKey: ["club", "current"],
+    queryFn: () => fetchCurrentClub(),
+    enabled: roles.includes("CUSTOMER") && !roles.includes("ATHLETE"),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  const noAthleteArea = !roles.includes("ATHLETE") && familyClub?.kind === "JAV_COURSES";
+
+  // I corsi esterni in cui lavora (scuola o treinador): l'area Escola si
+  // offre anche al treinador che non ha il ruolo EXT_SCHOOL.
+  const { data: extCourses } = useQuery({
+    queryKey: STAFF_COURSES_KEY,
+    queryFn: fetchStaffCourses,
+    enabled: roles.includes("INSTRUCTOR") || roles.includes("EXT_SCHOOL"),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  const school = roles.includes("EXT_SCHOOL") || (extCourses?.length ?? 0) > 0;
+
   return {
     hasBothRoles: roles.includes("CUSTOMER") && roles.includes("PROMOTER"),
     isCustomerArea: pathname?.startsWith("/customer") ?? false,
-    clubAreas: clubAreasFor(roles).filter((a) => !pathname?.startsWith(a.href)),
+    clubAreas: clubAreasFor(roles, { athleteArea: !noAthleteArea, school })
+      .filter((a) => !pathname?.startsWith(a.href.split("?")[0] ?? a.href)),
   };
 }
 
 /** Le aree del club di chi ha più ruoli: un genitore che si allena e
  *  insegna passa da famiglia ad atleta a treinador dal menu utente. Senza
  *  questo l'area treinador si apriva solo scrivendo /staff. */
-export function clubAreasFor(roles: string[]): { href: string; key: "family" | "athlete" | "coach" | "secretary"; icon: string }[] {
-  const out: { href: string; key: "family" | "athlete" | "coach" | "secretary"; icon: string }[] = [];
-  if (roles.includes("SECRETARY")) out.push({ href: "/club", key: "secretary", icon: "🗂️" });
-  if (roles.includes("CUSTOMER")) out.push({ href: "/customer", key: "family", icon: "👪" });
-  if (roles.includes("CUSTOMER") || roles.includes("ATHLETE")) out.push({ href: "/atleta", key: "athlete", icon: "🥋" });
-  if (roles.includes("INSTRUCTOR")) out.push({ href: "/staff", key: "coach", icon: "🧑‍🏫" });
+export function clubAreasFor(roles: string[], { athleteArea = true, school = false }: { athleteArea?: boolean; school?: boolean } = {}): AreaLink[] {
+  const out: AreaLink[] = [];
+  if (roles.includes("SECRETARY")) out.push({ href: "/club", labelKey: "shell.area.secretary", icon: "🗂️" });
+  if (roles.includes("CUSTOMER")) out.push({ href: "/customer", labelKey: "shell.area.family", icon: "👪" });
+  if (roles.includes("ATHLETE") || (roles.includes("CUSTOMER") && athleteArea)) out.push({ href: "/atleta", labelKey: "shell.area.athlete", icon: "🥋" });
+  if (roles.includes("INSTRUCTOR")) out.push({ href: "/staff", labelKey: "shell.area.coach", icon: "🧑‍🏫" });
+  // I corsi esterni (extcourses), un mondo a parte: i figli iscritti a un
+  // corso nella scuola, e l'area della scuola / del treinador del corso.
+  // ?area=familia: il ruolo appena dato può non essere ancora nel token.
+  if (roles.includes("EXT_FAMILY")) out.push({ href: "/cursos?area=familia", labelKey: "ext.area.courses", icon: "🎒" });
+  if (school) out.push({ href: "/escola", labelKey: "ext.area.school", icon: "🏫" });
   return out.length > 1 ? out : [];
 }
+
+export interface AreaLink { href: string; labelKey: MessageKey; icon: string }
 
 /** Always-visible customer/promoter toggle for anyone who holds BOTH roles --
  * e.g. a customer who "lavora con noi"-activated into a promoter, or a

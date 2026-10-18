@@ -18,6 +18,7 @@ import { ContactInbox } from "@/components/club/contact-inbox";
 import { StaffInbox } from "@/components/club/staff-management";
 import { KnowledgePanel } from "@/components/javbot/knowledge-panel";
 import { CoursesUnitPanel } from "@/components/club/courses-unit-panel";
+import { ExtCoursesAdminPanel } from "@/components/ext-courses/admin-panel";
 import { ClubList } from "@/components/club/clubs-panel";
 import { useCurrentClub } from "@/components/club/current-club";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -29,7 +30,7 @@ import type { PlatformOverview } from "@/lib/club";
 import { enterClub, leaveClub } from "@/lib/club-cookie";
 import { useI18n } from "@/lib/i18n/provider";
 
-type PlatformKey = "hq" | "clubs" | "coaches" | "jav-courses" | "messages" | "staff-messages" | "sponsors" | "emails" | "jav-news" | "javbot" | "shop" | "wallets" | "support" | "settings";
+type PlatformKey = "hq" | "clubs" | "coaches" | "jav-courses" | "ext-courses" | "messages" | "staff-messages" | "sponsors" | "emails" | "jav-news" | "javbot" | "shop" | "wallets" | "support" | "settings";
 type Key = PlatformKey | `club:${ClubSection}`;
 
 const emoji = (e: string) => <span className="text-base leading-none" aria-hidden="true">{e}</span>;
@@ -60,6 +61,8 @@ export function AdminConsole({ email, isSuperAdmin }: { email?: string; isSuperA
     { key: "coaches", label: t("staffClubs.nav"), icon: emoji("🧑‍🏫"), group: "JudoArteVida" },
     // I corsi nelle scuole non sono un club: un'entrata loro, accanto ai club.
     { key: "jav-courses", label: t("javCourses.navEntry"), icon: emoji("🏫"), group: "JudoArteVida" },
+    // I corsi esterni (extcourses): un sistema a parte, con la sua contabilità.
+    ...(isSuperAdmin ? [{ key: "ext-courses", label: t("ext.admin.nav"), icon: emoji("🎒"), group: "JudoArteVida" }] : []),
     // I messaggi scritti a JudoArteVida da /contactos.
     { key: "messages", label: t("console.messages"), icon: emoji("✉️"), group: "JudoArteVida", notificationTypes: ["CONTACT_MESSAGE"] },
     { key: "staff-messages", label: t("staffMsg.consoleNav"), icon: emoji("💬"), group: "JudoArteVida", notificationTypes: ["CLUB_STAFF_MESSAGE"] },
@@ -99,6 +102,7 @@ export function AdminConsole({ email, isSuperAdmin }: { email?: string; isSuperA
           <CoachesPanel />
         </>
       )}
+      {active === "ext-courses" && <ExtCoursesAdminPanel />}
       {active === "jav-courses" && <CoursesUnitPanel canCreate={isSuperAdmin} onEnter={(id) => choose(id, "jav-courses")} />}
       {active === "messages" && (
         <>

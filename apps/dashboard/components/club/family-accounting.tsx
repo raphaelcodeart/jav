@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/cn";
 import { clubGet } from "@/lib/club";
 import { CHART, monthShort, type PersonalAccount } from "@/lib/club-accounting";
+import { useClubFeatures } from "@/components/club/jav-courses";
 import { useI18n } from "@/lib/i18n/provider";
 import { feeLabel } from "@/lib/fee-label";
 import { usePrefersReducedMotion } from "@/lib/motion";
@@ -35,6 +36,8 @@ export function FamilyAccounting({ onNavigate }: { onNavigate: (key: string) => 
   const thisYear = new Date().getFullYear();
   const [year, setYear] = useState(thisYear);
   const { data, isLoading, error, isFetching } = useAccount(year);
+  // Nei corsi JAV niente wallet né Shop: restano le quote pagate e da pagare.
+  const { wallet: hasWallet, shop: hasShop } = useClubFeatures();
   if (isLoading) return <Skeleton className="h-96" />;
   if (error || !data) return <EmptyState title={t("famAcc.unavailable")} text={(error as Error)?.message} />;
   const tot = data.totals;
@@ -72,7 +75,7 @@ export function FamilyAccounting({ onNavigate }: { onNavigate: (key: string) => 
         <section className="glass-card rounded-3xl p-5">
           <h3 className="text-base text-ink-900">{t("famAcc.monthsTitle", { year })}</h3>
           <p className="text-xs text-ink-500 mb-2">{t("famAcc.monthsExplain")}</p>
-          <MonthsChart data={data} />
+          <MonthsChart data={data} withShop={hasShop} />
         </section>
         <section className="glass-card rounded-3xl p-5">
           <h3 className="text-base text-ink-900">{t("famAcc.byKind")}</h3>
@@ -94,7 +97,7 @@ export function FamilyAccounting({ onNavigate }: { onNavigate: (key: string) => 
                   <dt className="text-ink-500">{t("famAcc.paidYear", { year })}</dt><dd className="text-right font-semibold tabular-nums">{fmt.euro(p.paid_year_cents)}</dd>
                   <dt className="text-ink-500">{t("famAcc.dueNow")}</dt><dd className={cn("text-right font-semibold tabular-nums", p.overdue_cents > 0 && "text-rose-700")}>{fmt.euro(p.due_cents)}</dd>
                   <dt className="text-ink-500">{t("famAcc.savingsShort")}</dt><dd className="text-right tabular-nums text-emerald-700">{fmt.euro(p.savings_year_cents)}</dd>
-                  {p.athlete_id && <><dt className="text-ink-500">{t("famAcc.shopShort")}</dt><dd className="text-right tabular-nums">{fmt.euro(p.shop_year_cents)}</dd></>}
+                  {p.athlete_id && hasShop && <><dt className="text-ink-500">{t("famAcc.shopShort")}</dt><dd className="text-right tabular-nums">{fmt.euro(p.shop_year_cents)}</dd></>}
                 </dl>
               </div>
             ))}
@@ -102,7 +105,7 @@ export function FamilyAccounting({ onNavigate }: { onNavigate: (key: string) => 
         </section>
       )}
 
-      <div className="grid lg:grid-cols-2 gap-6">
+      <div className={cn("grid gap-6", hasWallet && "lg:grid-cols-2")}>
         <section className="glass-card rounded-3xl p-5">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-base text-ink-900">{t("famAcc.next")}</h3>
@@ -125,7 +128,7 @@ export function FamilyAccounting({ onNavigate }: { onNavigate: (key: string) => 
             </ul>
           )}
         </section>
-        <section className="glass-card rounded-3xl p-5">
+        {hasWallet && <section className="glass-card rounded-3xl p-5">
           <h3 className="text-base text-ink-900">{t("famAcc.walletTitle")}</h3>
           <p className="text-xs text-ink-500 mb-3">{t("famAcc.walletExplain")}</p>
           <p className="font-display text-3xl text-ink-900">{fmt.euro(data.wallet.balance_cents)}</p>
@@ -142,10 +145,10 @@ export function FamilyAccounting({ onNavigate }: { onNavigate: (key: string) => 
               </div>
             ))}
           </dl>
-        </section>
+        </section>}
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-6">
+      <div className={cn("grid gap-6", hasShop && "lg:grid-cols-2")}>
         <section className="glass-card rounded-3xl p-5">
           <h3 className="text-base text-ink-900">{t("famAcc.discountsTitle", { year })}</h3>
           <p className="text-xs text-ink-500 mb-3">{t("famAcc.discountsExplain")}</p>
@@ -163,7 +166,7 @@ export function FamilyAccounting({ onNavigate }: { onNavigate: (key: string) => 
             </ul>
           )}
         </section>
-        <section className="glass-card rounded-3xl p-5">
+        {hasShop && <section className="glass-card rounded-3xl p-5">
           <h3 className="text-base text-ink-900">{t("famAcc.shopTitle")}</h3>
           <p className="text-xs text-ink-500 mb-3">{t("famAcc.shopExplain")}</p>
           <div className="grid grid-cols-2 gap-4">
@@ -171,13 +174,13 @@ export function FamilyAccounting({ onNavigate }: { onNavigate: (key: string) => 
             <div><p className="text-xs text-ink-500">{t("famAcc.allTime")}</p><p className="font-display text-2xl text-ink-900">{fmt.euro(data.shop.all_time_cents)}</p></div>
           </div>
           <Button size="sm" variant="secondary" className="mt-4" onClick={() => onNavigate("orders")}>{t("famAcc.openOrders")}</Button>
-        </section>
+        </section>}
       </div>
     </div>
   );
 }
 
-function MonthsChart({ data }: { data: PersonalAccount }) {
+function MonthsChart({ data, withShop }: { data: PersonalAccount; withShop: boolean }) {
   const { t, fmt } = useI18n();
   const reduced = usePrefersReducedMotion();
   const points = data.series.map((p) => ({ label: monthShort(p.month, fmt.tag), fees: p.fees_cents / 100, shop: p.shop_cents / 100 }));
@@ -195,17 +198,17 @@ function MonthsChart({ data }: { data: PersonalAccount }) {
               cursor={{ fill: "rgba(22,21,21,0.04)" }}
               formatter={(value, name) => [fmt.euroUnits(Number(value)), names[String(name)] ?? String(name)]} />
             <Legend formatter={(value: string) => <span className="text-xs text-ink-600">{names[value] ?? value}</span>} iconSize={10} />
-            <Bar dataKey="fees" stackId="m" fill={CHART.income} maxBarSize={22} isAnimationActive={!reduced} stroke="#fff" strokeWidth={1} />
-            <Bar dataKey="shop" stackId="m" fill={CHART.costs} radius={[4, 4, 0, 0]} maxBarSize={22} isAnimationActive={!reduced} stroke="#fff" strokeWidth={1} />
+            <Bar dataKey="fees" stackId="m" fill={CHART.income} radius={withShop ? undefined : [4, 4, 0, 0]} maxBarSize={22} isAnimationActive={!reduced} stroke="#fff" strokeWidth={1} />
+            {withShop && <Bar dataKey="shop" stackId="m" fill={CHART.costs} radius={[4, 4, 0, 0]} maxBarSize={22} isAnimationActive={!reduced} stroke="#fff" strokeWidth={1} />}
           </BarChart>
         </ResponsiveContainer>
       </div>
       <details className="mt-2">
         <summary className="text-xs font-semibold text-ink-500 cursor-pointer hover:text-ink-800">{t("acc.showTable")}</summary>
         <table className="mt-2 w-full text-xs tabular-nums">
-          <thead><tr className="text-ink-500 text-left"><th className="py-1">{t("acc.colMonth")}</th><th className="py-1 text-right">{names.fees}</th><th className="py-1 text-right">{names.shop}</th></tr></thead>
+          <thead><tr className="text-ink-500 text-left"><th className="py-1">{t("acc.colMonth")}</th><th className="py-1 text-right">{names.fees}</th>{withShop && <th className="py-1 text-right">{names.shop}</th>}</tr></thead>
           <tbody>{data.series.map((p) => (
-            <tr key={p.month} className="border-t border-ink-100"><td className="py-1">{monthShort(p.month, fmt.tag)}</td><td className="py-1 text-right">{fmt.euro(p.fees_cents)}</td><td className="py-1 text-right">{fmt.euro(p.shop_cents)}</td></tr>
+            <tr key={p.month} className="border-t border-ink-100"><td className="py-1">{monthShort(p.month, fmt.tag)}</td><td className="py-1 text-right">{fmt.euro(p.fees_cents)}</td>{withShop && <td className="py-1 text-right">{fmt.euro(p.shop_cents)}</td>}</tr>
           ))}</tbody>
         </table>
       </details>

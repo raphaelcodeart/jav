@@ -247,6 +247,50 @@ async def set_competition_image(
     return comp
 
 
+async def set_regulation(
+    db: AsyncSession, *, scope: ClubScope, competition_id: uuid.UUID, actor_user_id: uuid.UUID,
+    file_bytes: bytes | None, filename: str = "",
+) -> ClubCompetition:
+    """Il regolamento PDF della gara o dell'evento, nel bucket privato:
+    `file_bytes` None lo toglie. Il testo entra nella base di JAVBOT
+    (javbot/rag.py, fonte EVENT), così l'assistente risponde dal regolamento."""
+    import asyncio
+
+    from app.core.storage import UploadValidationError, delete_document_object, upload_document
+    from app.domains.javbot import knowledge, rag
+
+    comp = await get_competition(db, scope=scope, competition_id=competition_id, editing=True)
+    old_key = comp.regulation_storage_key
+    if file_bytes is None:
+        comp.regulation_storage_key = comp.regulation_filename = comp.regulation_size = None
+    else:
+        if not file_bytes.startswith(b"%PDF-"):
+            raise ClubValidationError("Il regolamento deve essere un PDF.")
+        try:
+            key = await asyncio.to_thread(upload_document, file_bytes=file_bytes, content_type="application/pdf",
+                                          key_prefix=f"club-events/{scope.club_id}/regulations")
+        except UploadValidationError as exc:
+            raise ClubValidationError("Il regolamento deve essere un PDF di massimo 15 MB.") from exc
+        comp.regulation_storage_key = key
+        comp.regulation_filename = (filename or "regulamento.pdf").strip()[:255]
+        comp.regulation_size = len(file_bytes)
+        await rag.index_regulation(db, competition=comp, file_bytes=file_bytes)
+    await audit_service.record(
+        db, organization_id=scope.organization_id, actor_user_id=actor_user_id,
+        action="club.competition_regulation", entity_type="club_competition", entity_id=str(comp.id),
+        new_value={"regulation": comp.regulation_storage_key is not None},
+    )
+    await db.commit()
+    await db.refresh(comp)
+    if file_bytes is None:
+        await knowledge.drop_source(db, source_ref=f"event:{comp.id}", organization_id=comp.organization_id)
+    else:
+        await knowledge.bump_version(comp.organization_id)
+    if old_key and old_key != comp.regulation_storage_key:
+        delete_document_object(storage_key=old_key)
+    return comp
+
+
 async def set_competition_status(
     db: AsyncSession, *, scope: ClubScope, competition_id: uuid.UUID, actor_user_id: uuid.UUID, status: str
 ) -> ClubCompetition:

@@ -90,6 +90,12 @@ Le variabili S3 servono davvero: i test dei documenti e delle prove di
 pagamento caricano file veri su MinIO. Senza, falliscono con
 `EndpointConnectionError`.
 
+I test **non chiamano mai un modello vero**: `tests/conftest.py` spegne
+`OPENAI_API_KEY` e `ANTHROPIC_API_KEY` anche se il `.env` di produzione le ha
+(costerebbero e sarebbero lenti). Chi prova il modello lo simula
+(`monkeypatch` di `javbot.llm.chat`). Aggiungi `-e SMTP_HOST=` al comando:
+senza, i test che mandano email provano il server SMTP vero.
+
 Se `drop_all` fallisce con `DependentObjectsStillExist`, il database di test
 contiene tabelle che i modelli non conoscono più (una tabella tolta): non è
 un bug, ricrea `jav_test` vuoto (`DROP DATABASE jav_test WITH (FORCE)`).

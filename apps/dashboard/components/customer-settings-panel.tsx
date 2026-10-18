@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { friendlyApiError } from "@/lib/api-error";
 import { useSpendPinStatus } from "@/components/javcash-confirm-code";
+import { useClubFeatures } from "@/components/club/jav-courses";
 import type { SpendPinStatusRead, TicketRead } from "@/lib/types";
 import { useI18n } from "@/lib/i18n/provider";
 
@@ -18,13 +19,15 @@ const label = "block font-semibold text-slate-500 mb-1";
  *  acceso senza niente da confermare. */
 export function CustomerSettingsPanel() {
   const { t } = useI18n();
+  // Nei corsi JAV non ci sono JavCash da confermare: resta solo l'account.
+  const { wallet } = useClubFeatures();
   return (
     <div className="space-y-6 max-w-2xl">
       <div>
         <h2 className="text-lg font-bold text-slate-900">{t("acct.settings.title")}</h2>
-        <p className="text-sm text-slate-500">{t("acct.settings.subtitle")}</p>
+        <p className="text-sm text-slate-500">{wallet ? t("acct.settings.subtitle") : t("jcx.settingsSubtitle")}</p>
       </div>
-      <SpendPinCard />
+      {wallet && <SpendPinCard />}
       <AccountClosureCard />
     </div>
   );

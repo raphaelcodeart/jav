@@ -7,7 +7,8 @@ import { useEffect, useRef } from "react";
 // pagina della famiglia senza che le due cose si conoscano.
 
 export interface BotAction {
-  type: "navigate" | "open_pay" | "confirm_task" | "cancel_task" | "link" | "copy";
+  /** `say`: il bottone manda `value` come se l'utente l'avesse scritto. */
+  type: "navigate" | "open_pay" | "confirm_task" | "cancel_task" | "link" | "copy" | "say";
   label: string;
   target?: string | null;
   kind?: string | null;
@@ -24,8 +25,38 @@ export interface BotMessage {
   text: string;
   actions: BotAction[];
   quick_replies: string[];
+  /** Le schede sotto il testo (eventi, fonti dei documenti). */
+  cards?: BotCard[];
   created_at?: string;
 }
+
+/** Una gara o un evento proposto da JAVBOT, con i bottoni `say` («Inscrever X»). */
+export interface BotEventCard {
+  type: "event";
+  competition_id?: string | null;
+  title: string;
+  kind?: string | null;
+  date: string;
+  end_date?: string | null;
+  location?: string | null;
+  deadline?: string | null;
+  fee_cents?: number | null;
+  has_regulation?: boolean;
+  actions?: BotAction[];
+}
+
+/** Una fonte della risposta: un PDF caricato, il regolamento di un evento,
+ *  o una scheda scritta dal gestionale con i dati del club (DATA). */
+export interface BotSourceCard {
+  type: "source";
+  n: number;
+  title: string;
+  page?: number | null;
+  source: "UPLOAD" | "EVENT" | "DATA" | string;
+  competition_id?: string | null;
+}
+
+export type BotCard = BotEventCard | BotSourceCard | { type: string };
 
 /** Le sezioni che il backend nomina (`navigate.target`) e le schede che le
  *  mostrano, nell'ordine in cui cercarle: ogni area ha le sue chiavi. */

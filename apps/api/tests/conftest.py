@@ -2,6 +2,12 @@ import asyncio
 import os
 import uuid
 
+# I test non chiamano mai un modello vero (costa, ed è lento): il .env di
+# produzione può avere le chiavi, qui si spengono prima che le impostazioni
+# si leggano. Chi prova il modello lo simula (monkeypatch di javbot.llm.chat).
+os.environ["OPENAI_API_KEY"] = ""
+os.environ["ANTHROPIC_API_KEY"] = ""
+
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -28,6 +34,7 @@ from app.domains.email_texts import models as _email_texts_models  # noqa: F401
 from app.domains.friend_referrals import models as _friend_referrals_models  # noqa: F401
 from app.domains.jav_market import models as _jav_market_models  # noqa: F401
 from app.domains.javbot import models as _javbot_models  # noqa: F401
+from app.domains.extcourses import models as _extcourses_models  # noqa: F401
 from app.domains.marketplaces import models as _marketplaces_models  # noqa: F401
 from app.domains.network import models as _network_models  # noqa: F401
 from app.domains.notifications import models as _notifications_models  # noqa: F401

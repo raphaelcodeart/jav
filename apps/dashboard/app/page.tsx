@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Podium } from "@/components/ui/gamification";
 import { ClubCarousel } from "@/components/site/club-carousel";
-import { CourseCards } from "@/components/site/course-cards";
+import { CourseCards, ExtCourseCards } from "@/components/site/course-cards";
 import { Container, EmptyNote, EventCard, MedalList, RankingTable, SectionHeading } from "@/components/site/blocks";
 import { siteI18n } from "@/components/site/i18n";
 import { linkButton } from "@/components/site/link-button";
@@ -12,7 +12,7 @@ import { SponsorMarquee } from "@/components/site/sponsor-marquee";
 import { ImageBand, WaveDivider, WordMarquee } from "@/components/site/decor";
 import { VideoCarousel3D } from "@/components/site/video-carousel-3d";
 import { VideoHero } from "@/components/site/video-hero";
-import { HERO_VIDEO_ID, publicSite, type PortalHome } from "@/lib/public-site";
+import { HERO_VIDEO_ID, publicSite, type PortalHome, publicExtCourses } from "@/lib/public-site";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await siteI18n();
@@ -53,13 +53,15 @@ export default async function PortalHomePage() {
   const { t, fmt, locale } = i18n;
   // Se l'API non risponde la home si apre lo stesso, con la parte che non
   // dipende dai dati: chi cerca il login lo deve trovare comunque.
-  const [homeData, videoData, coursesData, sponsorsData] = await Promise.all([
+  const [homeData, videoData, coursesData, sponsorsData, extData] = await Promise.all([
     publicSite.home().catch(() => null),
     publicSite.videos().catch(() => null),
     publicSite.courses().catch(() => null),
     publicSite.sponsors().catch(() => null),
+    publicExtCourses().catch(() => null),
   ]);
   const courses = coursesData?.courses ?? [];
+  const extCourses = extData ?? [];
   const home = homeData ?? EMPTY;
   const videos = (videoData ?? []).slice(0, 15);
 
@@ -132,7 +134,7 @@ export default async function PortalHomePage() {
       </section>
 
       {/* --- I corsi JAV nelle scuole: separati dai club, senza persone --- */}
-      {courses.length > 0 && (
+      {(courses.length > 0 || extCourses.length > 0) && (
         <section id="cursos" aria-labelledby="cursos-title" className="scroll-mt-20 pb-12">
           <Container>
             <SectionHeading
@@ -142,7 +144,11 @@ export default async function PortalHomePage() {
               text={t("site.courses.text")}
               action={<Link href="/cursos" className={linkButton({ variant: "secondary" })}>{t("site.courses.all")}</Link>}
             />
-            <CourseCards courses={courses.slice(0, 6)} i18n={i18n} />
+            {/* Prima i corsi esterni (extcourses), poi quelli delle unità JAV: al massimo sei in tutto. */}
+            <div className="space-y-6">
+              {extCourses.length > 0 && <ExtCourseCards courses={extCourses.slice(0, 6)} i18n={i18n} />}
+              {courses.length > 0 && extCourses.length < 6 && <CourseCards courses={courses.slice(0, 6 - extCourses.length)} i18n={i18n} />}
+            </div>
           </Container>
         </section>
       )}

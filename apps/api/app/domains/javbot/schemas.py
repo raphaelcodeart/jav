@@ -18,6 +18,7 @@ class BotAction(BaseModel):
 
     type: str
     label: str
+    #: `say`: il bottone manda `value` come se l'utente l'avesse scritto.
     target: str | None = None
     kind: str | None = None
     task_id: str | None = None
@@ -29,9 +30,14 @@ class BotAction(BaseModel):
 class BotMessageRead(BaseModel):
     id: uuid.UUID
     role: str
+    #: Testo con un Markdown minimo (**grassetto**, elenchi «- », link): il
+    #: browser lo disegna.
     text: str
     actions: list[BotAction]
     quick_replies: list[str]
+    #: Le schede sotto il testo: `event` (una gara con data, luogo, scadenza,
+    #: quota, regolamento e bottoni `say`), `source` (una fonte del RAG).
+    cards: list[dict] = []
     created_at: datetime
 
 
@@ -84,6 +90,10 @@ class KnowledgeDocumentRead(BaseModel):
     #: Della base comune a tutti i club.
     common: bool
     created_at: datetime
+    #: UPLOAD (caricato), EVENT (regolamento di un evento), DATA (scheda scritta dal gestionale).
+    source: str = "UPLOAD"
+    source_ref: str | None = None
+    has_file: bool = True
 
 
 class KnowledgeRead(BaseModel):
@@ -95,6 +105,9 @@ class KnowledgeRead(BaseModel):
     common_instructions: str = ""
     #: False se il server non ha la chiave del modello: JAVBOT risponde a parole chiave.
     assistant_enabled: bool
+    #: Il fornitore del modello (openai / anthropic) e il modello, se c'è.
+    provider: str | None = None
+    model: str | None = None
 
 
 class InstructionsWrite(BaseModel):

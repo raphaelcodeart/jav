@@ -244,3 +244,31 @@ Scelte fatte senza il titolare, da confermare:
 - **Abbigliamento dell'altro sesso.** Non si mostra (la stessa t-shirt due
   volte); alta competizione e rosa invece si vedono chiusi. Se il club vuole
   mostrare anche questi chiusi è una riga in `loja.product_visible`.
+
+## 19. JAVBOT con OpenAI (migrazione 0043)
+
+- **Privacy (GDPR)**: come al §17, ma il fornitore ora è OpenAI. La domanda,
+  i passaggi dei documenti e i risultati degli strumenti (i dati che
+  l'utente vede nella sua area) vanno all'API: va scritto nell'informativa
+  delle famiglie prima di mostrare JAVBOT a tutti.
+- **La chiave di test** è stata scritta in una chat: va rigenerata su
+  platform.openai.com e sostituita in `.env` (poi `up -d --force-recreate api
+  celery-worker celery-beat`).
+- **Domande a parole diverse** («quanto costa per i più piccoli?»): la
+  ricerca a parole non trova la scheda dei prezzi e risponde l'agente con
+  gli strumenti (più token). Un dizionario di sinonimi (costa → preço,
+  mensalidade; pequenos → idade) o gli embedding ridurrebbero le chiamate;
+  da misurare con il contatore prima di decidere.
+- **Altre azioni** pronte da aggiungere con lo stesso schema (compito da
+  confermare): ritiro da una gara, giustificare un'assenza, rinnovare il
+  certificato, la segreteria che segna un pagamento in contanti.
+
+
+## 18/10/2026 — Dopo i corsi esterni
+
+- La chiave OpenAI è stata incollata in chat: va **ruotata** sul pannello
+  OpenAI e sostituita in `.env` (`OPENAI_API_KEY`).
+- L'unità «Cursos JAV» (club di tipo unità corsi) resta nel database ma non
+  serve più ai corsi nelle scuole: decidere se spegnerla del tutto.
+- Il messaggio del commit fe38cd7 è in portoghese invece che in italiano
+  (già pubblicato; riscriverlo richiederebbe un force push).

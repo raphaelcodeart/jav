@@ -734,7 +734,7 @@ async def _courses_read(
             staff_user_ids=staff.get(c.id, []), excluded_coach_ids=excluded.get(c.id, []),
             venue_name=c.venue_name, venue_address=c.venue_address, venue_city=c.venue_city,
             public_description=c.public_description, public_coach_name=c.public_coach_name,
-            coach_share_pct=c.coach_share_pct, published=c.published,
+            coach_share_pct=c.coach_share_pct, published=c.published, venue_logo_url=c.venue_logo_url,
         )
         for c in courses
     ]
@@ -1334,6 +1334,85 @@ async def admin_competition_image(
     return CompetitionRead.model_validate(comp)
 
 
+@admin_router.post(
+    "/competitions/{competition_id}/regulation", response_model=CompetitionRead,
+    dependencies=[Depends(rate_limit("club-event-regulation", max_requests=30, window_seconds=300))],
+)
+async def admin_competition_regulation(
+    competition_id: uuid.UUID,
+    file: UploadFile = File(...),
+    current_user: ClubUser = Depends(require_club_permission(MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> CompetitionRead:
+    """Il regolamento PDF dell'evento: lo scaricano famiglie e staff, e
+    JAVBOT lo legge per rispondere."""
+    try:
+        comp = await competitions_service.set_regulation(
+            db, scope=current_user.scope, competition_id=competition_id, actor_user_id=current_user.user_id,
+            file_bytes=await file.read(), filename=file.filename or "",
+        )
+    except club_service.ClubError as exc:
+        _raise(exc)
+    return CompetitionRead.model_validate(comp)
+
+
+@admin_router.delete("/competitions/{competition_id}/regulation", response_model=CompetitionRead)
+async def admin_competition_regulation_delete(
+    competition_id: uuid.UUID,
+    current_user: ClubUser = Depends(require_club_permission(MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> CompetitionRead:
+    try:
+        comp = await competitions_service.set_regulation(
+            db, scope=current_user.scope, competition_id=competition_id, actor_user_id=current_user.user_id,
+            file_bytes=None,
+        )
+    except club_service.ClubError as exc:
+        _raise(exc)
+    return CompetitionRead.model_validate(comp)
+
+
+async def _regulation_link(db: AsyncSession, current_user: ClubUser, competition_id: uuid.UUID) -> dict:
+    from app.core.storage import generate_presigned_document_url
+
+    try:
+        comp = await competitions_service.get_competition(db, scope=current_user.scope, competition_id=competition_id)
+    except club_service.ClubError as exc:
+        _raise(exc)
+    if not comp.regulation_storage_key:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Questo evento non ha un regolamento.")
+    return {"url": generate_presigned_document_url(storage_key=comp.regulation_storage_key),
+            "filename": comp.regulation_filename}
+
+
+@router.get("/competitions/{competition_id}/regulation")
+async def family_competition_regulation(
+    competition_id: uuid.UUID,
+    request: Request,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Il regolamento dell'evento per chi è del club come famiglia o come
+    atleta con il suo accesso: un URL di pochi minuti."""
+    granted = await get_permission_codes_for_user(db, user_id=current_user.user_id,
+                                                  organization_id=current_user.organization_id)
+    if not granted & {FAMILY, "club.athlete"}:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Non hai accesso a questo evento.")
+    club = await resolve_club(db, current_user=current_user, requested=request.headers.get(CLUB_HEADER))
+    user = ClubUser(user_id=current_user.user_id, organization_id=current_user.organization_id,
+                    roles=current_user.roles, club_id=club.id)
+    return await _regulation_link(db, user, competition_id)
+
+
+@staff_router.get("/competitions/{competition_id}/regulation")
+async def staff_competition_regulation(
+    competition_id: uuid.UUID,
+    current_user: ClubUser = Depends(require_club_permission(INSTRUCT)),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    return await _regulation_link(db, current_user, competition_id)
+
+
 @admin_router.delete("/competitions/{competition_id}/image", response_model=CompetitionRead)
 async def admin_competition_image_delete(
     competition_id: uuid.UUID,
@@ -1553,6 +1632,36 @@ async def admin_update_course(
         course = await courses_service.update_course(
             db, scope=current_user.scope, course_id=course_id, actor_user_id=current_user.user_id,
             changes=payload.model_dump(exclude_unset=True),
+        )
+    except club_service.ClubError as exc:
+        _raise(exc)
+    return (await _courses_read(db, [course], with_staff=True))[0]
+
+
+@admin_router.post(
+    "/courses/{course_id}/logo", response_model=CourseRead,
+    dependencies=[Depends(rate_limit("club-course-logo", max_requests=30, window_seconds=300))],
+)
+async def admin_course_logo(
+    course_id: uuid.UUID,
+    file: UploadFile | None = File(default=None),
+    current_user: ClubUser = Depends(require_club_permission(MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> CourseRead:
+    """Il logo della scuola di un corso JAV (senza file: lo toglie)."""
+    from app.core.storage import UploadValidationError, upload_media
+
+    url = None
+    if file is not None and file.filename:
+        try:
+            url = upload_media(file_bytes=await file.read(), content_type=file.content_type or "",
+                               key_prefix=f"photos/courses/{current_user.club_id}")
+        except UploadValidationError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Il logo deve essere un JPG, PNG o WebP di massimo 5 MB.") from exc
+    try:
+        course = await courses_service.update_course(
+            db, scope=current_user.scope, course_id=course_id, actor_user_id=current_user.user_id,
+            changes={"venue_logo_url": url},
         )
     except club_service.ClubError as exc:
         _raise(exc)

@@ -35,6 +35,7 @@ from app.domains.club.scope import ClubScope
 FAMILY = "club.family"
 MANAGE = "club.manage"
 INSTRUCT = "club.instruct"
+ATHLETE = "club.athlete"
 
 #: Le prove di pagamento: gli stessi limiti di core/storage.py::upload_document
 #: (documents/models.py). Qui solo per spiegarli, il controllo vero è lì.
@@ -63,6 +64,11 @@ class ToolContext:
     permissions: frozenset[str]
     lang: str
     today: date
+    #: Il club in cui lavora il treinador (club/scope.py, X-Jav-Staff-Club):
+    #: quello scelto entrando nell'area del treinador, o il club dell'account.
+    staff_scope: ClubScope | None = None
+    #: Falso nel club di un'altra appartenenza: lì non è segreteria.
+    staff_home: bool = True
 
     def require(self, permission: str) -> ClubScope:
         if self.scope is None:
@@ -70,6 +76,20 @@ class ToolContext:
         if permission not in self.permissions:
             raise ToolDenied("denied.family" if permission == FAMILY else "denied.staff")
         return self.scope
+
+    def require_staff(self) -> ClubScope:
+        """Il club del lavoro da treinador (presenze): quello scelto
+        nell'area del treinador, se c'è."""
+        scope = self.staff_scope or self.scope
+        if scope is None:
+            raise ToolDenied("denied.noClub")
+        if INSTRUCT not in self.permissions:
+            raise ToolDenied("denied.staff")
+        return scope
+
+    @property
+    def staff_manager(self) -> bool:
+        return MANAGE in self.permissions and self.staff_home
 
 
 @dataclass(frozen=True)
@@ -165,7 +185,9 @@ async def family_athletes(ctx: ToolContext, _args: dict) -> dict:
 
     scope = ctx.require(FAMILY)
     athletes = await club_service.list_family_athletes(ctx.db, scope=scope, guardian_user_id=ctx.user_id)
-    return {"athletes": [{"id": a.id, "first_name": a.first_name, "is_self": a.is_self} for a in athletes]}
+    return {"athletes": [{"id": a.id, "first_name": a.first_name, "last_name": a.last_name, "is_self": a.is_self,
+                          "height_cm": a.height_cm, "weight_kg": a.weight_kg, "weight_category": a.weight_category,
+                          "federation_number": a.federation_number} for a in athletes]}
 
 
 # --- Famiglia: Shop e judogi ----------------------------------------------------------------------
@@ -345,8 +367,10 @@ async def open_competitions(ctx: ToolContext, _args: dict) -> dict:
             if ok:
                 eligible.append(athlete.first_name)
         out.append({
-            "name": comp.name, "kind": comp.kind, "starts_on": comp.starts_on, "location": comp.location,
-            "registration_deadline": comp.registration_deadline, "eligible": eligible,
+            "id": str(comp.id), "name": comp.name, "kind": comp.kind, "starts_on": comp.starts_on,
+            "ends_on": comp.ends_on,
+            "location": comp.location, "registration_deadline": comp.registration_deadline, "eligible": eligible,
+            "fee_cents": comp.fee_cents, "has_regulation": bool(comp.regulation_storage_key),
         })
     return {"competitions": out, "more": max(len(comps) - 5, 0)}
 
@@ -494,6 +518,7 @@ async def my_profile(ctx: ToolContext, _args: dict) -> dict:
     out["club_name"] = club.name if club else None
     athletes = await club_service.list_family_athletes(ctx.db, scope=ctx.scope, guardian_user_id=ctx.user_id)
     joined = {a.id: a.joined_on for a in athletes}
+    heights = {a.id: a.height_cm for a in athletes}
     for card in await family_service.athlete_cards(ctx.db, athletes=athletes, today=ctx.today):
         out["athletes"].append({
             "first_name": card["first_name"], "last_name": card["last_name"], "is_self": card["is_self"],
@@ -503,9 +528,33 @@ async def my_profile(ctx: ToolContext, _args: dict) -> dict:
             "fiscal_code": card["fiscal_code"], "federation_number": card["federation_number"],
             "federation_expires_on": card["federation_expires_on"],
             "weight_kg": card["weight_kg"], "joined_on": joined[card["id"]],
+            "height_cm": heights.get(card["id"]), "weight_category": card.get("weight_category"),
             "certificate": card["certificate"]["status"], "certificate_expires_on": card["certificate"]["expires_on"],
         })
     return out
+
+
+async def my_athlete(ctx: ToolContext, _args: dict) -> dict:
+    """L'atleta con il suo accesso chiede di sé: solo la sua scheda, mai
+    quella di un altro (anche se della stessa famiglia)."""
+    from app.domains.club import family as family_service
+    from app.domains.club.models import ClubAthlete
+
+    scope = ctx.require(ATHLETE)
+    athlete = (await ctx.db.execute(select(ClubAthlete).where(
+        ClubAthlete.club_id == scope.club_id, ClubAthlete.user_id == ctx.user_id))).scalars().first()
+    if athlete is None:
+        raise ToolDenied("denied.family")
+    card = (await family_service.athlete_cards(ctx.db, athletes=[athlete], today=ctx.today))[0]
+    return {
+        "first_name": card["first_name"], "last_name": card["last_name"], "age": card["age"],
+        "height_cm": athlete.height_cm, "weight_kg": card["weight_kg"], "weight_category": card["weight_category"],
+        "belt": (card["belt"] or {}).get("label") if card.get("belt") else None,
+        "federation_number": card["federation_number"], "plan": card["plan"]["name"] if card["plan"] else None,
+        "certificate": card["certificate"]["status"], "attendances": card["attendances"],
+        "next_competition": card["next_competition"], "medals": card["medals"],
+        "due_cents": card["due_cents"],
+    }
 
 
 async def family_progress(ctx: ToolContext, _args: dict) -> dict:
@@ -839,7 +888,11 @@ for _tool in (
          required_permission=FAMILY),
     Tool("shop_orders_awaiting_payment", "Ordini dello Shop in attesa di bonifico e limiti dei file della ricevuta.",
          _schema(), shop_orders_awaiting_payment),
-    Tool("family_athletes", "Gli atleti della famiglia (solo il nome).", _schema(), family_athletes, required_permission=FAMILY),
+    Tool("family_athletes", "Gli atleti della famiglia: nome, altezza (cm), peso, categoria di peso, tessera federale.",
+         _schema(), family_athletes, required_permission=FAMILY),
+    Tool("my_athlete", "La scheda dell'atleta che scrive con il suo accesso (solo sé stesso): nome, età, altezza, "
+         "peso, categoria, cintura, tessera federale, gruppo, certificato, presenze del mese, prossima gara.",
+         _schema(), my_athlete, required_permission=ATHLETE),
     Tool("find_judogi", "Trova nel catalogo il judogi della taglia giusta per un'altezza in cm, con il prezzo del server.",
          _schema({"height_cm": {"type": "integer", "minimum": 80, "maximum": 215}}, ["height_cm"]), find_judogi),
     Tool("delivery_address", "L'indirizzo di consegna dal profilo e che cosa manca.", _schema(), delivery_address),

@@ -12,8 +12,11 @@ export default async function MyArea() {
   const roles = decodeRolesFromAccessToken(session.accessToken);
   if (roles.some((r) => ADMIN_ROLES.includes(r))) redirect("/admin");
   if (roles.includes("SECRETARY")) redirect("/club");
+  if (roles.includes("EXT_SCHOOL")) redirect("/escola");
   if (roles.includes("CUSTOMER")) redirect("/customer");
   if (roles.includes("INSTRUCTOR")) redirect("/staff");
   if (roles.includes("ATHLETE")) redirect("/atleta");
+  // I corsi esterni senza nessun ruolo di un club.
+  if (roles.includes("EXT_FAMILY")) redirect("/cursos");
   redirect("/promoter");
 }

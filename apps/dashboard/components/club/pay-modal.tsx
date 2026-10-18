@@ -17,6 +17,7 @@ import { useI18n } from "@/lib/i18n/provider";
 import { feeLabel } from "@/lib/fee-label";
 import { useClubPaymentInfo, usePaymentInfo, type PaymentInfo } from "@/components/club/payment-info";
 import { JavCashConfirmCode } from "@/components/javcash-confirm-code";
+import { useClubFeatures } from "@/components/club/jav-courses";
 
 /** Un ordine dello Shop come lo restituisce GET /jav-market/orders/mine:
  *  solo i campi che servono a pagarlo. */
@@ -43,20 +44,24 @@ type Kind = "fees" | "order";
  *    la foto accompagna il bonifico: l'ordine parte quando il pagamento è
  *    confermato. */
 export function PayModal({ open, onClose, fees, preselect }: { open: boolean; onClose: () => void; fees: Fee[]; preselect?: string[] }) {
-  const [kind, setKind] = useState<Kind | null>(preselect ? "fees" : null);
+  const [chosen, setKind] = useState<Kind | null>(preselect ? "fees" : null);
   const { t, fmt } = useI18n();
+  // Nei corsi JAV non c'è lo Shop: si pagano solo le quote, senza la scelta.
+  const { shop } = useClubFeatures();
+  const kind = shop ? chosen : "fees";
   const { data: orders } = useQuery({
     queryKey: ["jav-market", "orders", "mine"],
     queryFn: async (): Promise<ShopOrder[]> => {
       const res = await fetch("/api/proxy/jav-market/orders/mine");
       return res.ok ? res.json() : [];
     },
+    enabled: shop,
   });
   const payable = useMemo(
     () => (orders ?? []).filter((o) => o.status === "AWAITING_PAYMENT" && o.payment_method === "BANK_TRANSFER"),
     [orders],
   );
-  const back = preselect ? undefined : () => setKind(null);
+  const back = preselect || !shop ? undefined : () => setKind(null);
 
   if (kind === "fees") return <FeesStep open={open} onClose={onClose} onBack={back} fees={fees} preselect={preselect} />;
   if (kind === "order") return <OrderStep open={open} onClose={onClose} onBack={back} orders={payable} />;
@@ -178,18 +183,21 @@ function FeesStep({ open, onClose, onBack, fees, preselect }: { open: boolean; o
     queryFn: () => clubGet<CashReceiver[]>("/cash-receivers"),
     enabled: how === "CASH",
   });
+  // Nei corsi JAV niente wallet: il credito non si offre.
+  const features = useClubFeatures();
   const { data: wallet } = useQuery({
     queryKey: ["wallet", "me"],
     queryFn: async (): Promise<{ balance_cents: number }> => {
       const res = await fetch("/api/proxy/wallets/me");
       return res.ok ? res.json() : { balance_cents: 0 };
     },
+    enabled: features.wallet,
   });
   const { t, fmt } = useI18n();
   const { euro, shortDate } = fmt;
 
   const total = useMemo(() => fees.filter((f) => selected.has(f.id)).reduce((s, f) => s + f.amount_cents, 0), [fees, selected]);
-  const balance = wallet?.balance_cents ?? 0;
+  const balance = features.wallet ? wallet?.balance_cents ?? 0 : 0;
   const cash = how === "CASH";
   const credit = useCredit && !cash ? Math.min(balance, total) : 0;
   const needsFile = !cash && credit < total;

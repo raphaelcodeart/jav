@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge, FeeStatusPill } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
 import { useCurrentClub } from "@/components/club/current-club";
 import { SlotEditModal, type EditableSlot } from "@/components/club/slot-edit-modal";
+import { cn } from "@/lib/cn";
 import { useI18n } from "@/lib/i18n/provider";
 import {
   clubGet,
@@ -39,12 +40,28 @@ const A = (path: string) => `/admin${path}`;
 /** Se il club su cui si lavora è l'unità dei corsi JAV, e che cosa ha. */
 export function useClubFeatures() {
   const { data: club } = useCurrentClub();
-  return kindFeatures(club?.kind);
+  // Lo stesso oggetto finché il tipo non cambia: si può usare nelle dipendenze.
+  const kind = club?.kind;
+  return useMemo(() => kindFeatures(kind), [kind]);
+}
+
+/** Il logo della scuola di un corso (caricato dalla segreteria), o 🏫 se
+ *  non c'è: lo usano la segreteria, la famiglia e il treinador. */
+export function SchoolLogo({ url, size = "md", className }: { url?: string | null; size?: "sm" | "md" | "lg"; className?: string }) {
+  const box = size === "sm" ? "h-8 w-8 rounded-lg text-base" : size === "lg" ? "h-16 w-16 rounded-2xl text-3xl" : "h-12 w-12 rounded-xl text-2xl";
+  return (
+    <span className={cn("flex shrink-0 items-center justify-center overflow-hidden bg-white ring-1 ring-ink-100", box, className)} aria-hidden="true">
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt="" className="h-full w-full object-contain p-0.5" loading="lazy" />
+      ) : "🏫"}
+    </span>
+  );
 }
 
 /** "Seg", "Ter"... dalla lingua di chi legge: il 1° gennaio 2024 era lunedì,
  *  e 0 è lunedì anche per l'API (date.weekday()). */
-function useWeekday() {
+export function useWeekday() {
   const { fmt } = useI18n();
   return (weekday: number, style: "short" | "long" = "short") =>
     fmt.date(new Date(2024, 0, 1 + weekday), { weekday: style });
@@ -151,7 +168,8 @@ function CourseCard({ row, course, onEdit, onAthletes, onFees }: {
     <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
       className={`glass-card rounded-3xl p-5 space-y-3 ${orphan ? "ring-2 ring-amber-300" : ""}`}>
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
+        {!orphan && course?.venue_logo_url && <SchoolLogo url={course.venue_logo_url} />}
+        <div className="min-w-0 flex-1">
           <h3 className="text-base text-ink-900">{orphan ? t("javCourses.noCourse") : row.name}</h3>
           {orphan ? (
             <p className="text-sm text-amber-700">{t("javCourses.noCourseText")}</p>
@@ -210,6 +228,10 @@ function CourseEditor({ course: c, onClose }: { course: Course | null; onClose: 
   const { t } = useI18n();
   const weekday = useWeekday();
   const run = useRun();
+  const toast = useToast();
+  // Il logo si salva subito, a parte dal modulo: è un file, non un campo.
+  const [logo, setLogo] = useState<string | null>(c?.venue_logo_url ?? null);
+  const [logoBusy, setLogoBusy] = useState(false);
   const { data: staff } = useQuery({ queryKey: ["club", "admin", "staff"], queryFn: () => clubGet<StaffRow[]>(A("/staff")) });
   const [form, setForm] = useState({
     name: c?.name ?? "",
@@ -232,6 +254,23 @@ function CourseEditor({ course: c, onClose }: { course: Course | null; onClose: 
   const set = (key: keyof typeof form) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [key]: e.target.value }));
   const pct = Number(form.coach_share_pct.replace(",", "."));
   const pctOk = form.coach_share_pct !== "" && pct >= 0 && pct <= 100;
+
+  /** Senza file il server toglie il logo (stesso indirizzo, FormData vuoto). */
+  async function sendLogo(file: File | null) {
+    if (!c) return;
+    if (file && file.size > 5 * 1024 * 1024) {
+      toast({ tone: "error", title: t("jcx.logoTooBig") });
+      return;
+    }
+    const form = new FormData();
+    if (file) form.append("file", file);
+    setLogoBusy(true);
+    await run(async () => {
+      const saved = await clubSend<Course>(A(`/courses/${c.id}/logo`), "POST", form);
+      setLogo(saved.venue_logo_url ?? null);
+    }, file ? t("jcx.logoSaved") : t("jcx.logoRemoved"));
+    setLogoBusy(false);
+  }
 
   async function save() {
     setBusy(true);
@@ -270,6 +309,25 @@ function CourseEditor({ course: c, onClose }: { course: Course | null; onClose: 
         <Field label={t("javCourses.fieldAddress")} htmlFor="jc-address">
           <Input id="jc-address" value={form.venue_address} onChange={set("venue_address")} />
         </Field>
+        {c ? (
+          <div className="flex flex-wrap items-center gap-4 rounded-2xl bg-ink-50 p-4">
+            <SchoolLogo url={logo} size="lg" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-ink-900">{t("jcx.logoTitle")}</p>
+              <p className="text-xs text-ink-500">{t("jcx.logoHint")}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <label className={cn("inline-flex h-9 items-center rounded-xl bg-white px-3.5 text-sm font-semibold text-ink-800 ring-1 ring-ink-200 hover:ring-brand-300", logoBusy ? "pointer-events-none opacity-60" : "cursor-pointer")}>
+                {logo ? t("jcx.logoChange") : t("jcx.logoUpload")}
+                <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" disabled={logoBusy}
+                  onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void sendLogo(f); }} />
+              </label>
+              {logo && <Button size="sm" variant="ghost" loading={logoBusy} onClick={() => sendLogo(null)}>{t("jcx.logoRemove")}</Button>}
+            </div>
+          </div>
+        ) : (
+          <p className="text-xs text-ink-500">{t("jcx.logoAfterCreate")}</p>
+        )}
         <div className="grid grid-cols-3 gap-3">
           <Field label={t("javCourses.fieldMinAge")} htmlFor="jc-min"><Input id="jc-min" type="number" value={form.min_age} onChange={set("min_age")} /></Field>
           <Field label={t("javCourses.fieldMaxAge")} htmlFor="jc-max"><Input id="jc-max" type="number" value={form.max_age} onChange={set("max_age")} /></Field>

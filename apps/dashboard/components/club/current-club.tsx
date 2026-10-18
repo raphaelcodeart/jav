@@ -40,13 +40,17 @@ export function useCurrentClub() {
   const staff = usePathname()?.startsWith("/staff") ?? false;
   return useQuery({
     queryKey: staff ? ["club", "current", "staff"] : ["club", "current"],
-    queryFn: async (): Promise<CurrentClub | null> => {
-      const res = await fetch(staff ? "/api/proxy/club/current?area=staff" : "/api/proxy/club/current");
-      if (res.status === 409) return null;
-      if (!res.ok) throw new Error(await friendlyApiError(res));
-      return res.json();
-    },
+    queryFn: () => fetchCurrentClub(staff),
     staleTime: 5 * 60_000,
     retry: false,
   });
+}
+
+/** La lettura di GET /club/current, anche per chi vuole il club della
+ *  famiglia qualunque sia la pagina (il menu delle aree). */
+export async function fetchCurrentClub(staff = false): Promise<CurrentClub | null> {
+  const res = await fetch(staff ? "/api/proxy/club/current?area=staff" : "/api/proxy/club/current");
+  if (res.status === 409) return null;
+  if (!res.ok) throw new Error(await friendlyApiError(res));
+  return res.json();
 }

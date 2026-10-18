@@ -99,6 +99,18 @@ celery_app.conf.update(
             "task": "app.celery_app.club_close_competitions_task",
             "schedule": crontab(hour=1, minute=0),
         },
+        # Le schede del gestionale nella base di JAVBOT (javbot/rag.py):
+        # orari, prezzi, eventi, contatti di ogni club, riscritte di notte.
+        # Le mensilità dei corsi esterni (extcourses/service.py): ogni giorno,
+        # idempotente; il primo del mese le crea, gli altri giorni non trova niente.
+        "ext-courses-monthly-fees": {
+            "task": "app.celery_app.ext_courses_fees_task",
+            "schedule": crontab(hour=3, minute=20),
+        },
+        "javbot-data-sources": {
+            "task": "app.celery_app.javbot_data_sources_task",
+            "schedule": crontab(hour=4, minute=15),
+        },
         # I costi fissi del club diventano spese del mese. Ogni giorno e non
         # solo il 1°: un giorno saltato si recupera il giorno dopo, e il
         # vincolo UNIQUE (costo fisso, mese) impedisce i doppioni.
@@ -247,3 +259,32 @@ def data_retention_task() -> dict:
             return await retention.run(db)
 
     return asyncio.run(_run())
+
+
+@celery_app.task(name="app.celery_app.javbot_data_sources_task")
+def javbot_data_sources_task() -> int:
+    import asyncio
+
+    from app.core.db import AsyncSessionLocal
+    from app.domains.javbot import rag
+
+    async def _run() -> int:
+        async with AsyncSessionLocal() as db:
+            return await rag.refresh_all(db)
+
+    return asyncio.run(_run())
+
+
+@celery_app.task(name="app.celery_app.ext_courses_fees_task")
+def ext_courses_fees_task() -> int:
+    import asyncio
+
+    from app.core.db import AsyncSessionLocal
+    from app.domains.extcourses import service
+
+    async def _run() -> int:
+        async with AsyncSessionLocal() as db:
+            return await service.issue_month(db)
+
+    return asyncio.run(_run())
+

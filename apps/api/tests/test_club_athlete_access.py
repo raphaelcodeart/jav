@@ -128,5 +128,7 @@ async def test_at_18_the_athlete_becomes_holder_of_the_own_account(db, scope):
     assert teen.guardian_user_id == teen.user_id and teen.is_self
     user = await db.get(User, teen.user_id)
     assert user.email == "rita@example.demo" and "CUSTOMER" in await _role_codes(db, user.id)
-    # Il genitore non lo vede più tra i suoi.
-    assert [a.id for a in await athlete_access.area_athletes(db, user_id=parent.id, club_id=scope.club_id)] == [young.id]
+    # Il genitore resta collegato (club_athlete_links): lo vede ancora, ma
+    # il titolare ora è l'atleta.
+    assert {a.id for a in await athlete_access.area_athletes(db, user_id=parent.id, club_id=scope.club_id)} == {
+        young.id, teen.id}

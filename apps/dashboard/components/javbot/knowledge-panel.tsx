@@ -9,7 +9,9 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Field, Input, Textarea } from "@/components/ui/field";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
+import { UsageCard } from "@/components/javbot/usage-card";
 import { friendlyApiError } from "@/lib/api-error";
+import type { MessageKey } from "@/lib/i18n/messages/it";
 import { useI18n } from "@/lib/i18n/provider";
 
 // La base di conoscenza di JAVBOT (apps/api/app/domains/javbot/knowledge.py):
@@ -17,6 +19,11 @@ import { useI18n } from "@/lib/i18n/provider";
 // deve rispondere. La segreteria lavora sul suo club (/club/admin/javbot: il
 // club lo decide l'API) e vede, senza toccarli, i documenti comuni; la console
 // di JudoArteVida lavora sulla base comune a tutti i club (/javbot/admin).
+//
+// Non tutti i documenti li carica qualcuno: il regolamento di un evento
+// (EVENT) entra da solo quando la segreteria lo allega alla prova, e le
+// «fichas» del club (DATA: orari, prezzi, corsi) le scrive il gestionale
+// (javbot/rag.py). Quelli si cambiano dove nascono, non da qui.
 
 interface KnowledgeDocument {
   id: string;
@@ -27,6 +34,9 @@ interface KnowledgeDocument {
   status: "READY" | "EMPTY";
   common: boolean;
   created_at: string;
+  source?: "UPLOAD" | "EVENT" | "DATA" | string;
+  source_ref?: string | null;
+  has_file?: boolean;
 }
 
 interface Knowledge {
@@ -35,9 +45,17 @@ interface Knowledge {
   instructions: string;
   common_instructions: string;
   assistant_enabled: boolean;
+  provider?: "openai" | "anthropic" | string | null;
+  model?: string | null;
 }
 
 const MAX_INSTRUCTIONS = 8000;
+
+const SOURCES: Record<string, { icon: string; label: MessageKey; tone: "neutral" | "info" | "accent" }> = {
+  UPLOAD: { icon: "📄", label: "jbx.src.UPLOAD", tone: "neutral" },
+  EVENT: { icon: "🏆", label: "jbx.src.EVENT", tone: "info" },
+  DATA: { icon: "🗂️", label: "jbx.src.DATA", tone: "accent" },
+};
 
 async function call<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
@@ -63,6 +81,7 @@ export function KnowledgePanel({ mode }: { mode: "club" | "platform" }) {
         </Card>
       )}
       <Instructions key={data.instructions} base={base} queryKey={queryKey} mode={mode} initial={data.instructions} common={data.common_instructions} />
+      <UsageCard mode={mode} provider={data.provider ?? null} model={data.model ?? null} />
       <Documents base={base} queryKey={queryKey} mode={mode} documents={data.documents} />
       {mode === "club" && data.common_documents.length > 0 && (
         <Card>
@@ -143,6 +162,28 @@ function Documents({ base, queryKey, mode, documents }: {
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Le fichas si riscrivono da sole ogni notte; il bottone serve dopo aver
+  // cambiato orari o prezzi, per non aspettare domani.
+  async function refresh() {
+    setRefreshing(true);
+    try {
+      if (mode === "club") {
+        const fresh = await call<Knowledge>(`${base}/refresh`, { method: "POST" });
+        queryClient.setQueryData(queryKey, fresh);
+        toast({ tone: "success", title: t("jbx.kb.refreshed") });
+      } else {
+        const { written } = await call<{ written: number }>(`${base}/refresh`, { method: "POST" });
+        await queryClient.invalidateQueries({ queryKey });
+        toast({ tone: "success", title: t("jbx.kb.refreshed"), text: t("jbx.kb.refreshedN", { n: written }) });
+      }
+    } catch (e) {
+      toast({ tone: "error", title: t("jbx.kb.refreshError"), text: (e as Error).message });
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   async function upload() {
     if (!file) return;
@@ -171,7 +212,9 @@ function Documents({ base, queryKey, mode, documents }: {
         icon={<span aria-hidden="true">📚</span>}
         title={mode === "club" ? t("kb.clubDocs") : t("kb.commonDocsAdmin")}
         subtitle={mode === "club" ? t("kb.clubDocsText") : t("kb.commonDocsAdminText")}
+        action={<Button variant="secondary" size="sm" loading={refreshing} onClick={refresh} icon={<span aria-hidden="true">↻</span>}>{t("jbx.kb.refresh")}</Button>}
       />
+      <p className="-mt-2 mb-4 text-xs text-ink-500">{t("jbx.kb.refreshHint")}</p>
       <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
         <Field label={t("kb.file")} hint={t("kb.fileHint")}>
           <Input ref={input} type="file" accept="application/pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
@@ -228,24 +271,33 @@ function DocumentList({ base, documents, readOnly = false, queryKey }: {
 
   return (
     <ul className="divide-y divide-ink-100">
-      {documents.map((doc) => (
-        <li key={doc.id} className="flex flex-wrap items-center gap-3 py-3">
-          <span aria-hidden="true" className="text-xl">📄</span>
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-semibold text-ink-900">{doc.title}</p>
-            <p className="truncate text-xs text-ink-500">
-              {doc.filename} · {t("kb.pages", { pages: doc.page_count })} · {(doc.size_bytes / 1024 / 1024).toFixed(1)} MB · {fmt.shortDate(doc.created_at)}
-            </p>
-          </div>
-          {doc.status === "EMPTY"
-            ? <Badge tone="warning">{t("kb.statusEmpty")}</Badge>
-            : <Badge tone="success" dot>{t("kb.statusReady")}</Badge>}
-          {!readOnly && <Button variant="secondary" size="sm" onClick={() => open(doc)}>{t("kb.open")}</Button>}
-          {!readOnly && (
-            <Button variant="ghost" size="sm" onClick={() => remove(doc)} loading={busy === doc.id}>{t("kb.delete")}</Button>
-          )}
-        </li>
-      ))}
+      {documents.map((doc) => {
+        const source = SOURCES[doc.source ?? "UPLOAD"] ?? SOURCES.UPLOAD!;
+        const isData = doc.source === "DATA";
+        return (
+          <li key={doc.id} className="flex flex-wrap items-center gap-3 py-3">
+            <span aria-hidden="true" className="text-xl">{source.icon}</span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-semibold text-ink-900">{doc.title}</p>
+              <p className="truncate text-xs text-ink-500">
+                {isData
+                  ? `${t("jbx.kb.dataMeta")} · ${fmt.shortDate(doc.created_at)}`
+                  : `${doc.filename} · ${t("kb.pages", { pages: doc.page_count })} · ${(doc.size_bytes / 1024 / 1024).toFixed(1)} MB · ${fmt.shortDate(doc.created_at)}`}
+              </p>
+            </div>
+            <Badge tone={source.tone}>{t(source.label)}</Badge>
+            {doc.status === "EMPTY"
+              ? <Badge tone="warning">{t("kb.statusEmpty")}</Badge>
+              : <Badge tone="success" dot>{t("kb.statusReady")}</Badge>}
+            {!readOnly && !isData && doc.has_file !== false && <Button variant="secondary" size="sm" onClick={() => open(doc)}>{t("kb.open")}</Button>}
+            {/* Solo i PDF caricati si eliminano da qui: un regolamento si toglie
+                dalla prova, una ficha la riscrive il gestionale. */}
+            {!readOnly && (doc.source ?? "UPLOAD") === "UPLOAD" && (
+              <Button variant="ghost" size="sm" onClick={() => remove(doc)} loading={busy === doc.id}>{t("kb.delete")}</Button>
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
 }

@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
+import { SchoolLogo, useClubFeatures } from "@/components/club/jav-courses";
 import { clubGet, clubSend, type Course, type Family } from "@/lib/club";
 import { useI18n } from "@/lib/i18n/provider";
 
@@ -23,7 +24,11 @@ export function CoursesPanel() {
   const { data: family } = useQuery({ queryKey: ["club", "family"], queryFn: () => clubGet<Family>("/family") });
   const { t, fmt } = useI18n();
   const days = weekdayNames(fmt.tag);
-  const active = (courses ?? []).filter((c) => c.active);
+  // Nei corsi JAV ogni corso è in una scuola diversa: l'orario di tutte
+  // insieme non serve a nessuno. Prima i corsi dei figli, poi gli altri.
+  const { courses: schools } = useClubFeatures();
+  const active = (courses ?? []).filter((c) => c.active)
+    .sort((a, b) => (schools ? Number(b.my_athlete_ids.length > 0) - Number(a.my_athlete_ids.length > 0) : 0));
 
   return (
     <div>
@@ -34,7 +39,7 @@ export function CoursesPanel() {
 
       {active.length > 0 && (
         <>
-          <div className="grid grid-cols-7 gap-2 mb-8 overflow-x-auto min-w-0">
+          {!schools && <div className="grid grid-cols-7 gap-2 mb-8 overflow-x-auto min-w-0">
             {days.map((d, wd) => {
               const slots = active.flatMap((c) => c.slots.filter((s) => s.weekday === wd).map((s) => ({ c, s }))).sort((a, b) => a.s.starts_at.localeCompare(b.s.starts_at));
               return (
@@ -59,7 +64,7 @@ export function CoursesPanel() {
                 </div>
               );
             })}
-          </div>
+          </div>}
 
           <div className="grid md:grid-cols-2 gap-5">
             {active.map((c) => (
@@ -94,7 +99,9 @@ function CourseCard({ course: c, athletes, days }: { course: Course; athletes: F
   return (
     <div className="glass-card rounded-3xl p-5">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
+        {c.venue_name && <SchoolLogo url={c.venue_logo_url} />}
+        <div className="min-w-0 flex-1">
+          {c.venue_name && <p className="text-xs font-bold uppercase tracking-wider text-brand-600">{[c.venue_name, c.venue_city].filter(Boolean).join(" · ")}</p>}
           <h3 className="text-base text-ink-900">{c.name}</h3>
           <p className="text-sm text-ink-500">
             {[c.level, c.min_age != null ? t("club.yearsOld", { n: `${c.min_age}${c.max_age != null ? `–${c.max_age}` : "+"}` }) : null, c.instructor_name ? t("courses.with", { name: c.instructor_name }) : null].filter(Boolean).join(" · ")}

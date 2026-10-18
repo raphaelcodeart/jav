@@ -561,6 +561,9 @@ class CompetitionRead(BaseModel):
     transport_auto_send: bool
     #: La foto o la locandina; None = l'icona del tipo.
     image_url: str | None = None
+    #: Il regolamento PDF (si scarica con /competitions/{id}/regulation).
+    regulation_filename: str | None = None
+    regulation_size: int | None = None
 
 
 class AthleteEligibilityRead(BaseModel):
@@ -733,6 +736,7 @@ class CourseRead(BaseModel):
     public_coach_name: str | None = None
     coach_share_pct: Decimal | None = None
     published: bool = False
+    venue_logo_url: str | None = None
 
 
 class EnrolWrite(BaseModel):

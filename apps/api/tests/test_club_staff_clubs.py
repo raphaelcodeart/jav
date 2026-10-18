@@ -150,3 +150,23 @@ async def test_the_scope_ignores_foreign_clubs(db, scope):
     with pytest.raises(HTTPException):
         await resolve_club(db, current_user=CurrentUser(user_id=uuid.uuid4(), organization_id=scope.organization_id,
                                                          roles=[]), requested=None)
+
+
+async def test_a_guest_coach_can_lead_a_course(db, scope):
+    from app.domains.club import courses as courses_service
+
+    unit = await _other_club(db, scope, "Cursos JAV")
+    unit_scope = ClubScope(organization_id=scope.organization_id, club_id=unit.id)
+    marco = await _coach(db, scope, "marco-corsi")
+    stranger = await _coach(db, scope, "estraneo")
+    with pytest.raises(ClubValidationError):
+        await courses_service.create_course(db, scope=unit_scope, actor_user_id=marco.id,
+                                            data={"name": "Torraltinha", "instructor_user_id": marco.id})
+    await staff_clubs.assign(db, organization_id=scope.organization_id, club_id=unit.id, actor_user_id=marco.id,
+                             user_id=marco.id)
+    course = await courses_service.create_course(db, scope=unit_scope, actor_user_id=marco.id,
+                                                 data={"name": "Torraltinha", "instructor_user_id": marco.id})
+    assert course.instructor_user_id == marco.id
+    with pytest.raises(ClubValidationError):
+        await courses_service.update_course(db, scope=unit_scope, course_id=course.id, actor_user_id=marco.id,
+                                            changes={"instructor_user_id": stranger.id})

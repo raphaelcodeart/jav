@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge, FeeStatusPill } from "@/components/ui/badge";
 import { BeltBadge } from "@/components/ui/belt";
@@ -42,6 +42,7 @@ import { BeltAwardPanel } from "@/components/club/staff-tools";
 import { CoursesManager } from "@/components/club/jav-courses";
 import { SeasonMonthsPanel } from "@/components/club/season-months";
 import { EventNameButton } from "@/components/club/competition-detail-modal";
+import { RegulationButton } from "@/components/club/regulation-link";
 import { CoachNotebook } from "@/components/club/coach-notebook";
 import { ProvasBar, ProvasContent, type ProvasView } from "@/components/club/event-reports";
 import { useI18n } from "@/lib/i18n/provider";
@@ -557,6 +558,7 @@ function CompetitionsList() {
                 <div className="flex flex-wrap gap-1.5 mb-1">
                   {c.kind === "COMPETITION" ? <Badge tone="neutral">{t.dyn(`club.level.${c.level}`, LEVEL_LABELS[c.level] ?? c.level)}</Badge> : <Badge tone="brand">{EVENT_KIND_STYLE[c.kind]?.icon} {t.dyn(`event.${({ STAGE: "stage", REFEREEING: "referee", EDUCATION: "education", MEETING: "meeting" } as Record<string, string>)[c.kind] ?? "other"}`, c.kind)}</Badge>}
                   {c.transport_needed && <Badge tone="info">🚌 {t("event.transport")}</Badge>}
+                  {c.regulation_filename && <Badge tone="neutral">📄 {t("jbx.reg.short")}</Badge>}
                   <Badge tone={c.status === "OPEN" ? "success" : c.status === "DONE" ? "info" : "warning"}>{c.status === "OPEN" ? t("ca.comp.status.OPEN") : c.status === "DONE" ? t("ca.comp.status.DONE") : t("ca.comp.status.CLOSED")}</Badge>
                 </div>
                 <h3 className="text-base text-ink-900"><EventNameButton id={c.id} name={c.name} mode="staff" /></h3>
@@ -628,6 +630,70 @@ function EventImageEditor({ competition: c, kind }: { competition: Competition; 
   );
 }
 
+/** Il regolamento PDF dell'evento: come la foto, si carica e si toglie
+ *  subito. Le famiglie lo scaricano dalla scheda della prova e JAVBOT lo
+ *  legge (javbot/rag.py) per rispondere alle domande su quell'evento. */
+function EventRegulationEditor({ competition: c }: { competition: Competition }) {
+  const { t } = useI18n();
+  const [regulation, setRegulation] = useState(c.regulation_filename ? { name: c.regulation_filename, size: c.regulation_size ?? null } : null);
+  const [busy, setBusy] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  async function upload(file: File | null) {
+    if (file && (file.type && file.type !== "application/pdf" && !/\.pdf$/i.test(file.name))) {
+      toast({ tone: "error", title: t("jbx.reg.failed"), text: t("jbx.reg.notPdf") });
+      return;
+    }
+    if (file && file.size > 15 * 1024 * 1024) {
+      toast({ tone: "error", title: t("jbx.reg.failed"), text: t("jbx.reg.tooBig") });
+      return;
+    }
+    if (!file && !window.confirm(t("jbx.reg.removeConfirm"))) return;
+    setBusy(true);
+    try {
+      let updated: Competition;
+      if (file) {
+        const form = new FormData();
+        form.append("file", file);
+        updated = await clubSend<Competition>(A(`/competitions/${c.id}/regulation`), "POST", form);
+      } else {
+        updated = await clubSend<Competition>(A(`/competitions/${c.id}/regulation`), "DELETE");
+      }
+      setRegulation(updated.regulation_filename ? { name: updated.regulation_filename, size: updated.regulation_size ?? null } : null);
+      toast({ tone: "success", title: file ? t("jbx.reg.uploaded") : t("jbx.reg.removed") });
+      await queryClient.invalidateQueries({ queryKey: ["club"] });
+    } catch (e) {
+      toast({ tone: "error", title: t("jbx.reg.failed"), text: (e as Error).message });
+    } finally {
+      setBusy(false);
+      if (input.current) input.current.value = "";
+    }
+  }
+  return (
+    <div className="flex items-start gap-4 rounded-2xl bg-ink-50 p-3 ring-1 ring-ink-100">
+      <span aria-hidden="true" className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white text-2xl shadow-soft ring-1 ring-ink-100">📄</span>
+      <div className="min-w-0 flex-1 space-y-2">
+        <p className="text-sm font-semibold text-ink-900">{t("jbx.reg.title")}</p>
+        <p className="text-xs text-ink-500">🤖 {t("jbx.reg.hint")}</p>
+        {regulation && (
+          <div className="flex flex-wrap items-center gap-2 rounded-xl bg-white px-3 py-2 ring-1 ring-ink-100">
+            <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-900">{regulation.name}</span>
+            {regulation.size != null && <span className="text-xs text-ink-500">{(regulation.size / 1024 / 1024).toFixed(1)} MB</span>}
+            <RegulationButton competitionId={c.id} area="staff" filename={regulation.name} variant="ghost" />
+          </div>
+        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <Input ref={input} type="file" accept="application/pdf,.pdf" disabled={busy} aria-label={regulation ? t("jbx.reg.replace") : t("jbx.reg.title")}
+            onChange={(e) => { const file = e.target.files?.[0]; if (file) void upload(file); }} className="max-w-xs" />
+          {regulation && <Button size="sm" variant="ghost" loading={busy} onClick={() => upload(null)}>{t("ca.remove")}</Button>}
+        </div>
+        <p className="text-[11px] text-ink-400">{regulation ? t("jbx.reg.replaceHint") : t("jbx.reg.fileHint")}</p>
+      </div>
+    </div>
+  );
+}
+
 function CompetitionModal({ competition: c, onClose }: { competition: Competition | null; onClose: () => void }) {
   const [f, setF] = useState({
     name: c?.name ?? "", description: c?.description ?? "", starts_on: c?.starts_on ?? "", ends_on: c?.ends_on ?? "",
@@ -670,6 +736,7 @@ function CompetitionModal({ competition: c, onClose }: { competition: Competitio
     <Modal open onClose={onClose} size="lg" title={c ? t("ca.comp.editTitle") : t("ca.comp.new")} footer={<><Button variant="ghost" onClick={onClose}>{t("common.cancel")}</Button><Button loading={busy} onClick={save} disabled={!f.name || !f.starts_on || !f.registration_deadline}>{t("common.save")}</Button></>}>
       <div className="grid sm:grid-cols-2 gap-4">
         {c && <div className="sm:col-span-2"><EventImageEditor competition={c} kind={f.kind} /></div>}
+        {c && <div className="sm:col-span-2"><EventRegulationEditor competition={c} /></div>}
         <div className="sm:col-span-2"><Field label={t("ca.name")} htmlFor="cp-name"><Input id="cp-name" value={f.name} onChange={(e) => set({ name: e.target.value })} /></Field></div>
         <Field label={t("event.kind")} hint={t("event.kindHint")} htmlFor="cp-kind">
           <Select id="cp-kind" value={f.kind} onChange={(e) => set({ kind: e.target.value })}>

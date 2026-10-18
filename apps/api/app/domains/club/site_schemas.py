@@ -586,6 +586,8 @@ class PublicCourse(BaseModel):
     venue_name: str | None
     venue_address: str | None
     venue_city: str | None
+    #: Il logo della scuola, se il corso l'ha.
+    venue_logo_url: str | None = None
     description: str | None
     #: Il nome scritto a mano per il sito, non quello dell'account.
     coach_name: str | None

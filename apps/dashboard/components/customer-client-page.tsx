@@ -278,6 +278,17 @@ const FAMILY_NAV_ITEMS: NavItem[] = [
   ...OTHER_ITEMS.filter((item) => FAMILY_KEYS.has(item.key)),
 ];
 
+// Le voci che esistono solo se l'unità ha quella cosa (lib/club.ts::kindFeatures).
+const FEATURE_OF: Partial<Record<string, "competitions" | "ranking" | "games" | "shop" | "wallet" | "board">> = {
+  "club-competitions": "competitions",
+  "club-ranking": "ranking",
+  games: "games",
+  products: "shop",
+  orders: "shop",
+  wallet: "wallet",
+  "club-board": "board",
+};
+
 const HOME_QUICK_LINKS: { key: string; label: string; description: string; icon: React.ReactNode }[] = [
   {
     key: "contracts",
@@ -399,14 +410,19 @@ export function CustomerClientPage({ email, organizationId }: CustomerClientPage
     queryFn: () => fetchMyCustomerRecord(t("acct.customer.recordError")),
   });
 
-  const isClubTab = (CLUB_TABS as readonly string[]).includes(activeTab);
   // The labels above stay as the Italian source; the menu shows them in the
   // chosen language, falling back to them for a key not translated yet.
-  // Nei corsi JAV nelle scuole non ci sono gare né ranking: le voci spariscono.
+  // Nei corsi JAV il genitore ha solo figli, corso, presenze e mensilità:
+  // niente gare, ranking, Shop, ordini, wallet, giochi, bacheca (FEATURE_OF).
   const features = useClubFeatures();
   const navItems = useMemo(() => FAMILY_NAV_ITEMS
-    .filter((item) => (item.key !== "club-competitions" || features.competitions) && (item.key !== "club-ranking" || features.ranking))
-    .map((item) => ({ ...item, label: t.dyn(`nav.${item.key}`, item.label) })), [t, features.competitions, features.ranking]);
+    .filter((item) => { const need = FEATURE_OF[item.key]; return !need || features[need]; })
+    .map((item) => ({ ...item, label: features.courses && item.key === "club" ? t("jcx.navHome") : t.dyn(`nav.${item.key}`, item.label) })), [t, features]);
+  // Nei corsi si apre solo ciò che è nel menu: un vecchio link (?tab=wallet,
+  // un'email) porta alla home invece che a una sezione che lì non esiste.
+  const tab = features.courses && !navItems.some((item) => item.key === activeTab) ? "club" : activeTab;
+
+  const isClubTab = (CLUB_TABS as readonly string[]).includes(tab);
 
   return (
     <AppShell
@@ -414,20 +430,20 @@ export function CustomerClientPage({ email, organizationId }: CustomerClientPage
       roleLabel={t("customer.roleLabel")}
       email={email}
       navItems={navItems}
-      activeKey={activeTab}
+      activeKey={tab}
       onNavigate={(key) => setActiveTab(key as typeof activeTab)}
       // The club pages carry their own hero/headers.
       headerTitle={isClubTab ? undefined : t("customer.headerTitle")}
-      showCart
+      showCart={features.shop}
       // Not on Contabilità (Session 54): the page has its own heading, and the
       // space goes to the totals.
       headerSubtitle={
-        activeTab === "accounting" || isClubTab
+        tab === "accounting" || isClubTab
           ? undefined
           : t("customer.headerSubtitle")
       }
     >
-      {activeTab === "contracts" && (
+      {tab === "contracts" && (
         <div className="space-y-6">
           <SectionBanner image="contracts" alt={t("nav.contracts")} />
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl border border-brand-500/25 bg-gradient-to-br from-brand-500/10 to-transparent">
@@ -453,15 +469,15 @@ export function CustomerClientPage({ email, organizationId }: CustomerClientPage
         </div>
       )}
 
-      {activeTab === "club" && <FamilyHome onNavigate={(key) => setActiveTab(key as typeof activeTab)} />}
-      {activeTab === "club-board" && <ClubBoard />}
-      {activeTab === "games" && <GamesHub />}
-      {activeTab === "club-competitions" && features.competitions && <CompetitionsPanel />}
-      {activeTab === "club-ranking" && features.ranking && <RankingPanel />}
-      {activeTab === "club-courses" && <CoursesPanel />}
-      {activeTab === "club-accounting" && <FamilyAccounting onNavigate={(key) => setActiveTab(key as typeof activeTab)} />}
+      {tab === "club" && <FamilyHome onNavigate={(key) => setActiveTab(key as typeof activeTab)} />}
+      {tab === "club-board" && <ClubBoard />}
+      {tab === "games" && <GamesHub />}
+      {tab === "club-competitions" && features.competitions && <CompetitionsPanel />}
+      {tab === "club-ranking" && features.ranking && <RankingPanel />}
+      {tab === "club-courses" && <CoursesPanel />}
+      {tab === "club-accounting" && <FamilyAccounting onNavigate={(key) => setActiveTab(key as typeof activeTab)} />}
 
-      {activeTab === "jav-contracts" && (
+      {tab === "jav-contracts" && (
         <div className="space-y-6">
           <SectionBanner image="contracts" alt={t("acct.area.customer")} compact>
             <div>
@@ -502,7 +518,7 @@ export function CustomerClientPage({ email, organizationId }: CustomerClientPage
         </div>
       )}
 
-      {activeTab === "products" && (
+      {tab === "products" && (
         <div className="space-y-6">
           <FamilyJudogiSection />
           <CustomerProductsPanel
@@ -513,14 +529,14 @@ export function CustomerClientPage({ email, organizationId }: CustomerClientPage
         </div>
       )}
 
-      {activeTab === "product-requests" && (
+      {tab === "product-requests" && (
         <div className="space-y-6">
           <SectionBanner image="products" alt={t("nav.product-requests")} />
           <CustomerProductRequestsPanel />
         </div>
       )}
 
-      {activeTab === "orders" && (
+      {tab === "orders" && (
         <div className="space-y-6">
           <SectionBanner image="products" alt={t("nav.orders")} />
           {/* I judogi del club stanno nelle quote, non negli ordini dello
@@ -530,7 +546,7 @@ export function CustomerClientPage({ email, organizationId }: CustomerClientPage
         </div>
       )}
 
-      {activeTab === "support" && (
+      {tab === "support" && (
         <div className="space-y-6">
           <SectionBanner image="support" alt={t("nav.support")} />
           <SupportTicketsPanel
@@ -540,33 +556,33 @@ export function CustomerClientPage({ email, organizationId }: CustomerClientPage
         </div>
       )}
 
-      {activeTab === "friend-referrals" && (
+      {tab === "friend-referrals" && (
         <FriendReferralsPanel organizationId={organizationId} />
       )}
 
-      {activeTab === "promoter-application" && (
+      {tab === "promoter-application" && (
         <div className="space-y-6">
           <CustomerPromoterApplicationCard />
         </div>
       )}
 
-      {activeTab === "documentation" && (
+      {tab === "documentation" && (
         <div className="space-y-6">
           <SectionBanner image="documentation" alt={t("nav.documentation")} />
           <DocumentationFeed />
         </div>
       )}
 
-      {activeTab === "wallet" && (
+      {tab === "wallet" && (
         <div className="space-y-6">
           <SectionBanner image="wallets" alt={t("nav.wallet")} />
           <WalletPanel />
         </div>
       )}
 
-      {activeTab === "settings" && <CustomerSettingsPanel />}
+      {tab === "settings" && <CustomerSettingsPanel />}
 
-      {activeTab === "accounting" && (
+      {tab === "accounting" && (
         <AccountingPanel onOpenTab={(tab) => setActiveTab(tab as typeof activeTab)} />
       )}
       {wizard && (

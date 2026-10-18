@@ -4,6 +4,7 @@ import { Fragment, useEffect, useRef, useState, useSyncExternalStore, type React
 import { AnimatePresence, motion } from "motion/react";
 import Image from "next/image";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AccountGate } from "@/components/account-gate";
 import { AreaSwitcher, useDualRoleAreas } from "@/components/area-switcher";
@@ -366,7 +367,7 @@ function UserMenu({ email, roleLabel, onOpenSettings }: { email?: string; roleLa
             {clubAreas.map((area) => (
               <Link key={area.href} href={area.href} onClick={() => setOpen(false)} className={itemClass}>
                 <span className="w-4 text-center" aria-hidden="true">{area.icon}</span>
-                {t(`shell.area.${area.key}`)}
+                {t(area.labelKey)}
               </Link>
             ))}
             {hasBothRoles && (
@@ -440,6 +441,9 @@ export function AppShell({
   clubBranding = false,
 }: AppShellProps) {
   const branding = useClubBranding(clubBranding);
+  // I corsi esterni (area del genitore e della scuola) non hanno JAVBOT.
+  const pathname = usePathname();
+  const noJavbot = !!pathname && (pathname.startsWith("/cursos") || pathname.startsWith("/escola"));
   const [moreOpen, setMoreOpen] = useState(false);
   const { t } = useI18n();
   // Il carrello vive qui, non dentro lo Shop: si apre da qualunque scheda, e
@@ -715,7 +719,7 @@ export function AppShell({
       {/* JAVBOT, l'assistente: qui una volta sola, quindi in ogni pagina
           privata di ogni ruolo. Cambia scheda con lo stesso onNavigate del
           menu, e solo verso sezioni che quest'area ha davvero. */}
-      <Javbot navKeys={navItems.map((item) => item.key)} onNavigate={(key) => onNavigate(key)} />
+      {!noJavbot && <Javbot navKeys={navItems.map((item) => item.key)} onNavigate={(key) => onNavigate(key)} />}
     </div>
   );
 }

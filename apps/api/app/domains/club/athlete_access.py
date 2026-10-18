@@ -276,21 +276,27 @@ async def user_for_code(db: AsyncSession, *, organization_id: uuid.UUID, code: s
 async def area_athletes(db: AsyncSession, *, user_id: uuid.UUID, club_id: uuid.UUID) -> list[ClubAthlete]:
     """Le aree che questo account può aprire: la propria (se è un atleta) e
     quelle degli atleti di cui è titolare. Prima la propria."""
+    from app.domains.club.models import ClubAthleteLink
+
+    linked = select(ClubAthleteLink.athlete_id).where(ClubAthleteLink.user_id == user_id)
     rows = list((await db.execute(
         select(ClubAthlete).where(
             ClubAthlete.club_id == club_id, ClubAthlete.status == "ACTIVE",
-            (ClubAthlete.user_id == user_id) | (ClubAthlete.guardian_user_id == user_id),
+            (ClubAthlete.user_id == user_id) | (ClubAthlete.guardian_user_id == user_id) | ClubAthlete.id.in_(linked),
         ).order_by(ClubAthlete.first_name)
     )).scalars())
     return sorted(rows, key=lambda a: a.user_id != user_id)
 
 
 async def area_athlete(db: AsyncSession, *, user_id: uuid.UUID, club_id: uuid.UUID, athlete_id: uuid.UUID) -> ClubAthlete:
+    from app.domains.club.models import ClubAthleteLink
+
     athlete = await db.get(ClubAthlete, athlete_id)
-    if (
-        athlete is None or athlete.club_id != club_id
-        or (athlete.user_id != user_id and athlete.guardian_user_id != user_id)
-    ):
+    if athlete is None or athlete.club_id != club_id:
+        raise ClubNotFoundError("Atleta non trovato.")
+    if athlete.user_id != user_id and athlete.guardian_user_id != user_id and (await db.execute(
+        select(ClubAthleteLink.id).where(ClubAthleteLink.athlete_id == athlete.id, ClubAthleteLink.user_id == user_id)
+    )).first() is None:
         raise ClubNotFoundError("Atleta non trovato.")
     return athlete
 
@@ -359,6 +365,10 @@ async def area(db: AsyncSession, *, athlete: ClubAthlete, viewer_user_id: uuid.U
         # accesso, che ancora non lo è.
         "can_become_holder": own and age >= ADULT_AGE and not athlete.is_self
         and athlete.guardian_user_id != viewer_user_id,
+        # Il titolare che guarda l'area di un figlio maggiorenne: lo invita a
+        # prendere il suo conto (invite_holder).
+        "can_invite_holder": athlete.guardian_user_id == viewer_user_id and not athlete.is_self
+        and age >= ADULT_AGE,
         "today": today,
         "lessons": lessons,
         "month_present": sum(1 for lesson in lessons if lesson["status"] == "PRESENT"),
@@ -411,6 +421,13 @@ async def become_holder(
     old_guardian = athlete.guardian_user_id
     athlete.guardian_user_id = user_id
     athlete.is_self = True
+    # Il genitore non sparisce: resta collegato, lo vede e può pagare per lui.
+    from app.domains.club.models import ClubAthleteLink
+
+    if old_guardian != user_id and (await db.execute(select(ClubAthleteLink.id).where(
+        ClubAthleteLink.athlete_id == athlete.id, ClubAthleteLink.user_id == old_guardian,
+    ))).first() is None:
+        db.add(ClubAthleteLink(athlete_id=athlete.id, user_id=old_guardian))
     await _grant(db, user, "CUSTOMER")
     await _ensure_customer(db, user=user, athlete=athlete)
     await audit_service.record(
@@ -419,6 +436,44 @@ async def become_holder(
         previous_value={"guardian_user_id": str(old_guardian)}, new_value={"guardian_user_id": str(user_id)},
     )
     await db.commit()
+
+
+async def invite_holder(
+    db: AsyncSession, *, athlete: ClubAthlete, guardian_user_id: uuid.UUID, email: str, today: date,
+) -> str | None:
+    """Il genitore invita il figlio maggiorenne a prendere il suo conto: gli
+    dà (o corregge) l'email dell'accesso e gli manda l'invito a scegliersi
+    la password. Entrando, il figlio trova «Diventa titolare» nella sua area.
+    Restituisce il link se l'email non è partita (da consegnare a mano)."""
+    from app.domains.auth import service as auth_service
+
+    if athlete.guardian_user_id != guardian_user_id or athlete.is_self:
+        raise ClubValidationError("Lo invita il titolare del conto.")
+    if age_on(athlete.birth_date, today) < ADULT_AGE:
+        raise ClubValidationError("Si diventa titolari del proprio conto a 18 anni.")
+    email = (email or "").strip().lower()
+    if "@" not in email or is_placeholder_address(email):
+        raise ClubValidationError("Scrivi l'email dell'atleta.")
+    if athlete.user_id is None:
+        base = re.sub(r"[^a-z0-9]+", ".", f"{athlete.first_name}.{athlete.last_name}".lower()).strip(".")[:30] or "atleta"
+        username = f"{base}.{secrets.token_hex(2)}"
+        await set_login(db, athlete=athlete, actor_user_id=guardian_user_id, username=username, email=email,
+                        password=secrets.token_urlsafe(16))
+        await db.refresh(athlete)
+    else:
+        await set_login(db, athlete=athlete, actor_user_id=guardian_user_id, username=None, email=email, password=None)
+    user = await db.get(User, athlete.user_id)
+    link, sent = await auth_service.send_account_invite_email(
+        db, user=user, invited_by_display_name=f"{athlete.first_name}",
+        intro=f"Olá {athlete.first_name}! Já tens 18 anos: entra na tua área do atleta e toca em «Ficar com a "
+              f"minha conta» para gerir tu as tuas quotas e inscrições. A tua família continua ligada a ti.",
+    )
+    await audit_service.record(
+        db, organization_id=athlete.organization_id, actor_user_id=guardian_user_id,
+        action="club.athlete_invited_to_hold", entity_type="club_athlete", entity_id=str(athlete.id),
+    )
+    await db.commit()
+    return None if sent else link
 
 
 async def _ensure_customer(db: AsyncSession, *, user: User, athlete: ClubAthlete) -> None:

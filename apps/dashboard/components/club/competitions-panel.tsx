@@ -16,6 +16,7 @@ import { celebrate } from "@/lib/motion";
 import { LEVEL_LABELS, PLACEMENT_LABELS, clubGet, clubSend, daysUntil, type FamilyCompetition } from "@/lib/club";
 import type { MessageKey } from "@/lib/i18n/messages/it";
 import { EventIcon } from "@/components/club/event-icon";
+import { RegulationButton } from "@/components/club/regulation-link";
 import { JavCalendar } from "@/components/club/jav-calendar";
 import { AreaEvents } from "@/components/club/area-events";
 import { Pagination, usePaged } from "@/components/ui/pagination";
@@ -104,6 +105,9 @@ function CompetitionCard({ competition: c, delay }: { competition: FamilyCompeti
                 {[c.location, c.organizer].filter(Boolean).join(" · ") || t("comp.placeTbd")}
               </p>
               {c.categories && <p className="text-xs text-ink-500 mt-1">{t("comp.categories", { categories: c.categories })}</p>}
+              {c.regulation_filename && (
+                <div className="mt-2"><RegulationButton competitionId={c.id} area="member" filename={c.regulation_filename} /></div>
+              )}
             </div>
             {c.registrations_open ? (
               <div className="rounded-2xl bg-accent-100 text-accent-900 px-3 py-2 text-center">

@@ -39,6 +39,8 @@ logger = logging.getLogger(__name__)
 MAX_ARTICLE_CHARS = 20000
 #: Un articolo, non un romanzo: il modello si ferma molto prima.
 AI_MAX_TOKENS = 2000
+#: Con OpenAI: 400-500 parole bastano per una crónica (≈ 700 token).
+OPENAI_ARTICLE_TOKENS = 900
 
 _COUNT_F = {1: "Uma", 2: "Duas", 3: "Três", 4: "Quatro", 5: "Cinco", 6: "Seis", 7: "Sete", 8: "Oito",
             9: "Nove", 10: "Dez"}
@@ -49,7 +51,7 @@ _COST_WORD = {"HOTEL": "alojamento", "TRAVEL": "viagem", "FUEL": "combustível",
 
 def ai_available() -> bool:
     settings = get_settings()
-    return bool(settings.event_report_ai_enabled and settings.anthropic_api_key)
+    return bool(settings.event_report_ai_enabled and (settings.openai_api_key or settings.anthropic_api_key))
 
 
 def _long_date(d: date) -> str:
@@ -174,6 +176,39 @@ def _ai_payload(rep: dict, *, club_name: str) -> dict:
     }
 
 
+def _split_article(text: str, rep: dict) -> tuple[str, str]:
+    title, _, body = text.partition("\n")
+    title = title.strip().strip("#*«»\"").strip()
+    body = body.strip()
+    if not body:
+        title, body = rep["title"], text
+    return title[:200], body[:MAX_ARTICLE_CHARS]
+
+
+async def compose_openai(db: AsyncSession, rep: dict, *, scope: ClubScope, actor_user_id: uuid.UUID,
+                         club_name: str) -> tuple[str, str]:
+    """L'articolo con OpenAI (javbot/llm.py): una chiamata sola, i dati in
+    JSON compatto, un tetto di token in uscita. Le foto non vanno al modello:
+    le impagina la pagina e il PDF."""
+    from app.domains.javbot import llm
+
+    data = json.dumps(_ai_payload(rep, club_name=club_name), ensure_ascii=False, default=str, separators=(",", ":"))
+    spend = llm.Spend()
+    try:
+        result = await llm.chat(db, [
+            {"role": "system", "content": _AI_SYSTEM},
+            {"role": "user", "content": f"Escreve a crónica desta prova.\n\nDados:\n{data}"},
+        ], max_tokens=OPENAI_ARTICLE_TOKENS, temperature=0.6)
+    except llm.LlmUnavailable as exc:
+        raise ClubValidationError("L'IA non ha risposto: riprova tra poco, oppure usa il testo automatico.") from exc
+    spend.add(result)
+    await llm.record(db, organization_id=scope.organization_id, club_id=scope.club_id, user_id=actor_user_id,
+                     route="ARTICLE", spend=spend, intent="event_article")
+    if not result.text:
+        raise ClubValidationError("L'IA non ha scritto l'articolo: usa il testo automatico e correggilo a mano.")
+    return _split_article(result.text, rep)
+
+
 async def compose_ai(rep: dict, *, club_name: str) -> tuple[str, str]:
     """L'articolo scritto da Claude con gli stessi dati del modello."""
     import anthropic
@@ -217,7 +252,9 @@ async def generate(
     report = await event_reports.get_report(db, scope=scope, report_id=report_id)
     event_reports._check_owner(report, user_id=actor_user_id, can_manage=can_manage)
     rep = await event_reports.report_dict(db, scope=scope, report=report, photo_urls=False)
-    if source == "AI":
+    if source == "AI" and get_settings().openai_api_key:
+        title, text = await compose_openai(db, rep, scope=scope, actor_user_id=actor_user_id, club_name=club_name)
+    elif source == "AI":
         title, text = await compose_ai(rep, club_name=club_name)
     else:
         title, text = compose_template(rep, club_name=club_name)

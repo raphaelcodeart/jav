@@ -50,6 +50,11 @@ from app.domains.club.loja_router import staff_router as club_loja_staff_router
 from app.domains.club.staff_clubs_router import admin_router as club_coaches_admin_router
 from app.domains.club.staff_clubs_router import platform_router as clubs_coaches_router
 from app.domains.club.staff_clubs_router import staff_router as club_staff_clubs_router
+from app.domains.club.coach_cv_router import router as club_coach_cv_router
+from app.domains.extcourses.router import admin_router as ext_admin_router
+from app.domains.extcourses.router import family_router as ext_family_router
+from app.domains.extcourses.router import public_router as ext_public_router
+from app.domains.extcourses.router import staff_router as ext_staff_router
 from app.domains.commissions import models as _commissions_models  # noqa: F401
 from app.domains.commissions.router import router as commissions_router
 from app.domains.contracts import models as _contracts_models  # noqa: F401
@@ -66,6 +71,7 @@ from app.domains.friend_referrals.router import router as friend_referrals_route
 from app.domains.jav_market import models as _jav_market_models  # noqa: F401
 from app.domains.jav_market.router import router as jav_market_router
 from app.domains.javbot import models as _javbot_models  # noqa: F401
+from app.domains.extcourses import models as _extcourses_models  # noqa: F401
 from app.domains.club.club_documents_router import router as club_documents_router
 from app.domains.club.news_router import admin_news_router, board_router, platform_news_router
 from app.domains.club.sponsors_router import admin_sponsors_router, public_sponsors_router
@@ -161,6 +167,11 @@ app.include_router(club_loja_admin_router, prefix="/api")
 app.include_router(club_staff_clubs_router, prefix="/api")
 app.include_router(club_coaches_admin_router, prefix="/api")
 app.include_router(clubs_coaches_router, prefix="/api")
+app.include_router(club_coach_cv_router, prefix="/api")
+app.include_router(ext_public_router, prefix="/api")
+app.include_router(ext_family_router, prefix="/api")
+app.include_router(ext_staff_router, prefix="/api")
+app.include_router(ext_admin_router, prefix="/api")
 app.include_router(club_wishlist_router, prefix="/api")
 app.include_router(club_judogi_admin_router, prefix="/api")
 app.include_router(contact_public_router, prefix="/api")

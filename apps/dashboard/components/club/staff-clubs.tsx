@@ -3,6 +3,7 @@
 import { motion } from "motion/react";
 import { useRef, useState, useSyncExternalStore } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { ExtCourseLinks, useStaffExtCourses } from "@/components/ext-courses/staff-course-links";
 import { Button, Spinner } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ImageCropDialog } from "@/components/ui/image-cropper";
@@ -72,8 +73,10 @@ export function greetingKey(hour: number) {
 
 /** La foto del treinador, tonda, con l'anello: toccandola se ne carica una
  *  nuova (si ritaglia nel cerchio prima di caricarla). Senza foto, le iniziali. */
-export function CoachAvatar({ me, size = "lg", editable = true, className }: {
+export function CoachAvatar({ me, size = "lg", editable = true, className, onUploaded }: {
   me: MyClubs["me"]; size?: "md" | "lg"; editable?: boolean; className?: string;
+  /** Chi mostra la foto da un'altra query (il curriculum) la ricarica qui. */
+  onUploaded?: () => void;
 }) {
   const { t } = useI18n();
   const toast = useToast();
@@ -90,6 +93,7 @@ export function CoachAvatar({ me, size = "lg", editable = true, className }: {
       form.append("file", file);
       await clubSend("/staff/me/photo", "PUT", form);
       await queryClient.invalidateQueries({ queryKey: MY_CLUBS_KEY });
+      onUploaded?.();
       toast({ tone: "success", title: t("staffClubs.photoSaved") });
     } catch (e) {
       toast({ tone: "error", title: t("staffClubs.photoFailed"), text: (e as Error).message });
@@ -145,6 +149,9 @@ export function StaffClubPicker({ data, isLoading, error, onChoose }: {
 }) {
   const { t } = useI18n();
   const [entering, setEntering] = useState<string | null>(null);
+  // I corsi esterni in cui insegna: bottoni grandi anche loro, sotto i club.
+  const { data: extCourses } = useStaffExtCourses();
+  const hasExt = (extCourses ?? []).some((c) => c.roles.includes("COACH") && !c.roles.includes("ADMIN"));
   if (isLoading) return <div className="space-y-4"><Skeleton className="h-40" /><Skeleton className="h-28" /><Skeleton className="h-28" /></div>;
   if (error || !data) return <EmptyState icon={<span className="text-3xl">🏯</span>} title={t("staffClubs.loadFailed")} text={error?.message} />;
 
@@ -164,7 +171,7 @@ export function StaffClubPicker({ data, isLoading, error, onChoose }: {
         </div>
       </section>
 
-      {data.clubs.length === 0 ? (
+      {data.clubs.length === 0 ? (!hasExt &&
         <EmptyState icon={<span className="text-3xl">🏯</span>} title={t("staffClubs.none")} text={t("staffClubs.noneText")} />
       ) : (
         <div className="space-y-3">
@@ -198,6 +205,7 @@ export function StaffClubPicker({ data, isLoading, error, onChoose }: {
           })}
         </div>
       )}
+      <ExtCourseLinks />
     </div>
   );
 }

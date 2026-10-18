@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { EventIcon } from "@/components/club/event-icon";
 import { ParticipateButton } from "@/components/club/participate-button";
+import { RegulationButton } from "@/components/club/regulation-link";
 import { clubGet, clubSend, type AthleteDetail, type Competition } from "@/lib/club";
 import type { MessageKey } from "@/lib/i18n/messages/it";
 import { useI18n } from "@/lib/i18n/provider";
@@ -121,6 +122,11 @@ export function AreaCompetitions({ athlete }: { athlete: AthleteDetail }) {
               </p>
               {c.registrations_open && !c.entry_status && (
                 <Countdown className="mt-1.5" target={moment(c.registration_deadline, null, "endOfDay")} label={t("countdown.registrations")} />
+              )}
+              {/* Il regolamento passa dal permesso della famiglia: solo il
+                  titolare del conto lo può aprire da qui. */}
+              {c.regulation_filename && c.viewer_is_holder && (
+                <div className="mt-2"><RegulationButton competitionId={c.id} area="member" filename={c.regulation_filename} /></div>
               )}
             </div>
             {c.entry_status ? (

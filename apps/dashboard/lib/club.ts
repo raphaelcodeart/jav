@@ -384,6 +384,9 @@ export interface Competition {
   transport_auto_send: boolean;
   /** La foto o la locandina; null = l'icona del tipo (EventIcon). */
   image_url?: string | null;
+  /** Il regolamento PDF: si scarica con /competitions/{id}/regulation (regulation-link.tsx). */
+  regulation_filename?: string | null;
+  regulation_size?: number | null;
 }
 
 /** La lettera al comune (o all'ente) per il trasporto di un evento. */
@@ -514,6 +517,8 @@ export interface Course {
   public_coach_name: string | null;
   coach_share_pct: string | number | null;
   published: boolean;
+  /** Corsi JAV: il logo della scuola (POST /club/admin/courses/{id}/logo). */
+  venue_logo_url?: string | null;
 }
 
 /** Club ufficiale o unità dei corsi JAV nelle scuole (club/kinds.py). */
@@ -523,7 +528,17 @@ export type ClubKind = "CLUB" | "JAV_COURSES";
  *  Lo decide il server; qui serve solo a non mostrare ciò che non c'è. */
 export function kindFeatures(kind: string | null | undefined) {
   const courses = kind === "JAV_COURSES";
-  return { courses, belts: !courses, competitions: !courses, ranking: !courses };
+  const club = !courses;
+  // Nei corsi nelle scuole il genitore vede figli, corso, presenze e
+  // mensilità: lo Shop, il wallet, gli inviti, i giochi e l'area
+  // dell'atleta (i bambini non hanno un accesso) appartengono ai club.
+  return {
+    courses, belts: club, competitions: club, ranking: club,
+    shop: club, judogi: club, games: club, wallet: club, referrals: club,
+    athleteArea: club, obligations: club, achievements: club, certificates: club,
+    // La bacheca resta: è da lì che si avvisa «lunedì niente lezione».
+    board: true,
+  };
 }
 
 export interface CourseFigures {

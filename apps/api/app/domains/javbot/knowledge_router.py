@@ -18,7 +18,8 @@ from app.core.db import get_db
 from app.core.deps import CurrentUser, require_permission
 from app.core.rate_limit import rate_limit
 from app.domains.club.scope import CLUBS_MANAGE, ClubUser, require_club_permission
-from app.domains.javbot import assistant, knowledge
+from app.core.config import get_settings
+from app.domains.javbot import assistant, knowledge, llm, rag
 from app.domains.javbot.schemas import DocumentLinkRead, InstructionsWrite, KnowledgeDocumentRead, KnowledgeRead
 from app.domains.javbot.tools import MANAGE
 
@@ -45,7 +46,9 @@ async def _read(db: AsyncSession, level: knowledge.Level) -> KnowledgeRead:
         common_documents=_docs(await knowledge.list_documents(db, level=common)) if is_club else [],
         instructions=await knowledge.get_instructions(db, level=level),
         common_instructions=await knowledge.get_instructions(db, level=common) if is_club else "",
-        assistant_enabled=assistant.enabled(),
+        assistant_enabled=assistant.enabled() or llm.enabled(),
+        provider=llm.provider(),
+        model=get_settings().openai_model if llm.enabled() else (get_settings().javbot_model if assistant.enabled() else None),
     )
 
 
@@ -189,3 +192,39 @@ async def common_set_instructions(
     db: AsyncSession = Depends(get_db),
 ) -> KnowledgeRead:
     return await _instructions(db, _common_level(current_user), payload, current_user.user_id)
+
+
+# --- Le schede del gestionale e il contatore dei token ---------------------------------------------
+
+
+@club_knowledge_router.post("/knowledge/refresh", response_model=KnowledgeRead)
+async def club_refresh(
+    current_user: ClubUser = Depends(require_club_permission(MANAGE)), db: AsyncSession = Depends(get_db),
+) -> KnowledgeRead:
+    """Riscrive adesso le schede del club (orari, prezzi, eventi, contatti)."""
+    await rag.build_data_sources(db, club_id=current_user.club_id)
+    return await _read(db, knowledge.Level(current_user.organization_id, current_user.club_id))
+
+
+@club_knowledge_router.get("/usage")
+async def club_usage(
+    current_user: ClubUser = Depends(require_club_permission(MANAGE)), db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Le risposte di JAVBOT nel club negli ultimi 30 giorni: quante a costo zero, quanti token."""
+    return await llm.usage_summary(db, organization_id=current_user.organization_id, club_id=current_user.club_id)
+
+
+@platform_knowledge_router.post("/knowledge/refresh")
+async def common_refresh(
+    current_user: CurrentUser = Depends(require_permission(CLUBS_MANAGE)), db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Riscrive adesso le schede di tutti i club attivi."""
+    return {"written": await rag.refresh_all(db)}
+
+
+@platform_knowledge_router.get("/usage")
+async def common_usage(
+    current_user: CurrentUser = Depends(require_permission(CLUBS_MANAGE)), db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Le risposte di JAVBOT di tutta la piattaforma negli ultimi 30 giorni e i token spesi."""
+    return await llm.usage_summary(db, organization_id=current_user.organization_id)

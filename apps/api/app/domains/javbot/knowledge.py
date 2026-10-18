@@ -149,6 +149,8 @@ def _level_filter(stmt, model, level: Level):
 
 
 async def list_documents(db: AsyncSession, *, level: Level) -> list[JavbotKnowledgeDocument]:
+    """Tutte le fonti del livello: i PDF caricati, i regolamenti degli eventi
+    e le schede del gestionale (chi amministra vede che cosa legge JAVBOT)."""
     stmt = _level_filter(select(JavbotKnowledgeDocument), JavbotKnowledgeDocument, level)
     return list((await db.execute(stmt.order_by(JavbotKnowledgeDocument.created_at.desc()))).scalars().all())
 
@@ -161,6 +163,7 @@ async def add_document(
         raise KnowledgeError("Si possono caricare solo file PDF.")
     count = (await db.execute(
         _level_filter(select(func.count()).select_from(JavbotKnowledgeDocument), JavbotKnowledgeDocument, level)
+        .where(JavbotKnowledgeDocument.source == "UPLOAD")
     )).scalar_one()
     if count >= MAX_DOCUMENTS:
         raise KnowledgeError(f"Ci sono già {MAX_DOCUMENTS} documenti: togline qualcuno vecchio prima di aggiungerne.")
@@ -194,6 +197,7 @@ async def add_document(
     ])
     await db.commit()
     await db.refresh(document)
+    await bump_version(level.organization_id)
     return document
 
 
@@ -212,14 +216,20 @@ async def get_document(db: AsyncSession, *, level: Level, document_id: uuid.UUID
 
 async def remove_document(db: AsyncSession, *, level: Level, document_id: uuid.UUID) -> None:
     document = await get_document(db, level=level, document_id=document_id)
+    if document.source != "UPLOAD":
+        raise KnowledgeError("Questa fonte la scrive il gestionale: si toglie dall'evento o si aggiorna da sola.")
     key = document.storage_key
     await db.execute(delete(JavbotKnowledgeChunk).where(JavbotKnowledgeChunk.document_id == document.id))
     await db.delete(document)
     await db.commit()
-    await asyncio.to_thread(storage.delete_document_object, storage_key=key)
+    await bump_version(level.organization_id)
+    if key:
+        await asyncio.to_thread(storage.delete_document_object, storage_key=key)
 
 
-def document_url(document: JavbotKnowledgeDocument) -> str:
+def document_url(document: JavbotKnowledgeDocument) -> str | None:
+    if not document.storage_key:
+        return None
     return storage.generate_presigned_document_url(storage_key=document.storage_key)
 
 
@@ -228,7 +238,81 @@ def document_dict(document: JavbotKnowledgeDocument) -> dict:
         "id": document.id, "title": document.title, "filename": document.filename,
         "size_bytes": document.size_bytes, "page_count": document.page_count, "status": document.status,
         "common": document.club_id is None, "created_at": document.created_at,
+        "source": document.source, "source_ref": document.source_ref, "has_file": document.storage_key is not None,
     }
+
+
+# --- Le fonti scritte dal gestionale --------------------------------------------------------------
+
+
+async def upsert_source(
+    db: AsyncSession, *, level: Level, source: str, source_ref: str, title: str, pages: list[str],
+    filename: str, storage_key: str | None = None, size_bytes: int = 0, commit: bool = True,
+) -> JavbotKnowledgeDocument:
+    """Una fonte che non carica nessuno a mano (il regolamento di un evento,
+    una scheda del gestionale): si riscrive intera, con i suoi pezzi, sotto
+    la stessa `source_ref`."""
+    document = (await db.execute(select(JavbotKnowledgeDocument).where(
+        JavbotKnowledgeDocument.source_ref == source_ref,
+    ))).scalar_one_or_none()
+    chunks = split_chunks(pages)
+    if document is None:
+        document = JavbotKnowledgeDocument(organization_id=level.organization_id, club_id=level.club_id,
+                                           source=source, source_ref=source_ref)
+        db.add(document)
+    document.title = " ".join(title.split())[:MAX_TITLE]
+    document.filename = filename[:255]
+    document.storage_key = storage_key
+    document.size_bytes = size_bytes
+    document.page_count = len(pages)
+    document.char_count = sum(len(text) for _page, text in chunks)
+    document.status = "READY" if chunks else "EMPTY"
+    await db.flush()
+    await db.execute(delete(JavbotKnowledgeChunk).where(JavbotKnowledgeChunk.document_id == document.id))
+    db.add_all([
+        JavbotKnowledgeChunk(document_id=document.id, organization_id=level.organization_id, club_id=level.club_id,
+                             ordinal=i, page=page, text=text, norm=normalize(text))
+        for i, (page, text) in enumerate(chunks)
+    ])
+    if commit:
+        await db.commit()
+        await bump_version(level.organization_id)
+    return document
+
+
+async def drop_source(db: AsyncSession, *, source_ref: str, organization_id: uuid.UUID) -> None:
+    document = (await db.execute(select(JavbotKnowledgeDocument).where(
+        JavbotKnowledgeDocument.source_ref == source_ref,
+    ))).scalar_one_or_none()
+    if document is not None:
+        await db.delete(document)
+        await db.commit()
+        await bump_version(organization_id)
+
+
+# --- La versione dell'indice: la cache delle risposte vale finché non cambia ----------------------
+
+
+def _version_key(organization_id: uuid.UUID) -> str:
+    return f"javbot:kbv:{organization_id}"
+
+
+async def bump_version(organization_id: uuid.UUID) -> None:
+    from app.core.rate_limit import _get_redis
+
+    try:
+        await _get_redis().incr(_version_key(organization_id))
+    except Exception:  # noqa: BLE001 -- senza Redis non c'è cache, quindi niente da invalidare
+        logger.warning("javbot knowledge: versione non aggiornata (Redis)")
+
+
+async def version(organization_id: uuid.UUID) -> str | None:
+    from app.core.rate_limit import _get_redis
+
+    try:
+        return str(await _get_redis().get(_version_key(organization_id)) or 0)
+    except Exception:  # noqa: BLE001
+        return None
 
 
 # --- Ricerca --------------------------------------------------------------------------------------
@@ -264,7 +348,8 @@ async def search(
     if club_id is not None:
         levels.append(JavbotKnowledgeChunk.club_id == club_id)
     stmt = (
-        select(JavbotKnowledgeChunk, JavbotKnowledgeDocument.title, rank)
+        select(JavbotKnowledgeChunk, JavbotKnowledgeDocument.title, rank, JavbotKnowledgeDocument.source,
+               JavbotKnowledgeDocument.source_ref)
         .join(JavbotKnowledgeDocument, JavbotKnowledgeDocument.id == JavbotKnowledgeChunk.document_id)
         .where(JavbotKnowledgeChunk.organization_id == organization_id, or_(*levels), vector.op("@@")(tsquery))
         .order_by(rank.desc(), JavbotKnowledgeChunk.ordinal)
@@ -272,8 +357,9 @@ async def search(
     )
     rows = (await db.execute(stmt)).all()
     return [
-        {"document": title, "page": chunk.page, "common": chunk.club_id is None, "text": chunk.text}
-        for chunk, title, _rank in rows
+        {"document": title, "page": chunk.page, "common": chunk.club_id is None, "text": chunk.text,
+         "document_id": chunk.document_id, "source": source, "source_ref": source_ref, "rank": float(rank_value)}
+        for chunk, title, rank_value, source, source_ref in rows
     ]
 
 
@@ -316,7 +402,7 @@ def excerpt(text: str, terms: list[str], limit: int = EXCERPT_CHARS) -> str:
 
 async def passages(
     db: AsyncSession, *, organization_id: uuid.UUID, club_id: uuid.UUID | None, query: str, limit: int = 2,
-    strict: bool = False,
+    strict: bool = False, loose: bool = False,
 ) -> list[dict]:
     """Gli estratti da mostrare quando risponde JAVBOT senza modello: i
     pezzi che contengono **almeno metà** delle parole della domanda (uno che
@@ -330,7 +416,15 @@ async def passages(
     if not terms:
         return []
     hits = await search(db, organization_id=organization_id, club_id=club_id, query=query, limit=12)
-    need = max(2, -(-len(terms) * 2 // 3)) if strict else max(1, -(-len(terms) // 2))
+    # `loose` (rag.answer): un terzo delle parole basta, perché poi il modello
+    # legge il passaggio e dice se risponde; una domanda parlata ("quanto
+    # costa per i più piccoli?") ha molte parole che nei documenti non ci sono.
+    if strict:
+        need = max(2, -(-len(terms) * 2 // 3))
+    elif loose:
+        need = max(1, -(-len(terms) // 3))
+    else:
+        need = max(1, -(-len(terms) // 2))
     seen: set[tuple[str, int]] = set()
     scored = []
     for rank, hit in enumerate(hits):

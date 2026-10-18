@@ -770,6 +770,91 @@ T: dict[str, tuple[str, str, str]] = {
     "pub.act.login": ("Entra nella tua area", "Entrar na minha área", "Log in to your area"),
     "ages.range": (" ({min}–{max} anni)", " ({min}–{max} anos)", " (ages {min}–{max})"),
     "ages.from": (" (dai {min} anni)", " (a partir dos {min} anos)", " (ages {min}+)"),
+    # --- Azioni da segretario (actions.py) --------------------------------------------------------
+    "act.signup.noneOpen": (
+        "Al momento non ci sono gare o eventi con le iscrizioni aperte.",
+        "Neste momento não há provas nem eventos com inscrições abertas.",
+        "There are no events open for registration right now.",
+    ),
+    "act.signup.noAthletes": (
+        "Non trovo atleti attivi nel tuo conto da iscrivere.",
+        "Não encontro atletas ativos na tua conta para inscrever.",
+        "I can't find active athletes on your account to register.",
+    ),
+    "act.signup.which": (
+        "A quale gara vuoi iscriverti? Ecco quelle con le iscrizioni aperte:",
+        "Em que prova queres inscrever? Estas são as que têm inscrições abertas:",
+        "Which event? These are open for registration:",
+    ),
+    "act.signup.who": ("Chi iscrivo a **{name}**?", "Quem inscrevo em **{name}**?", "Who should I register for **{name}**?"),
+    "act.signup.say": ("Iscrivi {athlete} a {name}", "Inscreve {athlete} em {name}", "Register {athlete} for {name}"),
+    "act.signup.short": ("Iscrivi {athlete}", "Inscrever {athlete}", "Register {athlete}"),
+    "act.signup.notEligible": (
+        "**{athlete}** non può iscriversi a **{name}**: {reason}",
+        "O(A) **{athlete}** não se pode inscrever em **{name}**: {reason}",
+        "**{athlete}** can't register for **{name}**: {reason}",
+    ),
+    "act.signup.confirm": (
+        "Confermi l'iscrizione di **{athlete}** a **{name}**?\n- Data: {date}{location}\n- Iscrizioni fino al {deadline}",
+        "Confirmas a inscrição de **{athlete}** em **{name}**?\n- Data: {date}{location}\n- Inscrições até {deadline}",
+        "Confirm registering **{athlete}** for **{name}**?\n- Date: {date}{location}\n- Registration until {deadline}",
+    ),
+    "act.signup.fee": ("- Iscrizione: **{amount}**", "- Inscrição: **{amount}**", "- Fee: **{amount}**"),
+    "act.signup.free": ("- Iscrizione gratuita", "- Inscrição gratuita", "- Free registration"),
+    "act.signup.alsoOthers": (
+        "Poi, se vuoi, iscrivo anche: {names} (uno alla volta).",
+        "Depois, se quiseres, inscrevo também: {names} (um de cada vez).",
+        "Then, if you want, I'll also register: {names} (one at a time).",
+    ),
+    "act.signup.button": ("Sì, iscrivi", "Sim, inscrever", "Yes, register"),
+    "act.signup.done": (
+        "Fatto! **{athlete}** è iscritto a **{name}**. ✅",
+        "Feito! O(A) **{athlete}** está inscrito(a) em **{name}**. ✅",
+        "Done! **{athlete}** is registered for **{name}**. ✅",
+    ),
+    "act.signup.doneFee": (
+        "Fatto! **{athlete}** è iscritto a **{name}**. ✅\nLa quota di **{amount}** è tra le cose da pagare (entro il {deadline}): puoi pagarla adesso.",
+        "Feito! O(A) **{athlete}** está inscrito(a) em **{name}**. ✅\nA quota de **{amount}** já está nos pagamentos (até {deadline}): podes pagar já.",
+        "Done! **{athlete}** is registered for **{name}**. ✅\nThe **{amount}** fee is now due (by {deadline}): you can pay it now.",
+    ),
+    "act.att.future": (
+        "Le presenze si segnano per oggi o per i giorni passati, non per il futuro.",
+        "As presenças marcam-se para hoje ou dias passados, não para o futuro.",
+        "Attendance can be marked for today or past days, not the future.",
+    ),
+    "act.att.ambiguous": (
+        "Ci sono più atleti che si chiamano **{name}**: quale?",
+        "Há vários atletas chamados **{name}**: qual?",
+        "There are several athletes called **{name}**: which one?",
+    ),
+    "act.att.noNames": (
+        "Non ho trovato questi nomi tra i tuoi atleti. Scrivi il nome come è sulla scheda (es. «segna presenti Marco e Ana oggi»).",
+        "Não encontrei esses nomes entre os teus atletas. Escreve o nome como está na ficha (ex.: «marca presentes o Marco e a Ana hoje»).",
+        "I couldn't find those names among your athletes. Write them as on the athlete card (e.g. \"mark Marco and Ana present today\").",
+    ),
+    "act.att.noLesson": (
+        "{names}: nessuna lezione delle loro turme il {date}.",
+        "{names}: nenhuma aula das suas turmas no dia {date}.",
+        "{names}: no class of their groups on {date}.",
+    ),
+    "act.att.confirm": (
+        "Segno **presenti** {n} atleti il **{date}**:",
+        "Marco **presentes** {n} atletas no dia **{date}**:",
+        "Marking {n} athletes **present** on **{date}**:",
+    ),
+    "act.att.skipped": (
+        "Senza lezione quel giorno: {names}.", "Sem aula nesse dia: {names}.", "No class that day: {names}.",
+    ),
+    "act.att.unknown": (
+        "Non trovati: {names}.", "Não encontrados: {names}.", "Not found: {names}.",
+    ),
+    "act.att.button": ("Sì, segna", "Sim, marcar", "Yes, mark"),
+    "act.att.done": (
+        "Fatto: {n} presenze segnate il {date} ({names}). ✅",
+        "Feito: {n} presenças marcadas no dia {date} ({names}). ✅",
+        "Done: {n} attendances marked on {date} ({names}). ✅",
+    ),
+    "rag.sources": ("Fonti", "Fontes", "Sources"),
 }
 
 MONTHS = {

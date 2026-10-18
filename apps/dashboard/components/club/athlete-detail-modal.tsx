@@ -39,9 +39,12 @@ type Tab = "path" | "certificates" | "fees" | "competitions" | "access";
 /** Everything about one athlete: the judo path (belts, medals, traguardi),
  *  the medical certificate, the fees, the competitions. */
 export function AthleteDetailModal({ athleteId, onClose, initialTab = "path" }: { athleteId: string | null; onClose: () => void; initialTab?: Tab }) {
-  const [tab, setTab] = useState<Tab>(initialTab);
+  const [picked, setTab] = useState<Tab>(initialTab);
   // Nei corsi JAV niente cinture, punti, gare né sito: si mostra il resto.
+  // E niente traguardi, certificato medico (non serve) né accesso del
+  // figlio (i bambini dei corsi non hanno un'area): restano le quote.
   const features = useClubFeatures();
+  const tab: Tab = features.courses ? "fees" : picked;
   const [editing, setEditing] = useState(false);
   const [payFee, setPayFee] = useState<Fee | null>(null);
   const [pickedPhoto, setPickedPhoto] = useState<File | null>(null);
@@ -105,10 +108,12 @@ export function AthleteDetailModal({ athleteId, onClose, initialTab = "path" }: 
                 )}
               </div>
               <div className="flex sm:flex-col gap-3 sm:items-end">
-                <div className="rounded-2xl bg-white/15 backdrop-blur px-4 py-2 text-center">
-                  <p className="font-display text-2xl">{a.level}</p>
-                  <p className="text-[10px] uppercase tracking-widest text-white/80">{t("athlete.levelLabel")}</p>
-                </div>
+                {features.achievements && (
+                  <div className="rounded-2xl bg-white/15 backdrop-blur px-4 py-2 text-center">
+                    <p className="font-display text-2xl">{a.level}</p>
+                    <p className="text-[10px] uppercase tracking-widest text-white/80">{t("athlete.levelLabel")}</p>
+                  </div>
+                )}
                 {features.ranking && (
                   <div className="rounded-2xl bg-accent-400 text-ink-900 px-4 py-2 text-center">
                     <p className="font-display text-2xl">{a.ranking_points}</p>
@@ -117,13 +122,15 @@ export function AthleteDetailModal({ athleteId, onClose, initialTab = "path" }: 
                 )}
               </div>
             </div>
-            <div className="relative mt-5">
-              <div className="flex justify-between text-[11px] font-semibold text-white/80 mb-1.5">
-                <span>{a.xp} XP</span>
-                <span>{t("athlete.nextLevelAt", { n: a.level + 1, xp: a.next_level_xp })}</span>
+            {features.achievements && (
+              <div className="relative mt-5">
+                <div className="flex justify-between text-[11px] font-semibold text-white/80 mb-1.5">
+                  <span>{a.xp} XP</span>
+                  <span>{t("athlete.nextLevelAt", { n: a.level + 1, xp: a.next_level_xp })}</span>
+                </div>
+                <ProgressBar value={a.xp - a.level_xp_floor} max={Math.max(1, a.next_level_xp - a.level_xp_floor)} tone="accent" />
               </div>
-              <ProgressBar value={a.xp - a.level_xp_floor} max={Math.max(1, a.next_level_xp - a.level_xp_floor)} tone="accent" />
-            </div>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -131,11 +138,11 @@ export function AthleteDetailModal({ athleteId, onClose, initialTab = "path" }: 
               value={tab}
               onChange={(k) => setTab(k as Tab)}
               items={[
-                { key: "path", label: t("athlete.tabPath") },
-                { key: "certificates", label: t("athlete.tabCertificate") },
+                ...(features.achievements ? [{ key: "path", label: t("athlete.tabPath") }] : []),
+                ...(features.certificates ? [{ key: "certificates", label: t("athlete.tabCertificate") }] : []),
                 { key: "fees", label: t("athlete.tabFees"), count: a.fees.filter((f) => f.status === "DUE").length },
                 ...(features.competitions ? [{ key: "competitions", label: t("athlete.tabCompetitions") }] : []),
-                { key: "access", label: t("athleteAccess.tab") },
+                ...(features.athleteArea ? [{ key: "access", label: t("athleteAccess.tab") }] : []),
               ]}
             />
             <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>✏️ {t("athlete.editData")}</Button>
